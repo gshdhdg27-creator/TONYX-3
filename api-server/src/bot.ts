@@ -1,4 +1,5 @@
-import { Telegraf } from "telegraf";
+import { Telegraf, type Context } from "telegraf";
+import type { Update } from "telegraf/types";
 import { db } from "@workspace/db";
 import { usersTable } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
@@ -8,7 +9,7 @@ const WEBAPP_URL =
   process.env.WEBAPP_URL ??
   (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}/mini-app/` : null);
 
-export function startBot() {
+export function startBot(): Telegraf<Context<Update>> | null | void {
   // Only run bot polling in production OR when explicitly enabled in dev.
   // Telegram allows only ONE getUpdates consumer per token — if both dev and
   // prod poll, both get 409 Conflict and the bot stops responding.

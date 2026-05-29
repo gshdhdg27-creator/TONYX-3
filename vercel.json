@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "buildCommand": "pnpm install --no-frozen-lockfile && pnpm --filter @workspace/mini-app run build",
+  "buildCommand": "pnpm install --no-frozen-lockfile && pnpm --filter @workspace/api-zod run build && pnpm --filter @workspace/mini-app run build",
   "outputDirectory": "mini-app/dist/public",
   "rewrites": [
     { "source": "/api/:path*", "destination": "/api/server" }

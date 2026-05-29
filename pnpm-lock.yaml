@@ -83,6 +83,10 @@ importers:
       zod:
         specifier: '*'
         version: 4.4.3
+    devDependencies:
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
 
   db:
     dependencies:

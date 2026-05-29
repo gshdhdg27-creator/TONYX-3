@@ -1,15 +1,15 @@
 import { Router, type IRouter } from "express";
-import earnRouter from "./earn";
-import marketRouter from "./market";
-import spinRouter from "./games-spin";
-import minesRouter from "./games-mines";
-import arenaRouter from "./games-arena";
-import tasksRouter from "./tasks";
-import financeRouter from "./finance";
-import leaderboardRouter from "./leaderboard";
-import marketPoolRouter from "./market-pool";
-import historyRouter from "./history";
-import adminRouter from "./admin";
+import earnRouter from "./earn.js";
+import marketRouter from "./market.js";
+import spinRouter from "./games-spin.js";
+import minesRouter from "./games-mines.js";
+import arenaRouter from "./games-arena.js";
+import tasksRouter from "./tasks.js";
+import financeRouter from "./finance.js";
+import leaderboardRouter from "./leaderboard.js";
+import marketPoolRouter from "./market-pool.js";
+import historyRouter from "./history.js";
+import adminRouter from "./admin.js";
 
 const router: IRouter = Router();
 

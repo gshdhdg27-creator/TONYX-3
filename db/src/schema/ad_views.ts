@@ -10,6 +10,6 @@ export const adViewsTable = pgTable("ad_views", {
   viewedAt: timestamp("viewed_at").notNull().defaultNow(),
 });
 
-export const insertAdViewSchema = createInsertSchema(adViewsTable).omit({ id: true, viewedAt: true });
+export const insertAdViewSchema = createInsertSchema(adViewsTable);
 export type InsertAdView = z.infer<typeof insertAdViewSchema>;
 export type AdView = typeof adViewsTable.$inferSelect;

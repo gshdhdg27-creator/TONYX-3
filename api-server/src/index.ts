@@ -1,5 +1,5 @@
-import app from "./app";
-import { startBot } from "./bot";
+import app from "./app.js";
+import { startBot } from "./bot.js";
 
 // Start the Telegram bot
 startBot();

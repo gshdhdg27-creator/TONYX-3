@@ -13,6 +13,6 @@ export const withdrawalsTable = pgTable("withdrawals", {
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
-export const insertWithdrawalSchema = createInsertSchema(withdrawalsTable).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertWithdrawalSchema = createInsertSchema(withdrawalsTable);
 export type InsertWithdrawal = z.infer<typeof insertWithdrawalSchema>;
 export type Withdrawal = typeof withdrawalsTable.$inferSelect;

@@ -1,16 +1,16 @@
 import { Router, type IRouter } from "express";
-import healthRouter from "./health";
-import usersRouter from "./users";
-import adsRouter from "./ads";
-import leaderboardRouter from "./leaderboard";
-import referralsRouter from "./referrals";
-import withdrawalsRouter from "./withdrawals";
-import tasksRouter from "./tasks";
-import achievementsRouter from "./achievements";
-import bonusRouter from "./bonus";
-import adminRouter from "./admin";
-import pricesRouter from "./prices";
-import miniRouter from "./mini/index";
+import healthRouter from "./health.js";
+import usersRouter from "./users.js";
+import adsRouter from "./ads.js";
+import leaderboardRouter from "./leaderboard.js";
+import referralsRouter from "./referrals.js";
+import withdrawalsRouter from "./withdrawals.js";
+import tasksRouter from "./tasks.js";
+import achievementsRouter from "./achievements.js";
+import bonusRouter from "./bonus.js";
+import adminRouter from "./admin.js";
+import pricesRouter from "./prices.js";
+import miniRouter from "./mini/index.js";
 
 const router: IRouter = Router();
 

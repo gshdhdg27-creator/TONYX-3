@@ -9,6 +9,6 @@ export const userAchievementsTable = pgTable("user_achievements", {
   unlockedAt: timestamp("unlocked_at").notNull().defaultNow(),
 });
 
-export const insertUserAchievementSchema = createInsertSchema(userAchievementsTable).omit({ id: true, unlockedAt: true });
+export const insertUserAchievementSchema = createInsertSchema(userAchievementsTable);
 export type InsertUserAchievement = z.infer<typeof insertUserAchievementSchema>;
 export type UserAchievement = typeof userAchievementsTable.$inferSelect;

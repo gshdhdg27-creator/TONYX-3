@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/mini-app/"
+title = "Mini App"
+version = "1.0.0"
+id = "artifacts/mini-app"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/mini-app/" ]
+localPort = 18801
+
+[services.development]
+run = "pnpm --filter @workspace/mini-app run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/mini-app", "run", "build" ]
+publicDir = "artifacts/mini-app/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "18801"
+BASE_PATH = "/mini-app/"

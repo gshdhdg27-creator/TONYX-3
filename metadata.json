@@ -1,0 +1,6 @@
+{
+  "name": "Project Workspace",
+  "description": "A workspace ready to import and run the user's project code.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,1639 @@
+openapi: 3.1.0
+info:
+  title: Api
+  version: 0.2.0
+  description: AdsGram Telegram Bot API
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+  - name: users
+  - name: ads
+  - name: leaderboard
+  - name: referrals
+  - name: withdrawals
+  - name: tasks
+  - name: achievements
+  - name: bonus
+  - name: mini-earn
+  - name: mini-market
+  - name: mini-games
+  - name: mini-tasks
+  - name: mini-finance
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  /users/register:
+    post:
+      operationId: registerUser
+      tags: [users]
+      summary: Register or login a Telegram user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterUserRequest"
+      responses:
+        "200":
+          description: User registered or updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserProfile"
+
+  /users/{telegramId}:
+    get:
+      operationId: getUserProfile
+      tags: [users]
+      summary: Get user profile and balance
+      parameters:
+        - name: telegramId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: User profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserProfile"
+        "404":
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /ads/watch:
+    post:
+      operationId: recordAdWatch
+      tags: [ads]
+      summary: Record that a user watched an ad and award random coins
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WatchAdRequest"
+      responses:
+        "200":
+          description: Coins awarded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WatchAdResponse"
+        "429":
+          description: Cooldown active or daily limit reached
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /ads/status/{telegramId}:
+    get:
+      operationId: getAdStatus
+      tags: [ads]
+      summary: Get ad watching status for a user
+      parameters:
+        - name: telegramId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Ad status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdStatus"
+
+  /leaderboard:
+    get:
+      operationId: getLeaderboard
+      tags: [leaderboard]
+      summary: Get top users by coins
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+      responses:
+        "200":
+          description: Leaderboard
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LeaderboardResponse"
+
+  /referrals/{telegramId}:
+    get:
+      operationId: getReferrals
+      tags: [referrals]
+      summary: Get referral info for a user
+      parameters:
+        - name: telegramId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Referral info
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReferralInfo"
+
+  /withdrawals:
+    post:
+      operationId: requestWithdrawal
+      tags: [withdrawals]
+      summary: Request a withdrawal
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WithdrawalRequest"
+      responses:
+        "200":
+          description: Withdrawal submitted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WithdrawalResponse"
+        "400":
+          description: Insufficient balance or invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /withdrawals/{telegramId}:
+    get:
+      operationId: getWithdrawals
+      tags: [withdrawals]
+      summary: Get withdrawal history for a user
+      parameters:
+        - name: telegramId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Withdrawal history
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WithdrawalListResponse"
+
+  /tasks/{telegramId}:
+    get:
+      operationId: getTasks
+      tags: [tasks]
+      summary: Get all tasks with completion status for a user
+      parameters:
+        - name: telegramId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Tasks list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TasksResponse"
+
+  /tasks/complete:
+    post:
+      operationId: completeTask
+      tags: [tasks]
+      summary: Complete a task and claim reward
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CompleteTaskRequest"
+      responses:
+        "200":
+          description: Task completed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CompleteTaskResponse"
+        "400":
+          description: Task already completed or requirements not met
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /achievements/{telegramId}:
+    get:
+      operationId: getAchievements
+      tags: [achievements]
+      summary: Get all achievements with unlock status for a user
+      parameters:
+        - name: telegramId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Achievements list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AchievementsResponse"
+
+  /bonus/daily/{telegramId}:
+    get:
+      operationId: getDailyBonusStatus
+      tags: [bonus]
+      summary: Get daily bonus status
+      parameters:
+        - name: telegramId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Daily bonus status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DailyBonusStatus"
+
+  /bonus/daily/claim:
+    post:
+      operationId: claimDailyBonus
+      tags: [bonus]
+      summary: Claim daily bonus
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClaimBonusRequest"
+      responses:
+        "200":
+          description: Daily bonus claimed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClaimBonusResponse"
+        "400":
+          description: Already claimed today
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /bonus/spin:
+    post:
+      operationId: luckySpinBonus
+      tags: [bonus]
+      summary: Spin the lucky wheel (once per day)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClaimBonusRequest"
+      responses:
+        "200":
+          description: Spin result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpinResponse"
+        "400":
+          description: Already spun today
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /mini/earn/status/{telegramId}:
+    get:
+      operationId: getMiniEarnStatus
+      tags: [mini-earn]
+      summary: Get ad watching status for mini-app
+      parameters:
+        - name: telegramId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Earn status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MiniEarnStatus"
+
+  /mini/earn/watch:
+    post:
+      operationId: recordMiniAdWatch
+      tags: [mini-earn]
+      summary: Record ad watch and award coins (mini-app)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MiniWatchAdInput"
+      responses:
+        "200":
+          description: Coins awarded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MiniAdWatchResult"
+
+  /mini/market/orders:
+    get:
+      operationId: getMiniMarketOrders
+      tags: [mini-market]
+      summary: List open market orders
+      responses:
+        "200":
+          description: Market orders
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MiniMarketOrderList"
+    post:
+      operationId: createMiniMarketOrder
+      tags: [mini-market]
+      summary: Create a sell order for coins
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MiniMarketOrderInput"
+      responses:
+        "200":
+          description: Order created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MiniMarketOrder"
+
+  /mini/market/orders/{id}:
+    delete:
+      operationId: cancelMiniMarketOrder
+      tags: [mini-market]
+      summary: Cancel a market order
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Order cancelled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MiniMarketOrder"
+
+  /mini/market/orders/{id}/buy:
+    post:
+      operationId: buyMiniMarketOrder
+      tags: [mini-market]
+      summary: Buy a market order
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MiniOrderBuyInput"
+      responses:
+        "200":
+          description: Order purchased
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MiniMarketOrder"
+
+  /mini/games/spin/rooms:
+    get:
+      operationId: getMiniSpinRooms
+      tags: [mini-games]
+      summary: List open spin rooms
+      responses:
+        "200":
+          description: Spin rooms
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MiniSpinRoomList"
+    post:
+      operationId: createMiniSpinRoom
+      tags: [mini-games]
+      summary: Create a new PvP spin room
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MiniSpinRoomInput"
+      responses:
+        "200":
+          description: Room created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MiniSpinRoom"
+
+  /mini/games/spin/rooms/{id}:
+    get:
+      operationId: getMiniSpinRoom
+      tags: [mini-games]
+      summary: Get spin room details
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Spin room
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MiniSpinRoom"
+
+  /mini/games/spin/rooms/{id}/join:
+    post:
+      operationId: joinMiniSpinRoom
+      tags: [mini-games]
+      summary: Join a PvP spin room
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MiniSpinJoinInput"
+      responses:
+        "200":
+          description: Joined room
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MiniSpinRoom"
+
+  /mini/games/mines/start:
+    post:
+      operationId: startMineGame
+      tags: [mini-games]
+      summary: Start a Mines game
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MineGameInput"
+      responses:
+        "200":
+          description: Game started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MineGame"
+
+  /mini/games/mines/reveal:
+    post:
+      operationId: revealMineCell
+      tags: [mini-games]
+      summary: Reveal a cell in Mines game
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MineCellInput"
+      responses:
+        "200":
+          description: Cell revealed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MineCellResult"
+
+  /mini/games/mines/cashout:
+    post:
+      operationId: cashoutMineGame
+      tags: [mini-games]
+      summary: Cash out winnings from Mines game
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MineCashoutInput"
+      responses:
+        "200":
+          description: Cashed out
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MineCashoutResult"
+
+  /mini/games/mines/{gameId}:
+    get:
+      operationId: getMineGame
+      tags: [mini-games]
+      summary: Get Mines game state
+      parameters:
+        - name: gameId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Game state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MineGame"
+
+  /mini/tasks/{telegramId}:
+    get:
+      operationId: getMiniTasks
+      tags: [mini-tasks]
+      summary: List all tasks for the mini-app
+      parameters:
+        - name: telegramId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Tasks list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MiniTaskList"
+
+  /mini/tasks:
+    post:
+      operationId: createMiniTask
+      tags: [mini-tasks]
+      summary: Create a new task (advertiser)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MiniTaskInput"
+      responses:
+        "200":
+          description: Task created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MiniTask"
+
+  /mini/tasks/{id}/complete:
+    post:
+      operationId: completeMiniTask
+      tags: [mini-tasks]
+      summary: Complete a task and claim reward
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MiniTaskCompleteInput"
+      responses:
+        "200":
+          description: Task completed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MiniTaskCompleteResult"
+
+  /mini/exchange:
+    post:
+      operationId: exchangeMiniCoins
+      tags: [mini-finance]
+      summary: Exchange coins to TON
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MiniExchangeInput"
+      responses:
+        "200":
+          description: Exchange successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MiniExchangeResult"
+
+  /mini/withdraw:
+    post:
+      operationId: requestMiniWithdraw
+      tags: [mini-finance]
+      summary: Request a TON withdrawal
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MiniWithdrawInput"
+      responses:
+        "200":
+          description: Withdrawal submitted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MiniWithdrawResult"
+
+  /mini/market/pool:
+    get:
+      operationId: getMiniMarketPool
+      tags: [mini]
+      summary: Get primary market pool status
+      responses:
+        "200":
+          description: pool state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MiniMarketPool"
+
+  /mini/market/reserve:
+    post:
+      operationId: reserveMiniMarketPool
+      tags: [mini]
+      summary: Reserve coins from primary market pool
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MiniMarketReserveInput"
+      responses:
+        "200":
+          description: reservation result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MiniMarketReserveResult"
+
+  /mini/history/{telegramId}:
+    get:
+      operationId: getMiniHistory
+      tags: [mini]
+      summary: Combined activity history
+      parameters:
+        - in: path
+          name: telegramId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: history
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MiniHistory"
+
+  /mini/leaderboard:
+    get:
+      operationId: getMiniLeaderboard
+      tags: [mini]
+      summary: Get leaderboard
+      parameters:
+        - in: query
+          name: category
+          schema:
+            type: string
+            enum: [top_earn, top_players, referrals]
+        - in: query
+          name: telegramId
+          schema:
+            type: string
+      responses:
+        "200":
+          description: leaderboard
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MiniLeaderboard"
+
+  /mini/withdraw/{telegramId}:
+    get:
+      operationId: getMiniWithdrawals
+      tags: [mini-finance]
+      summary: Get withdrawal history
+      parameters:
+        - name: telegramId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Withdrawal history
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MiniWithdrawList"
+
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required: [status]
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+        cooldownSeconds:
+          type: integer
+      required: [error]
+
+    RegisterUserRequest:
+      type: object
+      properties:
+        telegramId:
+          type: string
+        username:
+          type: string
+        firstName:
+          type: string
+        lastName:
+          type: string
+        referredBy:
+          type: string
+      required: [telegramId]
+
+    UserProfile:
+      type: object
+      properties:
+        id:
+          type: integer
+        telegramId:
+          type: string
+        username:
+          type: string
+        firstName:
+          type: string
+        coins:
+          type: integer
+        ton:
+          type: number
+        totalAdsWatched:
+          type: integer
+        totalReferrals:
+          type: integer
+        isBlocked:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, telegramId, coins, ton, totalAdsWatched, totalReferrals, isBlocked, createdAt]
+
+    WatchAdRequest:
+      type: object
+      properties:
+        telegramId:
+          type: string
+        blockId:
+          type: string
+      required: [telegramId]
+
+    WatchAdResponse:
+      type: object
+      properties:
+        coinsEarned:
+          type: integer
+        newBalance:
+          type: integer
+        adsWatchedToday:
+          type: integer
+        cooldownSeconds:
+          type: integer
+        achievementsUnlocked:
+          type: array
+          items:
+            type: string
+      required: [coinsEarned, newBalance, adsWatchedToday, cooldownSeconds, achievementsUnlocked]
+
+    AdStatus:
+      type: object
+      properties:
+        canWatch:
+          type: boolean
+        cooldownSeconds:
+          type: integer
+        adsWatchedToday:
+          type: integer
+        dailyLimit:
+          type: integer
+        minCoinsPerAd:
+          type: integer
+        maxCoinsPerAd:
+          type: integer
+      required: [canWatch, cooldownSeconds, adsWatchedToday, dailyLimit, minCoinsPerAd, maxCoinsPerAd]
+
+    LeaderboardEntry:
+      type: object
+      properties:
+        rank:
+          type: integer
+        telegramId:
+          type: string
+        username:
+          type: string
+        firstName:
+          type: string
+        coins:
+          type: integer
+        totalAdsWatched:
+          type: integer
+      required: [rank, telegramId, coins, totalAdsWatched]
+
+    LeaderboardResponse:
+      type: object
+      properties:
+        entries:
+          type: array
+          items:
+            $ref: "#/components/schemas/LeaderboardEntry"
+      required: [entries]
+
+    ReferralInfo:
+      type: object
+      properties:
+        referralCode:
+          type: string
+        referralLink:
+          type: string
+        totalReferrals:
+          type: integer
+        referralEarnings:
+          type: integer
+        referrals:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReferralEntry"
+      required: [referralCode, referralLink, totalReferrals, referralEarnings, referrals]
+
+    ReferralEntry:
+      type: object
+      properties:
+        username:
+          type: string
+        firstName:
+          type: string
+        joinedAt:
+          type: string
+          format: date-time
+        coinsEarned:
+          type: integer
+      required: [joinedAt, coinsEarned]
+
+    WithdrawalRequest:
+      type: object
+      properties:
+        telegramId:
+          type: string
+        amount:
+          type: integer
+        method:
+          type: string
+          enum: [USDT, TON, Payeer, BinancePay]
+        address:
+          type: string
+      required: [telegramId, amount, method, address]
+
+    WithdrawalResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        status:
+          type: string
+        amount:
+          type: integer
+        method:
+          type: string
+        message:
+          type: string
+      required: [id, status, amount, method, message]
+
+    WithdrawalItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        amount:
+          type: integer
+        method:
+          type: string
+        address:
+          type: string
+        status:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, amount, method, address, status, createdAt]
+
+    WithdrawalListResponse:
+      type: object
+      properties:
+        withdrawals:
+          type: array
+          items:
+            $ref: "#/components/schemas/WithdrawalItem"
+        minimumWithdrawal:
+          type: integer
+      required: [withdrawals, minimumWithdrawal]
+
+    TaskItem:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        reward:
+          type: integer
+        type:
+          type: string
+          enum: [subscribe, visit, watch_ads, invite_friends]
+        requirement:
+          type: integer
+        link:
+          type: string
+        completed:
+          type: boolean
+        completedAt:
+          type: string
+          format: date-time
+      required: [id, title, description, reward, type, requirement, completed]
+
+    TasksResponse:
+      type: object
+      properties:
+        tasks:
+          type: array
+          items:
+            $ref: "#/components/schemas/TaskItem"
+      required: [tasks]
+
+    CompleteTaskRequest:
+      type: object
+      properties:
+        telegramId:
+          type: string
+        taskId:
+          type: string
+      required: [telegramId, taskId]
+
+    CompleteTaskResponse:
+      type: object
+      properties:
+        coinsEarned:
+          type: integer
+        newBalance:
+          type: integer
+        taskTitle:
+          type: string
+      required: [coinsEarned, newBalance, taskTitle]
+
+    AchievementItem:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        reward:
+          type: integer
+        icon:
+          type: string
+        requirement:
+          type: integer
+        type:
+          type: string
+          enum: [watch_ads, invite_friends, earn_coins]
+        unlocked:
+          type: boolean
+        progress:
+          type: integer
+        unlockedAt:
+          type: string
+          format: date-time
+      required: [id, title, description, reward, icon, requirement, type, unlocked, progress]
+
+    AchievementsResponse:
+      type: object
+      properties:
+        achievements:
+          type: array
+          items:
+            $ref: "#/components/schemas/AchievementItem"
+      required: [achievements]
+
+    DailyBonusStatus:
+      type: object
+      properties:
+        canClaim:
+          type: boolean
+        nextClaimAt:
+          type: string
+          format: date-time
+        minBonus:
+          type: integer
+        maxBonus:
+          type: integer
+        canSpin:
+          type: boolean
+        nextSpinAt:
+          type: string
+          format: date-time
+      required: [canClaim, minBonus, maxBonus, canSpin]
+
+    ClaimBonusRequest:
+      type: object
+      properties:
+        telegramId:
+          type: string
+      required: [telegramId]
+
+    ClaimBonusResponse:
+      type: object
+      properties:
+        coinsEarned:
+          type: integer
+        newBalance:
+          type: integer
+        message:
+          type: string
+      required: [coinsEarned, newBalance, message]
+
+    SpinResponse:
+      type: object
+      properties:
+        coinsEarned:
+          type: integer
+        newBalance:
+          type: integer
+        prize:
+          type: string
+        spinIndex:
+          type: integer
+      required: [coinsEarned, newBalance, prize, spinIndex]
+
+    MiniEarnStatus:
+      type: object
+      properties:
+        canWatch:
+          type: boolean
+        cooldownSeconds:
+          type: integer
+        adsWatchedToday:
+          type: integer
+        dailyLimit:
+          type: integer
+        minCoins:
+          type: integer
+        maxCoins:
+          type: integer
+      required: [canWatch, cooldownSeconds, adsWatchedToday, dailyLimit, minCoins, maxCoins]
+
+    MiniWatchAdInput:
+      type: object
+      properties:
+        telegramId:
+          type: string
+        blockId:
+          type: string
+      required: [telegramId]
+
+    MiniAdWatchResult:
+      type: object
+      properties:
+        coinsEarned:
+          type: integer
+        newBalance:
+          type: integer
+        adsWatchedToday:
+          type: integer
+        cooldownSeconds:
+          type: integer
+      required: [coinsEarned, newBalance, adsWatchedToday, cooldownSeconds]
+
+    MiniMarketOrder:
+      type: object
+      properties:
+        id:
+          type: integer
+        sellerId:
+          type: string
+        sellerUsername:
+          type: ["string", "null"]
+        amount:
+          type: integer
+        pricePerCoin:
+          type: number
+        totalTon:
+          type: number
+        status:
+          type: string
+        buyerId:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, sellerId, amount, pricePerCoin, totalTon, status, createdAt]
+
+    MiniMarketOrderList:
+      type: object
+      properties:
+        orders:
+          type: array
+          items:
+            $ref: "#/components/schemas/MiniMarketOrder"
+      required: [orders]
+
+    MiniMarketOrderInput:
+      type: object
+      properties:
+        telegramId:
+          type: string
+        amount:
+          type: integer
+        pricePerCoin:
+          type: number
+      required: [telegramId, amount, pricePerCoin]
+
+    MiniOrderBuyInput:
+      type: object
+      properties:
+        telegramId:
+          type: string
+      required: [telegramId]
+
+    MiniSpinPlayer:
+      type: object
+      properties:
+        telegramId:
+          type: string
+        username:
+          type: ["string", "null"]
+        stake:
+          type: integer
+        chance:
+          type: number
+      required: [telegramId, stake, chance]
+
+    MiniSpinRoom:
+      type: object
+      properties:
+        id:
+          type: integer
+        status:
+          type: string
+        totalPool:
+          type: integer
+        winnerId:
+          type: ["string", "null"]
+        winnerUsername:
+          type: ["string", "null"]
+        players:
+          type: array
+          items:
+            $ref: "#/components/schemas/MiniSpinPlayer"
+        startAt:
+          type: ["string", "null"]
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, status, totalPool, players, createdAt]
+
+    MiniSpinRoomList:
+      type: object
+      properties:
+        rooms:
+          type: array
+          items:
+            $ref: "#/components/schemas/MiniSpinRoom"
+      required: [rooms]
+
+    MiniSpinRoomInput:
+      type: object
+      properties:
+        telegramId:
+          type: string
+        stake:
+          type: integer
+      required: [telegramId, stake]
+
+    MiniSpinJoinInput:
+      type: object
+      properties:
+        telegramId:
+          type: string
+        stake:
+          type: integer
+      required: [telegramId, stake]
+
+    MineBoard:
+      type: array
+      items:
+        type: array
+        items:
+          type: string
+
+    MineGame:
+      type: object
+      properties:
+        id:
+          type: integer
+        telegramId:
+          type: string
+        stake:
+          type: integer
+        minesCount:
+          type: integer
+        revealed:
+          $ref: "#/components/schemas/MineBoard"
+        multiplier:
+          type: number
+        status:
+          type: string
+        payout:
+          type: ["integer", "null"]
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, telegramId, stake, minesCount, revealed, multiplier, status, createdAt]
+
+    MineGameInput:
+      type: object
+      properties:
+        telegramId:
+          type: string
+        stake:
+          type: integer
+        minesCount:
+          type: integer
+      required: [telegramId, stake, minesCount]
+
+    MineCellInput:
+      type: object
+      properties:
+        gameId:
+          type: integer
+        telegramId:
+          type: string
+        row:
+          type: integer
+        col:
+          type: integer
+      required: [gameId, telegramId, row, col]
+
+    MineCellResult:
+      type: object
+      properties:
+        hit:
+          type: boolean
+        multiplier:
+          type: number
+        payout:
+          type: ["integer", "null"]
+        game:
+          $ref: "#/components/schemas/MineGame"
+      required: [hit, multiplier, game]
+
+    MineCashoutInput:
+      type: object
+      properties:
+        gameId:
+          type: integer
+        telegramId:
+          type: string
+      required: [gameId, telegramId]
+
+    MineCashoutResult:
+      type: object
+      properties:
+        payout:
+          type: integer
+        multiplier:
+          type: number
+        newBalance:
+          type: integer
+      required: [payout, multiplier, newBalance]
+
+    MiniTask:
+      type: object
+      properties:
+        id:
+          type: integer
+        ownerId:
+          type: ["string", "null"]
+        title:
+          type: string
+        description:
+          type: ["string", "null"]
+        type:
+          type: string
+        link:
+          type: ["string", "null"]
+        reward:
+          type: integer
+        completed:
+          type: boolean
+        completedAt:
+          type: ["string", "null"]
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, title, type, reward, completed, createdAt]
+
+    MiniTaskList:
+      type: object
+      properties:
+        tasks:
+          type: array
+          items:
+            $ref: "#/components/schemas/MiniTask"
+      required: [tasks]
+
+    MiniTaskInput:
+      type: object
+      properties:
+        telegramId:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        type:
+          type: string
+        link:
+          type: string
+        reward:
+          type: integer
+      required: [telegramId, title, type, reward]
+
+    MiniTaskCompleteInput:
+      type: object
+      properties:
+        telegramId:
+          type: string
+      required: [telegramId]
+
+    MiniTaskCompleteResult:
+      type: object
+      properties:
+        coinsEarned:
+          type: integer
+        newBalance:
+          type: integer
+        taskTitle:
+          type: string
+      required: [coinsEarned, newBalance, taskTitle]
+
+    MiniExchangeInput:
+      type: object
+      properties:
+        telegramId:
+          type: string
+        coins:
+          type: integer
+      required: [telegramId, coins]
+
+    MiniExchangeResult:
+      type: object
+      properties:
+        coins:
+          type: integer
+        ton:
+          type: number
+        newBalance:
+          type: integer
+        tonPrice:
+          type: number
+      required: [coins, ton, newBalance, tonPrice]
+
+    MiniWithdrawInput:
+      type: object
+      properties:
+        telegramId:
+          type: string
+        amount:
+          type: integer
+        address:
+          type: string
+      required: [telegramId, amount, address]
+
+    MiniWithdrawResult:
+      type: object
+      properties:
+        id:
+          type: integer
+        status:
+          type: string
+        amount:
+          type: integer
+        message:
+          type: string
+      required: [id, status, amount, message]
+
+    MiniWithdrawItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        amount:
+          type: integer
+        address:
+          type: string
+        tonAmount:
+          type: ["number", "null"]
+        tonPrice:
+          type: ["number", "null"]
+        status:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, amount, address, status, createdAt]
+
+    MiniWithdrawList:
+      type: object
+      properties:
+        withdrawals:
+          type: array
+          items:
+            $ref: "#/components/schemas/MiniWithdrawItem"
+        minimumAmount:
+          type: integer
+      required: [withdrawals, minimumAmount]
+
+    MiniMarketPool:
+      type: object
+      properties:
+        total:
+          type: integer
+        sold:
+          type: integer
+        remaining:
+          type: integer
+        coinsPerTon:
+          type: integer
+        soldOut:
+          type: boolean
+      required: [total, sold, remaining, coinsPerTon, soldOut]
+
+    MiniMarketReserveInput:
+      type: object
+      properties:
+        telegramId:
+          type: string
+        tonAmount:
+          type: number
+      required: [telegramId, tonAmount]
+
+    MiniMarketReserveResult:
+      type: object
+      properties:
+        status:
+          type: string
+        coins:
+          type: integer
+        tonAmount:
+          type: number
+        message:
+          type: string
+      required: [status, coins, tonAmount, message]
+
+    MiniHistoryItem:
+      type: object
+      properties:
+        kind:
+          type: string
+          enum: [ad, withdraw, game]
+        id:
+          type: integer
+        timestamp:
+          type: string
+          format: date-time
+        title:
+          type: string
+        amount:
+          type: integer
+        positive:
+          type: boolean
+        status:
+          type: ["string", "null"]
+      required: [kind, id, timestamp, title, amount, positive]
+
+    MiniHistory:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/MiniHistoryItem"
+      required: [items]
+
+    MiniLeaderEntry:
+      type: object
+      properties:
+        rank:
+          type: integer
+        telegramId:
+          type: string
+        username:
+          type: ["string", "null"]
+        firstName:
+          type: ["string", "null"]
+        coins:
+          type: integer
+        ton:
+          type: number
+      required: [rank, telegramId, coins, ton]
+
+    MiniLeaderboard:
+      type: object
+      properties:
+        category:
+          type: string
+        entries:
+          type: array
+          items:
+            $ref: "#/components/schemas/MiniLeaderEntry"
+        myRank:
+          type: ["integer", "null"]
+      required: [category, entries]

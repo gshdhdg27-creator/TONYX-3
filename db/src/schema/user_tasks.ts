@@ -1,6 +1,6 @@
 import { pgTable, text, timestamp, serial } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
-import { z } from "zod/v4";
+import { z } from "zod";
 
 export const userTasksTable = pgTable("user_tasks", {
   id: serial("id").primaryKey(),

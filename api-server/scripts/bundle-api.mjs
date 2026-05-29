@@ -1,16 +1,17 @@
-import { build } from '../api-server/node_modules/esbuild/lib/main.js';
+import { build } from '../node_modules/esbuild/lib/main.js';
 import { fileURLToPath } from 'url';
 import { dirname, resolve } from 'path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const root = resolve(__dirname, '..');
+const apiServerRoot = resolve(__dirname, '..');
+const repoRoot = resolve(apiServerRoot, '..');
 
 await build({
-  entryPoints: [resolve(root, 'api-server/src/app.ts')],
+  entryPoints: [resolve(apiServerRoot, 'src/app.ts')],
   bundle: true,
   platform: 'node',
   format: 'esm',
-  outfile: resolve(root, 'api/_bundled.mjs'),
+  outfile: resolve(repoRoot, 'api/_bundled.mjs'),
   external: [
     'express', 'cors', 'cookie-parser',
     'pino', 'pino-pretty', 'telegraf',

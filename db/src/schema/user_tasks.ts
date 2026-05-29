@@ -9,6 +9,6 @@ export const userTasksTable = pgTable("user_tasks", {
   completedAt: timestamp("completed_at").notNull().defaultNow(),
 });
 
-export const insertUserTaskSchema = createInsertSchema(userTasksTable);
+export const insertUserTaskSchema = createInsertSchema(userTasksTable) as any;
 export type InsertUserTask = z.infer<typeof insertUserTaskSchema>;
 export type UserTask = typeof userTasksTable.$inferSelect;

@@ -24,6 +24,7 @@ export const RegisterUserBody = zod.object({
   "username": zod.string().optional(),
   "firstName": zod.string().optional(),
   "lastName": zod.string().optional(),
+  "photoUrl": zod.string().optional(),
   "referredBy": zod.string().optional()
 })
 
@@ -144,7 +145,7 @@ export const GetReferralsResponse = zod.object({
 export const RequestWithdrawalBody = zod.object({
   "telegramId": zod.string(),
   "amount": zod.number(),
-  "method": zod.enum(['USDT', 'TON', 'Payeer', 'BinancePay']),
+  "method": zod.enum(['USDT', 'TON', 'Payeer', 'BinancePay', 'Stars']),
   "address": zod.string()
 })
 

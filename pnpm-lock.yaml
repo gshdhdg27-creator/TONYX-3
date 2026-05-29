@@ -11,7 +11,7 @@ importers:
   api-client-react:
     dependencies:
       '@tanstack/react-query':
-        specifier: latest
+        specifier: '*'
         version: 5.100.14(react@19.2.6)
       react:
         specifier: '>=18'
@@ -32,7 +32,7 @@ importers:
         specifier: ^2
         version: 2.8.6
       drizzle-orm:
-        specifier: latest
+        specifier: '*'
         version: 0.45.2(@electric-sql/pglite@0.4.6)(@types/pg@8.20.0)(pg@8.21.0)
       express:
         specifier: ^5
@@ -51,13 +51,13 @@ importers:
         specifier: ^5.0.6
         version: 5.0.6
       '@types/node':
-        specifier: latest
+        specifier: '*'
         version: 25.9.1
       esbuild:
         specifier: ^0.27.3
         version: 0.27.7
       tsx:
-        specifier: latest
+        specifier: '*'
         version: 4.22.3
 
   api-spec:
@@ -69,16 +69,16 @@ importers:
   api-zod:
     dependencies:
       zod:
-        specifier: latest
+        specifier: '*'
         version: 4.4.3
 
   db:
     dependencies:
       '@electric-sql/pglite':
-        specifier: latest
+        specifier: '*'
         version: 0.4.6
       drizzle-orm:
-        specifier: latest
+        specifier: '*'
         version: 0.45.2(@electric-sql/pglite@0.4.6)(@types/pg@8.20.0)(pg@8.21.0)
       drizzle-zod:
         specifier: ^0.8.3
@@ -87,11 +87,11 @@ importers:
         specifier: ^8.20.0
         version: 8.21.0
       zod:
-        specifier: latest
+        specifier: '*'
         version: 4.4.3
     devDependencies:
       '@types/node':
-        specifier: latest
+        specifier: '*'
         version: 25.9.1
       '@types/pg':
         specifier: ^8.18.0
@@ -191,43 +191,43 @@ importers:
         specifier: ^1.2.0
         version: 1.2.8(@types/react-dom@19.2.3(@types/react@19.2.15))(@types/react@19.2.15)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
       '@replit/vite-plugin-cartographer':
-        specifier: latest
+        specifier: '*'
         version: 0.5.5
       '@replit/vite-plugin-dev-banner':
-        specifier: latest
+        specifier: '*'
         version: 0.1.2
       '@replit/vite-plugin-runtime-error-modal':
-        specifier: latest
+        specifier: '*'
         version: 0.0.6
       '@tailwindcss/typography':
         specifier: ^0.5.15
         version: 0.5.19(tailwindcss@4.3.0)
       '@tailwindcss/vite':
-        specifier: latest
+        specifier: '*'
         version: 4.3.0(vite@8.0.14(@types/node@25.9.1)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.22.3)(yaml@2.9.0))
       '@tanstack/react-query':
-        specifier: latest
+        specifier: '*'
         version: 5.100.14(react@19.2.6)
       '@types/node':
-        specifier: latest
+        specifier: '*'
         version: 25.9.1
       '@types/react':
-        specifier: latest
+        specifier: '*'
         version: 19.2.15
       '@types/react-dom':
-        specifier: latest
+        specifier: '*'
         version: 19.2.3(@types/react@19.2.15)
       '@vitejs/plugin-react':
-        specifier: latest
+        specifier: '*'
         version: 6.0.2(vite@8.0.14(@types/node@25.9.1)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.22.3)(yaml@2.9.0))
       '@workspace/api-client-react':
         specifier: workspace:*
         version: link:../api-client-react
       class-variance-authority:
-        specifier: latest
+        specifier: '*'
         version: 0.7.1
       clsx:
-        specifier: latest
+        specifier: '*'
         version: 2.1.1
       cmdk:
         specifier: ^1.1.1
@@ -239,25 +239,25 @@ importers:
         specifier: ^8.6.0
         version: 8.6.0(react@19.2.6)
       framer-motion:
-        specifier: latest
+        specifier: '*'
         version: 12.40.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
       input-otp:
         specifier: ^1.4.2
         version: 1.4.2(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
       lucide-react:
-        specifier: latest
+        specifier: '*'
         version: 1.16.0(react@19.2.6)
       next-themes:
         specifier: ^0.4.6
         version: 0.4.6(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
       react:
-        specifier: latest
+        specifier: '*'
         version: 19.2.6
       react-day-picker:
         specifier: ^9.11.1
         version: 9.14.0(react@19.2.6)
       react-dom:
-        specifier: latest
+        specifier: '*'
         version: 19.2.6(react@19.2.6)
       react-hook-form:
         specifier: ^7.55.0
@@ -275,10 +275,10 @@ importers:
         specifier: ^2.0.7
         version: 2.0.7(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
       tailwind-merge:
-        specifier: latest
+        specifier: '*'
         version: 3.6.0
       tailwindcss:
-        specifier: latest
+        specifier: '*'
         version: 4.3.0
       tw-animate-css:
         specifier: ^1.4.0
@@ -287,13 +287,13 @@ importers:
         specifier: ^1.1.2
         version: 1.1.2(@types/react-dom@19.2.3(@types/react@19.2.15))(@types/react@19.2.15)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
       vite:
-        specifier: latest
+        specifier: '*'
         version: 8.0.14(@types/node@25.9.1)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.22.3)(yaml@2.9.0)
       wouter:
         specifier: ^3.3.5
         version: 3.10.0(react@19.2.6)
       zod:
-        specifier: latest
+        specifier: '*'
         version: 4.4.3
 
 packages:
@@ -1764,42 +1764,36 @@ packages:
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [arm64]
     os: [linux]
-    libc: [glibc]
 
   '@rolldown/binding-linux-arm64-musl@1.0.2':
     resolution: {integrity: sha512-QVLO/czFMdoMFSqlX3bcswcJNm/23r+qoa/jgtmFc/qEp6/jXmIkDjF/XIo8dPfGaiwy1xfQn8o77L79GeXFgw==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [arm64]
     os: [linux]
-    libc: [musl]
 
   '@rolldown/binding-linux-ppc64-gnu@1.0.2':
     resolution: {integrity: sha512-hgO5Abm0w5UL6FEa2iFnZqo2KlK7TQ5QhV5x09hujBf7t5KzHQ1VmfPuTpqRy/rNlSxua3eWH374xxiVrP+lcA==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [ppc64]
     os: [linux]
-    libc: [glibc]
 
   '@rolldown/binding-linux-s390x-gnu@1.0.2':
     resolution: {integrity: sha512-fy8rXxuYEu602abC8MUNaPjYLIFzReOaEIEMKMUa0rFEUxNpVXhs15KSSQ4qlqSaM7B6rcj9rDZgADh/IGDzLQ==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [s390x]
     os: [linux]
-    libc: [glibc]
 
   '@rolldown/binding-linux-x64-gnu@1.0.2':
     resolution: {integrity: sha512-0+bOkiQ779+r1WpoHOWHqncvyySci0vKph+myNDYb+im6meJAzHQXay6oEgnkHuUGouM1LKTZwqKpBow6Kj7CQ==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [x64]
     os: [linux]
-    libc: [glibc]
 
   '@rolldown/binding-linux-x64-musl@1.0.2':
     resolution: {integrity: sha512-mjSkrzZK5Qsl0a9d1JgILOiuZOSDTVdKENcSXBoqbzSrspLR/4/IRVDo5wd2GgZjNss/viBFJdeq+j7qH2nypw==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [x64]
     os: [linux]
-    libc: [musl]
 
   '@rolldown/binding-openharmony-arm64@1.0.2':
     resolution: {integrity: sha512-1v5vHasdfQAZoEHakBV72LIFAC9JjnymsiKxp+GEr/ma3+NJCPSaYK+qavInOovJkgwFrs7GccX2d6IgDA3Z5w==}
@@ -1915,28 +1909,24 @@ packages:
     engines: {node: '>= 20'}
     cpu: [arm64]
     os: [linux]
-    libc: [glibc]
 
   '@tailwindcss/oxide-linux-arm64-musl@4.3.0':
     resolution: {integrity: sha512-Z6sukiQsngnWO+l39X4pPbiWT81IC+PLKF+PHxIlyZbGNb9MODfYlXEVlFvej5BOZInWX01kVyzeLvHsXhfczQ==}
     engines: {node: '>= 20'}
     cpu: [arm64]
     os: [linux]
-    libc: [musl]
 
   '@tailwindcss/oxide-linux-x64-gnu@4.3.0':
     resolution: {integrity: sha512-DRNdQRpSGzRGfARVuVkxvM8Q12nh19l4BF/G7zGA1oe+9wcC6saFBHTISrpIcKzhiXtSrlSrluCfvMuledoCTQ==}
     engines: {node: '>= 20'}
     cpu: [x64]
     os: [linux]
-    libc: [glibc]
 
   '@tailwindcss/oxide-linux-x64-musl@4.3.0':
     resolution: {integrity: sha512-Z0IADbDo8bh6I7h2IQMx601AdXBLfFpEdUotft86evd/8ZPflZe9COPO8Q1vw+pfLWIUo9zN/JGZvwuAJqduqg==}
     engines: {node: '>= 20'}
     cpu: [x64]
     os: [linux]
-    libc: [musl]
 
   '@tailwindcss/oxide-wasm32-wasi@4.3.0':
     resolution: {integrity: sha512-HNZGOUxEmElksYR7S6sC5jTeNGpobAsy9u7Gu0AskJ8/20FR9GqebUyB+HBcU/ax6BHuiuJi+Oda4B+YX6H1yA==}
@@ -2721,28 +2711,24 @@ packages:
     engines: {node: '>= 12.0.0'}
     cpu: [arm64]
     os: [linux]
-    libc: [glibc]
 
   lightningcss-linux-arm64-musl@1.32.0:
     resolution: {integrity: sha512-UpQkoenr4UJEzgVIYpI80lDFvRmPVg6oqboNHfoH4CQIfNA+HOrZ7Mo7KZP02dC6LjghPQJeBsvXhJod/wnIBg==}
     engines: {node: '>= 12.0.0'}
     cpu: [arm64]
     os: [linux]
-    libc: [musl]
 
   lightningcss-linux-x64-gnu@1.32.0:
     resolution: {integrity: sha512-V7Qr52IhZmdKPVr+Vtw8o+WLsQJYCTd8loIfpDaMRWGUZfBOYEJeyJIkqGIDMZPwPx24pUMfwSxxI8phr/MbOA==}
     engines: {node: '>= 12.0.0'}
     cpu: [x64]
     os: [linux]
-    libc: [glibc]
 
   lightningcss-linux-x64-musl@1.32.0:
     resolution: {integrity: sha512-bYcLp+Vb0awsiXg/80uCRezCYHNg1/l3mt0gzHnWV9XP1W5sKa5/TCdGWaR/zBM2PeF/HbsQv/j2URNOiVuxWg==}
     engines: {node: '>= 12.0.0'}
     cpu: [x64]
     os: [linux]
-    libc: [musl]
 
   lightningcss-win32-arm64-msvc@1.32.0:
     resolution: {integrity: sha512-8SbC8BR40pS6baCM8sbtYDSwEVQd4JlFTOlaD3gWGHfThTcABnNDBda6eTZeqbofalIJhFx0qKzgHJmcPTnGdw==}

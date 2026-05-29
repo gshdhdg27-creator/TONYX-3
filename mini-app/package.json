@@ -48,7 +48,7 @@
     "@types/react": "*",
     "@types/react-dom": "*",
     "@vitejs/plugin-react": "*",
-    "@workspace/api-client-react": "*",
+    "@workspace/api-client-react": "workspace:*",
     "class-variance-authority": "*",
     "clsx": "*",
     "cmdk": "^1.1.1",

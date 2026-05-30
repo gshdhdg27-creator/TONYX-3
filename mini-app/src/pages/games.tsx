@@ -355,8 +355,12 @@ function JackpotWheel({ players, spinning, winnerId }: {
           const start = angle;
           const end = angle + frac * 360;
           if (p.telegramId === curWinnerId) {
-            const mid = (start + end) / 2;
-            targetAngle = ((360 - (mid % 360)) + 360) % 360;
+            // Stop at a random position inside the winner's sector, not just the midpoint.
+            // Keep a small margin (8% from each edge) so the pointer clearly sits inside.
+            const span = end - start;
+            const margin = Math.min(span * 0.08, 6);
+            const randAngle = start + margin + Math.random() * (span - margin * 2);
+            targetAngle = ((360 - (randAngle % 360)) + 360) % 360;
             break;
           }
           angle = end;
@@ -509,7 +513,17 @@ function SpinGame({ telegramId, tonBalance, onBalanceChange, onOpenHistory }: {
   }, []);
 
   useEffect(() => {
-    if (countdown === null || countdown <= 0) return;
+    if (countdown === null || countdown <= 0) {
+      if (countdown === 0) {
+        // Countdown just hit zero — poll aggressively so the spin starts ASAP
+        fetchState();
+        const t1 = setTimeout(fetchState, 500);
+        const t2 = setTimeout(fetchState, 1000);
+        const t3 = setTimeout(fetchState, 1600);
+        return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
+      }
+      return;
+    }
     const t = setTimeout(() => setCountdown(c => (c !== null && c > 0 ? c - 1 : 0)), 1000);
     return () => clearTimeout(t);
   }, [countdown]);

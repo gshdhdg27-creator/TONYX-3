@@ -86,14 +86,27 @@ function sectorAvatarPos(startDeg: number, endDeg: number, fraction = 0.58): [nu
   return [CX + (px - CX) * fraction, CY + (py - CY) * fraction];
 }
 
+function sectorCentroid(startDeg: number, endDeg: number): [number, number] {
+  const N = 32;
+  let sx = CX, sy = CY;
+  let count = 1;
+  for (let i = 0; i <= N; i++) {
+    const a = startDeg + (endDeg - startDeg) * i / N;
+    const [px, py] = squarePoint(a);
+    sx += px; sy += py; count++;
+  }
+  return [sx / count, sy / count];
+}
+
 function sectorRandomPoint(startDeg: number, endDeg: number): [number, number] {
-  // Random angle within the sector (avoid extreme edges)
+  // Random angle within sector (10% margin from edges to stay away from boundaries)
   const span = endDeg - startDeg;
-  const midDeg = startDeg + span * (0.25 + Math.random() * 0.5);
-  const [bx, by] = squarePoint(midDeg);
-  // Random radial depth: 40–70% from center to boundary (clearly inside sector)
-  const frac = 0.40 + Math.random() * 0.30;
-  return [CX + (bx - CX) * frac, CY + (by - CY) * frac];
+  const margin = Math.min(span * 0.12, 8);
+  const randDeg = startDeg + margin + Math.random() * (span - margin * 2);
+  const [px, py] = squarePoint(randDeg);
+  // Random radial fraction between 30% and 70% of the distance from centre to edge
+  const frac = 0.30 + Math.random() * 0.40;
+  return [CX + (px - CX) * frac, CY + (py - CY) * frac];
 }
 
 interface Sector {
@@ -201,7 +214,6 @@ export default function ArenaGame({
   const ballVelRef        = useRef({ vx: 0, vy: 0 });
   const ballTargetRef     = useRef<{ x: number; y: number } | null>(null);
   const ballStoppedRef    = useRef(false);
-  const ballLaunchedRef   = useRef(false);
   const runStartTimeRef   = useRef<number | null>(null);
   const rafRef            = useRef<number | null>(null);
   const prevCountdownRef  = useRef<number | null>(null);
@@ -312,7 +324,17 @@ export default function ArenaGame({
 
   /* ── Countdown tick ── */
   useEffect(() => {
-    if (countdown === null || countdown <= 0) return;
+    if (countdown === null || countdown <= 0) {
+      if (countdown === 0) {
+        // Countdown just hit zero — poll aggressively to catch "finished" ASAP
+        fetchArena();
+        const t1 = setTimeout(fetchArena, 500);
+        const t2 = setTimeout(fetchArena, 1000);
+        const t3 = setTimeout(fetchArena, 1600);
+        return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
+      }
+      return;
+    }
     const t = setTimeout(() => setCountdown(c => (c !== null && c > 0 ? c - 1 : 0)), 1000);
     return () => clearTimeout(t);
   }, [countdown]);
@@ -367,7 +389,7 @@ export default function ArenaGame({
         const dy  = tgt.y - pos.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
 
-        if (dist < 1.5) {
+        if (dist < 2) {
           ballStoppedRef.current = true;
           ballVelRef.current = { vx: 0, vy: 0 };
           place(tgt.x, tgt.y);
@@ -378,22 +400,17 @@ export default function ArenaGame({
           return;
         }
 
-        // Smooth attraction: gently steer toward target, cap max speed, keep wall bounce
-        // dx*0.04 adds force proportional to distance, *0.90 friction ensures no overshoot
-        vx = (vx + dx * 0.04) * 0.90;
-        vy = (vy + dy * 0.04) * 0.90;
-        const sp = Math.sqrt(vx * vx + vy * vy);
-        if (sp > 6) { vx = (vx / sp) * 6; vy = (vy / sp) * 6; }
+        vx = dx * 0.10;
+        vy = dy * 0.10;
         ballVelRef.current = { vx, vy };
-        const ba = wallBounce(pos.x + vx, pos.y + vy, vx, vy);
-        ballVelRef.current = { vx: ba.vx, vy: ba.vy };
-        place(ba.nx, ba.ny);
+        place(pos.x + vx, pos.y + vy);
         rafRef.current = requestAnimationFrame(step);
         return;
       }
 
-      // Free bounce phase: mild friction, wall bounce
+      // suppress unused warning
       void FREE_MS;
+
       vx *= 0.995;
       vy *= 0.995;
       const b = wallBounce(pos.x + vx, pos.y + vy, vx, vy);
@@ -412,8 +429,6 @@ export default function ArenaGame({
   /* ── Ball state transitions ── */
   useEffect(() => {
     const launchBall = () => {
-      if (ballLaunchedRef.current) return;
-      ballLaunchedRef.current = true;
       const angle = Math.random() * Math.PI * 2;
       const speed = 3.5 + Math.random() * 1.5;
       ballStateRef.current    = "RUNNING";
@@ -423,32 +438,40 @@ export default function ArenaGame({
       runStartTimeRef.current = performance.now();
     };
 
+    // Countdown just hit zero — launch ball only if it hasn't been launched already
     if (prevCountdownRef.current !== null && prevCountdownRef.current > 0 && countdown === 0) {
-      launchBall();
-    }
-
-    if (arena?.status === "finished" && arena?.winnerId && !ballTargetRef.current) {
-      const win = sectorsRef.current.find(s => s.player.telegramId === arena.winnerId);
-      if (win) {
-        const [tx, ty] = sectorRandomPoint(win.startDeg, win.endDeg);
-        ballTargetRef.current = { x: tx, y: ty };
-      }
       if (ballStateRef.current === "IDLE") launchBall();
     }
 
+    // Backend confirmed "finished" and we have a winner
+    if (arena?.status === "finished" && arena?.winnerId && !ballTargetRef.current) {
+      const win = sectorsRef.current.find(s => s.player.telegramId === arena.winnerId);
+      if (win) {
+        // Pick a random point inside the winner's sector (not just the centroid)
+        const [tx, ty] = sectorRandomPoint(win.startDeg, win.endDeg);
+        ballTargetRef.current = { x: tx, y: ty };
+      }
+      // If ball wasn't launched yet (finished came before countdown=0), launch now
+      if (ballStateRef.current === "IDLE") launchBall();
+    }
+
+    // New round started — only reset physics if the previous animation has fully completed
+    // (ball stopped + result overlay dismissed). This prevents cutting off a running animation.
     if (arena?.status === "waiting") {
-      cancelTimersRef.current?.();
-      cancelTimersRef.current  = null;
-      onBallStopRef.current    = null;
-      ballStateRef.current     = "IDLE";
-      ballPosRef.current       = { x: CX, y: CY };
-      ballVelRef.current       = { vx: 0, vy: 0 };
-      ballTargetRef.current    = null;
-      ballStoppedRef.current   = false;
-      ballLaunchedRef.current  = false;
-      runStartTimeRef.current  = null;
-      setAnimPhase("idle");
-      setPendingResult(null);
+      const animationDone = ballStoppedRef.current || ballStateRef.current === "IDLE";
+      if (animationDone) {
+        cancelTimersRef.current?.();
+        cancelTimersRef.current  = null;
+        onBallStopRef.current    = null;
+        ballStateRef.current     = "IDLE";
+        ballPosRef.current       = { x: CX, y: CY };
+        ballVelRef.current       = { vx: 0, vy: 0 };
+        ballTargetRef.current    = null;
+        ballStoppedRef.current   = false;
+        runStartTimeRef.current  = null;
+        setAnimPhase("idle");
+        setPendingResult(null);
+      }
     }
 
     prevCountdownRef.current = countdown;

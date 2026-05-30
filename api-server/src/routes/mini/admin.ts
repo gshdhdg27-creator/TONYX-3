@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
-import { usersTable, miniMarketOrdersTable, systemSettingsTable } from "@workspace/db/schema";
+import { usersTable, miniMarketOrdersTable, systemSettingsTable, miniTasksTable, miniTaskCompletionsTable } from "@workspace/db/schema";
 import { eq, sql, or, ilike, desc } from "drizzle-orm";
 
 const router: IRouter = Router();
@@ -226,6 +226,113 @@ router.post("/users/:id/adjust-balance", async (req, res) => {
     await db.update(usersTable).set({ tonyxCoins: newVal, updatedAt: new Date() }).where(eq(usersTable.telegramId, id));
     res.json({ success: true, currency, action, newBalance: newVal });
   }
+});
+
+/* ─── GET /admin/ip-check — find multi-accounts by shared IP ─── */
+router.get("/ip-check", async (_req, res) => {
+  const rows = await db.execute<{ last_ip: string; cnt: number; user_ids: string }>(
+    sql`SELECT last_ip, COUNT(*)::int AS cnt, STRING_AGG(telegram_id || ':' || COALESCE(username,'') || ':' || COALESCE(first_name,''), '|' ORDER BY last_login_at DESC) AS user_ids
+        FROM users
+        WHERE last_ip IS NOT NULL AND last_ip != ''
+        GROUP BY last_ip
+        HAVING COUNT(*) > 1
+        ORDER BY cnt DESC
+        LIMIT 100`,
+  );
+
+  const groups = rows.rows.map((r) => ({
+    ip: r.last_ip,
+    count: r.cnt,
+    users: (r.user_ids ?? "").split("|").map((entry) => {
+      const [telegramId, username, firstName] = entry.split(":");
+      return { telegramId, username: username || null, firstName: firstName || null };
+    }),
+  }));
+
+  res.json({ groups, total: groups.length });
+});
+
+/* ─── GET /admin/tasks — list all tasks ─── */
+router.get("/tasks", async (_req, res) => {
+  const tasks = await db.select().from(miniTasksTable).orderBy(desc(miniTasksTable.createdAt));
+
+  const withStats = await Promise.all(tasks.map(async (t) => {
+    const [cntRow] = await db.execute<{ cnt: number }>(
+      sql`SELECT COUNT(*)::int AS cnt FROM mini_task_completions WHERE task_id = ${t.id}`,
+    );
+    return {
+      id: t.id,
+      ownerId: t.ownerId ?? null,
+      title: t.title,
+      description: t.description ?? null,
+      type: t.type,
+      link: t.link ?? null,
+      reward: t.reward,
+      isActive: t.isActive === "true",
+      completions: cntRow?.cnt ?? 0,
+      createdAt: t.createdAt.toISOString(),
+    };
+  }));
+
+  res.json({ tasks: withStats });
+});
+
+/* ─── POST /admin/tasks — create a new task ─── */
+router.post("/tasks", async (req, res) => {
+  const { title, description, type, link, reward } = req.body as {
+    title?: string; description?: string; type?: string; link?: string; reward?: number;
+  };
+
+  if (!title?.trim()) { res.status(400).json({ error: "title обязателен" }); return; }
+  if (!type?.trim())  { res.status(400).json({ error: "type обязателен" });  return; }
+  if (!reward || reward <= 0) { res.status(400).json({ error: "reward должен быть > 0" }); return; }
+
+  const [task] = await db.insert(miniTasksTable).values({
+    title: title.trim(),
+    description: description?.trim() ?? null,
+    type: type.trim(),
+    link: link?.trim() ?? null,
+    reward: Math.floor(reward),
+    isActive: "true",
+  }).returning();
+
+  res.json({
+    success: true,
+    task: {
+      id: task.id, title: task.title, description: task.description ?? null,
+      type: task.type, link: task.link ?? null, reward: task.reward,
+      isActive: true, completions: 0, createdAt: task.createdAt.toISOString(),
+    },
+  });
+});
+
+/* ─── PATCH /admin/tasks/:id — toggle active/inactive ─── */
+router.patch("/tasks/:id", async (req, res) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid task id" }); return; }
+
+  const { isActive } = req.body as { isActive?: boolean };
+  if (isActive === undefined) { res.status(400).json({ error: "isActive required" }); return; }
+
+  const [task] = await db.update(miniTasksTable)
+    .set({ isActive: isActive ? "true" : "false" })
+    .where(eq(miniTasksTable.id, id))
+    .returning();
+
+  if (!task) { res.status(404).json({ error: "Task not found" }); return; }
+  res.json({ success: true, task: { id: task.id, isActive: task.isActive === "true" } });
+});
+
+/* ─── DELETE /admin/tasks/:id — permanently delete a task ─── */
+router.delete("/tasks/:id", async (req, res) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid task id" }); return; }
+
+  await db.delete(miniTaskCompletionsTable).where(eq(miniTaskCompletionsTable.taskId, id));
+  const [deleted] = await db.delete(miniTasksTable).where(eq(miniTasksTable.id, id)).returning();
+
+  if (!deleted) { res.status(404).json({ error: "Task not found" }); return; }
+  res.json({ success: true, message: `Задание "${deleted.title}" удалено` });
 });
 
 export default router;

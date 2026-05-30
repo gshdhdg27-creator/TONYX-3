@@ -3,6 +3,26 @@ import { useTelegram } from "@/lib/telegram";
 
 const SUPERADMIN_IDS = ["7257793582"];
 
+/* ─── Additional Types ─── */
+interface IpGroup {
+  ip: string;
+  count: number;
+  users: { telegramId: string; username: string | null; firstName: string | null }[];
+}
+
+interface AdminTask {
+  id: number;
+  ownerId: string | null;
+  title: string;
+  description: string | null;
+  type: string;
+  link: string | null;
+  reward: number;
+  isActive: boolean;
+  completions: number;
+  createdAt: string;
+}
+
 /* ─── Types ─── */
 interface Stats {
   totalUsers: number; totalCoinsSold: number; totalTonVolume: number;
@@ -306,6 +326,234 @@ function TeamSection({ admins, adminId, onRefresh }: {
   );
 }
 
+/* ─── IP Anti-Twin Section ─── */
+function IpCheckSection({ adminId }: { adminId: string }) {
+  const [groups, setGroups] = useState<IpGroup[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const [toast, setToast] = useState<{ msg: string; type: "success" | "error" | "info" } | null>(null);
+  const flash = (msg: string, type: "success" | "error" | "info") => { setToast({ msg, type }); setTimeout(() => setToast(null), 3000); };
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const r = await fetch(`/api/mini/admin/ip-check?adminId=${adminId}`);
+      if (!r.ok) { flash("Ошибка загрузки", "error"); return; }
+      const d = await r.json();
+      setGroups(d.groups ?? []);
+      setLoaded(true);
+    } catch { flash("Ошибка сети", "error"); }
+    finally { setLoading(false); }
+  };
+
+  return (
+    <div style={{ background: "rgba(15,23,42,0.95)", border: "1px solid rgba(239,68,68,0.25)", borderRadius: 16, padding: 16, marginBottom: 14 }}>
+      {toast && <Toast msg={toast.msg} type={toast.type} />}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: 18 }}>🕵️</span>
+          <div style={{ fontSize: 14, fontWeight: 800, color: "#f87171" }}>Анти-твин (по IP)</div>
+        </div>
+        <button onClick={load} disabled={loading}
+          style={{ padding: "8px 14px", borderRadius: 10, border: "1px solid rgba(239,68,68,0.4)", background: "rgba(239,68,68,0.1)", color: "#f87171", fontFamily: "inherit", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+          {loading ? "..." : loaded ? "🔄 Обновить" : "🔍 Проверить"}
+        </button>
+      </div>
+
+      {!loaded ? (
+        <div style={{ fontSize: 12, color: "#475569", textAlign: "center", padding: "12px 0" }}>
+          Нажмите «Проверить» для поиска мультиаккаунтов по IP
+        </div>
+      ) : groups.length === 0 ? (
+        <div style={{ fontSize: 13, color: "#4ade80", textAlign: "center", padding: "12px 0", fontWeight: 700 }}>
+          ✅ Мультиаккаунты не обнаружены
+        </div>
+      ) : (
+        <>
+          <div style={{ fontSize: 10, color: "#f87171", fontWeight: 700, marginBottom: 10, letterSpacing: "0.1em" }}>
+            НАЙДЕНО ГРУПП: {groups.length}
+          </div>
+          {groups.map((g) => (
+            <div key={g.ip} style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", borderRadius: 12, padding: 12, marginBottom: 8 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+                <div style={{ fontSize: 11, fontFamily: "monospace", color: "#94a3b8" }}>{g.ip}</div>
+                <div style={{ fontSize: 10, background: "rgba(239,68,68,0.2)", color: "#f87171", padding: "2px 8px", borderRadius: 6, fontWeight: 700 }}>
+                  {g.count} аккаунта
+                </div>
+              </div>
+              {g.users.map((u) => (
+                <div key={u.telegramId} style={{ display: "flex", gap: 8, marginBottom: 4 }}>
+                  <span style={{ fontSize: 11, color: "#475569", fontFamily: "monospace" }}>{u.telegramId}</span>
+                  <span style={{ fontSize: 11, color: "#94a3b8" }}>{u.username ? `@${u.username}` : (u.firstName ?? "—")}</span>
+                </div>
+              ))}
+            </div>
+          ))}
+        </>
+      )}
+    </div>
+  );
+}
+
+/* ─── Task Constructor Section ─── */
+function TaskConstructorSection({ adminId }: { adminId: string }) {
+  const [tasks, setTasks] = useState<AdminTask[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [toast, setToast] = useState<{ msg: string; type: "success" | "error" | "info" } | null>(null);
+  const [form, setForm] = useState({ title: "", description: "", type: "visit", link: "", reward: "50" });
+
+  const flash = (msg: string, type: "success" | "error" | "info") => { setToast({ msg, type }); setTimeout(() => setToast(null), 3000); };
+
+  const fetchTasks = useCallback(async () => {
+    setLoading(true);
+    try {
+      const r = await fetch(`/api/mini/admin/tasks?adminId=${adminId}`);
+      if (r.ok) { const d = await r.json(); setTasks(d.tasks ?? []); }
+    } catch {}
+    finally { setLoading(false); }
+  }, [adminId]);
+
+  useEffect(() => { fetchTasks(); }, [fetchTasks]);
+
+  const createTask = async () => {
+    if (!form.title.trim()) { flash("Введите название задания", "error"); return; }
+    const reward = parseInt(form.reward);
+    if (!reward || reward <= 0) { flash("Награда должна быть > 0", "error"); return; }
+    setSaving(true);
+    try {
+      const r = await fetch("/api/mini/admin/tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ adminId, title: form.title, description: form.description || null, type: form.type, link: form.link || null, reward }),
+      });
+      const d = await r.json();
+      if (!r.ok) { flash(d.error || "Ошибка", "error"); return; }
+      flash(`✅ Задание «${form.title}» создано!`, "success");
+      setForm({ title: "", description: "", type: "visit", link: "", reward: "50" });
+      fetchTasks();
+    } catch { flash("Ошибка сети", "error"); }
+    finally { setSaving(false); }
+  };
+
+  const toggleTask = async (id: number, isActive: boolean) => {
+    try {
+      await fetch(`/api/mini/admin/tasks/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ adminId, isActive: !isActive }),
+      });
+      fetchTasks();
+    } catch {}
+  };
+
+  const deleteTask = async (id: number, title: string) => {
+    if (!window.confirm(`Удалить задание «${title}»?`)) return;
+    try {
+      const r = await fetch(`/api/mini/admin/tasks/${id}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ adminId }),
+      });
+      const d = await r.json();
+      if (r.ok) { flash(d.message || "Удалено", "success"); fetchTasks(); }
+      else flash(d.error || "Ошибка", "error");
+    } catch { flash("Ошибка сети", "error"); }
+  };
+
+  const inputStyle: React.CSSProperties = {
+    width: "100%", background: "rgba(30,45,69,0.7)", border: "1px solid rgba(30,58,143,0.4)",
+    borderRadius: 8, padding: "10px 12px", color: "#f1f5f9", fontFamily: "inherit",
+    fontSize: 13, outline: "none", boxSizing: "border-box",
+  };
+
+  const TASK_TYPES = ["visit", "subscribe", "share", "watch", "other"];
+
+  return (
+    <div style={{ background: "rgba(15,23,42,0.95)", border: "1px solid rgba(251,191,36,0.2)", borderRadius: 16, padding: 16, marginBottom: 14 }}>
+      {toast && <Toast msg={toast.msg} type={toast.type} />}
+
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
+        <span style={{ fontSize: 18 }}>📋</span>
+        <div style={{ fontSize: 14, fontWeight: 800, color: "#fbbf24" }}>Конструктор заданий</div>
+      </div>
+
+      {/* Create form */}
+      <div style={{ background: "rgba(30,45,69,0.4)", borderRadius: 12, padding: 12, marginBottom: 14 }}>
+        <div style={{ fontSize: 10, color: "#475569", fontWeight: 700, marginBottom: 10, letterSpacing: "0.1em" }}>НОВОЕ ЗАДАНИЕ</div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
+            placeholder="Название задания *" style={inputStyle} />
+          <input value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+            placeholder="Описание (необязательно)" style={inputStyle} />
+          <input value={form.link} onChange={e => setForm(f => ({ ...f, link: e.target.value }))}
+            placeholder="Ссылка (https://...)" style={inputStyle} />
+
+          <div style={{ display: "flex", gap: 8 }}>
+            <select value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))}
+              style={{ ...inputStyle, flex: 1, appearance: "none" }}>
+              {TASK_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+            <input value={form.reward} onChange={e => setForm(f => ({ ...f, reward: e.target.value }))}
+              type="number" placeholder="Награда (pts)" style={{ ...inputStyle, width: 110 }} />
+          </div>
+
+          <button onClick={createTask} disabled={saving}
+            style={{ width: "100%", padding: "12px 0", borderRadius: 10, border: "none", fontFamily: "inherit", background: "linear-gradient(135deg,#92400e,#b45309)", color: "#fbbf24", fontSize: 13, fontWeight: 800, cursor: "pointer" }}>
+            {saving ? "Создаю..." : "➕ Создать задание"}
+          </button>
+        </div>
+      </div>
+
+      {/* Tasks list */}
+      <div style={{ fontSize: 10, color: "#475569", fontWeight: 700, marginBottom: 8, letterSpacing: "0.1em" }}>
+        ВСЕ ЗАДАНИЯ {tasks.length > 0 && `(${tasks.length})`}
+      </div>
+
+      {loading ? (
+        <div style={{ textAlign: "center", color: "#334155", padding: "16px 0", fontSize: 12 }}>Загрузка...</div>
+      ) : tasks.length === 0 ? (
+        <div style={{ textAlign: "center", color: "#334155", padding: "16px 0", fontSize: 12 }}>Нет заданий</div>
+      ) : (
+        tasks.map(task => (
+          <div key={task.id} style={{ background: "rgba(30,45,69,0.4)", border: `1px solid ${task.isActive ? "rgba(74,222,128,0.2)" : "rgba(30,58,143,0.2)"}`, borderRadius: 12, padding: 12, marginBottom: 8 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#f1f5f9" }}>{task.title}</div>
+                {task.description && <div style={{ fontSize: 11, color: "#475569", marginTop: 2 }}>{task.description}</div>}
+                {task.link && <div style={{ fontSize: 10, color: "#60a5fa", marginTop: 2, wordBreak: "break-all" }}>{task.link}</div>}
+              </div>
+              <div style={{ display: "flex", gap: 6, flexShrink: 0, marginLeft: 8 }}>
+                <span style={{ fontSize: 9, background: "rgba(30,45,69,0.6)", color: "#94a3b8", padding: "2px 6px", borderRadius: 6 }}>{task.type}</span>
+                <span style={{ fontSize: 9, background: task.isActive ? "rgba(74,222,128,0.15)" : "rgba(239,68,68,0.12)", color: task.isActive ? "#4ade80" : "#f87171", padding: "2px 6px", borderRadius: 6, fontWeight: 700 }}>
+                  {task.isActive ? "active" : "off"}
+                </span>
+              </div>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ display: "flex", gap: 10, fontSize: 11, color: "#475569" }}>
+                <span style={{ color: "#fbbf24", fontWeight: 700 }}>+{task.reward} pts</span>
+                <span>✅ {task.completions} выполнений</span>
+              </div>
+              <div style={{ display: "flex", gap: 6 }}>
+                <button onClick={() => toggleTask(task.id, task.isActive)}
+                  style={{ padding: "5px 10px", borderRadius: 7, border: "none", fontFamily: "inherit", background: task.isActive ? "rgba(239,68,68,0.12)" : "rgba(74,222,128,0.12)", color: task.isActive ? "#f87171" : "#4ade80", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                  {task.isActive ? "Выкл" : "Вкл"}
+                </button>
+                <button onClick={() => deleteTask(task.id, task.title)}
+                  style={{ padding: "5px 10px", borderRadius: 7, border: "none", fontFamily: "inherit", background: "rgba(239,68,68,0.1)", color: "#f87171", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                  🗑
+                </button>
+              </div>
+            </div>
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
+
 /* ═══════════════════════════
    ADMIN PAGE
 ═══════════════════════════ */
@@ -474,6 +722,12 @@ export default function AdminPage() {
       {isSuperAdmin && stats && (
         <TeamSection admins={stats.admins} adminId={adminId} onRefresh={() => { fetchStats(adminId); fetchUsers(adminId, search); }} />
       )}
+
+      {/* IP Anti-twin — superadmin only */}
+      {isSuperAdmin && <IpCheckSection adminId={adminId} />}
+
+      {/* Task Constructor */}
+      <TaskConstructorSection adminId={adminId} />
 
       {/* User search */}
       <div style={{ marginBottom: 12 }}>

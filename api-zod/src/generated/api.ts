@@ -33,12 +33,15 @@ export const RegisterUserResponse = zod.object({
   "telegramId": zod.string(),
   "username": zod.string().optional(),
   "firstName": zod.string().optional(),
+  "photoUrl": zod.string().optional(),
   "coins": zod.number(),
   "ton": zod.number(),
+  "tonyxCoins": zod.number(),
   "totalAdsWatched": zod.number(),
   "totalReferrals": zod.number(),
   "isBlocked": zod.boolean(),
-  "createdAt": zod.date()
+  "isAdmin": zod.boolean(),
+  "createdAt": zod.string()
 })
 
 
@@ -54,12 +57,15 @@ export const GetUserProfileResponse = zod.object({
   "telegramId": zod.string(),
   "username": zod.string().optional(),
   "firstName": zod.string().optional(),
+  "photoUrl": zod.string().optional(),
   "coins": zod.number(),
   "ton": zod.number(),
+  "tonyxCoins": zod.number(),
   "totalAdsWatched": zod.number(),
   "totalReferrals": zod.number(),
   "isBlocked": zod.boolean(),
-  "createdAt": zod.date()
+  "isAdmin": zod.boolean(),
+  "createdAt": zod.string()
 })
 
 

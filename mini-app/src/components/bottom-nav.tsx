@@ -65,10 +65,14 @@ function AdminIcon(active: boolean) {
 /* Session-level cache so we don't re-fetch on every render */
 const adminCache: Record<string, boolean> = {};
 
-async function fetchIsAdmin(telegramId: string): Promise<boolean> {
+async function fetchIsAdmin(rawId: string | number | null | undefined): Promise<boolean> {
+  // Always coerce to string — Telegram SDK may return id as number in older WebApp versions
+  const telegramId = rawId != null ? String(rawId) : null;
+  if (!telegramId) return false;
+
   if (telegramId in adminCache) return adminCache[telegramId];
   try {
-    const r = await fetch(`/api/mini/admin/check?telegramId=${telegramId}`);
+    const r = await fetch(`/api/mini/admin/check?telegramId=${encodeURIComponent(telegramId)}`);
     if (r.ok) {
       const d = (await r.json()) as { isAdmin: boolean };
       adminCache[telegramId] = d.isAdmin;
@@ -86,7 +90,9 @@ export default function BottomNav() {
 
   useEffect(() => {
     if (!telegramId) return;
-    fetchIsAdmin(telegramId).then(setIsAdmin);
+    // Re-check after a short delay to ensure the user is registered in DB first
+    const t = setTimeout(() => { fetchIsAdmin(telegramId).then(setIsAdmin); }, 300);
+    return () => clearTimeout(t);
   }, [telegramId]);
 
   const tabs = isAdmin ? [...BASE_TABS, ADMIN_TAB] : BASE_TABS;

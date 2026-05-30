@@ -57,6 +57,15 @@ function ActionButton({ icon, label, active, onClick, accent }: ActionButtonProp
   );
 }
 
+function LoadingScreen() {
+  return (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "60vh", flexDirection: "column", gap: 12 }}>
+      <div style={{ fontSize: 32 }}>⏳</div>
+      <div style={{ fontSize: 13, color: "#475569" }}>Загрузка профиля…</div>
+    </div>
+  );
+}
+
 export default function ProfilePage() {
   const { telegramId, username, firstName, photoUrl } = useTelegram();
   const qc = useQueryClient();
@@ -101,6 +110,9 @@ export default function ProfilePage() {
       onError: (e: unknown) => showToast((e as { data?: { error?: string } })?.data?.error ?? "Failed", "error"),
     },
   });
+
+  // Guard: Telegram context not yet available — don't try to render user data
+  if (!telegramId) return <LoadingScreen />;
 
   const coins = profile?.coins ?? 0;
   const minWithdraw = withdrawals?.minimumAmount ?? 1000;
@@ -151,35 +163,23 @@ export default function ProfilePage() {
       <div style={{
         background: "linear-gradient(135deg, rgba(30,58,143,0.4), rgba(37,99,235,0.15))",
         border: "1px solid rgba(96,165,250,0.3)",
-        borderRadius: 18, padding: "16px 18px", marginBottom: 10,
+        borderRadius: 18, padding: "16px 18px", marginBottom: 16,
+        display: "flex", justifyContent: "space-between", alignItems: "center",
         boxShadow: "0 0 28px rgba(37,99,235,0.18)",
       }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-          <div>
-            <div style={{ fontSize: 10, color: "#93c5fd", letterSpacing: "0.2em", fontWeight: 600 }}>POINTS</div>
-            <div style={{
-              fontSize: 28, fontWeight: 800, color: "#fff", marginTop: 2,
-              textShadow: "0 0 16px rgba(96,165,250,0.45)", fontVariantNumeric: "tabular-nums",
-            }}>
-              <CountUp value={coins} /> <span style={{ fontSize: 14, color: "#93c5fd", fontWeight: 600 }}>pts</span>
-            </div>
-          </div>
-          <div style={{ textAlign: "right" }}>
-            <div style={{ fontSize: 10, color: "#93c5fd", letterSpacing: "0.2em", fontWeight: 600 }}>TON BALANCE</div>
-            <div style={{ fontSize: 22, fontWeight: 700, color: "#60a5fa", marginTop: 2 }}>
-              {Number(profile?.ton ?? 0).toFixed(4)}
-            </div>
+        <div>
+          <div style={{ fontSize: 10, color: "#93c5fd", letterSpacing: "0.2em", fontWeight: 600 }}>BALANCE</div>
+          <div style={{
+            fontSize: 28, fontWeight: 800, color: "#fff", marginTop: 2,
+            textShadow: "0 0 16px rgba(96,165,250,0.45)", fontVariantNumeric: "tabular-nums",
+          }}>
+            <CountUp value={coins} /> <span style={{ fontSize: 14, color: "#93c5fd", fontWeight: 600 }}>pts</span>
           </div>
         </div>
-        {/* TONYX row */}
-        <div style={{
-          display: "flex", alignItems: "center", justifyContent: "space-between",
-          background: "rgba(167,139,250,0.1)", border: "1px solid rgba(167,139,250,0.25)",
-          borderRadius: 12, padding: "8px 14px",
-        }}>
-          <div style={{ fontSize: 10, color: "#c4b5fd", letterSpacing: "0.15em", fontWeight: 700 }}>💎 TONYX TOKENS</div>
-          <div style={{ fontSize: 18, fontWeight: 800, color: "#a78bfa", fontVariantNumeric: "tabular-nums" }}>
-            <CountUp value={profile?.tonyxCoins ?? 0} />
+        <div style={{ textAlign: "right" }}>
+          <div style={{ fontSize: 10, color: "#93c5fd", letterSpacing: "0.2em", fontWeight: 600 }}>≈ TON</div>
+          <div style={{ fontSize: 18, fontWeight: 700, color: "#60a5fa", marginTop: 2 }}>
+            {(coins / 1000).toFixed(3)}
           </div>
         </div>
       </div>
@@ -383,12 +383,12 @@ export default function ProfilePage() {
       {section === "main" && (
         <div style={{ background: "rgba(17,24,39,0.9)", border: "1px solid rgba(30,58,143,0.3)", borderRadius: 16, padding: 16 }}>
           <div style={{ fontSize: 11, color: "#64748b", marginBottom: 12, letterSpacing: "0.12em", fontWeight: 600 }}>📜 RECENT ACTIVITY</div>
-          {!history || history.items.length === 0 ? (
+          {!history || !history.items || history.items.length === 0 ? (
             <div style={{ textAlign: "center", color: "#475569", padding: "20px 0", fontSize: 13 }}>
               No activity yet — watch ads, play games, withdraw to see history here.
             </div>
           ) : (
-            history.items.map((it: typeof history.items[number]) => (
+            (history.items as Array<{ kind: string; id: number | string; title: string; amount: number; positive: boolean; timestamp: string }>).map((it) => (
               <div key={`${it.kind}-${it.id}`} style={{
                 display: "flex", justifyContent: "space-between", alignItems: "center",
                 padding: "10px 0", borderBottom: "1px solid rgba(30,58,143,0.12)",

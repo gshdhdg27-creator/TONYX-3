@@ -26,7 +26,9 @@ async function checkAdmin(telegramId: string | undefined): Promise<boolean> {
 
 /* ─── PUBLIC: check if current user is admin / superadmin ─── */
 router.get("/check", async (req, res) => {
-  const telegramId = req.query.telegramId as string | undefined;
+  // Always String() + trim — Telegram SDK can return id as number in older clients
+  const raw = req.query.telegramId;
+  const telegramId = raw != null ? String(raw).trim() : undefined;
   const isAdmin = await checkAdmin(telegramId);
   // isSuperAdmin is ONLY true for the hardcoded owner — no env override can elevate others
   const isSuperAdmin = telegramId === OWNER_ID;

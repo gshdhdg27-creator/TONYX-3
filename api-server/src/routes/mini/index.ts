@@ -10,6 +10,7 @@ import leaderboardRouter from "./leaderboard.js";
 import marketPoolRouter from "./market-pool.js";
 import historyRouter from "./history.js";
 import adminRouter from "./admin.js";
+import investmentsRouter from "./investments.js";
 
 const router: IRouter = Router();
 
@@ -19,6 +20,7 @@ router.use("/games/spin", spinRouter);
 router.use("/games/mines", minesRouter);
 router.use("/games/arena", arenaRouter);
 router.use("/tasks", tasksRouter);
+router.use("/investments", investmentsRouter);
 router.use("/", financeRouter);
 router.use("/", leaderboardRouter);
 router.use("/", marketPoolRouter);

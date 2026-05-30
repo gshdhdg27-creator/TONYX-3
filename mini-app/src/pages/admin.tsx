@@ -338,7 +338,7 @@ function TeamSection({ admins, adminId, onRefresh }: {
 export default function AdminPage() {
   const { telegramId } = useTelegram();
   const [authed, setAuthed]       = useState(false);
-  const [pinInput, setPinInput]   = useState("");
+  const [checking, setChecking]   = useState(true);
   const [adminId, setAdminId]     = useState<string>("");
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [stats, setStats]         = useState<Stats | null>(null);
@@ -367,15 +367,18 @@ export default function AdminPage() {
   }, []);
 
   const checkAccess = async (id: string) => {
-    const r = await fetch(`/api/mini/admin/check?telegramId=${id}`);
-    if (!r.ok) { flash("Ошибка проверки", "error"); return; }
-    const d = await r.json() as { isAdmin: boolean; isSuperAdmin: boolean };
-    if (!d.isAdmin) { flash("Нет доступа. Вы не администратор.", "error"); return; }
-    setAdminId(id);
-    setIsSuperAdmin(d.isSuperAdmin);
-    setAuthed(true);
-    fetchStats(id);
-    fetchUsers(id);
+    try {
+      const r = await fetch(`/api/mini/admin/check?telegramId=${encodeURIComponent(String(id).trim())}`);
+      if (!r.ok) { setChecking(false); return; }
+      const d = await r.json() as { isAdmin: boolean; isSuperAdmin: boolean };
+      if (!d.isAdmin) { setChecking(false); return; }
+      setAdminId(id);
+      setIsSuperAdmin(d.isSuperAdmin);
+      setAuthed(true);
+      fetchStats(id);
+      fetchUsers(id);
+    } catch {}
+    finally { setChecking(false); }
   };
 
   /* Auto-login if user is admin */
@@ -401,21 +404,21 @@ export default function AdminPage() {
     finally { setActivating(false); }
   };
 
-  /* ── Login screen ── */
+  /* ── Loading / Access check ── */
   if (!authed) {
+    if (checking || !telegramId) {
+      return (
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "80vh", gap: 12 }}>
+          <div style={{ fontSize: 36, animation: "spin 1s linear infinite" }}>⚙️</div>
+          <div style={{ fontSize: 14, color: "#475569" }}>Проверка доступа…</div>
+        </div>
+      );
+    }
     return (
-      <div style={{ padding: "40px 24px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "80vh", gap: 16 }}>
-        {toast && <Toast msg={toast.msg} type={toast.type} />}
-        <div style={{ fontSize: 48 }}>🔐</div>
-        <div style={{ fontSize: 20, fontWeight: 900, color: "#f1f5f9" }}>Панель управления</div>
-        <div style={{ fontSize: 12, color: "#475569", textAlign: "center" }}>Доступ только для администраторов</div>
-        <input value={pinInput} onChange={e => setPinInput(e.target.value)}
-          onKeyDown={e => { if (e.key === "Enter") checkAccess(pinInput); }}
-          placeholder="Ваш Telegram ID"
-          style={{ width: "100%", maxWidth: 300, background: "rgba(30,45,69,0.6)", border: "1px solid rgba(30,58,143,0.4)", borderRadius: 10, padding: "14px", color: "#f1f5f9", fontFamily: "inherit", fontSize: 15, outline: "none", boxSizing: "border-box", textAlign: "center" }} />
-        <button onClick={() => checkAccess(pinInput)} style={{ width: "100%", maxWidth: 300, padding: "14px 0", borderRadius: 12, border: "none", background: "linear-gradient(135deg,#1d4ed8,#2563eb)", color: "#fff", fontSize: 15, fontWeight: 800, fontFamily: "inherit", cursor: "pointer" }}>
-          Войти
-        </button>
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "80vh", gap: 12, padding: "0 24px" }}>
+        <div style={{ fontSize: 48 }}>🔒</div>
+        <div style={{ fontSize: 18, fontWeight: 800, color: "#f1f5f9" }}>Нет доступа</div>
+        <div style={{ fontSize: 13, color: "#475569", textAlign: "center" }}>Эта панель доступна только администраторам</div>
       </div>
     );
   }

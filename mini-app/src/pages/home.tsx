@@ -1,212 +1,182 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Link } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
-import { useAdsgram } from "@adsgram/react";
 import {
-  useGetMiniEarnStatus,
-  getGetMiniEarnStatusQueryKey,
-  useRecordMiniAdWatch,
   useGetUserProfile,
   getGetUserProfileQueryKey,
 } from "@workspace/api-client-react";
 import { useTelegram, haptic, hapticNotify } from "@/lib/telegram";
 import { CountUp } from "@/components/count-up";
 
-const BLOCK_ID = import.meta.env.VITE_ADSGRAM_BLOCK_ID ?? "int-32141";
-
 function Toast({ msg, type }: { msg: string; type: "success" | "error" }) {
-  const bg = type === "success" ? "rgba(22,163,74,0.95)" : "rgba(220,38,38,0.95)";
   return (
     <div style={{
       position: "fixed", top: 16, left: "50%", transform: "translateX(-50%)",
-      background: bg, color: "#fff", padding: "12px 20px", borderRadius: 12,
+      background: type === "success" ? "rgba(22,163,74,0.95)" : "rgba(220,38,38,0.95)",
+      color: "#fff", padding: "12px 20px", borderRadius: 12,
       fontSize: 14, fontWeight: 600, zIndex: 9999, maxWidth: "calc(100% - 32px)",
-      animation: "bounceIn 0.3s ease-out",
-      boxShadow: "0 8px 28px rgba(0,0,0,0.4)",
+      animation: "bounceIn 0.3s ease-out", boxShadow: "0 8px 28px rgba(0,0,0,0.4)",
     }}>{msg}</div>
   );
 }
 
-/** Remove any DOM overlay that AdsGram injected into <body> after the snapshot set. */
-function removeAdsgramOverlays(snapshotBefore: Set<Element>) {
-  try {
-    // 1. Remove new direct body children added by the SDK (the overlay container)
-    Array.from(document.body.children).forEach((el) => {
-      if (!snapshotBefore.has(el)) el.remove();
-    });
-    // 2. Fallback: target known AdsGram selectors regardless of snapshot
-    document
-      .querySelectorAll(
-        '[id*="adsgram"], [class*="adsgram"], [data-adsgram], ' +
-        'iframe[src*="adsgram"], iframe[src*="sad.adsgram"]',
-      )
-      .forEach((el) => {
-        // Walk up to the outermost overlay wrapper and remove it
-        let target: Element | null = el;
-        while (target?.parentElement && target.parentElement !== document.body) {
-          target = target.parentElement;
-        }
-        target?.remove();
-      });
-  } catch (err) {
-    console.warn("[AdsGram] overlay cleanup error", err);
-  }
+const RATE_PER_MS = 0.01 / (24 * 60 * 60 * 1000); // 1% per day in ms
+
+interface InvData {
+  principal: number;
+  totalClaimed: number;
+  earnedTotal: number;
+  unclaimed: number;
+  startedAt: string | null;
+  ratePerDay: number;
 }
 
 export default function HomePage() {
-  const { telegramId, isInTelegram } = useTelegram();
+  const { telegramId } = useTelegram();
   const qc = useQueryClient();
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
-  const [justEarned, setJustEarned] = useState(0);
-  // Snapshot of body children taken just before each showAd() call
-  const bodySnapshotRef = useRef<Set<Element>>(new Set());
+
+  const [inv, setInv] = useState<InvData | null>(null);
+  const [animUnclaimed, setAnimUnclaimed] = useState(0);
+  const [investInput, setInvestInput] = useState("");
+  const [investing, setInvesting] = useState(false);
+  const [claiming, setClaiming] = useState(false);
+  const animRef = useRef<number>(0);
+
+  const showToast = useCallback((msg: string, type: "success" | "error") => {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 3000);
+  }, []);
 
   const { data: profile } = useGetUserProfile(telegramId ?? "", {
     query: { enabled: !!telegramId, refetchInterval: 8000 },
   });
-  const { data: status } = useGetMiniEarnStatus(telegramId ?? "", {
-    query: { enabled: !!telegramId, refetchInterval: 5000 },
-  });
 
-  const recordWatch = useRecordMiniAdWatch({
-    mutation: {
-      onSuccess: (data) => {
-        if (data.coinsEarned > 0) {
-          hapticNotify("success");
-          setJustEarned(data.coinsEarned);
-          setToast({ msg: `+${data.coinsEarned} pts earned!`, type: "success" });
-        }
-        qc.invalidateQueries({ queryKey: getGetMiniEarnStatusQueryKey(telegramId ?? "") });
-        qc.invalidateQueries({ queryKey: getGetUserProfileQueryKey(telegramId ?? "") });
-        setTimeout(() => { setToast(null); setJustEarned(0); }, 2500);
-      },
-      onError: (e: unknown) => {
-        hapticNotify("error");
-        const msg = (e as { data?: { error?: string } })?.data?.error ?? "Something went wrong";
-        setToast({ msg, type: "error" });
-        setTimeout(() => setToast(null), 2500);
-      },
-    },
-  });
-
-  const onReward = useCallback(() => {
+  const fetchInv = useCallback(async () => {
     if (!telegramId) return;
-    recordWatch.mutate({ data: { telegramId, blockId: BLOCK_ID } });
+    try {
+      const r = await fetch(`/api/mini/investments/${encodeURIComponent(telegramId)}`);
+      if (r.ok) setInv(await r.json());
+    } catch {}
   }, [telegramId]);
 
-  const showErrorToast = useCallback(() => {
-    setToast({ msg: "Реклама временно загружается, попробуйте через пару минут", type: "error" });
-    setTimeout(() => setToast(null), 4000);
-  }, []);
+  useEffect(() => { fetchInv(); }, [fetchInv]);
 
-  const onError = useCallback((result?: { error: boolean; done: boolean; state: string; description: string }) => {
-    console.warn("[AdsGram] error", result);
-    // Remove the SDK's own error overlay from the DOM immediately
-    removeAdsgramOverlays(bodySnapshotRef.current);
-    showErrorToast();
-  }, [showErrorToast]);
-
-  const { show: showAd } = useAdsgram({ blockId: BLOCK_ID, onReward, onError });
-
-  const handleWatch = useCallback(async () => {
-    haptic("medium");
-    if (!isInTelegram) {
-      setToast({ msg: "Реклама работает только внутри Telegram", type: "error" });
-      setTimeout(() => setToast(null), 3000);
+  // requestAnimationFrame counter — live ms-level animation
+  useEffect(() => {
+    cancelAnimationFrame(animRef.current);
+    if (!inv?.startedAt || inv.principal <= 0) {
+      setAnimUnclaimed(Math.max(0, inv?.unclaimed ?? 0));
       return;
     }
-    if (!telegramId) {
-      setToast({ msg: "Профиль не загружен, попробуйте позже", type: "error" });
-      setTimeout(() => setToast(null), 3000);
-      return;
+    const startMs = new Date(inv.startedAt).getTime();
+    const claimed = inv.totalClaimed;
+    const principal = inv.principal;
+    const tick = () => {
+      const elapsed = Date.now() - startMs;
+      setAnimUnclaimed(Math.max(0, principal * RATE_PER_MS * elapsed - claimed));
+      animRef.current = requestAnimationFrame(tick);
+    };
+    animRef.current = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(animRef.current);
+  }, [inv?.startedAt, inv?.principal, inv?.totalClaimed]);
+
+  const handleInvest = async () => {
+    const amount = parseInt(investInput, 10);
+    if (!telegramId || isNaN(amount) || amount < 100) {
+      showToast("Минимальная инвестиция — 100 pts", "error"); return;
     }
-    // Snapshot body BEFORE the SDK adds its overlay — used for cleanup on error
-    bodySnapshotRef.current = new Set(Array.from(document.body.children));
+    setInvesting(true);
     try {
-      await showAd();
-    } catch (err) {
-      // Promise rejected after onError fires — overlay already cleaned up,
-      // but run cleanup again in case the SDK re-injected anything
-      console.warn("[AdsGram] show() rejected:", err);
-      removeAdsgramOverlays(bodySnapshotRef.current);
-      showErrorToast();
-    }
-  }, [showAd, isInTelegram, telegramId, showErrorToast]);
+      const r = await fetch("/api/mini/investments/invest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ telegramId, amount }),
+      });
+      const d = await r.json();
+      if (!r.ok) { showToast(d.error ?? "Ошибка", "error"); return; }
+      hapticNotify("success");
+      showToast(d.message ?? `Вложено ${amount} pts!`, "success");
+      setInvestInput("");
+      await fetchInv();
+      qc.invalidateQueries({ queryKey: getGetUserProfileQueryKey(telegramId) });
+    } catch { showToast("Ошибка сети", "error"); }
+    finally { setInvesting(false); }
+  };
+
+  const handleClaim = async () => {
+    if (!telegramId) return;
+    setClaiming(true);
+    try {
+      const r = await fetch("/api/mini/investments/claim", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ telegramId }),
+      });
+      const d = await r.json();
+      if (!r.ok) { showToast(d.error ?? "Ошибка", "error"); return; }
+      hapticNotify("success");
+      showToast(d.message ?? "Получено!", "success");
+      await fetchInv();
+      qc.invalidateQueries({ queryKey: getGetUserProfileQueryKey(telegramId) });
+    } catch { showToast("Ошибка сети", "error"); }
+    finally { setClaiming(false); }
+  };
 
   const coins = profile?.coins ?? 0;
   const ton = coins / 1000;
-  const cool = status?.cooldownSeconds ?? 0;
-  const canWatch = status?.canWatch ?? false;
-  const watched = status?.adsWatchedToday ?? 0;
-  const limit = status?.dailyLimit ?? 100;
+  const hasPrincipal = (inv?.principal ?? 0) > 0;
+  const dailyIncome = hasPrincipal ? inv!.principal * 0.01 : 0;
 
   return (
     <div style={{ padding: "16px 16px 28px", minHeight: "100%" }}>
       {toast && <Toast msg={toast.msg} type={toast.type} />}
 
-      {/* TONYX header */}
+      {/* Header */}
       <div style={{ textAlign: "center", marginBottom: 14 }}>
-        <div
-          style={{
-            fontSize: 26, fontWeight: 800, letterSpacing: "0.08em",
-            background: "linear-gradient(135deg, #60a5fa 0%, #c084fc 50%, #60a5fa 100%)",
-            WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
-            backgroundClip: "text", backgroundSize: "200% auto",
-            animation: "shine 4s linear infinite",
-          }}
-        >
-          TONYX
-        </div>
+        <div style={{
+          fontSize: 26, fontWeight: 800, letterSpacing: "0.08em",
+          background: "linear-gradient(135deg, #60a5fa 0%, #c084fc 50%, #60a5fa 100%)",
+          WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
+          backgroundClip: "text", backgroundSize: "200% auto",
+          animation: "shine 4s linear infinite",
+        }}>TONYX</div>
       </div>
 
-      {/* Weekly Leaderboard banner */}
-      <Link
-        href="/leaderboard"
-        onClick={() => haptic("light")}
-        style={{
-          display: "flex", alignItems: "center", gap: 12,
-          background: "linear-gradient(135deg, rgba(190,18,60,0.35), rgba(244,63,94,0.18))",
-          border: "1px solid rgba(244,63,94,0.45)",
-          borderRadius: 16, padding: "12px 14px", marginBottom: 16,
-          textDecoration: "none", color: "inherit",
-          boxShadow: "0 0 22px rgba(244,63,94,0.22)",
-          cursor: "pointer",
-        }}
-        className="tile-bounce"
-      >
+      {/* Leaderboard banner */}
+      <Link href="/leaderboard" onClick={() => haptic("light")} style={{
+        display: "flex", alignItems: "center", gap: 12,
+        background: "linear-gradient(135deg, rgba(190,18,60,0.35), rgba(244,63,94,0.18))",
+        border: "1px solid rgba(244,63,94,0.45)",
+        borderRadius: 16, padding: "12px 14px", marginBottom: 16,
+        textDecoration: "none", color: "inherit",
+        boxShadow: "0 0 22px rgba(244,63,94,0.22)", cursor: "pointer",
+      }} className="tile-bounce">
         <div style={{ fontSize: 28 }}>🔥</div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 14, fontWeight: 800, color: "#fff" }}>Weekly Leaderboard</div>
           <div style={{ fontSize: 11, color: "#fda4af" }}>Top 10 players get rewards!</div>
         </div>
-        <div style={{
-          padding: "6px 12px", borderRadius: 10, fontSize: 11, fontWeight: 700,
-          background: "rgba(244,63,94,0.25)", color: "#fff", letterSpacing: "0.05em",
-        }}>
+        <div style={{ padding: "6px 12px", borderRadius: 10, fontSize: 11, fontWeight: 700, background: "rgba(244,63,94,0.25)", color: "#fff" }}>
           VIEW →
         </div>
       </Link>
 
       {/* Balance card */}
-      <div
-        style={{
-          background: "linear-gradient(135deg, rgba(30,58,143,0.45), rgba(37,99,235,0.18))",
-          border: "1px solid rgba(96,165,250,0.3)",
-          borderRadius: 20, padding: "20px 18px", marginBottom: 22,
-          textAlign: "center", position: "relative", overflow: "hidden",
-          boxShadow: "0 0 36px rgba(37,99,235,0.25)",
-        }}
-        className="balance-card"
-      >
+      <div style={{
+        background: "linear-gradient(135deg, rgba(30,58,143,0.45), rgba(37,99,235,0.18))",
+        border: "1px solid rgba(96,165,250,0.3)",
+        borderRadius: 20, padding: "20px 18px", marginBottom: 22,
+        textAlign: "center", position: "relative", overflow: "hidden",
+        boxShadow: "0 0 36px rgba(37,99,235,0.25)",
+      }} className="balance-card">
         <div style={{
           position: "absolute", top: -40, left: "50%", transform: "translateX(-50%)",
           width: 220, height: 220, borderRadius: "50%",
           background: "radial-gradient(circle, rgba(96,165,250,0.35) 0%, transparent 70%)",
           pointerEvents: "none",
         }} />
-        <div style={{ fontSize: 11, color: "#93c5fd", letterSpacing: "0.22em", fontWeight: 600, position: "relative" }}>
-          BALANCE
-        </div>
+        <div style={{ fontSize: 11, color: "#93c5fd", letterSpacing: "0.22em", fontWeight: 600, position: "relative" }}>BALANCE</div>
         <div style={{
           fontSize: 40, fontWeight: 800, color: "#fff", marginTop: 4, letterSpacing: "-0.02em",
           textShadow: "0 0 24px rgba(96,165,250,0.55)", position: "relative", fontVariantNumeric: "tabular-nums",
@@ -218,60 +188,127 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* Watch Ad section */}
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginBottom: 18 }}>
-        {justEarned > 0 && (
+      {/* ═══ INVESTMENTS ═══ */}
+      <div style={{
+        background: "linear-gradient(135deg, rgba(5,46,36,0.7), rgba(6,78,59,0.4))",
+        border: "1px solid rgba(16,185,129,0.4)",
+        borderRadius: 20, padding: "18px 16px",
+        boxShadow: "0 0 32px rgba(16,185,129,0.12)",
+      }}>
+        {/* Title */}
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+          <div style={{ fontSize: 28 }}>💹</div>
+          <div>
+            <div style={{ fontSize: 16, fontWeight: 800, color: "#f1f5f9" }}>Инвестиции</div>
+            <div style={{ fontSize: 11, color: "#6ee7b7" }}>1% в день · начисление каждую миллисекунду</div>
+          </div>
+          {hasPrincipal && (
+            <div style={{ marginLeft: "auto", background: "rgba(16,185,129,0.15)", border: "1px solid rgba(16,185,129,0.3)", borderRadius: 8, padding: "3px 8px", fontSize: 9, color: "#4ade80", fontWeight: 800, letterSpacing: "0.1em" }}>
+              АКТИВНО
+            </div>
+          )}
+        </div>
+
+        {hasPrincipal ? (
+          <>
+            {/* Animated live counter */}
+            <div style={{
+              background: "rgba(0,0,0,0.35)", border: "1px solid rgba(16,185,129,0.25)",
+              borderRadius: 16, padding: "16px", marginBottom: 14, textAlign: "center",
+            }}>
+              <div style={{ fontSize: 10, color: "#6ee7b7", letterSpacing: "0.2em", fontWeight: 700, marginBottom: 6 }}>
+                НАКОПЛЕНО (ЖИВОЙ СЧЁТЧИК)
+              </div>
+              <div style={{
+                fontSize: 32, fontWeight: 900, color: "#4ade80",
+                fontVariantNumeric: "tabular-nums", fontFamily: "monospace",
+                textShadow: "0 0 24px rgba(74,222,128,0.6)",
+                letterSpacing: "-0.02em",
+              }}>
+                {animUnclaimed.toFixed(6)}
+                <span style={{ fontSize: 14, color: "#6ee7b7", marginLeft: 6 }}>pts</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "center", gap: 16, marginTop: 8, fontSize: 11, color: "#475569" }}>
+                <span>Вложено: <b style={{ color: "#a7f3d0" }}>{inv!.principal.toLocaleString()}</b></span>
+                <span>·</span>
+                <span>+<b style={{ color: "#a7f3d0" }}>{dailyIncome.toFixed(1)}</b>/день</span>
+                <span>·</span>
+                <span>Получено: <b style={{ color: "#a7f3d0" }}>{inv!.totalClaimed.toLocaleString()}</b></span>
+              </div>
+            </div>
+
+            {/* Claim */}
+            <button
+              onClick={handleClaim}
+              disabled={claiming || animUnclaimed < 1}
+              style={{
+                width: "100%", padding: "14px 0", borderRadius: 14, border: "none",
+                fontFamily: "inherit",
+                background: animUnclaimed >= 1
+                  ? "linear-gradient(135deg, #059669, #10b981)"
+                  : "rgba(30,45,69,0.35)",
+                color: animUnclaimed >= 1 ? "#fff" : "#334155",
+                fontSize: 15, fontWeight: 800,
+                cursor: animUnclaimed >= 1 ? "pointer" : "not-allowed",
+                boxShadow: animUnclaimed >= 1 ? "0 4px 20px rgba(16,185,129,0.4)" : "none",
+                transition: "all 0.2s", marginBottom: 12,
+              }}
+            >
+              {claiming
+                ? "Получение…"
+                : animUnclaimed >= 1
+                  ? `💰 Забрать ${Math.floor(animUnclaimed)} pts`
+                  : "⏳ Копится…"}
+            </button>
+
+            <div style={{ fontSize: 11, color: "#475569", fontWeight: 700, marginBottom: 8 }}>ДОБАВИТЬ К ВКЛАДУ</div>
+          </>
+        ) : (
           <div style={{
-            fontSize: 36, fontWeight: 800, color: "#4ade80", marginBottom: 12,
-            animation: "bounceIn 0.3s ease-out",
-            textShadow: "0 0 16px rgba(74,222,128,0.6)",
-          }}>+{justEarned} pts</div>
+            background: "rgba(0,0,0,0.2)", border: "1px dashed rgba(16,185,129,0.2)",
+            borderRadius: 14, padding: 18, marginBottom: 14, textAlign: "center",
+          }}>
+            <div style={{ fontSize: 36, marginBottom: 8 }}>🌱</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "#6ee7b7", marginBottom: 6 }}>Начните копить прямо сейчас</div>
+            <div style={{ fontSize: 12, color: "#475569", lineHeight: 1.6 }}>
+              Вложите pts и получайте <b style={{ color: "#4ade80" }}>1% в день</b><br />
+              Счётчик крутится в реальном времени — каждую миллисекунду
+            </div>
+          </div>
         )}
 
-        <button
-          onClick={handleWatch}
-          disabled={!telegramId || recordWatch.isPending}
-          className={telegramId ? "pulse-glow" : ""}
-          style={{
-            width: "100%", maxWidth: 320, padding: "20px 0", borderRadius: 18, border: "none",
-            background: telegramId
-              ? "linear-gradient(135deg, #1e3a8a 0%, #2563eb 50%, #60a5fa 100%)"
-              : "rgba(30,58,143,0.2)",
-            color: telegramId ? "#fff" : "#475569",
-            fontSize: 18, fontWeight: 800, letterSpacing: "0.14em",
-            fontFamily: "inherit",
-            cursor: telegramId ? "pointer" : "not-allowed",
-            transition: "all 0.2s",
-            boxShadow: telegramId ? "0 0 28px rgba(37,99,235,0.45)" : "none",
-          }}
-        >
-          {recordWatch.isPending ? "⏳ ОБРАБОТКА…" : "▶ WATCH AD"}
-        </button>
-
-        <div style={{ fontSize: 12, color: "#64748b", marginTop: 10 }}>
-          Earn {status?.minCoins ?? 1}–{status?.maxCoins ?? 2} pts per ad
+        {/* Invest input */}
+        <div style={{ display: "flex", gap: 8 }}>
+          <input
+            value={investInput}
+            onChange={e => setInvestInput(e.target.value)}
+            type="number"
+            placeholder="Сумма pts (минимум 100)"
+            style={{
+              flex: 1, background: "rgba(0,0,0,0.3)", border: "1px solid rgba(16,185,129,0.25)",
+              borderRadius: 10, padding: "12px 14px", color: "#f1f5f9",
+              fontFamily: "inherit", fontSize: 14, outline: "none",
+            }}
+          />
+          <button
+            onClick={handleInvest}
+            disabled={investing || !investInput || parseInt(investInput, 10) < 100}
+            style={{
+              padding: "12px 18px", borderRadius: 10, border: "none", fontFamily: "inherit",
+              background: "linear-gradient(135deg, #065f46, #059669)",
+              color: "#fff", fontSize: 14, fontWeight: 800,
+              cursor: "pointer", whiteSpace: "nowrap",
+              opacity: investing || !investInput || parseInt(investInput, 10) < 100 ? 0.5 : 1,
+              transition: "opacity 0.15s",
+            }}
+          >
+            {investing ? "…" : "Вложить"}
+          </button>
         </div>
-      </div>
 
-      {/* Daily stats */}
-      <div style={{
-        background: "rgba(17,24,39,0.85)",
-        border: "1px solid rgba(30,58,143,0.3)",
-        borderRadius: 16, padding: "14px 16px",
-      }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
-          <div style={{ fontSize: 11, color: "#64748b", letterSpacing: "0.12em", fontWeight: 600 }}>СЕГОДНЯ</div>
-          <div style={{ fontSize: 13, color: "#93c5fd", fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>
-            {watched} / {limit} ads
-          </div>
-        </div>
-        <div style={{ height: 8, borderRadius: 4, background: "rgba(30,58,143,0.25)", overflow: "hidden" }}>
-          <div style={{
-            height: "100%", width: `${Math.min(100, (watched / limit) * 100)}%`,
-            background: "linear-gradient(90deg, #2563eb, #60a5fa)",
-            borderRadius: 4, transition: "width 0.5s ease",
-            boxShadow: "0 0 10px rgba(96,165,250,0.6)",
-          }} />
+        <div style={{ fontSize: 10, color: "#334155", marginTop: 10, textAlign: "center", lineHeight: 1.6 }}>
+          Доступный баланс: <b style={{ color: "#6ee7b7" }}>{coins.toLocaleString()} pts</b>
+          {hasPrincipal && <> · Всего вложено: <b style={{ color: "#6ee7b7" }}>{inv!.principal.toLocaleString()} pts</b></>}
         </div>
       </div>
     </div>

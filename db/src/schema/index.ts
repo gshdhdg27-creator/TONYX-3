@@ -10,3 +10,4 @@ export * from "./mini_mine_games";
 export * from "./mini_tasks";
 export * from "./mini_withdrawals";
 export * from "./system_settings";
+export * from "./mini_investments";

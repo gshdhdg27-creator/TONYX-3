@@ -114,6 +114,18 @@ router.post("/:id/complete", async (req, res) => {
   const newBalance = user.coins + task.reward;
   await db.update(usersTable).set({ coins: newBalance, updatedAt: new Date() }).where(eq(usersTable.telegramId, body.telegramId));
 
+  // Referral 10%: award bonus to the user who invited this user
+  if (user.referredBy && user.referredBy !== body.telegramId) {
+    const referrer = await db.select().from(usersTable)
+      .where(eq(usersTable.telegramId, user.referredBy)).then(r => r[0] ?? null);
+    if (referrer && !referrer.isBlocked) {
+      const bonus = Math.max(1, Math.round(task.reward * 0.1));
+      await db.update(usersTable)
+        .set({ coins: referrer.coins + bonus, referralEarnings: referrer.referralEarnings + bonus, updatedAt: new Date() })
+        .where(eq(usersTable.telegramId, user.referredBy));
+    }
+  }
+
   const data = CompleteMiniTaskResponse.parse({ coinsEarned: task.reward, newBalance, taskTitle: task.title });
   res.json(data);
 });

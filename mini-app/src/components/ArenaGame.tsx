@@ -86,16 +86,14 @@ function sectorAvatarPos(startDeg: number, endDeg: number, fraction = 0.58): [nu
   return [CX + (px - CX) * fraction, CY + (py - CY) * fraction];
 }
 
-function sectorCentroid(startDeg: number, endDeg: number): [number, number] {
-  const N = 32;
-  let sx = CX, sy = CY;
-  let count = 1;
-  for (let i = 0; i <= N; i++) {
-    const a = startDeg + (endDeg - startDeg) * i / N;
-    const [px, py] = squarePoint(a);
-    sx += px; sy += py; count++;
-  }
-  return [sx / count, sy / count];
+function sectorRandomPoint(startDeg: number, endDeg: number): [number, number] {
+  // Random angle within the sector (avoid extreme edges)
+  const span = endDeg - startDeg;
+  const midDeg = startDeg + span * (0.25 + Math.random() * 0.5);
+  const [bx, by] = squarePoint(midDeg);
+  // Random radial depth: 40–70% from center to boundary (clearly inside sector)
+  const frac = 0.40 + Math.random() * 0.30;
+  return [CX + (bx - CX) * frac, CY + (by - CY) * frac];
 }
 
 interface Sector {
@@ -203,6 +201,7 @@ export default function ArenaGame({
   const ballVelRef        = useRef({ vx: 0, vy: 0 });
   const ballTargetRef     = useRef<{ x: number; y: number } | null>(null);
   const ballStoppedRef    = useRef(false);
+  const ballLaunchedRef   = useRef(false);
   const runStartTimeRef   = useRef<number | null>(null);
   const rafRef            = useRef<number | null>(null);
   const prevCountdownRef  = useRef<number | null>(null);
@@ -368,7 +367,7 @@ export default function ArenaGame({
         const dy  = tgt.y - pos.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
 
-        if (dist < 2) {
+        if (dist < 1.5) {
           ballStoppedRef.current = true;
           ballVelRef.current = { vx: 0, vy: 0 };
           place(tgt.x, tgt.y);
@@ -379,17 +378,22 @@ export default function ArenaGame({
           return;
         }
 
-        vx = dx * 0.10;
-        vy = dy * 0.10;
+        // Smooth attraction: gently steer toward target, cap max speed, keep wall bounce
+        // dx*0.04 adds force proportional to distance, *0.90 friction ensures no overshoot
+        vx = (vx + dx * 0.04) * 0.90;
+        vy = (vy + dy * 0.04) * 0.90;
+        const sp = Math.sqrt(vx * vx + vy * vy);
+        if (sp > 6) { vx = (vx / sp) * 6; vy = (vy / sp) * 6; }
         ballVelRef.current = { vx, vy };
-        place(pos.x + vx, pos.y + vy);
+        const ba = wallBounce(pos.x + vx, pos.y + vy, vx, vy);
+        ballVelRef.current = { vx: ba.vx, vy: ba.vy };
+        place(ba.nx, ba.ny);
         rafRef.current = requestAnimationFrame(step);
         return;
       }
 
-      // suppress unused warning
+      // Free bounce phase: mild friction, wall bounce
       void FREE_MS;
-
       vx *= 0.995;
       vy *= 0.995;
       const b = wallBounce(pos.x + vx, pos.y + vy, vx, vy);
@@ -408,12 +412,14 @@ export default function ArenaGame({
   /* ── Ball state transitions ── */
   useEffect(() => {
     const launchBall = () => {
+      if (ballLaunchedRef.current) return;
+      ballLaunchedRef.current = true;
       const angle = Math.random() * Math.PI * 2;
       const speed = 3.5 + Math.random() * 1.5;
-      ballStateRef.current   = "RUNNING";
-      ballStoppedRef.current = false;
-      ballPosRef.current     = { x: CX, y: CY };
-      ballVelRef.current     = { vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed };
+      ballStateRef.current    = "RUNNING";
+      ballStoppedRef.current  = false;
+      ballPosRef.current      = { x: CX, y: CY };
+      ballVelRef.current      = { vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed };
       runStartTimeRef.current = performance.now();
     };
 
@@ -424,7 +430,7 @@ export default function ArenaGame({
     if (arena?.status === "finished" && arena?.winnerId && !ballTargetRef.current) {
       const win = sectorsRef.current.find(s => s.player.telegramId === arena.winnerId);
       if (win) {
-        const [tx, ty] = sectorCentroid(win.startDeg, win.endDeg);
+        const [tx, ty] = sectorRandomPoint(win.startDeg, win.endDeg);
         ballTargetRef.current = { x: tx, y: ty };
       }
       if (ballStateRef.current === "IDLE") launchBall();
@@ -439,6 +445,7 @@ export default function ArenaGame({
       ballVelRef.current       = { vx: 0, vy: 0 };
       ballTargetRef.current    = null;
       ballStoppedRef.current   = false;
+      ballLaunchedRef.current  = false;
       runStartTimeRef.current  = null;
       setAnimPhase("idle");
       setPendingResult(null);

@@ -13,6 +13,12 @@ const router: IRouter = Router();
 
 const COINS_PER_REFERRAL = 500;
 
+function getClientIp(req: import("express").Request): string | null {
+  const fwd = req.headers["x-forwarded-for"];
+  if (fwd) return (Array.isArray(fwd) ? fwd[0] : fwd).split(",")[0].trim();
+  return req.socket?.remoteAddress ?? null;
+}
+
 async function getReferralCount(telegramId: string): Promise<number> {
   const referrals = await db
     .select()
@@ -23,6 +29,7 @@ async function getReferralCount(telegramId: string): Promise<number> {
 
 router.post("/register", async (req, res) => {
   const body = RegisterUserBody.parse(req.body);
+  const ip = getClientIp(req);
 
   let user = await db
     .select()
@@ -40,6 +47,7 @@ router.post("/register", async (req, res) => {
         lastName: body.lastName ?? null,
         photoUrl: body.photoUrl ?? null,
         referredBy: body.referredBy ?? null,
+        lastIp: ip,
         coins: 0,
         totalAdsWatched: 0,
         isBlocked: false,
@@ -64,7 +72,7 @@ router.post("/register", async (req, res) => {
       }
     }
   } else {
-    // Always update profile fields on every login so nickname/avatar stay fresh
+    // Update profile fields + IP + lastLoginAt on every login
     const [updated] = await db
       .update(usersTable)
       .set({
@@ -72,6 +80,8 @@ router.post("/register", async (req, res) => {
         firstName: body.firstName ?? user.firstName,
         lastName:  body.lastName  ?? user.lastName,
         photoUrl:  body.photoUrl  ?? user.photoUrl,
+        lastIp: ip ?? user.lastIp,
+        lastLoginAt: new Date(),
         updatedAt: new Date(),
       })
       .where(eq(usersTable.telegramId, body.telegramId))
@@ -89,10 +99,12 @@ router.post("/register", async (req, res) => {
     photoUrl: user.photoUrl ?? undefined,
     coins: user.coins,
     ton: Number(user.ton),
+    tonyxCoins: user.tonyxCoins,
     totalAdsWatched: user.totalAdsWatched,
     totalReferrals,
     isBlocked: user.isBlocked,
-    createdAt: user.createdAt,
+    isAdmin: user.isAdmin,
+    createdAt: user.createdAt.toISOString(),
   });
   res.json(data);
 });
@@ -120,10 +132,12 @@ router.get("/:telegramId", async (req, res) => {
     photoUrl: user.photoUrl ?? undefined,
     coins: user.coins,
     ton: Number(user.ton),
+    tonyxCoins: user.tonyxCoins,
     totalAdsWatched: user.totalAdsWatched,
     totalReferrals,
     isBlocked: user.isBlocked,
-    createdAt: user.createdAt,
+    isAdmin: user.isAdmin,
+    createdAt: user.createdAt.toISOString(),
   });
   res.json(data);
 });

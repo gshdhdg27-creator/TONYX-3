@@ -9,8 +9,18 @@ fi
 git config user.email "replit-sync@users.noreply.github.com"
 git config user.name "Replit Sync"
 
-REMOTE_URL="https://${GITHUB_PERSONAL_ACCESS_TOKEN}@github.com/gshdhdg27-creator/TONYX-3.git"
-git remote set-url origin "$REMOTE_URL"
+ASKPASS=$(mktemp)
+chmod 700 "$ASKPASS"
+printf '#!/bin/sh\necho "%s"\n' "${GITHUB_PERSONAL_ACCESS_TOKEN}" > "$ASKPASS"
+
+cleanup() {
+  rm -f "$ASKPASS"
+  if [ "${STASHED:-false}" = true ]; then
+    echo "[sync] Restoring stashed changes..."
+    git stash pop || true
+  fi
+}
+trap cleanup EXIT
 
 STASHED=false
 if ! git diff --quiet || ! git diff --cached --quiet; then
@@ -19,16 +29,8 @@ if ! git diff --quiet || ! git diff --cached --quiet; then
   STASHED=true
 fi
 
-restore_stash() {
-  if [ "$STASHED" = true ]; then
-    echo "[sync] Restoring stashed changes..."
-    git stash pop || true
-  fi
-}
-trap restore_stash EXIT
-
 echo "[sync] Fetching latest from GitHub..."
-git fetch origin main
+GIT_ASKPASS="$ASKPASS" GIT_USERNAME="x-access-token" git fetch origin main
 
 LOCAL=$(git rev-parse main)
 REMOTE=$(git rev-parse origin/main)
@@ -42,11 +44,11 @@ MERGE_BASE=$(git merge-base main origin/main)
 
 if [ "$MERGE_BASE" = "$REMOTE" ]; then
   echo "[sync] Local is ahead of remote. Pushing..."
-  git push origin main
-  echo "[sync] Done at $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+  GIT_ASKPASS="$ASKPASS" GIT_USERNAME="x-access-token" git push origin main
 else
   echo "[sync] Rebasing local onto remote then pushing..."
   git rebase origin/main
-  git push origin main
-  echo "[sync] Done at $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+  GIT_ASKPASS="$ASKPASS" GIT_USERNAME="x-access-token" git push origin main
 fi
+
+echo "[sync] Done at $(date -u '+%Y-%m-%d %H:%M:%S UTC')"

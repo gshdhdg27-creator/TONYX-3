@@ -54,6 +54,14 @@ externalPort = 3001
 localPort = 5000
 externalPort = 80
 
+[[ports]]
+localPort = 8080
+externalPort = 8080
+
+[[ports]]
+localPort = 18801
+externalPort = 3000
+
 [deployment]
 deploymentTarget = "vm"
 run = ["bash", "-c", "npx concurrently \"PORT=3001 node api-server/dist/index.js\" \"cd mini-app && npx serve -l 5000 dist/public\""]

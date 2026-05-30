@@ -151,23 +151,35 @@ export default function ProfilePage() {
       <div style={{
         background: "linear-gradient(135deg, rgba(30,58,143,0.4), rgba(37,99,235,0.15))",
         border: "1px solid rgba(96,165,250,0.3)",
-        borderRadius: 18, padding: "16px 18px", marginBottom: 16,
-        display: "flex", justifyContent: "space-between", alignItems: "center",
+        borderRadius: 18, padding: "16px 18px", marginBottom: 10,
         boxShadow: "0 0 28px rgba(37,99,235,0.18)",
       }}>
-        <div>
-          <div style={{ fontSize: 10, color: "#93c5fd", letterSpacing: "0.2em", fontWeight: 600 }}>BALANCE</div>
-          <div style={{
-            fontSize: 28, fontWeight: 800, color: "#fff", marginTop: 2,
-            textShadow: "0 0 16px rgba(96,165,250,0.45)", fontVariantNumeric: "tabular-nums",
-          }}>
-            <CountUp value={coins} /> <span style={{ fontSize: 14, color: "#93c5fd", fontWeight: 600 }}>pts</span>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <div>
+            <div style={{ fontSize: 10, color: "#93c5fd", letterSpacing: "0.2em", fontWeight: 600 }}>POINTS</div>
+            <div style={{
+              fontSize: 28, fontWeight: 800, color: "#fff", marginTop: 2,
+              textShadow: "0 0 16px rgba(96,165,250,0.45)", fontVariantNumeric: "tabular-nums",
+            }}>
+              <CountUp value={coins} /> <span style={{ fontSize: 14, color: "#93c5fd", fontWeight: 600 }}>pts</span>
+            </div>
+          </div>
+          <div style={{ textAlign: "right" }}>
+            <div style={{ fontSize: 10, color: "#93c5fd", letterSpacing: "0.2em", fontWeight: 600 }}>TON BALANCE</div>
+            <div style={{ fontSize: 22, fontWeight: 700, color: "#60a5fa", marginTop: 2 }}>
+              {Number(profile?.ton ?? 0).toFixed(4)}
+            </div>
           </div>
         </div>
-        <div style={{ textAlign: "right" }}>
-          <div style={{ fontSize: 10, color: "#93c5fd", letterSpacing: "0.2em", fontWeight: 600 }}>≈ TON</div>
-          <div style={{ fontSize: 18, fontWeight: 700, color: "#60a5fa", marginTop: 2 }}>
-            {(coins / 1000).toFixed(3)}
+        {/* TONYX row */}
+        <div style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          background: "rgba(167,139,250,0.1)", border: "1px solid rgba(167,139,250,0.25)",
+          borderRadius: 12, padding: "8px 14px",
+        }}>
+          <div style={{ fontSize: 10, color: "#c4b5fd", letterSpacing: "0.15em", fontWeight: 700 }}>💎 TONYX TOKENS</div>
+          <div style={{ fontSize: 18, fontWeight: 800, color: "#a78bfa", fontVariantNumeric: "tabular-nums" }}>
+            <CountUp value={profile?.tonyxCoins ?? 0} />
           </div>
         </div>
       </div>

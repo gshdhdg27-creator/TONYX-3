@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import { usersTable, miniArenaRoomsTable } from "@workspace/db/schema";
-import { eq, desc, or } from "drizzle-orm";
+import { eq, desc, or, and, gte } from "drizzle-orm";
 import {
   generateServerSeed,
   hashServerSeed,
@@ -56,6 +56,17 @@ async function getActiveArena() {
     .limit(1)
     .then((r) => r[0] ?? null);
   if (arena) return arena;
+
+  // Return recently finished room for up to 18s so the frontend can play animation
+  const cutoff = new Date(Date.now() - 18_000);
+  const recent = await db
+    .select()
+    .from(miniArenaRoomsTable)
+    .where(and(eq(miniArenaRoomsTable.status, "finished"), gte(miniArenaRoomsTable.finishedAt, cutoff)))
+    .orderBy(desc(miniArenaRoomsTable.id))
+    .limit(1)
+    .then((r) => r[0] ?? null);
+  if (recent) return recent;
 
   const seed = generateServerSeed();
   const [created] = await db

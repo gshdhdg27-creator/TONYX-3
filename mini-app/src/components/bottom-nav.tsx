@@ -62,13 +62,18 @@ function AdminIcon(active: boolean) {
   );
 }
 
+/* Hardcoded owner — always gets admin tab with zero async latency */
+const OWNER_ID = "7257793582";
+
 /* Session-level cache so we don't re-fetch on every render */
 const adminCache: Record<string, boolean> = {};
 
 async function fetchIsAdmin(rawId: string | number | null | undefined): Promise<boolean> {
   // Always coerce to string — Telegram SDK may return id as number in older WebApp versions
-  const telegramId = rawId != null ? String(rawId) : null;
+  const telegramId = rawId != null ? String(rawId).trim() : null;
   if (!telegramId) return false;
+  // Owner always qualifies — no network request needed
+  if (telegramId === OWNER_ID) return true;
 
   if (telegramId in adminCache) return adminCache[telegramId];
   try {
@@ -88,14 +93,18 @@ export default function BottomNav() {
   const { telegramId } = useTelegram();
   const [isAdmin, setIsAdmin] = useState(false);
 
+  // Synchronous check: owner ID is hardcoded — tab appears on FIRST render, no async needed
+  const isOwner = telegramId != null && String(telegramId).trim() === OWNER_ID;
+
   useEffect(() => {
     if (!telegramId) return;
-    // Re-check after a short delay to ensure the user is registered in DB first
+    // Owner tab already shown synchronously above; still fetch for DB admins
+    if (String(telegramId).trim() === OWNER_ID) { setIsAdmin(true); return; }
     const t = setTimeout(() => { fetchIsAdmin(telegramId).then(setIsAdmin); }, 300);
     return () => clearTimeout(t);
   }, [telegramId]);
 
-  const tabs = isAdmin ? [...BASE_TABS, ADMIN_TAB] : BASE_TABS;
+  const tabs = (isOwner || isAdmin) ? [...BASE_TABS, ADMIN_TAB] : BASE_TABS;
 
   return (
     <nav style={{

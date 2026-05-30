@@ -246,8 +246,20 @@ export default function ProfilePage() {
               </div>
             )}
             <button
-              onClick={() => { haptic("heavy"); withdraw.mutate({ data: { telegramId: telegramId!, amount: parseInt(withdrawAmount), address: withdrawAddress } }); }}
-              disabled={!withdrawAmount || !withdrawAddress || withdraw.isPending || parseInt(withdrawAmount) < minWithdraw}
+              onClick={() => {
+                try {
+                  haptic("heavy");
+                  const amount = parseInt(withdrawAmount, 10);
+                  if (!telegramId || isNaN(amount) || amount < minWithdraw || !withdrawAddress.trim()) {
+                    showToast("Проверьте сумму и адрес кошелька", "error");
+                    return;
+                  }
+                  withdraw.mutate({ data: { telegramId, amount, address: withdrawAddress.trim() } });
+                } catch (err) {
+                  showToast("Ошибка — попробуйте ещё раз", "error");
+                }
+              }}
+              disabled={!withdrawAmount || !withdrawAddress || withdraw.isPending || parseInt(withdrawAmount, 10) < minWithdraw}
               style={{
                 width: "100%", padding: "13px 0", borderRadius: 12, border: "none",
                 background: "linear-gradient(135deg, #15803d, #22c55e)",
@@ -259,7 +271,7 @@ export default function ProfilePage() {
             </button>
           </div>
 
-          {withdrawals && withdrawals.withdrawals.length > 0 && (
+          {withdrawals?.withdrawals && withdrawals.withdrawals.length > 0 && (
             <div style={{ background: "rgba(17,24,39,0.9)", border: "1px solid rgba(30,58,143,0.3)", borderRadius: 16, padding: 16 }}>
               <div style={{ fontSize: 11, color: "#64748b", marginBottom: 10, letterSpacing: "0.12em", fontWeight: 600 }}>WITHDRAWAL HISTORY</div>
               {withdrawals.withdrawals.slice().reverse().map(w => (

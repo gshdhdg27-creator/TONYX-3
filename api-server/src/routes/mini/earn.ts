@@ -5,22 +5,17 @@ import {
   GetMiniEarnStatusParams,
   GetMiniEarnStatusResponse,
   RecordMiniAdWatchBody,
-  RecordMiniAdWatchResponse,
 } from "@workspace/api-zod";
 import { eq, and, gte, desc } from "drizzle-orm";
 
 const router: IRouter = Router();
 
-const MIN_COINS = 1;
-const MAX_COINS = 2;
+const TON_PER_AD = 0.0001;
 const COOLDOWN_SECONDS = 60;
 const DEDUP_SECONDS = 2;
 const DAILY_LIMIT = 100;
 const MINI_BLOCK_ID = "int-32141";
-
-function randomCoins(): number {
-  return Math.random() < 0.5 ? MIN_COINS : MAX_COINS;
-}
+const REFERRAL_PCT = 0.10;
 
 function startOfDayUtc(): Date {
   const d = new Date();
@@ -65,10 +60,10 @@ router.get("/status/:telegramId", async (req, res) => {
     cooldownSeconds,
     adsWatchedToday: todayViews.length,
     dailyLimit: DAILY_LIMIT,
-    minCoins: MIN_COINS,
-    maxCoins: MAX_COINS,
+    minCoins: 0,
+    maxCoins: 0,
   });
-  res.json(data);
+  res.json({ ...data, minTon: TON_PER_AD, maxTon: TON_PER_AD });
 });
 
 router.post("/watch", async (req, res) => {
@@ -116,29 +111,30 @@ router.post("/watch", async (req, res) => {
   if (lastView) {
     const elapsed = (Date.now() - lastView.viewedAt.getTime()) / 1000;
     if (elapsed < DEDUP_SECONDS) {
-      const data = RecordMiniAdWatchResponse.parse({
+      res.json({
+        tonEarned: 0,
         coinsEarned: 0,
-        newBalance: user.coins,
+        newBalance: Number(user.ton),
         adsWatchedToday: todayViews.length,
         cooldownSeconds: Math.ceil(DEDUP_SECONDS - elapsed),
       });
-      res.json(data);
       return;
     }
   }
 
-  const coinsEarned = randomCoins();
+  const tonEarned = TON_PER_AD;
+  const newTon = Number(user.ton) + tonEarned;
 
   await db.insert(adViewsTable).values({
     telegramId: body.telegramId,
     blockId: MINI_BLOCK_ID,
-    coinsEarned,
+    coinsEarned: 0,
+    tonEarned: String(tonEarned),
   });
 
-  const newCoins = user.coins + coinsEarned;
   await db
     .update(usersTable)
-    .set({ coins: newCoins, totalAdsWatched: user.totalAdsWatched + 1, updatedAt: new Date() })
+    .set({ ton: String(newTon), totalAdsWatched: user.totalAdsWatched + 1, updatedAt: new Date() })
     .where(eq(usersTable.telegramId, body.telegramId));
 
   if (user.referredBy && user.referredBy !== body.telegramId) {
@@ -148,21 +144,22 @@ router.post("/watch", async (req, res) => {
       .where(eq(usersTable.telegramId, user.referredBy))
       .then((rows) => rows[0] ?? null);
     if (referrer && !referrer.isBlocked) {
-      const bonus = Math.max(1, Math.round(coinsEarned * 0.1));
+      const bonus = tonEarned * REFERRAL_PCT;
+      const newReferrerTon = Number(referrer.ton) + bonus;
       await db
         .update(usersTable)
-        .set({ coins: referrer.coins + bonus, referralEarnings: referrer.referralEarnings + bonus, updatedAt: new Date() })
+        .set({ ton: String(newReferrerTon), referralEarnings: referrer.referralEarnings + 1, updatedAt: new Date() })
         .where(eq(usersTable.telegramId, user.referredBy));
     }
   }
 
-  const data = RecordMiniAdWatchResponse.parse({
-    coinsEarned,
-    newBalance: newCoins,
+  res.json({
+    tonEarned,
+    coinsEarned: 0,
+    newBalance: newTon,
     adsWatchedToday: todayViews.length + 1,
     cooldownSeconds: COOLDOWN_SECONDS,
   });
-  res.json(data);
 });
 
 export default router;

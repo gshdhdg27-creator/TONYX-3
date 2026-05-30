@@ -4,7 +4,6 @@ import {
   useGetUserProfile,
   getGetUserProfileQueryKey,
   useGetReferrals,
-  useExchangeMiniCoins,
   useRequestMiniWithdraw,
   useGetMiniWithdrawals,
   getGetMiniWithdrawalsQueryKey,
@@ -25,32 +24,24 @@ function Toast({ msg, type }: { msg: string; type: "success" | "error" }) {
   );
 }
 
-type Section = "main" | "exchange" | "withdraw" | "invite" | "topup";
+type Section = "main" | "withdraw" | "invite" | "topup";
 
 interface ActionButtonProps {
-  icon: string;
-  label: string;
-  active: boolean;
-  onClick: () => void;
-  accent: string;
+  icon: string; label: string; active: boolean; onClick: () => void; accent: string;
 }
 
 function ActionButton({ icon, label, active, onClick, accent }: ActionButtonProps) {
   return (
-    <button
-      onClick={onClick}
-      className="tile-bounce"
-      style={{
-        flex: 1, padding: "14px 8px", borderRadius: 14,
-        background: active ? `linear-gradient(135deg, ${accent}aa, ${accent}55)` : "rgba(17,24,39,0.85)",
-        border: `1px solid ${active ? accent : "rgba(30,58,143,0.3)"}`,
-        color: active ? "#fff" : "#cbd5e1",
-        fontSize: 12, fontWeight: 700, fontFamily: "inherit",
-        cursor: "pointer", transition: "all 0.2s",
-        display: "flex", flexDirection: "column", alignItems: "center", gap: 6,
-        boxShadow: active ? `0 0 20px ${accent}55` : "none",
-      }}
-    >
+    <button onClick={onClick} className="tile-bounce" style={{
+      flex: 1, padding: "14px 8px", borderRadius: 14,
+      background: active ? `linear-gradient(135deg, ${accent}aa, ${accent}55)` : "rgba(17,24,39,0.85)",
+      border: `1px solid ${active ? accent : "rgba(30,58,143,0.3)"}`,
+      color: active ? "#fff" : "#cbd5e1",
+      fontSize: 12, fontWeight: 700, fontFamily: "inherit",
+      cursor: "pointer", transition: "all 0.2s",
+      display: "flex", flexDirection: "column", alignItems: "center", gap: 6,
+      boxShadow: active ? `0 0 20px ${accent}55` : "none",
+    }}>
       <div style={{ fontSize: 22 }}>{icon}</div>
       <div style={{ letterSpacing: "0.04em" }}>{label}</div>
     </button>
@@ -66,11 +57,24 @@ function LoadingScreen() {
   );
 }
 
+function StatusBadge({ status }: { status: string }) {
+  const cfg: Record<string, { bg: string; color: string }> = {
+    pending: { bg: "rgba(217,119,6,0.2)", color: "#fbbf24" },
+    completed: { bg: "rgba(22,163,74,0.2)", color: "#4ade80" },
+    rejected: { bg: "rgba(220,38,38,0.2)", color: "#f87171" },
+  };
+  const c = cfg[status] ?? cfg.pending;
+  return (
+    <span style={{ background: c.bg, color: c.color, padding: "3px 10px", borderRadius: 8, fontSize: 11, fontWeight: 700 }}>
+      {status}
+    </span>
+  );
+}
+
 export default function ProfilePage() {
   const { telegramId, username, firstName, photoUrl } = useTelegram();
   const qc = useQueryClient();
   const [section, setSection] = useState<Section>("main");
-  const [exchangeCoins, setExchangeCoins] = useState("");
   const [withdrawAmount, setWithdrawAmount] = useState("");
   const [withdrawAddress, setWithdrawAddress] = useState("");
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
@@ -86,18 +90,6 @@ export default function ProfilePage() {
     setTimeout(() => setToast(null), 2500);
   };
 
-  const exchange = useExchangeMiniCoins({
-    mutation: {
-      onSuccess: (data) => {
-        hapticNotify("success");
-        showToast(`Exchanged ${data.coins} pts → ${data.ton} TON`, "success");
-        setExchangeCoins("");
-        qc.invalidateQueries({ queryKey: getGetUserProfileQueryKey(telegramId ?? "") });
-      },
-      onError: (e: unknown) => showToast((e as { data?: { error?: string } })?.data?.error ?? "Failed", "error"),
-    },
-  });
-
   const withdraw = useRequestMiniWithdraw({
     mutation: {
       onSuccess: (data) => {
@@ -111,12 +103,12 @@ export default function ProfilePage() {
     },
   });
 
-  // Guard: Telegram context not yet available — don't try to render user data
   if (!telegramId) return <LoadingScreen />;
 
-  const coins = profile?.coins ?? 0;
+  const userTon    = Number((profile as { ton?: string | number } | undefined)?.ton ?? 0);
+  const userTonyx  = Number((profile as { tonyxCoins?: number } | undefined)?.tonyxCoins ?? 0);
+  const boostRate  = Number((profile as { boostRate?: number } | undefined)?.boostRate ?? 0);
   const minWithdraw = withdrawals?.minimumAmount ?? 1000;
-  const tonFromExchange = exchangeCoins ? Math.floor(parseInt(exchangeCoins) / 1000) : 0;
   const tonFromWithdraw = withdrawAmount ? parseInt(withdrawAmount) / 1000 : 0;
   const inviteLink = `https://t.me/TONYX_game_bot?start=${telegramId ?? ""}`;
 
@@ -126,16 +118,14 @@ export default function ProfilePage() {
       setCopied(true);
       haptic("light");
       setTimeout(() => setCopied(false), 1500);
-    } catch {
-      showToast("Copy failed", "error");
-    }
+    } catch { showToast("Copy failed", "error"); }
   };
 
   return (
     <div style={{ padding: "16px 16px 28px" }}>
       {toast && <Toast msg={toast.msg} type={toast.type} />}
 
-      {/* Header */}
+      {/* ─── Header ─── */}
       <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 18 }}>
         <div style={{
           width: 60, height: 60, borderRadius: "50%",
@@ -159,35 +149,43 @@ export default function ProfilePage() {
         </div>
       </div>
 
-      {/* Balance card */}
-      <div style={{
-        background: "linear-gradient(135deg, rgba(30,58,143,0.4), rgba(37,99,235,0.15))",
-        border: "1px solid rgba(96,165,250,0.3)",
-        borderRadius: 18, padding: "16px 18px", marginBottom: 16,
-        display: "flex", justifyContent: "space-between", alignItems: "center",
-        boxShadow: "0 0 28px rgba(37,99,235,0.18)",
-      }}>
-        <div>
-          <div style={{ fontSize: 10, color: "#93c5fd", letterSpacing: "0.2em", fontWeight: 600 }}>BALANCE</div>
-          <div style={{
-            fontSize: 28, fontWeight: 800, color: "#fff", marginTop: 2,
-            textShadow: "0 0 16px rgba(96,165,250,0.45)", fontVariantNumeric: "tabular-nums",
-          }}>
-            <CountUp value={coins} /> <span style={{ fontSize: 14, color: "#93c5fd", fontWeight: 600 }}>pts</span>
+      {/* ─── Balance cards ─── */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
+        {/* TON */}
+        <div style={{
+          background: "linear-gradient(135deg, rgba(30,58,143,0.5), rgba(37,99,235,0.2))",
+          border: "1px solid rgba(96,165,250,0.35)", borderRadius: 16, padding: "14px 16px",
+          boxShadow: "0 0 24px rgba(37,99,235,0.15)",
+        }}>
+          <div style={{ fontSize: 9, color: "#93c5fd", letterSpacing: "0.2em", fontWeight: 700, marginBottom: 6 }}>TON БАЛАНС</div>
+          <div style={{ fontSize: 22, fontWeight: 900, color: "#fbbf24", fontVariantNumeric: "tabular-nums" }}>
+            {userTon.toFixed(4)}
           </div>
+          <div style={{ fontSize: 10, color: "#475569", marginTop: 2 }}>TON</div>
+          {boostRate > 0 && (
+            <div style={{ fontSize: 10, color: "#4ade80", marginTop: 4, fontWeight: 700 }}>
+              🚀 +{(boostRate * 100).toFixed(1)}% буст
+            </div>
+          )}
         </div>
-        <div style={{ textAlign: "right" }}>
-          <div style={{ fontSize: 10, color: "#93c5fd", letterSpacing: "0.2em", fontWeight: 600 }}>≈ TON</div>
-          <div style={{ fontSize: 18, fontWeight: 700, color: "#60a5fa", marginTop: 2 }}>
-            {(coins / 1000).toFixed(3)}
+
+        {/* TONYX */}
+        <div style={{
+          background: "linear-gradient(135deg, rgba(109,40,217,0.4), rgba(139,92,246,0.15))",
+          border: "1px solid rgba(167,139,250,0.35)", borderRadius: 16, padding: "14px 16px",
+          boxShadow: "0 0 24px rgba(139,92,246,0.15)",
+        }}>
+          <div style={{ fontSize: 9, color: "#c4b5fd", letterSpacing: "0.2em", fontWeight: 700, marginBottom: 6 }}>TONYX</div>
+          <div style={{ fontSize: 22, fontWeight: 900, color: "#a78bfa", fontVariantNumeric: "tabular-nums" }}>
+            <CountUp value={userTonyx} />
           </div>
+
+          <div style={{ fontSize: 10, color: "#475569", marginTop: 2 }}>TONYX токены</div>
         </div>
       </div>
 
-      {/* 4 action buttons */}
+      {/* ─── Action buttons ─── */}
       <div style={{ display: "flex", gap: 8, marginBottom: 18 }}>
-        <ActionButton icon="🔄" label="EXCHANGE" active={section === "exchange"} accent="#2563eb"
-          onClick={() => { haptic("light"); setSection(section === "exchange" ? "main" : "exchange"); }} />
         <ActionButton icon="💸" label="WITHDRAW" active={section === "withdraw"} accent="#16a34a"
           onClick={() => { haptic("light"); setSection(section === "withdraw" ? "main" : "withdraw"); }} />
         <ActionButton icon="👥" label="INVITE" active={section === "invite"} accent="#a855f7"
@@ -196,53 +194,25 @@ export default function ProfilePage() {
           onClick={() => { haptic("light"); setSection(section === "topup" ? "main" : "topup"); }} />
       </div>
 
-      {section === "exchange" && (
-        <div style={{ background: "rgba(17,24,39,0.9)", border: "1px solid rgba(30,58,143,0.3)", borderRadius: 16, padding: 16, marginBottom: 16 }}>
-          <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>Exchange points to TON</div>
-          <div style={{ fontSize: 12, color: "#64748b", marginBottom: 14 }}>Rate: 1000 pts = 1 TON</div>
-          <input
-            value={exchangeCoins} onChange={(e) => setExchangeCoins(e.target.value)}
-            type="number" step="1000" placeholder="Enter pts (multiple of 1000)"
-            style={{ width: "100%", background: "rgba(30,45,69,0.6)", border: "1px solid rgba(30,58,143,0.4)", borderRadius: 10, padding: "12px 14px", color: "#f1f5f9", fontFamily: "inherit", fontSize: 14, outline: "none", boxSizing: "border-box", marginBottom: 10 }}
-          />
-          {tonFromExchange > 0 && (
-            <div style={{ background: "rgba(37,99,235,0.12)", borderRadius: 10, padding: "10px 14px", fontSize: 13, color: "#93c5fd", marginBottom: 12, fontWeight: 600 }}>
-              You will get: {tonFromExchange} TON
-            </div>
-          )}
-          <button
-            onClick={() => { haptic("medium"); exchange.mutate({ data: { telegramId: telegramId!, coins: parseInt(exchangeCoins) } }); }}
-            disabled={!exchangeCoins || exchange.isPending || parseInt(exchangeCoins) < 1000}
-            style={{
-              width: "100%", padding: "13px 0", borderRadius: 12, border: "none",
-              background: "linear-gradient(135deg, #1e3a8a, #2563eb)",
-              color: "#fff", fontSize: 15, fontWeight: 700, fontFamily: "inherit",
-              cursor: "pointer", opacity: exchange.isPending ? 0.6 : 1,
-            }}
-          >
-            {exchange.isPending ? "Exchanging…" : "Exchange"}
-          </button>
-        </div>
-      )}
-
+      {/* ─── Withdraw section ─── */}
       {section === "withdraw" && (
         <div style={{ marginBottom: 16 }}>
           <div style={{ background: "rgba(17,24,39,0.9)", border: "1px solid rgba(30,58,143,0.3)", borderRadius: 16, padding: 16, marginBottom: 14 }}>
-            <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>Withdraw TON</div>
-            <div style={{ fontSize: 12, color: "#64748b", marginBottom: 14 }}>Min: {minWithdraw} pts = {minWithdraw / 1000} TON</div>
+            <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>Вывод TON</div>
+            <div style={{ fontSize: 12, color: "#64748b", marginBottom: 14 }}>Мин: {minWithdraw} pts = {minWithdraw / 1000} TON</div>
             <input
               value={withdrawAmount} onChange={(e) => setWithdrawAmount(e.target.value)}
-              type="number" step="1000" placeholder={`Min ${minWithdraw} pts`}
+              type="number" step="1000" placeholder={`Мин. ${minWithdraw} pts`}
               style={{ width: "100%", background: "rgba(30,45,69,0.6)", border: "1px solid rgba(30,58,143,0.4)", borderRadius: 10, padding: "12px 14px", color: "#f1f5f9", fontFamily: "inherit", fontSize: 14, outline: "none", boxSizing: "border-box", marginBottom: 10 }}
             />
             <input
               value={withdrawAddress} onChange={(e) => setWithdrawAddress(e.target.value)}
-              type="text" placeholder="TON wallet address (UQ…)"
+              type="text" placeholder="TON адрес кошелька (UQ…)"
               style={{ width: "100%", background: "rgba(30,45,69,0.6)", border: "1px solid rgba(30,58,143,0.4)", borderRadius: 10, padding: "12px 14px", color: "#f1f5f9", fontFamily: "inherit", fontSize: 14, outline: "none", boxSizing: "border-box", marginBottom: 10 }}
             />
             {tonFromWithdraw > 0 && (
               <div style={{ background: "rgba(22,163,74,0.12)", borderRadius: 10, padding: "10px 14px", fontSize: 13, color: "#4ade80", marginBottom: 12, fontWeight: 600 }}>
-                You will receive: {tonFromWithdraw.toFixed(4)} TON
+                Вы получите: {tonFromWithdraw.toFixed(4)} TON
               </div>
             )}
             <button
@@ -251,13 +221,10 @@ export default function ProfilePage() {
                   haptic("heavy");
                   const amount = parseInt(withdrawAmount, 10);
                   if (!telegramId || isNaN(amount) || amount < minWithdraw || !withdrawAddress.trim()) {
-                    showToast("Проверьте сумму и адрес кошелька", "error");
-                    return;
+                    showToast("Проверьте сумму и адрес кошелька", "error"); return;
                   }
                   withdraw.mutate({ data: { telegramId, amount, address: withdrawAddress.trim() } });
-                } catch (err) {
-                  showToast("Ошибка — попробуйте ещё раз", "error");
-                }
+                } catch { showToast("Ошибка — попробуйте ещё раз", "error"); }
               }}
               disabled={!withdrawAmount || !withdrawAddress || withdraw.isPending || parseInt(withdrawAmount, 10) < minWithdraw}
               style={{
@@ -267,13 +234,13 @@ export default function ProfilePage() {
                 cursor: "pointer", opacity: withdraw.isPending ? 0.6 : 1,
               }}
             >
-              {withdraw.isPending ? "Submitting…" : "Request withdrawal"}
+              {withdraw.isPending ? "Отправляем…" : "Запросить вывод"}
             </button>
           </div>
 
           {withdrawals?.withdrawals && withdrawals.withdrawals.length > 0 && (
             <div style={{ background: "rgba(17,24,39,0.9)", border: "1px solid rgba(30,58,143,0.3)", borderRadius: 16, padding: 16 }}>
-              <div style={{ fontSize: 11, color: "#64748b", marginBottom: 10, letterSpacing: "0.12em", fontWeight: 600 }}>WITHDRAWAL HISTORY</div>
+              <div style={{ fontSize: 11, color: "#64748b", marginBottom: 10, letterSpacing: "0.12em", fontWeight: 600 }}>ИСТОРИЯ ВЫВОДОВ</div>
               {withdrawals.withdrawals.slice().reverse().map(w => (
                 <div key={w.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: "1px solid rgba(30,58,143,0.15)" }}>
                   <div>
@@ -288,12 +255,13 @@ export default function ProfilePage() {
         </div>
       )}
 
+      {/* ─── Invite section ─── */}
       {section === "invite" && (
         <div style={{ marginBottom: 16 }}>
           <div style={{ background: "rgba(17,24,39,0.9)", border: "1px solid rgba(168,85,247,0.3)", borderRadius: 16, padding: 16, marginBottom: 14 }}>
-            <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>Invite friends</div>
+            <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>Пригласить друзей</div>
             <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 14, lineHeight: 1.5 }}>
-              Earn <b style={{ color: "#c084fc" }}>10%</b> of ad rewards from every friend you invite, forever.
+              Получай <b style={{ color: "#c084fc" }}>10%</b> от TON-наград каждого приглашённого друга навсегда.
             </div>
             <div style={{
               background: "rgba(30,45,69,0.6)", borderRadius: 10, padding: "12px 14px",
@@ -312,16 +280,16 @@ export default function ProfilePage() {
                 boxShadow: "0 4px 18px rgba(168,85,247,0.35)",
               }}
             >
-              {copied ? "✓ Copied!" : "📋 Copy invite link"}
+              {copied ? "✓ Скопировано!" : "📋 Скопировать ссылку"}
             </button>
             <div style={{ marginTop: 12, fontSize: 13, color: "#4ade80", fontWeight: 600, textAlign: "center" }}>
-              {referrals?.referrals?.length ?? 0} referrals · {referrals?.referralEarnings ?? 0} pts earned
+              {referrals?.referrals?.length ?? 0} рефералов
             </div>
           </div>
 
           {referrals && referrals.referrals && referrals.referrals.length > 0 && (
             <div style={{ background: "rgba(17,24,39,0.9)", border: "1px solid rgba(30,58,143,0.3)", borderRadius: 16, padding: 16 }}>
-              <div style={{ fontSize: 11, color: "#64748b", marginBottom: 10, letterSpacing: "0.12em", fontWeight: 600 }}>YOUR REFERRALS</div>
+              <div style={{ fontSize: 11, color: "#64748b", marginBottom: 10, letterSpacing: "0.12em", fontWeight: 600 }}>ВАШИ РЕФЕРАЛЫ</div>
               {referrals.referrals.slice(0, 10).map((r, i) => (
                 <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid rgba(30,58,143,0.1)" }}>
                   <div style={{ fontSize: 13, color: "#cbd5e1" }}>{r.username ? `@${r.username}` : r.firstName ?? "User"}</div>
@@ -333,71 +301,52 @@ export default function ProfilePage() {
         </div>
       )}
 
+      {/* ─── Top Up section ─── */}
       {section === "topup" && (
         <div style={{ marginBottom: 16 }}>
           <div style={{ background: "rgba(17,24,39,0.9)", border: "1px solid rgba(8,145,178,0.35)", borderRadius: 16, padding: 16, marginBottom: 12 }}>
-            <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>💎 Top Up Balance</div>
+            <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>💎 Пополнение TON</div>
             <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 16, lineHeight: 1.5 }}>
-              Send TON to your account and receive pts automatically.<br />
-              Rate: <b style={{ color: "#22d3ee" }}>1 TON = 100 pts</b>
+              Пополните TON-баланс напрямую через кошелёк
             </div>
 
-            {/* Option 1: TON Connect */}
             <div style={{ background: "rgba(8,145,178,0.1)", border: "1px solid rgba(8,145,178,0.3)", borderRadius: 12, padding: "14px 16px", marginBottom: 10 }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
                 <div style={{ fontSize: 13, fontWeight: 700, color: "#22d3ee" }}>TON Connect</div>
-                <div style={{ fontSize: 10, background: "rgba(251,191,36,0.2)", color: "#fbbf24", padding: "2px 8px", borderRadius: 6, fontWeight: 600 }}>COMING SOON</div>
+                <div style={{ fontSize: 10, background: "rgba(251,191,36,0.2)", color: "#fbbf24", padding: "2px 8px", borderRadius: 6, fontWeight: 600 }}>СКОРО</div>
               </div>
               <div style={{ fontSize: 11, color: "#64748b", lineHeight: 1.5 }}>
-                Connect your TON wallet directly and send funds with one tap. No address copy needed.
+                Подключите TON-кошелёк и пополняйте одним нажатием.
               </div>
             </div>
 
-            {/* Option 2: Manual send */}
-            <div style={{ background: "rgba(14,116,144,0.1)", border: "1px solid rgba(14,116,144,0.3)", borderRadius: 12, padding: "14px 16px", marginBottom: 10 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: "#67e8f9", marginBottom: 8 }}>Manual Transfer</div>
+            <div style={{ background: "rgba(14,116,144,0.1)", border: "1px solid rgba(14,116,144,0.3)", borderRadius: 12, padding: "14px 16px" }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: "#67e8f9", marginBottom: 8 }}>Ручной перевод</div>
               <div style={{ fontSize: 11, color: "#94a3b8", marginBottom: 10, lineHeight: 1.5 }}>
-                Send TON to the address below. Include your Telegram ID in the comment so we can credit your account.
+                Отправьте TON на адрес ниже с комментарием вашего Telegram ID.
               </div>
               <div style={{
                 background: "rgba(15,23,42,0.8)", borderRadius: 8, padding: "10px 12px",
                 fontFamily: "monospace", fontSize: 12, color: "#67e8f9",
-                wordBreak: "break-all", border: "1px solid rgba(14,116,144,0.3)",
-                marginBottom: 8,
+                wordBreak: "break-all", border: "1px solid rgba(14,116,144,0.3)", marginBottom: 8,
               }}>
                 UQXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
               </div>
               <div style={{ background: "rgba(15,23,42,0.6)", borderRadius: 8, padding: "8px 12px", fontSize: 11, color: "#64748b" }}>
-                Comment: <span style={{ color: "#93c5fd", fontWeight: 600 }}>TOPUP_{telegramId}</span>
+                Комментарий: <span style={{ color: "#93c5fd", fontWeight: 600 }}>TOPUP_{telegramId}</span>
               </div>
             </div>
-
-            {/* Option 3: Crypto Pay */}
-            <div style={{ background: "rgba(37,99,235,0.1)", border: "1px solid rgba(37,99,235,0.25)", borderRadius: 12, padding: "14px 16px" }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: "#93c5fd" }}>Crypto Pay (CryptoPay API)</div>
-                <div style={{ fontSize: 10, background: "rgba(251,191,36,0.2)", color: "#fbbf24", padding: "2px 8px", borderRadius: 6, fontWeight: 600 }}>COMING SOON</div>
-              </div>
-              <div style={{ fontSize: 11, color: "#64748b", lineHeight: 1.5 }}>
-                Pay via @CryptoBot directly inside Telegram. Supports TON, USDT, BTC and more.
-              </div>
-            </div>
-          </div>
-
-          <div style={{ fontSize: 11, color: "#475569", textAlign: "center", lineHeight: 1.6 }}>
-            After sending, allow up to 5 minutes for the balance to update.<br />
-            Contact support if funds don't arrive within 24 hours.
           </div>
         </div>
       )}
 
-      {/* History always shown on main */}
+      {/* ─── Recent Activity (main) ─── */}
       {section === "main" && (
         <div style={{ background: "rgba(17,24,39,0.9)", border: "1px solid rgba(30,58,143,0.3)", borderRadius: 16, padding: 16 }}>
-          <div style={{ fontSize: 11, color: "#64748b", marginBottom: 12, letterSpacing: "0.12em", fontWeight: 600 }}>📜 RECENT ACTIVITY</div>
+          <div style={{ fontSize: 11, color: "#64748b", marginBottom: 12, letterSpacing: "0.12em", fontWeight: 600 }}>📜 ПОСЛЕДНЯЯ АКТИВНОСТЬ</div>
           {!history || !history.items || history.items.length === 0 ? (
             <div style={{ textAlign: "center", color: "#475569", padding: "20px 0", fontSize: 13 }}>
-              No activity yet — watch ads, play games, withdraw to see history here.
+              Активности нет — смотри рекламу, играй, выводи TON
             </div>
           ) : (
             (history.items as Array<{ kind: string; id: number | string; title: string; amount: number; positive: boolean; timestamp: string }>).map((it) => (
@@ -432,19 +381,5 @@ export default function ProfilePage() {
         </div>
       )}
     </div>
-  );
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const cfg: Record<string, { bg: string; color: string }> = {
-    pending: { bg: "rgba(217,119,6,0.2)", color: "#fbbf24" },
-    completed: { bg: "rgba(22,163,74,0.2)", color: "#4ade80" },
-    rejected: { bg: "rgba(220,38,38,0.2)", color: "#f87171" },
-  };
-  const c = cfg[status] ?? cfg.pending;
-  return (
-    <span style={{ background: c.bg, color: c.color, padding: "3px 10px", borderRadius: 8, fontSize: 11, fontWeight: 700 }}>
-      {status}
-    </span>
   );
 }

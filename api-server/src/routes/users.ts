@@ -91,7 +91,7 @@ router.post("/register", async (req, res) => {
 
   const totalReferrals = await getReferralCount(user.telegramId);
 
-  const data = RegisterUserResponse.parse({
+  res.json({
     id: user.id,
     telegramId: user.telegramId,
     username: user.username ?? undefined,
@@ -100,13 +100,13 @@ router.post("/register", async (req, res) => {
     coins: user.coins,
     ton: Number(user.ton),
     tonyxCoins: user.tonyxCoins,
+    boostRate: Number(user.boostRate ?? 0),
     totalAdsWatched: user.totalAdsWatched,
     totalReferrals,
     isBlocked: user.isBlocked,
     isAdmin: user.isAdmin,
     createdAt: user.createdAt.toISOString(),
   });
-  res.json(data);
 });
 
 router.get("/:telegramId", async (req, res) => {
@@ -124,7 +124,7 @@ router.get("/:telegramId", async (req, res) => {
 
   const totalReferrals = await getReferralCount(user.telegramId);
 
-  const data = GetUserProfileResponse.parse({
+  res.json({
     id: user.id,
     telegramId: user.telegramId,
     username: user.username ?? undefined,
@@ -133,13 +133,13 @@ router.get("/:telegramId", async (req, res) => {
     coins: user.coins,
     ton: Number(user.ton),
     tonyxCoins: user.tonyxCoins,
+    boostRate: Number(user.boostRate ?? 0),
     totalAdsWatched: user.totalAdsWatched,
     totalReferrals,
     isBlocked: user.isBlocked,
     isAdmin: user.isAdmin,
     createdAt: user.createdAt.toISOString(),
   });
-  res.json(data);
 });
 
 export default router;

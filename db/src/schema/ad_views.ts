@@ -1,4 +1,4 @@
-import { pgTable, text, integer, timestamp, serial } from "drizzle-orm/pg-core";
+import { pgTable, text, integer, timestamp, serial, numeric } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -6,7 +6,8 @@ export const adViewsTable = pgTable("ad_views", {
   id: serial("id").primaryKey(),
   telegramId: text("telegram_id").notNull(),
   blockId: text("block_id").notNull().default("20809"),
-  coinsEarned: integer("coins_earned").notNull().default(10),
+  coinsEarned: integer("coins_earned").notNull().default(0),
+  tonEarned: numeric("ton_earned", { precision: 18, scale: 8 }).notNull().default("0"),
   viewedAt: timestamp("viewed_at").notNull().defaultNow(),
 });
 

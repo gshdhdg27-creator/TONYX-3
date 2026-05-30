@@ -9,7 +9,7 @@ export const usersTable = pgTable("users", {
   firstName: text("first_name"),
   lastName: text("last_name"),
 
-  /* Wallet 1: points (from ads) */
+  /* Wallet 1: legacy points (kept for backward compat, not displayed) */
   coins: integer("coins").notNull().default(0),
 
   /* Wallet 2: TON balance */
@@ -17,6 +17,9 @@ export const usersTable = pgTable("users", {
 
   /* Wallet 3: TONYX trading tokens */
   tonyxCoins: integer("tonyx_coins").notNull().default(0),
+
+  /* Mining boost: additional daily rate (e.g. 0.001 = +0.1%) */
+  boostRate: numeric("boost_rate", { precision: 10, scale: 6 }).notNull().default("0"),
 
   /* Tracking */
   totalAdsWatched: integer("total_ads_watched").notNull().default(0),

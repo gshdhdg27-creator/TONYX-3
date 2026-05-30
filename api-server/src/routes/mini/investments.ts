@@ -5,15 +5,16 @@ import { eq } from "drizzle-orm";
 
 const router: IRouter = Router();
 
-const RATE_PER_DAY = 0.01; // 1% per day
+const BASE_RATE_PER_DAY = 0.01; // 1% per day base
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
-const RATE_PER_MS = RATE_PER_DAY / MS_PER_DAY;
 
-function calcEarned(principal: number, startedAt: Date, totalClaimed: number) {
+function calcEarned(principal: number, boostRate: number, startedAt: Date, totalClaimed: number) {
+  const ratePerDay = BASE_RATE_PER_DAY + boostRate;
+  const ratePerMs = ratePerDay / MS_PER_DAY;
   const elapsed = Date.now() - startedAt.getTime();
-  const earnedTotal = Math.floor(principal * RATE_PER_MS * elapsed);
+  const earnedTotal = principal * ratePerMs * elapsed;
   const unclaimed = Math.max(0, earnedTotal - totalClaimed);
-  return { earnedTotal, unclaimed };
+  return { earnedTotal, unclaimed, ratePerDay };
 }
 
 /* GET /investments/:telegramId */
@@ -21,30 +22,43 @@ router.get("/:telegramId", async (req, res) => {
   const { telegramId } = req.params;
   if (!telegramId) { res.status(400).json({ error: "Missing telegramId" }); return; }
 
-  const inv = await db
-    .select()
-    .from(miniInvestmentsTable)
-    .where(eq(miniInvestmentsTable.telegramId, telegramId))
-    .then(r => r[0] ?? null);
+  const [inv, user] = await Promise.all([
+    db.select().from(miniInvestmentsTable).where(eq(miniInvestmentsTable.telegramId, telegramId)).then(r => r[0] ?? null),
+    db.select().from(usersTable).where(eq(usersTable.telegramId, telegramId)).then(r => r[0] ?? null),
+  ]);
 
-  if (!inv) {
-    res.json({ principal: 0, totalClaimed: 0, earnedTotal: 0, unclaimed: 0, startedAt: null, ratePerDay: RATE_PER_DAY });
+  const boostRate = Number(user?.boostRate ?? 0);
+
+  if (!inv || Number(inv.principal) === 0) {
+    res.json({
+      principal: 0,
+      totalClaimed: 0,
+      earnedTotal: 0,
+      unclaimed: 0,
+      startedAt: null,
+      ratePerDay: BASE_RATE_PER_DAY + boostRate,
+      boostRate,
+    });
     return;
   }
 
-  const { earnedTotal, unclaimed } = calcEarned(inv.principal, inv.startedAt, inv.totalClaimed);
+  const principal = Number(inv.principal);
+  const totalClaimed = Number(inv.totalClaimed);
+  const { earnedTotal, unclaimed, ratePerDay } = calcEarned(principal, boostRate, inv.startedAt, totalClaimed);
+
   res.json({
-    principal: inv.principal,
-    totalClaimed: inv.totalClaimed,
+    principal,
+    totalClaimed,
     earnedTotal,
     unclaimed,
     startedAt: inv.startedAt.toISOString(),
-    ratePerDay: RATE_PER_DAY,
+    ratePerDay,
+    boostRate,
   });
 });
 
-/* POST /investments/invest — deduct coins from balance and start/add to investment */
-router.post("/invest", async (req, res) => {
+/* POST /investments/deposit — transfer TON from wallet to mining */
+router.post("/deposit", async (req, res) => {
   const { telegramId, amount } = req.body as { telegramId?: string; amount?: number };
   if (!telegramId || !amount || amount <= 0) {
     res.status(400).json({ error: "Invalid request" });
@@ -54,42 +68,86 @@ router.post("/invest", async (req, res) => {
   const user = await db.select().from(usersTable).where(eq(usersTable.telegramId, telegramId)).then(r => r[0] ?? null);
   if (!user) { res.status(404).json({ error: "User not found" }); return; }
   if (user.isBlocked) { res.status(403).json({ error: "Account is blocked" }); return; }
-  if (user.coins < amount) { res.status(400).json({ error: "Недостаточно монет на балансе" }); return; }
 
-  const existing = await db
-    .select()
-    .from(miniInvestmentsTable)
-    .where(eq(miniInvestmentsTable.telegramId, telegramId))
-    .then(r => r[0] ?? null);
+  const userTon = Number(user.ton);
+  if (userTon < amount) {
+    res.status(400).json({ error: `Недостаточно TON. У вас ${userTon.toFixed(4)} TON` });
+    return;
+  }
 
-  if (existing) {
-    // Claim any existing unclaimed earnings first, then add to principal
-    const { unclaimed } = calcEarned(existing.principal, existing.startedAt, existing.totalClaimed);
-    const newPrincipal = existing.principal + amount + unclaimed;
-    const newUserCoins = user.coins - amount + unclaimed;
+  const boostRate = Number(user.boostRate);
+  const existing = await db.select().from(miniInvestmentsTable).where(eq(miniInvestmentsTable.telegramId, telegramId)).then(r => r[0] ?? null);
+  const newUserTon = userTon - amount;
+
+  if (existing && Number(existing.principal) > 0) {
+    const principal = Number(existing.principal);
+    const totalClaimed = Number(existing.totalClaimed);
+    const { unclaimed } = calcEarned(principal, boostRate, existing.startedAt, totalClaimed);
+    const newPrincipal = principal + amount + unclaimed;
 
     await Promise.all([
       db.update(miniInvestmentsTable)
-        .set({ principal: newPrincipal, totalClaimed: 0, startedAt: new Date(), lastClaimedAt: new Date(), updatedAt: new Date() })
+        .set({ principal: String(newPrincipal), totalClaimed: "0", startedAt: new Date(), lastClaimedAt: new Date(), updatedAt: new Date() })
         .where(eq(miniInvestmentsTable.telegramId, telegramId)),
       db.update(usersTable)
-        .set({ coins: newUserCoins, updatedAt: new Date() })
+        .set({ ton: String(newUserTon), updatedAt: new Date() })
         .where(eq(usersTable.telegramId, telegramId)),
     ]);
-    res.json({ principal: newPrincipal, newBalance: newUserCoins, message: `Вложено ${amount} pts. Инвестиция обновлена.` });
-  } else {
-    // New investment
+    res.json({ principal: newPrincipal, newTon: newUserTon, message: `Пополнено на ${amount} TON` });
+  } else if (existing) {
     await Promise.all([
-      db.insert(miniInvestmentsTable).values({ telegramId, principal: amount }),
+      db.update(miniInvestmentsTable)
+        .set({ principal: String(amount), totalClaimed: "0", startedAt: new Date(), lastClaimedAt: new Date(), updatedAt: new Date() })
+        .where(eq(miniInvestmentsTable.telegramId, telegramId)),
       db.update(usersTable)
-        .set({ coins: user.coins - amount, updatedAt: new Date() })
+        .set({ ton: String(newUserTon), updatedAt: new Date() })
         .where(eq(usersTable.telegramId, telegramId)),
     ]);
-    res.json({ principal: amount, newBalance: user.coins - amount, message: `Вложено ${amount} pts. Инвестиция запущена!` });
+    res.json({ principal: amount, newTon: newUserTon, message: `Майнинг запущен! Вложено ${amount} TON` });
+  } else {
+    await Promise.all([
+      db.insert(miniInvestmentsTable).values({ telegramId, principal: String(amount), totalClaimed: "0" }),
+      db.update(usersTable)
+        .set({ ton: String(newUserTon), updatedAt: new Date() })
+        .where(eq(usersTable.telegramId, telegramId)),
+    ]);
+    res.json({ principal: amount, newTon: newUserTon, message: `Майнинг запущен! Вложено ${amount} TON` });
   }
 });
 
-/* POST /investments/claim — withdraw earned coins to balance */
+/* POST /investments/withdraw — move all (principal + unclaimed) back to wallet */
+router.post("/withdraw", async (req, res) => {
+  const { telegramId } = req.body as { telegramId?: string };
+  if (!telegramId) { res.status(400).json({ error: "Missing telegramId" }); return; }
+
+  const [user, inv] = await Promise.all([
+    db.select().from(usersTable).where(eq(usersTable.telegramId, telegramId)).then(r => r[0] ?? null),
+    db.select().from(miniInvestmentsTable).where(eq(miniInvestmentsTable.telegramId, telegramId)).then(r => r[0] ?? null),
+  ]);
+
+  if (!user) { res.status(404).json({ error: "User not found" }); return; }
+  if (!inv || Number(inv.principal) === 0) { res.status(400).json({ error: "Нет активных вложений" }); return; }
+
+  const boostRate = Number(user.boostRate);
+  const principal = Number(inv.principal);
+  const totalClaimed = Number(inv.totalClaimed);
+  const { unclaimed } = calcEarned(principal, boostRate, inv.startedAt, totalClaimed);
+  const totalReturn = principal + unclaimed;
+  const newUserTon = Number(user.ton) + totalReturn;
+
+  await Promise.all([
+    db.update(miniInvestmentsTable)
+      .set({ principal: "0", totalClaimed: "0", startedAt: new Date(), lastClaimedAt: new Date(), updatedAt: new Date() })
+      .where(eq(miniInvestmentsTable.telegramId, telegramId)),
+    db.update(usersTable)
+      .set({ ton: String(newUserTon), updatedAt: new Date() })
+      .where(eq(usersTable.telegramId, telegramId)),
+  ]);
+
+  res.json({ returned: totalReturn, principal, earned: unclaimed, newTon: newUserTon, message: `Выведено ${totalReturn.toFixed(8)} TON` });
+});
+
+/* POST /investments/claim — claim only earnings, keep principal */
 router.post("/claim", async (req, res) => {
   const { telegramId } = req.body as { telegramId?: string };
   if (!telegramId) { res.status(400).json({ error: "Missing telegramId" }); return; }
@@ -100,24 +158,31 @@ router.post("/claim", async (req, res) => {
   ]);
 
   if (!user) { res.status(404).json({ error: "User not found" }); return; }
-  if (!inv || inv.principal === 0) { res.status(400).json({ error: "Нет активных инвестиций" }); return; }
+  if (!inv || Number(inv.principal) === 0) { res.status(400).json({ error: "Нет активных вложений" }); return; }
 
-  const { unclaimed } = calcEarned(inv.principal, inv.startedAt, inv.totalClaimed);
-  if (unclaimed < 1) { res.status(400).json({ error: "Нет доступных к снятию монет (минимум 1 pt)" }); return; }
+  const boostRate = Number(user.boostRate);
+  const principal = Number(inv.principal);
+  const totalClaimed = Number(inv.totalClaimed);
+  const { unclaimed } = calcEarned(principal, boostRate, inv.startedAt, totalClaimed);
 
-  const newUserCoins = user.coins + unclaimed;
-  const newTotalClaimed = inv.totalClaimed + unclaimed;
+  if (unclaimed < 0.000001) {
+    res.status(400).json({ error: "Нет доступных к снятию TON" });
+    return;
+  }
+
+  const newUserTon = Number(user.ton) + unclaimed;
+  const newTotalClaimed = totalClaimed + unclaimed;
 
   await Promise.all([
     db.update(miniInvestmentsTable)
-      .set({ totalClaimed: newTotalClaimed, lastClaimedAt: new Date(), updatedAt: new Date() })
+      .set({ totalClaimed: String(newTotalClaimed), lastClaimedAt: new Date(), updatedAt: new Date() })
       .where(eq(miniInvestmentsTable.telegramId, telegramId)),
     db.update(usersTable)
-      .set({ coins: newUserCoins, updatedAt: new Date() })
+      .set({ ton: String(newUserTon), updatedAt: new Date() })
       .where(eq(usersTable.telegramId, telegramId)),
   ]);
 
-  res.json({ claimed: unclaimed, newBalance: newUserCoins, message: `Получено ${unclaimed} pts!` });
+  res.json({ claimed: unclaimed, newTon: newUserTon, message: `Получено ${unclaimed.toFixed(8)} TON!` });
 });
 
 export default router;

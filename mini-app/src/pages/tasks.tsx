@@ -14,6 +14,7 @@ import { useAdsgram } from "@adsgram/react";
 import { useTelegram, haptic, hapticNotify } from "@/lib/telegram";
 
 const BLOCK_ID = import.meta.env.VITE_ADSGRAM_BLOCK_ID ?? "int-32141";
+const TON_PER_AD = 0.0001;
 
 function Toast({ msg, type }: { msg: string; type: "success" | "error" }) {
   return (
@@ -26,7 +27,6 @@ function Toast({ msg, type }: { msg: string; type: "success" | "error" }) {
   );
 }
 
-/** Remove AdsGram overlays injected into <body> */
 function removeAdsgramOverlays(snapshot: Set<Element>) {
   try {
     Array.from(document.body.children).forEach(el => { if (!snapshot.has(el)) el.remove(); });
@@ -65,14 +65,17 @@ export default function TasksPage() {
     query: { enabled: !!telegramId, refetchInterval: 5000 },
   });
 
+  const userTon = Number((profile as { ton?: string | number } | undefined)?.ton ?? 0);
+
   /* ── Ad watch ── */
   const recordWatch = useRecordMiniAdWatch({
     mutation: {
       onSuccess: (data) => {
-        if (data.coinsEarned > 0) {
+        const tonEarned = (data as unknown as { tonEarned?: number }).tonEarned ?? 0;
+        if (tonEarned > 0 || data.coinsEarned > 0) {
           hapticNotify("success");
-          setJustEarned(data.coinsEarned);
-          showToast(`+${data.coinsEarned} pts заработано!`, "success");
+          setJustEarned(tonEarned || data.coinsEarned);
+          showToast(tonEarned > 0 ? `+${tonEarned} TON заработано!` : `+${data.coinsEarned} pts заработано!`, "success");
         }
         qc.invalidateQueries({ queryKey: getGetMiniEarnStatusQueryKey(telegramId ?? "") });
         qc.invalidateQueries({ queryKey: getGetUserProfileQueryKey(telegramId ?? "") });
@@ -118,7 +121,7 @@ export default function TasksPage() {
     mutation: {
       onSuccess: (data) => {
         hapticNotify("success");
-        showToast(`+${data.coinsEarned} pts за "${data.taskTitle}"!`, "success");
+        showToast(`Задание "${data.taskTitle}" выполнено! +${data.coinsEarned} pts`, "success");
         qc.invalidateQueries({ queryKey: getGetMiniTasksQueryKey(telegramId ?? "") });
         qc.invalidateQueries({ queryKey: getGetUserProfileQueryKey(telegramId ?? "") });
       },
@@ -160,8 +163,8 @@ export default function TasksPage() {
           <div style={{ fontSize: 13, color: "#64748b" }}>Выполняй задания и смотри рекламу</div>
         </div>
         <div style={{ textAlign: "right" }}>
-          <div style={{ fontSize: 20, fontWeight: 700, color: "#60a5fa" }}>{profile?.coins ?? 0}</div>
-          <div style={{ fontSize: 11, color: "#64748b" }}>pts</div>
+          <div style={{ fontSize: 16, fontWeight: 700, color: "#fbbf24" }}>{userTon.toFixed(4)}</div>
+          <div style={{ fontSize: 11, color: "#64748b" }}>TON</div>
         </div>
       </div>
 
@@ -177,7 +180,7 @@ export default function TasksPage() {
           <div>
             <div style={{ fontSize: 14, fontWeight: 800, color: "#f1f5f9" }}>Смотреть рекламу</div>
             <div style={{ fontSize: 11, color: "#93c5fd" }}>
-              {earnStatus ? `${earnStatus.minCoins}–${earnStatus.maxCoins} pts за просмотр` : "Загрузка…"}
+              +{TON_PER_AD} TON за просмотр
             </div>
           </div>
           <div style={{ marginLeft: "auto", textAlign: "right" }}>
@@ -202,7 +205,7 @@ export default function TasksPage() {
             fontSize: 28, fontWeight: 900, color: "#4ade80", textAlign: "center",
             marginBottom: 10, animation: "bounceIn 0.3s ease-out",
             textShadow: "0 0 16px rgba(74,222,128,0.6)",
-          }}>+{justEarned} pts</div>
+          }}>+{justEarned} TON</div>
         )}
 
         <button
@@ -229,6 +232,10 @@ export default function TasksPage() {
                 ? "✅ ЛИМИТ ИСЧЕРПАН"
                 : "▶ СМОТРЕТЬ РЕКЛАМУ"}
         </button>
+
+        <div style={{ textAlign: "center", marginTop: 8, fontSize: 11, color: "#334155" }}>
+          Итого за сегодня: <b style={{ color: "#fbbf24" }}>+{(watched * TON_PER_AD).toFixed(4)} TON</b>
+        </div>
       </div>
 
       {/* ── TASKS ── */}

@@ -11,6 +11,7 @@ import marketPoolRouter from "./market-pool.js";
 import historyRouter from "./history.js";
 import adminRouter from "./admin.js";
 import investmentsRouter from "./investments.js";
+import boostsRouter from "./boosts.js";
 
 const router: IRouter = Router();
 
@@ -21,6 +22,7 @@ router.use("/games/mines", minesRouter);
 router.use("/games/arena", arenaRouter);
 router.use("/tasks", tasksRouter);
 router.use("/investments", investmentsRouter);
+router.use("/boosts", boostsRouter);
 router.use("/", financeRouter);
 router.use("/", leaderboardRouter);
 router.use("/", marketPoolRouter);

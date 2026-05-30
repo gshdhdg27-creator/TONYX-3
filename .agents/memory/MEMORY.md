@@ -1,0 +1,1 @@
+- [TONYX tokenomics refactor](tonyx-tokenomics.md) — TON+TONYX only, no pts/coins UI; mining screen with boost modal; market locks until 1M TONYX sold.

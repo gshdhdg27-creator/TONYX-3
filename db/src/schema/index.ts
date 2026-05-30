@@ -11,3 +11,4 @@ export * from "./mini_tasks";
 export * from "./mini_withdrawals";
 export * from "./system_settings";
 export * from "./mini_investments";
+export * from "./mini_boosts";

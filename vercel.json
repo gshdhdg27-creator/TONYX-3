@@ -5,6 +5,5 @@
   "framework": null,
   "rewrites": [
     { "source": "/api/:path*", "destination": "/api/server" }
-  ],
-  "buildTrigger": "2026-06-02"
+  ]
 }

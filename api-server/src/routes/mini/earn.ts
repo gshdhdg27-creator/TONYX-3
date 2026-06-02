@@ -14,7 +14,7 @@ const TON_PER_AD = 0.0001;
 const COOLDOWN_SECONDS = 60;
 const DEDUP_SECONDS = 2;
 const DAILY_LIMIT = 100;
-const MINI_BLOCK_ID = "int-32141";
+const MINI_BLOCK_ID = "33819";
 const REFERRAL_PCT = 0.10;
 
 function startOfDayUtc(): Date {

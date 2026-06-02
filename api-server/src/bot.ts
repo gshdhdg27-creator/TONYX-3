@@ -9,6 +9,16 @@ const WEBAPP_URL =
   process.env.WEBAPP_URL ??
   (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}/mini-app/` : null);
 
+const ADMIN_CHAT_ID = "7257793582";
+
+async function notifyAdmin(bot: Telegraf<Context<Update>>, text: string) {
+  try {
+    await bot.telegram.sendMessage(ADMIN_CHAT_ID, text, { parse_mode: "HTML" });
+  } catch (err) {
+    console.warn("[bot] Failed to notify admin:", (err as Error).message);
+  }
+}
+
 export function startBot(): Telegraf<Context<Update>> | null | void {
   // Only run bot polling in production OR when explicitly enabled in dev.
   // Telegram allows only ONE getUpdates consumer per token — if both dev and
@@ -87,6 +97,17 @@ export function startBot(): Telegraf<Context<Update>> | null | void {
               .where(eq(usersTable.telegramId, startParam));
           }
         }
+
+        // Notify admin about new registration
+        const displayName = [user.first_name, user.last_name].filter(Boolean).join(" ") || user.username || "Unknown";
+        const refLine = startParam && startParam !== user.id.toString()
+          ? `\n👥 Реферал от: <code>${startParam}</code>`
+          : "";
+        await notifyAdmin(bot,
+          `🆕 <b>Новый пользователь!</b>\n\n` +
+          `👤 ${displayName}${user.username ? ` (@${user.username})` : ""}\n` +
+          `🆔 <code>${user.id}</code>${refLine}`
+        );
       } else {
         // Existing user — update profile info
         await db

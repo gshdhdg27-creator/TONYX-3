@@ -1,4 +1,4 @@
-export const ADSGRAM_BLOCK_ID = import.meta.env.VITE_ADSGRAM_BLOCK_ID ?? "int-32141";
+export const ADSGRAM_BLOCK_ID = import.meta.env.VITE_ADSGRAM_BLOCK_ID ?? "33819";
 
 interface AdsGramResult {
   done: boolean;

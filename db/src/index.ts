@@ -10,14 +10,10 @@ let client: any;
 if (connectionString && connectionString.startsWith("postgresql")) {
   const { Pool } = await import("pg");
   const { drizzle } = await import("drizzle-orm/node-postgres");
-  const { migrate } = await import("drizzle-orm/node-postgres/migrator");
 
   client = new Pool({ connectionString });
   db = drizzle(client, { schema });
-
-  migrate(db as any, { migrationsFolder: path.join(import.meta.dirname, "..", "migrations") })
-    .then(() => console.log("Database migrated successfully"))
-    .catch((err) => console.error("Database migration failed:", err));
+  console.log("Connected to PostgreSQL database");
 } else {
   const { PGlite } = await import("@electric-sql/pglite");
   const { drizzle } = await import("drizzle-orm/pglite");

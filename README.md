@@ -19,4 +19,4 @@ View your app in AI Studio: https://ai.studio/apps/96861362-8abe-4ea8-a7c5-7b854
 3. Run the app:
    `npm run dev`
 
-## AdsGram Integration - June 2026
+## AdsGram Integration - June 2026.

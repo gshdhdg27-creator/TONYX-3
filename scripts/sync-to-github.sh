@@ -52,3 +52,15 @@ else
 fi
 
 echo "[sync] Done at $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+
+if [ -n "${VERCEL_DEPLOY_HOOK_URL:-}" ]; then
+  echo "[sync] Triggering Vercel deployment..."
+  HTTP_STATUS=$(curl -s -o /tmp/vercel_response.txt -w "%{http_code}" -X POST "${VERCEL_DEPLOY_HOOK_URL}")
+  if [ "$HTTP_STATUS" = "201" ]; then
+    echo "[sync] Vercel deployment triggered successfully."
+  else
+    echo "[sync] WARNING: Vercel hook returned HTTP ${HTTP_STATUS}: $(cat /tmp/vercel_response.txt)"
+  fi
+else
+  echo "[sync] VERCEL_DEPLOY_HOOK_URL not set — skipping Vercel trigger."
+fi

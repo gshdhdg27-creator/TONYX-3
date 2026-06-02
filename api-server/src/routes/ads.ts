@@ -11,24 +11,18 @@ import { eq, and, gte, desc } from "drizzle-orm";
 
 const router: IRouter = Router();
 
-const COINS_PER_AD = 1;
+const TON_PER_AD = 0.0001;
 const REFERRAL_BONUS_PERCENT = 10;
-const COOLDOWN_SECONDS = 4;      // для UI-статуса (кнопка кулдаун)
-const DEDUP_SECONDS = 2;         // только дедупликация в /watch (не блокирует реальные награды)
+const COOLDOWN_SECONDS = 4;
+const DEDUP_SECONDS = 2;
 const DAILY_LIMIT = 5000;
 
-function randomCoins(): number {
-  return COINS_PER_AD;
-}
-
-// Полночь по ташкентскому времени (UTC+5)
 function startOfDayTashkent(): Date {
   const TASHKENT_OFFSET_MS = 5 * 60 * 60 * 1000;
   const nowUtc = Date.now();
   const tashkentMs = nowUtc + TASHKENT_OFFSET_MS;
   const tashkentMidnight = new Date(tashkentMs);
   tashkentMidnight.setUTCHours(0, 0, 0, 0);
-  // Сдвигаем обратно в UTC для сравнения с полем viewedAt (хранится в UTC)
   return new Date(tashkentMidnight.getTime() - TASHKENT_OFFSET_MS);
 }
 
@@ -84,16 +78,14 @@ router.post("/watch", async (req, res) => {
     .limit(1)
     .then((rows) => rows[0] ?? null);
 
-  // Только дедупликация: отклоняем только полный дубликат в течение 2 секунд
-  // (не блокируем реальные награды от AdsGram — cooldown для UI, не для записи)
   if (lastView) {
     const secondsSinceLast = (Date.now() - lastView.viewedAt.getTime()) / 1000;
     if (secondsSinceLast < DEDUP_SECONDS) {
       console.log(`[Ads] Duplicate reward ignored for ${body.telegramId} (${secondsSinceLast.toFixed(1)}s since last)`);
-      // Возвращаем 200 (не ошибку), чтобы клиент не терял событие
       const data = RecordAdWatchResponse.parse({
         coinsEarned: 0,
-        newBalance: user.coins,
+        tonEarned: 0,
+        newBalance: Number(user.ton),
         adsWatchedToday: todayViews.length,
         cooldownSeconds: Math.ceil(DEDUP_SECONDS - secondsSinceLast),
         achievementsUnlocked: [],
@@ -103,26 +95,25 @@ router.post("/watch", async (req, res) => {
     }
   }
 
-  const coinsEarned = randomCoins();
+  const tonEarned = TON_PER_AD;
 
   await db.insert(adViewsTable).values({
     telegramId: body.telegramId,
     blockId: body.blockId ?? "29470",
-    coinsEarned,
+    coinsEarned: 0,
   });
 
-  const newCoins = user.coins + coinsEarned;
+  const newTon = Number(user.ton) + tonEarned;
   const newTotalAds = user.totalAdsWatched + 1;
   await db
     .update(usersTable)
     .set({
-      coins: newCoins,
+      ton: String(newTon),
       totalAdsWatched: newTotalAds,
       updatedAt: new Date(),
     })
     .where(eq(usersTable.telegramId, body.telegramId));
 
-  // Check and award ad-watching achievements
   const unlockedAchievements: string[] = [];
   const existingAchievements = await db
     .select()
@@ -136,15 +127,10 @@ router.post("/watch", async (req, res) => {
         telegramId: body.telegramId,
         achievementId: ach.id,
       });
-      await db
-        .update(usersTable)
-        .set({ coins: newCoins + ach.reward })
-        .where(eq(usersTable.telegramId, body.telegramId));
       unlockedAchievements.push(ach.id);
     }
   }
 
-  // Award referral bonus (10% of coins earned, min 1)
   if (user.referredBy && user.referredBy !== body.telegramId) {
     const referrer = await db
       .select()
@@ -152,12 +138,12 @@ router.post("/watch", async (req, res) => {
       .where(eq(usersTable.telegramId, user.referredBy))
       .then((rows) => rows[0] ?? null);
     if (referrer && !referrer.isBlocked) {
-      const bonus = Math.max(1, Math.round(coinsEarned * REFERRAL_BONUS_PERCENT / 100));
+      const bonusTon = parseFloat((tonEarned * REFERRAL_BONUS_PERCENT / 100).toFixed(8));
       await db
         .update(usersTable)
         .set({
-          coins: referrer.coins + bonus,
-          referralEarnings: referrer.referralEarnings + bonus,
+          ton: String(Number(referrer.ton) + bonusTon),
+          referralEarnings: referrer.referralEarnings + 1,
           updatedAt: new Date(),
         })
         .where(eq(usersTable.telegramId, user.referredBy));
@@ -165,8 +151,9 @@ router.post("/watch", async (req, res) => {
   }
 
   const data = RecordAdWatchResponse.parse({
-    coinsEarned,
-    newBalance: newCoins,
+    coinsEarned: 0,
+    tonEarned,
+    newBalance: newTon,
     adsWatchedToday: todayViews.length + 1,
     cooldownSeconds: COOLDOWN_SECONDS,
     achievementsUnlocked: unlockedAchievements,
@@ -174,9 +161,6 @@ router.post("/watch", async (req, res) => {
   res.json(data);
 });
 
-// ── AdsGram Server-Side Reward callback ─────────────────────────────────────
-// AdsGram calls this URL with `?userid=<telegramId>` after a verified ad watch.
-// We must respond 200 OK on success (or the SDK will retry).
 router.get("/adsgram-reward", async (req, res) => {
   const userid = String(req.query.userid ?? "").trim();
   if (!userid) {
@@ -204,7 +188,6 @@ router.get("/adsgram-reward", async (req, res) => {
       return;
     }
 
-    // Daily limit
     const todayViews = await db
       .select()
       .from(adViewsTable)
@@ -219,7 +202,6 @@ router.get("/adsgram-reward", async (req, res) => {
       return;
     }
 
-    // Cooldown protection (prevents double-award if AdsGram retries)
     const lastView = await db
       .select()
       .from(adViewsTable)
@@ -230,55 +212,44 @@ router.get("/adsgram-reward", async (req, res) => {
     if (lastView) {
       const secondsSince = (Date.now() - lastView.viewedAt.getTime()) / 1000;
       if (secondsSince < 5) {
-        // Same callback retried within 5s — already credited
         res.status(200).json({ ok: false, reason: "duplicate" });
         return;
       }
     }
 
-    const coinsEarned = randomCoins();
+    const tonEarned = TON_PER_AD;
 
     await db.insert(adViewsTable).values({
       telegramId: userid,
       blockId: "adsgram",
-      coinsEarned,
+      coinsEarned: 0,
     });
 
-    const newCoins = user.coins + coinsEarned;
+    const newTon = Number(user.ton) + tonEarned;
     const newTotalAds = user.totalAdsWatched + 1;
     await db
       .update(usersTable)
       .set({
-        coins: newCoins,
+        ton: String(newTon),
         totalAdsWatched: newTotalAds,
         updatedAt: new Date(),
       })
       .where(eq(usersTable.telegramId, userid));
 
-    // Achievements
     const existingAchievements = await db
       .select()
       .from(userAchievementsTable)
       .where(eq(userAchievementsTable.telegramId, userid));
     const existingIds = new Set(existingAchievements.map((a) => a.achievementId));
-    let bonusFromAchievements = 0;
     for (const ach of AD_ACHIEVEMENTS) {
       if (!existingIds.has(ach.id) && newTotalAds >= ach.requirement) {
         await db.insert(userAchievementsTable).values({
           telegramId: userid,
           achievementId: ach.id,
         });
-        bonusFromAchievements += ach.reward;
       }
     }
-    if (bonusFromAchievements > 0) {
-      await db
-        .update(usersTable)
-        .set({ coins: newCoins + bonusFromAchievements })
-        .where(eq(usersTable.telegramId, userid));
-    }
 
-    // Referral bonus
     if (user.referredBy && user.referredBy !== userid) {
       const referrer = await db
         .select()
@@ -286,20 +257,20 @@ router.get("/adsgram-reward", async (req, res) => {
         .where(eq(usersTable.telegramId, user.referredBy))
         .then((rows) => rows[0] ?? null);
       if (referrer && !referrer.isBlocked) {
-        const bonus = Math.max(1, Math.round(coinsEarned * REFERRAL_BONUS_PERCENT / 100));
+        const bonusTon = parseFloat((tonEarned * REFERRAL_BONUS_PERCENT / 100).toFixed(8));
         await db
           .update(usersTable)
           .set({
-            coins: referrer.coins + bonus,
-            referralEarnings: referrer.referralEarnings + bonus,
+            ton: String(Number(referrer.ton) + bonusTon),
+            referralEarnings: referrer.referralEarnings + 1,
             updatedAt: new Date(),
           })
           .where(eq(usersTable.telegramId, user.referredBy));
       }
     }
 
-    console.log(`[AdsGram] Awarded ${coinsEarned} coins to ${userid} (new balance: ${newCoins + bonusFromAchievements})`);
-    res.status(200).json({ ok: true, coinsEarned, newBalance: newCoins + bonusFromAchievements });
+    console.log(`[AdsGram] Awarded ${tonEarned} TON to ${userid} (new balance: ${newTon})`);
+    res.status(200).json({ ok: true, tonEarned, newBalance: newTon });
   } catch (err) {
     console.error("[AdsGram] Callback error:", err);
     res.status(500).json({ error: "Internal error" });
@@ -342,8 +313,8 @@ router.get("/status/:telegramId", async (req, res) => {
     cooldownSeconds,
     adsWatchedToday: todayViews.length,
     dailyLimit: DAILY_LIMIT,
-    minCoinsPerAd: COINS_PER_AD,
-    maxCoinsPerAd: COINS_PER_AD,
+    minCoinsPerAd: 0,
+    maxCoinsPerAd: 0,
   });
   res.json(data);
 });

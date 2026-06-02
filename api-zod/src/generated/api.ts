@@ -79,6 +79,7 @@ export const RecordAdWatchBody = zod.object({
 
 export const RecordAdWatchResponse = zod.object({
   "coinsEarned": zod.number(),
+  "tonEarned": zod.number().optional(),
   "newBalance": zod.number(),
   "adsWatchedToday": zod.number(),
   "cooldownSeconds": zod.number(),

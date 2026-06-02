@@ -271,6 +271,17 @@ async function parseSuccessBody(
   }
 }
 
+function getTelegramInitData(): string | null {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const tg = (window as any).Telegram?.WebApp;
+    const data = tg?.initData;
+    return typeof data === "string" && data.length > 0 ? data : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function customFetch<T = unknown>(
   input: RequestInfo | URL,
   options: CustomFetchOptions = {},
@@ -284,6 +295,11 @@ export async function customFetch<T = unknown>(
   }
 
   const headers = mergeHeaders(isRequest(input) ? input.headers : undefined, headersInit);
+
+  const initData = getTelegramInitData();
+  if (initData && !headers.has("x-telegram-init-data")) {
+    headers.set("x-telegram-init-data", initData);
+  }
 
   if (
     typeof init.body === "string" &&

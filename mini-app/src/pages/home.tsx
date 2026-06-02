@@ -459,8 +459,8 @@ export default function HomePage() {
 
         {/* ─── Mining status label ─── */}
         <div style={{ textAlign: "center", marginBottom: 6 }}>
-          <div style={{ fontSize: 10, color: hasPrincipal ? "#475569" : "#334155", letterSpacing: "0.15em", fontWeight: 700 }}>
-            {hasPrincipal ? "ТЕКУЩИЙ ДОХОД" : "НЕТ АКТИВНОГО МАЙНИНГА"}
+          <div style={{ fontSize: 10, color: "#475569", letterSpacing: "0.15em", fontWeight: 700 }}>
+            {hasPrincipal ? "ТЕКУЩИЙ ДОХОД" : "МАЙНИНГ АКТИВЕН"}
           </div>
         </div>
 
@@ -469,19 +469,18 @@ export default function HomePage() {
           <div style={{
             fontSize: 36, fontWeight: 900, color: "#f1f5f9",
             fontVariantNumeric: "tabular-nums", letterSpacing: "-0.03em",
-            textShadow: hasPrincipal ? "0 0 40px rgba(96,165,250,0.4)" : "none",
+            textShadow: "0 0 40px rgba(96,165,250,0.4)",
             fontFamily: "monospace",
           }}>
             {animMined.toFixed(9)}
             <span style={{ fontSize: 16, color: "#60a5fa", marginLeft: 8, fontFamily: "inherit" }}>TON</span>
           </div>
-          {hasPrincipal && (
-            <div style={{ fontSize: 11, color: "#475569", marginTop: 4 }}>
-              Вложено: <b style={{ color: "#a5f3fc" }}>{inv!.principal.toFixed(4)} TON</b>
-              {" · +"}
-              <b style={{ color: "#4ade80" }}>{dailyEarn.toFixed(6)}</b>/день
-            </div>
-          )}
+          <div style={{ fontSize: 11, color: "#475569", marginTop: 4 }}>
+            {hasPrincipal
+              ? <>Вложено: <b style={{ color: "#a5f3fc" }}>{inv!.principal.toFixed(4)} TON</b>{" · +"}<b style={{ color: "#4ade80" }}>{dailyEarn.toFixed(6)}</b>/день</>
+              : <>Базовая доходность: <b style={{ color: "#4ade80" }}>+{ratePerDay.toFixed(1)}%</b>/день · пополни чтобы начать</>
+            }
+          </div>
         </div>
 
         {/* ─── Central TON coin ─── */}

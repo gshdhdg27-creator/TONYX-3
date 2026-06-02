@@ -18,3 +18,5 @@ View your app in AI Studio: https://ai.studio/apps/96861362-8abe-4ea8-a7c5-7b854
 2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
 3. Run the app:
    `npm run dev`
+
+## AdsGram Integration - June 2026

@@ -11,9 +11,11 @@ import bonusRouter from "./bonus.js";
 import adminRouter from "./admin.js";
 import pricesRouter from "./prices.js";
 import miniRouter from "./mini/index.js";
+import webhooksRouter from "./webhooks.js";
 
 const router: IRouter = Router();
 
+router.use("/webhooks", webhooksRouter);
 router.use(healthRouter);
 router.use("/users", usersRouter);
 router.use("/ads", adsRouter);

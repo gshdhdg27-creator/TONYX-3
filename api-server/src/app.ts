@@ -8,10 +8,13 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Mount at /api (dev via Vite proxy, and Vercel when req.url preserves the original path)
 app.use("/api", router);
+// Mount at / too — Vercel serverless functions may strip the /api prefix from req.url
+app.use("/", router);
 
-// JSON 404 handler for any unmatched /api/* path
-app.use("/api", (_req: Request, res: Response) => {
+// JSON 404 handler — catches anything unmatched above
+app.use((_req: Request, res: Response) => {
   res.status(404).json({ error: "Not found" });
 });
 

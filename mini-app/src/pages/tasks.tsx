@@ -10,10 +10,10 @@ import {
   getGetMiniEarnStatusQueryKey,
   useRecordMiniAdWatch,
 } from "@workspace/api-client-react";
-import { useAdsgram } from "@adsgram/react";
+import { showRewardedAd, ADSGRAM_BLOCK_ID } from "@/lib/adsgram";
 import { useTelegram, haptic, hapticNotify } from "@/lib/telegram";
 
-const BLOCK_ID = import.meta.env.VITE_ADSGRAM_BLOCK_ID ?? "int-32141";
+const BLOCK_ID = ADSGRAM_BLOCK_ID;
 const TON_PER_AD = 0.0001;
 
 function Toast({ msg, type }: { msg: string; type: "success" | "error" }) {
@@ -88,33 +88,23 @@ export default function TasksPage() {
     },
   });
 
-  const onReward = useCallback(() => {
-    if (!telegramId) return;
-    recordWatch.mutate({ data: { telegramId, blockId: BLOCK_ID } });
-  }, [telegramId]);
-
-  const showAdError = useCallback(() => {
-    removeAdsgramOverlays(bodySnapshotRef.current);
-    showToast("Реклама временно недоступна, попробуйте позже", "error");
-  }, [showToast]);
-
-  const onAdError = useCallback(() => {
-    removeAdsgramOverlays(bodySnapshotRef.current);
-    showAdError();
-  }, [showAdError]);
-
-  const { show: showAd } = useAdsgram({ blockId: BLOCK_ID, onReward, onError: onAdError });
-
   const handleWatch = useCallback(async () => {
     haptic("medium");
     if (!isInTelegram) { showToast("Реклама работает только внутри Telegram", "error"); return; }
     if (!telegramId) { showToast("Профиль не загружен", "error"); return; }
     bodySnapshotRef.current = new Set(Array.from(document.body.children));
-    try { await showAd(); } catch {
-      removeAdsgramOverlays(bodySnapshotRef.current);
-      showAdError();
-    }
-  }, [showAd, isInTelegram, telegramId, showAdError, showToast]);
+
+    await showRewardedAd({
+      blockId: BLOCK_ID,
+      onReward: () => {
+        recordWatch.mutate({ data: { telegramId, blockId: BLOCK_ID } });
+      },
+      onError: () => {
+        removeAdsgramOverlays(bodySnapshotRef.current);
+        showToast("Реклама временно недоступна, попробуйте позже", "error");
+      },
+    });
+  }, [isInTelegram, telegramId, showToast, recordWatch]);
 
   /* ── Task complete ── */
   const completeTask = useCompleteMiniTask({

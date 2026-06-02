@@ -32,17 +32,28 @@ function getTg(): TelegramWebApp | undefined {
     .Telegram?.WebApp;
 }
 
+const DEV_USER: TelegramUser = {
+  id: 99999999,
+  username: "dev_user",
+  first_name: "Dev",
+  last_name: "User",
+};
+
 export function useTelegram() {
   const tg = getTg();
   const user = tg?.initDataUnsafe?.user;
   // initData is non-empty string only inside real Telegram WebApp
   const isInTelegram = !!(tg?.initData && tg.initData.length > 0);
+
+  const isDev = import.meta.env.DEV && !isInTelegram;
+  const effectiveUser = user ?? (isDev ? DEV_USER : undefined);
+
   return {
-    telegramId: user?.id?.toString() ?? null,
-    username: user?.username ?? null,
-    firstName: user?.first_name ?? null,
-    lastName: user?.last_name ?? null,
-    photoUrl: user?.photo_url ?? null,
+    telegramId: effectiveUser?.id?.toString() ?? null,
+    username: effectiveUser?.username ?? null,
+    firstName: effectiveUser?.first_name ?? null,
+    lastName: effectiveUser?.last_name ?? null,
+    photoUrl: effectiveUser?.photo_url ?? null,
     startParam: tg?.initDataUnsafe?.start_param ?? null,
     isInTelegram,
     tg,

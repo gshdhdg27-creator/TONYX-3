@@ -10,7 +10,7 @@ import {
   getGetMiniEarnStatusQueryKey,
   useRecordMiniAdWatch,
 } from "@workspace/api-client-react";
-import { showRewardedAd, ADSGRAM_BLOCK_ID } from "@/lib/adsgram";
+import { showRewardedAd, ADSGRAM_BLOCK_ID, type AdError } from "@/lib/adsgram";
 import { useTelegram, haptic, hapticNotify } from "@/lib/telegram";
 
 const BLOCK_ID = ADSGRAM_BLOCK_ID;
@@ -99,9 +99,21 @@ export default function TasksPage() {
       onReward: () => {
         recordWatch.mutate({ data: { telegramId, blockId: BLOCK_ID } });
       },
-      onError: () => {
+      onSkip: () => {
         removeAdsgramOverlays(bodySnapshotRef.current);
-        showToast("Реклама временно недоступна, попробуйте позже", "error");
+        showToast("Досмотри рекламу до конца, чтобы получить TON", "error");
+      },
+      onError: (err: AdError) => {
+        removeAdsgramOverlays(bodySnapshotRef.current);
+        if (err.reason === "no_ads") {
+          showToast("Нет доступной рекламы — попробуй через несколько минут", "error");
+        } else if (err.reason === "not_loaded") {
+          showToast("AdsGram не загружен — открой приложение внутри Telegram", "error");
+        } else if (err.reason === "network") {
+          showToast("Ошибка сети — проверь интернет и попробуй снова", "error");
+        } else {
+          showToast("Реклама временно недоступна, попробуй позже", "error");
+        }
       },
     });
   }, [isInTelegram, telegramId, showToast, recordWatch]);

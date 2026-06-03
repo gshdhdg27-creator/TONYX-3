@@ -2,7 +2,7 @@ import { Telegraf, type Context } from "telegraf";
 import type { Update } from "telegraf/types";
 import { db } from "@workspace/db";
 import { usersTable, adViewsTable } from "@workspace/db/schema";
-import { eq, gte, sql } from "drizzle-orm";
+import { eq, gte, sql, asc } from "drizzle-orm";
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const WEBAPP_URL =
@@ -57,6 +57,64 @@ async function sendDailyStats(bot: Telegraf<Context<Update>>) {
   } catch (err) {
     console.error("[bot] Failed to send daily stats:", err);
   }
+}
+
+/** Delay helper for rate-limit compliance */
+const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
+
+/**
+ * Sends a message to every non-blocked user.
+ * Rate limit: Telegram allows ~30 msg/s. We send ~20/s (50ms gap) to stay safe.
+ * Reports progress every 100 users and a final summary to admin.
+ */
+async function broadcastMessage(bot: Telegraf<Context<Update>>, text: string): Promise<void> {
+  // Fetch all non-blocked user telegram IDs, oldest first
+  const users = await db
+    .select({ telegramId: usersTable.telegramId })
+    .from(usersTable)
+    .where(eq(usersTable.isBlocked, false))
+    .orderBy(asc(usersTable.id));
+
+  const total = users.length;
+  let sent = 0;
+  let failed = 0;
+
+  console.log(`[broadcast] Starting — ${total} users`);
+  await notifyAdmin(bot, `📣 <b>Рассылка запущена</b>\nПолучателей: <b>${total}</b>\nСообщение:\n${text}`);
+
+  for (let i = 0; i < users.length; i++) {
+    const { telegramId } = users[i];
+    try {
+      await bot.telegram.sendMessage(telegramId, text, { parse_mode: "HTML" });
+      sent++;
+    } catch (err) {
+      // 403 = user blocked the bot, 400 = invalid chat — mark as blocked in DB silently
+      const code = (err as { response?: { error_code?: number } })?.response?.error_code;
+      if (code === 403 || code === 400) {
+        await db.update(usersTable)
+          .set({ isBlocked: true })
+          .where(eq(usersTable.telegramId, telegramId))
+          .catch(() => {});
+      }
+      failed++;
+    }
+
+    // Progress update every 100 users
+    if ((i + 1) % 100 === 0) {
+      await notifyAdmin(bot, `⏳ Рассылка: <b>${i + 1}/${total}</b> — ✅ ${sent} / ❌ ${failed}`);
+    }
+
+    // 50ms gap ≈ 20 msg/s — well within Telegram's limit
+    await sleep(50);
+  }
+
+  console.log(`[broadcast] Done — sent: ${sent}, failed: ${failed}`);
+  await notifyAdmin(bot,
+    `✅ <b>Рассылка завершена!</b>\n\n` +
+    `👤 Всего: <b>${total}</b>\n` +
+    `📨 Доставлено: <b>${sent}</b>\n` +
+    `❌ Ошибок: <b>${failed}</b>`
+  );
 }
 
 function scheduleDailyStats(bot: Telegraf<Context<Update>>) {
@@ -193,6 +251,33 @@ export function startBot(): Telegraf<Context<Update>> | null | void {
     } catch (err) {
       console.error("Failed to send /start reply:", err);
     }
+  });
+
+  // /broadcast <text> — admin-only mass mailing
+  bot.command("broadcast", async (ctx) => {
+    const senderId = ctx.from?.id?.toString();
+    if (senderId !== ADMIN_CHAT_ID) {
+      await ctx.reply("⛔ Нет доступа").catch(() => {});
+      return;
+    }
+
+    // Everything after "/broadcast " is the message text
+    const text = ctx.message.text.replace(/^\/broadcast\s*/i, "").trim();
+    if (!text) {
+      await ctx.reply(
+        "✏️ <b>Использование:</b>\n<code>/broadcast Ваш текст сообщения</code>\n\n" +
+        "Поддерживается HTML-разметка: <b>жирный</b>, <i>курсив</i>, <code>моно</code>",
+        { parse_mode: "HTML" }
+      ).catch(() => {});
+      return;
+    }
+
+    // Run in background so handler returns immediately (broadcast can take minutes)
+    broadcastMessage(bot, text).catch(err =>
+      console.error("[broadcast] Fatal error:", err)
+    );
+
+    await ctx.reply("📣 Рассылка запущена! Прогресс будет приходить сообщениями.").catch(() => {});
   });
 
   // /stats — admin-only on-demand statistics

@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useGetMiniTasks,
@@ -48,8 +48,25 @@ export default function TasksPage() {
   const qc = useQueryClient();
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
   const [justEarned, setJustEarned] = useState(0);
-  const [adsgramRetry, setAdsgramRetry] = useState(false);
+  const [adsgramReady, setAdsgramReady] = useState<boolean | null>(null);
   const bodySnapshotRef = useRef<Set<Element>>(new Set());
+
+  // Silently poll for window.AdsGram in the background — no panic, no errors
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (window.AdsGram) { setAdsgramReady(true); return; }
+    const interval = setInterval(() => {
+      if (window.AdsGram) {
+        setAdsgramReady(true);
+        clearInterval(interval);
+      }
+    }, 300);
+    const timeout = setTimeout(() => {
+      clearInterval(interval);
+      if (!window.AdsGram) setAdsgramReady(false);
+    }, 12000);
+    return () => { clearInterval(interval); clearTimeout(timeout); };
+  }, []);
 
   const showToast = useCallback((msg: string, type: "success" | "error") => {
     setToast({ msg, type });
@@ -108,10 +125,6 @@ export default function TasksPage() {
         removeAdsgramOverlays(bodySnapshotRef.current);
         if (err.reason === "no_ads") {
           showToast("Нет доступной рекламы — попробуй через несколько минут", "error");
-        } else if (err.reason === "not_loaded") {
-          // Show retry button — script may just need more time
-          setAdsgramRetry(true);
-          showToast("AdsGram ещё загружается — нажми «Повторить» через секунду", "error");
         } else if (err.reason === "network") {
           showToast("Ошибка сети — проверь интернет и попробуй снова", "error");
         } else {
@@ -120,12 +133,6 @@ export default function TasksPage() {
       },
     });
   }, [isInTelegram, telegramId, showToast, recordWatch]);
-
-  const handleRetryAdsGram = useCallback(() => {
-    setAdsgramRetry(false);
-    // Give the script a moment, then retry
-    setTimeout(() => handleWatch(), 500);
-  }, [handleWatch]);
 
   /* ── Task complete ── */
   const completeTask = useCompleteMiniTask({
@@ -244,19 +251,15 @@ export default function TasksPage() {
                 : "▶ СМОТРЕТЬ РЕКЛАМУ"}
         </button>
 
-        {/* Retry button — appears when AdsGram script wasn't ready in time */}
-        {adsgramRetry && (
-          <button
-            onClick={handleRetryAdsGram}
-            style={{
-              width: "100%", marginTop: 10, padding: "12px 0", borderRadius: 12, border: "1px solid rgba(251,191,36,0.4)",
-              background: "rgba(251,191,36,0.1)", color: "#fbbf24",
-              fontSize: 14, fontWeight: 700, fontFamily: "inherit", cursor: "pointer",
-              transition: "all 0.2s",
-            }}
-          >
-            🔄 Повторить (AdsGram загружается…)
-          </button>
+        {/* Silent AdsGram status — no panic, just calm confirmation */}
+        {adsgramReady === true && (
+          <div style={{
+            marginTop: 10, padding: "10px 14px", borderRadius: 10,
+            background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)",
+            color: "#e2e8f0", fontSize: 13, textAlign: "center",
+          }}>
+            ✅ AdsGram успешно загружен. Реклама скоро появится. Спасибо за терпение!
+          </div>
         )}
 
         <div style={{ textAlign: "center", marginTop: 8, fontSize: 11, color: "#334155" }}>

@@ -102,8 +102,8 @@ export async function showRewardedAd({
   onError: (err: AdError) => void;
   onSkip?: () => void;
 }): Promise<void> {
-  // Wait up to 3s for script to initialise before giving up
-  const loaded = await waitForAdsGram(3000);
+  // Wait up to 10s for script to initialise — mobile can be slow
+  const loaded = await waitForAdsGram(10000);
   if (!loaded) {
     onError({ reason: "not_loaded" });
     return;

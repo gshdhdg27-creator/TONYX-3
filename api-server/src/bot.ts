@@ -1,8 +1,8 @@
 import { Telegraf, type Context } from "telegraf";
 import type { Update } from "telegraf/types";
 import { db } from "@workspace/db";
-import { usersTable } from "@workspace/db/schema";
-import { eq } from "drizzle-orm";
+import { usersTable, adViewsTable } from "@workspace/db/schema";
+import { eq, gte, sql } from "drizzle-orm";
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const WEBAPP_URL =
@@ -17,6 +17,55 @@ async function notifyAdmin(bot: Telegraf<Context<Update>>, text: string) {
   } catch (err) {
     console.warn("[bot] Failed to notify admin:", (err as Error).message);
   }
+}
+
+function msUntilNext9amUtc(): number {
+  const now = new Date();
+  const next = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 9, 0, 0, 0));
+  if (next.getTime() <= now.getTime()) next.setUTCDate(next.getUTCDate() + 1);
+  return next.getTime() - now.getTime();
+}
+
+async function sendDailyStats(bot: Telegraf<Context<Update>>) {
+  try {
+    const todayStart = new Date();
+    todayStart.setUTCHours(0, 0, 0, 0);
+
+    const [totalUsersRow, newUsersRow, adsRow] = await Promise.all([
+      db.execute<{ cnt: number }>(sql`SELECT COUNT(*)::int AS cnt FROM users`),
+      db.execute<{ cnt: number }>(sql`SELECT COUNT(*)::int AS cnt FROM users WHERE created_at >= ${todayStart}`),
+      db.execute<{ cnt: number; ton: string }>(
+        sql`SELECT COUNT(*)::int AS cnt, COALESCE(SUM(ton_earned::float),0)::text AS ton FROM ad_views WHERE viewed_at >= ${todayStart}`
+      ),
+    ]);
+
+    const totalUsers = totalUsersRow.rows[0]?.cnt ?? 0;
+    const newUsers   = newUsersRow.rows[0]?.cnt ?? 0;
+    const adsWatched = adsRow.rows[0]?.cnt ?? 0;
+    const tonEarned  = parseFloat(adsRow.rows[0]?.ton ?? "0");
+
+    const dateStr = new Date().toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" });
+
+    await notifyAdmin(bot,
+      `📊 <b>Утренняя статистика TONYX</b> — ${dateStr}\n\n` +
+      `👥 Новых пользователей за день: <b>${newUsers}</b>\n` +
+      `👤 Всего пользователей: <b>${totalUsers}</b>\n` +
+      `📺 Просмотров рекламы: <b>${adsWatched}</b>\n` +
+      `💰 TON заработано: <b>${tonEarned.toFixed(4)} TON</b>`
+    );
+    console.log("[bot] Daily stats sent to admin");
+  } catch (err) {
+    console.error("[bot] Failed to send daily stats:", err);
+  }
+}
+
+function scheduleDailyStats(bot: Telegraf<Context<Update>>) {
+  const delay = msUntilNext9amUtc();
+  console.log(`[bot] Daily stats scheduled in ${Math.round(delay / 60000)} min`);
+  setTimeout(() => {
+    sendDailyStats(bot);
+    setInterval(() => sendDailyStats(bot), 24 * 60 * 60 * 1000);
+  }, delay);
 }
 
 export function startBot(): Telegraf<Context<Update>> | null | void {
@@ -155,6 +204,9 @@ export function startBot(): Telegraf<Context<Update>> | null | void {
   });
   // Telegraf gotcha: bot.launch() resolves only on stop. Log immediately after polling begins.
   setTimeout(() => console.log("🤖 Telegram bot polling started"), 1000);
+
+  // Schedule daily 9:00 UTC stats report to admin
+  scheduleDailyStats(bot);
 
   process.once("SIGINT", () => bot.stop("SIGINT"));
   process.once("SIGTERM", () => bot.stop("SIGTERM"));

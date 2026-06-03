@@ -48,6 +48,7 @@ export default function TasksPage() {
   const qc = useQueryClient();
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
   const [justEarned, setJustEarned] = useState(0);
+  const [adsgramRetry, setAdsgramRetry] = useState(false);
   const bodySnapshotRef = useRef<Set<Element>>(new Set());
 
   const showToast = useCallback((msg: string, type: "success" | "error") => {
@@ -108,7 +109,9 @@ export default function TasksPage() {
         if (err.reason === "no_ads") {
           showToast("Нет доступной рекламы — попробуй через несколько минут", "error");
         } else if (err.reason === "not_loaded") {
-          showToast("AdsGram не загружен — открой приложение внутри Telegram", "error");
+          // Show retry button — script may just need more time
+          setAdsgramRetry(true);
+          showToast("AdsGram ещё загружается — нажми «Повторить» через секунду", "error");
         } else if (err.reason === "network") {
           showToast("Ошибка сети — проверь интернет и попробуй снова", "error");
         } else {
@@ -117,6 +120,12 @@ export default function TasksPage() {
       },
     });
   }, [isInTelegram, telegramId, showToast, recordWatch]);
+
+  const handleRetryAdsGram = useCallback(() => {
+    setAdsgramRetry(false);
+    // Give the script a moment, then retry
+    setTimeout(() => handleWatch(), 500);
+  }, [handleWatch]);
 
   /* ── Task complete ── */
   const completeTask = useCompleteMiniTask({
@@ -234,6 +243,21 @@ export default function TasksPage() {
                 ? "✅ ЛИМИТ ИСЧЕРПАН"
                 : "▶ СМОТРЕТЬ РЕКЛАМУ"}
         </button>
+
+        {/* Retry button — appears when AdsGram script wasn't ready in time */}
+        {adsgramRetry && (
+          <button
+            onClick={handleRetryAdsGram}
+            style={{
+              width: "100%", marginTop: 10, padding: "12px 0", borderRadius: 12, border: "1px solid rgba(251,191,36,0.4)",
+              background: "rgba(251,191,36,0.1)", color: "#fbbf24",
+              fontSize: 14, fontWeight: 700, fontFamily: "inherit", cursor: "pointer",
+              transition: "all 0.2s",
+            }}
+          >
+            🔄 Повторить (AdsGram загружается…)
+          </button>
+        )}
 
         <div style={{ textAlign: "center", marginTop: 8, fontSize: 11, color: "#334155" }}>
           Итого за сегодня: <b style={{ color: "#fbbf24" }}>+{(watched * TON_PER_AD).toFixed(4)} TON</b>

@@ -3,7 +3,7 @@ export const ADSGRAM_BLOCK_ID = import.meta.env.VITE_ADSGRAM_BLOCK_ID ?? "33819"
 export type AdErrorReason =
   | "no_ads"      // AdsGram вернул "нет рекламы" — блок прогревается
   | "skipped"     // Пользователь закрыл рекламу до конца
-  | "not_loaded"  // window.AdsGram не загружен (не Telegram или скрипт не подключён)
+  | "not_loaded"  // window.AdsGram не загружен — скрипт ещё не инициализировался
   | "network"     // Сетевая ошибка / таймаут
   | "unknown";    // Всё остальное
 
@@ -38,6 +38,33 @@ declare global {
   }
 }
 
+/**
+ * Ждёт появления window.AdsGram с поллингом каждые 100мс.
+ * Возвращает true если загрузился, false если истёк таймаут.
+ */
+export function waitForAdsGram(timeoutMs = 3000): Promise<boolean> {
+  if (typeof window === "undefined") return Promise.resolve(false);
+  if (window.AdsGram) return Promise.resolve(true);
+
+  return new Promise((resolve) => {
+    const interval = 100;
+    let elapsed = 0;
+    const timer = setInterval(() => {
+      if (window.AdsGram) {
+        clearInterval(timer);
+        resolve(true);
+        return;
+      }
+      elapsed += interval;
+      if (elapsed >= timeoutMs) {
+        clearInterval(timer);
+        console.warn("[AdsGram] window.AdsGram not available after", timeoutMs, "ms");
+        resolve(false);
+      }
+    }, interval);
+  });
+}
+
 function classifyError(raw: unknown): AdErrorReason {
   const desc = (
     (raw as AdsGramResult)?.description ??
@@ -59,7 +86,6 @@ function classifyError(raw: unknown): AdErrorReason {
 
 export function initAdController(blockId: string = ADSGRAM_BLOCK_ID): AdsGramController | null {
   if (typeof window === "undefined" || !window.AdsGram) {
-    console.warn("[AdsGram] window.AdsGram not available — script may not be loaded yet");
     return null;
   }
   return window.AdsGram.init({ blockId });
@@ -76,6 +102,13 @@ export async function showRewardedAd({
   onError: (err: AdError) => void;
   onSkip?: () => void;
 }): Promise<void> {
+  // Wait up to 3s for script to initialise before giving up
+  const loaded = await waitForAdsGram(3000);
+  if (!loaded) {
+    onError({ reason: "not_loaded" });
+    return;
+  }
+
   const AdController = initAdController(blockId);
   if (!AdController) {
     onError({ reason: "not_loaded" });
@@ -87,7 +120,6 @@ export async function showRewardedAd({
     if (result.done) {
       onReward();
     } else {
-      // done=false means user skipped or no ad filled
       const reason = classifyError(result);
       if (reason === "skipped" && onSkip) {
         onSkip();

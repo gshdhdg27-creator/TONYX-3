@@ -195,6 +195,16 @@ export function startBot(): Telegraf<Context<Update>> | null | void {
     }
   });
 
+  // /stats — admin-only on-demand statistics
+  bot.command("stats", async (ctx) => {
+    const senderId = ctx.from?.id?.toString();
+    if (senderId !== ADMIN_CHAT_ID) {
+      await ctx.reply("⛔ Нет доступа").catch(() => {});
+      return;
+    }
+    await sendDailyStats(bot);
+  });
+
   bot.catch((err) => {
     console.error("Bot error:", err);
   });

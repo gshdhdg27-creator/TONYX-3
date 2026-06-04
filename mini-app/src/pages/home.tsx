@@ -495,30 +495,41 @@ export default function HomePage() {
             pointerEvents: "none",
           }} />
 
-          {/* photo in circular crop with neon ring border aligned to edge */}
-          {/* scale(1.25) → показываем центральные 80% фото; кольцо ~80% от изображения → точно на краю */}
+          {/* outer neon ring wrapper — box-shadow здесь, чтобы webkit-mask не срезал свечение */}
           <div style={{
-            width: 250, height: 250,
             borderRadius: "50%",
-            overflow: "hidden",
             position: "relative", zIndex: 1,
             flexShrink: 0,
-            transform: "translateZ(0)",
-            WebkitMaskImage: "-webkit-radial-gradient(white, black)",
+            border: "2.5px solid rgba(0,162,255,0.9)",
+            boxShadow: [
+              "0 0 10px #00a2ff",
+              "0 0 28px rgba(0,162,255,0.75)",
+              "0 0 55px rgba(0,162,255,0.40)",
+              "0 0 90px rgba(0,162,255,0.18)",
+            ].join(", "),
           }}>
-            <img
-              src="/tonyx-logo.jpg"
-              alt="TONYX"
-              style={{
-                width: "100%",
-                height: "100%",
-                objectFit: "cover",
-                objectPosition: "center",
-                display: "block",
-                transform: "scale(1.50)",
-                transformOrigin: "center center",
-              }}
-            />
+            {/* inner clip container */}
+            <div style={{
+              width: 250, height: 250,
+              borderRadius: "50%",
+              overflow: "hidden",
+              transform: "translateZ(0)",
+              WebkitMaskImage: "-webkit-radial-gradient(white, black)",
+            }}>
+              <img
+                src="/tonyx-logo.jpg"
+                alt="TONYX"
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  objectFit: "cover",
+                  objectPosition: "center",
+                  display: "block",
+                  transform: "scale(1.50)",
+                  transformOrigin: "center center",
+                }}
+              />
+            </div>
           </div>
         </div>
 

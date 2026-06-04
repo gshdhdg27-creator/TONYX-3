@@ -495,9 +495,10 @@ export default function HomePage() {
             pointerEvents: "none",
           }} />
 
-          {/* photo in circular crop — scaled so photo's neon ring aligns with clip edge */}
+          {/* photo in circular crop — ring in photo aligns with clip boundary */}
+          {/* ring occupies ~80% of source image → display at clip/0.80 = 312px inside 250px clip */}
           <div style={{
-            width: 240, height: 240,
+            width: 250, height: 250,
             borderRadius: "50%",
             overflow: "hidden",
             position: "relative", zIndex: 1,
@@ -512,11 +513,15 @@ export default function HomePage() {
               src="/tonyx-logo.jpg"
               alt="TONYX"
               style={{
-                width: "128%", height: "128%",
+                width: 312,
+                height: 312,
                 position: "absolute",
-                top: "50%", left: "50%",
+                top: "50%",
+                left: "50%",
                 transform: "translate(-50%, -50%)",
                 display: "block",
+                objectFit: "cover",
+                objectPosition: "center",
               }}
             />
           </div>

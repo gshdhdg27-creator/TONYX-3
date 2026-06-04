@@ -496,6 +496,7 @@ export default function HomePage() {
           }} />
 
           {/* photo in circular crop with neon ring border aligned to edge */}
+          {/* scale(1.25) → показываем центральные 80% фото; кольцо ~80% от изображения → точно на краю */}
           <div style={{
             width: 250, height: 250,
             borderRadius: "50%",
@@ -504,15 +505,6 @@ export default function HomePage() {
             flexShrink: 0,
             transform: "translateZ(0)",
             WebkitMaskImage: "-webkit-radial-gradient(white, black)",
-            /* neon ring sits right on the circle boundary */
-            border: "2.5px solid rgba(0,162,255,0.95)",
-            boxShadow: [
-              "0 0 12px #00a2ff",
-              "0 0 30px rgba(0,162,255,0.7)",
-              "0 0 60px rgba(0,162,255,0.35)",
-              "0 0 100px rgba(0,162,255,0.15)",
-              "inset 0 0 20px rgba(0,162,255,0.08)",
-            ].join(", "),
           }}>
             <img
               src="/tonyx-logo.jpg"
@@ -523,8 +515,7 @@ export default function HomePage() {
                 objectFit: "cover",
                 objectPosition: "center",
                 display: "block",
-                /* zoom in so the photo's neon ring aligns with the clip edge */
-                transform: "scale(1.20)",
+                transform: "scale(1.25)",
                 transformOrigin: "center center",
               }}
             />

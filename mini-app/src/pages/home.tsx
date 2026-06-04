@@ -495,36 +495,38 @@ export default function HomePage() {
             pointerEvents: "none",
           }} />
 
-          {/* photo in circular crop — ring in photo aligns with clip boundary */}
-          {/* ring occupies ~80% of source image → display at clip/0.80 = 312px inside 250px clip */}
+          {/* photo in circular crop with neon ring border aligned to edge */}
           <div style={{
             width: 250, height: 250,
             borderRadius: "50%",
             overflow: "hidden",
             position: "relative", zIndex: 1,
             flexShrink: 0,
-            /* force GPU compositing — fixes WebKit overflow+border-radius clipping bug */
             transform: "translateZ(0)",
             WebkitMaskImage: "-webkit-radial-gradient(white, black)",
+            /* neon ring sits right on the circle boundary */
+            border: "2.5px solid rgba(0,162,255,0.95)",
             boxShadow: [
-              "0 0 28px rgba(0,162,255,0.6)",
-              "0 0 70px rgba(0,162,255,0.30)",
-              "0 0 120px rgba(0,162,255,0.15)",
+              "0 0 12px #00a2ff",
+              "0 0 30px rgba(0,162,255,0.7)",
+              "0 0 60px rgba(0,162,255,0.35)",
+              "0 0 100px rgba(0,162,255,0.15)",
+              "inset 0 0 20px rgba(0,162,255,0.08)",
             ].join(", "),
           }}>
+            {/* image scaled so its own neon ring coincides with the container's 250px boundary */}
+            {/* photo ring ≈ 83% of image → 250 / 0.83 ≈ 301px display size */}
             <img
               src="/tonyx-logo.jpg"
               alt="TONYX"
               style={{
-                width: 312,
-                height: 312,
+                width: 301,
+                height: 301,
                 position: "absolute",
                 top: "50%",
                 left: "50%",
                 transform: "translate(-50%, -50%)",
                 display: "block",
-                objectFit: "cover",
-                objectPosition: "center",
               }}
             />
           </div>

@@ -8,6 +8,7 @@ export const usersTable = pgTable("users", {
   username: text("username"),
   firstName: text("first_name"),
   lastName: text("last_name"),
+  language: text("language"),
 
   /* Wallet 1: legacy points (kept for backward compat, not displayed) */
   coins: integer("coins").notNull().default(0),

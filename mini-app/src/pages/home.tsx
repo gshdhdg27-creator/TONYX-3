@@ -525,7 +525,7 @@ export default function HomePage() {
                   objectFit: "cover",
                   objectPosition: "center",
                   display: "block",
-                  transform: "scale(1.50)",
+                  transform: "scale(1.55)",
                   transformOrigin: "center center",
                 }}
               />

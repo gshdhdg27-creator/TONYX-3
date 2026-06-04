@@ -495,23 +495,31 @@ export default function HomePage() {
             pointerEvents: "none",
           }} />
 
-          {/* photo in circular crop */}
-          <img
-            src="/tonyx-logo.jpg"
-            alt="TONYX"
-            style={{
-              width: 240, height: 240,
-              borderRadius: "50%",
-              objectFit: "cover",
-              objectPosition: "center",
-              position: "relative", zIndex: 1,
-              boxShadow: [
-                "0 0 28px rgba(0,162,255,0.55)",
-                "0 0 70px rgba(0,162,255,0.28)",
-                "0 0 120px rgba(0,162,255,0.14)",
-              ].join(", "),
-            }}
-          />
+          {/* photo in circular crop — scaled so photo's neon ring aligns with clip edge */}
+          <div style={{
+            width: 240, height: 240,
+            borderRadius: "50%",
+            overflow: "hidden",
+            position: "relative", zIndex: 1,
+            flexShrink: 0,
+            boxShadow: [
+              "0 0 28px rgba(0,162,255,0.6)",
+              "0 0 70px rgba(0,162,255,0.30)",
+              "0 0 120px rgba(0,162,255,0.15)",
+            ].join(", "),
+          }}>
+            <img
+              src="/tonyx-logo.jpg"
+              alt="TONYX"
+              style={{
+                width: "128%", height: "128%",
+                position: "absolute",
+                top: "50%", left: "50%",
+                transform: "translate(-50%, -50%)",
+                display: "block",
+              }}
+            />
+          </div>
         </div>
 
         {/* ─── Deposit / Withdraw — compact ─── */}

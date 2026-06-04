@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useGetMiniTasks,
@@ -12,6 +12,7 @@ import {
 } from "@workspace/api-client-react";
 import { showRewardedAd, ADSGRAM_BLOCK_ID, type AdError } from "@/lib/adsgram";
 import { useTelegram, haptic, hapticNotify } from "@/lib/telegram";
+import { useLang } from "@/lib/LanguageContext";
 
 const BLOCK_ID = ADSGRAM_BLOCK_ID;
 const TON_PER_AD = 0.0001;
@@ -46,9 +47,12 @@ const TYPE_ICONS: Record<string, string> = {
 
 export default function TasksPage() {
   const { telegramId, isInTelegram } = useTelegram();
+  const { t } = useLang();
   const qc = useQueryClient();
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
   const [justEarned, setJustEarned] = useState(0);
+  // Local 1-second countdown — smooth timer independent of network refetch
+  const [countdown, setCountdown] = useState(0);
   const bodySnapshotRef = useRef<Set<Element>>(new Set());
 
   const showToast = useCallback((msg: string, type: "success" | "error") => {
@@ -63,8 +67,30 @@ export default function TasksPage() {
     query: { enabled: !!telegramId, refetchInterval: 10000 },
   });
   const { data: earnStatus } = useGetMiniEarnStatus(telegramId ?? "", {
-    query: { enabled: !!telegramId, refetchInterval: 5000 },
+    query: { enabled: !!telegramId, refetchInterval: 10000 },
   });
+
+  // Sync server cooldown → local countdown whenever earnStatus updates
+  useEffect(() => {
+    const serverCooldown = earnStatus?.cooldownSeconds ?? 0;
+    if (serverCooldown > 0) setCountdown(serverCooldown);
+  }, [earnStatus?.cooldownSeconds]);
+
+  // Tick countdown down by 1 every second; refetch status when it reaches 0
+  useEffect(() => {
+    if (countdown <= 0) return;
+    const timer = setInterval(() => {
+      setCountdown(prev => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          qc.invalidateQueries({ queryKey: getGetMiniEarnStatusQueryKey(telegramId ?? "") });
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [countdown > 0]); // re-run only when countdown transitions from 0→positive
 
   const userTon = Number((profile as { ton?: string | number } | undefined)?.ton ?? 0);
 
@@ -75,7 +101,7 @@ export default function TasksPage() {
         const tonEarned = (data as unknown as { tonEarned?: number }).tonEarned ?? 0;
         hapticNotify("success");
         setJustEarned(tonEarned || data.coinsEarned);
-        showToast(tonEarned > 0 ? `+${tonEarned} TON заработано!` : `+${data.coinsEarned} pts заработано!`, "success");
+        showToast(tonEarned > 0 ? t.tasks.toastEarnedTon(tonEarned) : t.tasks.toastEarnedPts(data.coinsEarned), "success");
         qc.invalidateQueries({ queryKey: getGetMiniEarnStatusQueryKey(telegramId ?? "") });
         qc.invalidateQueries({ queryKey: getGetUserProfileQueryKey(telegramId ?? "") });
         setTimeout(() => setJustEarned(0), 2500);
@@ -89,14 +115,8 @@ export default function TasksPage() {
 
   const handleWatch = useCallback(async () => {
     haptic("medium");
-    if (!isInTelegram) {
-      showToast("Реклама работает только внутри Telegram", "error");
-      return;
-    }
-    if (!telegramId) {
-      showToast("Профиль не загружен", "error");
-      return;
-    }
+    if (!isInTelegram) { showToast(t.tasks.errTelegram, "error"); return; }
+    if (!telegramId) { showToast(t.tasks.errProfile, "error"); return; }
 
     bodySnapshotRef.current = new Set(Array.from(document.body.children));
 
@@ -107,30 +127,25 @@ export default function TasksPage() {
       },
       onSkip: () => {
         removeAdsgramOverlays(bodySnapshotRef.current);
-        showToast("Досмотри рекламу до конца, чтобы получить TON", "error");
+        showToast(t.tasks.errSkip, "error");
       },
       onError: (err: AdError) => {
         removeAdsgramOverlays(bodySnapshotRef.current);
         console.error("[AdsGram] error:", err.reason, err.description);
-        if (err.reason === "no_ads") {
-          showToast("Нет рекламы — блок прогревается, попробуй через несколько минут", "error");
-        } else if (err.reason === "not_loaded") {
-          showToast("AdsGram не загружен — открой приложение в Telegram", "error");
-        } else if (err.reason === "network") {
-          showToast("Ошибка сети — проверь интернет и попробуй снова", "error");
-        } else {
-          showToast("Реклама временно недоступна, попробуй позже", "error");
-        }
+        if (err.reason === "no_ads") showToast(t.tasks.errNoAds, "error");
+        else if (err.reason === "not_loaded") showToast(t.tasks.errNotLoaded, "error");
+        else if (err.reason === "network") showToast(t.tasks.errNetwork, "error");
+        else showToast(t.tasks.errGeneric, "error");
       },
     });
-  }, [isInTelegram, telegramId, showToast, recordWatch]);
+  }, [isInTelegram, telegramId, showToast, recordWatch, t]);
 
   /* ── Task complete ── */
   const completeTask = useCompleteMiniTask({
     mutation: {
       onSuccess: (data) => {
         hapticNotify("success");
-        showToast(`Задание "${data.taskTitle}" выполнено! +${data.coinsEarned} pts`, "success");
+        showToast(`${data.taskTitle} +${data.coinsEarned} pts ✅`, "success");
         qc.invalidateQueries({ queryKey: getGetMiniTasksQueryKey(telegramId ?? "") });
         qc.invalidateQueries({ queryKey: getGetUserProfileQueryKey(telegramId ?? "") });
       },
@@ -159,7 +174,16 @@ export default function TasksPage() {
   const canWatch = earnStatus?.canWatch ?? false;
   const watched = earnStatus?.adsWatchedToday ?? 0;
   const limit = earnStatus?.dailyLimit ?? 100;
-  const cooldown = earnStatus?.cooldownSeconds ?? 0;
+
+  const btnLabel = recordWatch.isPending
+    ? t.tasks.processing
+    : countdown > 0
+      ? t.tasks.cooldown(countdown)
+      : watched >= limit
+        ? t.tasks.limitDone
+        : t.tasks.watchBtn;
+
+  const btnActive = canWatch && !!telegramId && !recordWatch.isPending;
 
   return (
     <div style={{ padding: 16 }}>
@@ -168,8 +192,8 @@ export default function TasksPage() {
       {/* Page header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
         <div>
-          <div style={{ fontSize: 22, fontWeight: 700 }}>Задания</div>
-          <div style={{ fontSize: 13, color: "#64748b" }}>Выполняй задания и смотри рекламу</div>
+          <div style={{ fontSize: 22, fontWeight: 700 }}>{t.tasks.title}</div>
+          <div style={{ fontSize: 13, color: "#64748b" }}>{t.tasks.subtitle}</div>
         </div>
         <div style={{ textAlign: "right" }}>
           <div style={{ fontSize: 16, fontWeight: 700, color: "#fbbf24" }}>{userTon.toFixed(4)}</div>
@@ -187,14 +211,14 @@ export default function TasksPage() {
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
           <div style={{ fontSize: 24 }}>📺</div>
           <div>
-            <div style={{ fontSize: 14, fontWeight: 800, color: "#f1f5f9" }}>Смотреть рекламу</div>
-            <div style={{ fontSize: 11, color: "#93c5fd" }}>+{TON_PER_AD} TON за просмотр</div>
+            <div style={{ fontSize: 14, fontWeight: 800, color: "#f1f5f9" }}>{t.tasks.watchAd}</div>
+            <div style={{ fontSize: 11, color: "#93c5fd" }}>{t.tasks.perView}</div>
           </div>
           <div style={{ marginLeft: "auto", textAlign: "right" }}>
             <div style={{ fontSize: 13, fontWeight: 700, color: "#60a5fa", fontVariantNumeric: "tabular-nums" }}>
               {watched}/{limit}
             </div>
-            <div style={{ fontSize: 10, color: "#475569" }}>сегодня</div>
+            <div style={{ fontSize: 10, color: "#475569" }}>{t.tasks.today}</div>
           </div>
         </div>
 
@@ -217,52 +241,46 @@ export default function TasksPage() {
 
         <button
           onClick={handleWatch}
-          disabled={!telegramId || recordWatch.isPending || !canWatch}
-          className={telegramId && canWatch ? "pulse-glow" : ""}
+          disabled={!btnActive}
+          className={btnActive ? "pulse-glow" : ""}
           style={{
             width: "100%", padding: "16px 0", borderRadius: 14, border: "none",
-            background: canWatch && telegramId
+            background: btnActive
               ? "linear-gradient(135deg, #1e3a8a 0%, #2563eb 50%, #60a5fa 100%)"
               : "rgba(30,58,143,0.2)",
-            color: canWatch && telegramId ? "#fff" : "#475569",
+            color: btnActive ? "#fff" : "#475569",
             fontSize: 16, fontWeight: 800, letterSpacing: "0.1em",
-            fontFamily: "inherit", cursor: canWatch && telegramId ? "pointer" : "not-allowed",
-            boxShadow: canWatch && telegramId ? "0 0 24px rgba(37,99,235,0.4)" : "none",
+            fontFamily: "inherit", cursor: btnActive ? "pointer" : "not-allowed",
+            boxShadow: btnActive ? "0 0 24px rgba(37,99,235,0.4)" : "none",
             transition: "all 0.2s",
           }}
         >
-          {recordWatch.isPending
-            ? "⏳ ОБРАБОТКА…"
-            : cooldown > 0
-              ? `⏱ КУЛДАУН ${cooldown}с`
-              : watched >= limit
-                ? "✅ ЛИМИТ ИСЧЕРПАН"
-                : "▶ СМОТРЕТЬ РЕКЛАМУ"}
+          {btnLabel}
         </button>
 
         <div style={{ textAlign: "center", marginTop: 8, fontSize: 11, color: "#334155" }}>
-          Итого за сегодня: <b style={{ color: "#fbbf24" }}>+{(watched * TON_PER_AD).toFixed(4)} TON</b>
+          {t.tasks.totalToday} <b style={{ color: "#fbbf24" }}>+{(watched * TON_PER_AD).toFixed(4)} TON</b>
         </div>
       </div>
 
       {/* ── TASKS ── */}
       {isLoading ? (
-        <div style={{ textAlign: "center", color: "#64748b", padding: "32px 0" }}>Загрузка заданий…</div>
+        <div style={{ textAlign: "center", color: "#64748b", padding: "32px 0" }}>{t.tasks.loading}</div>
       ) : pending.length === 0 && done.length === 0 ? (
         <div style={{
           background: "rgba(17,24,39,0.8)", border: "1px solid rgba(30,58,143,0.2)",
           borderRadius: 16, padding: 32, textAlign: "center",
         }}>
           <div style={{ fontSize: 40, marginBottom: 12 }}>✅</div>
-          <div style={{ fontSize: 16, fontWeight: 600, color: "#f1f5f9" }}>Заданий пока нет</div>
-          <div style={{ fontSize: 13, color: "#64748b", marginTop: 4 }}>Загляни позже — скоро появятся новые</div>
+          <div style={{ fontSize: 16, fontWeight: 600, color: "#f1f5f9" }}>{t.tasks.noTasks}</div>
+          <div style={{ fontSize: 13, color: "#64748b", marginTop: 4 }}>{t.tasks.noTasksSub}</div>
         </div>
       ) : (
         <>
           {pending.length > 0 && (
             <div style={{ marginBottom: 20 }}>
               <div style={{ fontSize: 13, color: "#64748b", marginBottom: 10, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>
-                Доступные ({pending.length})
+                {t.tasks.available(pending.length)}
               </div>
               {pending.map(task => (
                 <div key={task.id} style={{
@@ -290,7 +308,7 @@ export default function TasksPage() {
                       fontFamily: "inherit", cursor: "pointer", whiteSpace: "nowrap",
                     }}
                   >
-                    {task.link ? "Перейти" : "Получить"}
+                    {task.link ? t.tasks.go : t.tasks.claim}
                   </button>
                 </div>
               ))}
@@ -300,7 +318,7 @@ export default function TasksPage() {
           {done.length > 0 && (
             <div>
               <div style={{ fontSize: 13, color: "#64748b", marginBottom: 10, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>
-                Выполненные ({done.length})
+                {t.tasks.completed(done.length)}
               </div>
               {done.map(task => (
                 <div key={task.id} style={{
@@ -311,7 +329,7 @@ export default function TasksPage() {
                   <div style={{ fontSize: 24, minWidth: 40, textAlign: "center" }}>✅</div>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: 14, fontWeight: 500, color: "#94a3b8", textDecoration: "line-through" }}>{task.title}</div>
-                    <div style={{ fontSize: 12, color: "#4ade80", marginTop: 2 }}>+{task.reward} pts получено</div>
+                    <div style={{ fontSize: 12, color: "#4ade80", marginTop: 2 }}>+{task.reward} pts</div>
                   </div>
                 </div>
               ))}

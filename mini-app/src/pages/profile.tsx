@@ -11,6 +11,8 @@ import {
 } from "@workspace/api-client-react";
 import { useTelegram, haptic, hapticNotify } from "@/lib/telegram";
 import { CountUp } from "@/components/count-up";
+import { useLang } from "@/lib/LanguageContext";
+import type { Lang } from "@/lib/i18n";
 
 function Toast({ msg, type }: { msg: string; type: "success" | "error" }) {
   return (
@@ -73,12 +75,15 @@ function StatusBadge({ status }: { status: string }) {
 
 export default function ProfilePage() {
   const { telegramId, username, firstName, photoUrl } = useTelegram();
+  const { t, lang, setLang } = useLang();
+  const tp = t.profile;
   const qc = useQueryClient();
   const [section, setSection] = useState<Section>("main");
   const [withdrawAmount, setWithdrawAmount] = useState("");
   const [withdrawAddress, setWithdrawAddress] = useState("");
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
   const [copied, setCopied] = useState(false);
+  const [showLangPicker, setShowLangPicker] = useState(false);
 
   const { data: profile } = useGetUserProfile(telegramId ?? "", { query: { enabled: !!telegramId, refetchInterval: 15000 } });
   const { data: referrals } = useGetReferrals(telegramId ?? "", { query: { enabled: !!telegramId } });
@@ -121,9 +126,48 @@ export default function ProfilePage() {
     } catch { showToast("Copy failed", "error"); }
   };
 
+  const chooseLang = (l: Lang) => {
+    haptic("medium");
+    setLang(l);
+    setShowLangPicker(false);
+  };
+
   return (
     <div style={{ padding: "16px 16px 28px" }}>
       {toast && <Toast msg={toast.msg} type={toast.type} />}
+
+      {/* ─── Language picker modal ─── */}
+      {showLangPicker && (
+        <div style={{
+          position: "fixed", inset: 0, zIndex: 9999,
+          background: "rgba(5,8,20,0.96)", display: "flex",
+          alignItems: "center", justifyContent: "center", flexDirection: "column",
+          padding: "0 28px", backdropFilter: "blur(12px)",
+        }}
+          onClick={() => setShowLangPicker(false)}
+        >
+          <div onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: 320 }}>
+            <div style={{ fontSize: 22, fontWeight: 800, color: "#f1f5f9", textAlign: "center", marginBottom: 24 }}>
+              {t.langModal.title}
+            </div>
+            {(["ru", "en"] as Lang[]).map(l => (
+              <button key={l} onClick={() => chooseLang(l)} style={{
+                width: "100%", padding: "18px 24px", borderRadius: 16, marginBottom: 12,
+                border: `1px solid ${lang === l ? "rgba(96,165,250,0.7)" : "rgba(96,165,250,0.2)"}`,
+                background: lang === l
+                  ? "linear-gradient(135deg, rgba(30,58,143,0.7), rgba(37,99,235,0.4))"
+                  : "rgba(17,24,39,0.8)",
+                color: "#f1f5f9", fontSize: 18, fontWeight: 700,
+                fontFamily: "inherit", cursor: "pointer",
+                boxShadow: lang === l ? "0 0 20px rgba(37,99,235,0.3)" : "none",
+              }}>
+                {l === "ru" ? t.langModal.ru : t.langModal.en}
+                {lang === l && <span style={{ marginLeft: 8, color: "#60a5fa" }}>✓</span>}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* ─── Header ─── */}
       <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 18 }}>
@@ -147,6 +191,17 @@ export default function ProfilePage() {
           {username && <div style={{ fontSize: 12, color: "#60a5fa" }}>@{username}</div>}
           <div style={{ fontSize: 10, color: "#475569" }}>ID {telegramId}</div>
         </div>
+        <button
+          onClick={() => { haptic("light"); setShowLangPicker(true); }}
+          style={{
+            background: "rgba(30,58,143,0.25)", border: "1px solid rgba(96,165,250,0.25)",
+            borderRadius: 10, padding: "7px 11px", color: "#93c5fd",
+            fontSize: 12, fontWeight: 600, fontFamily: "inherit", cursor: "pointer",
+            flexShrink: 0,
+          }}
+        >
+          {lang === "ru" ? "🇷🇺 RU" : "🇬🇧 EN"}
+        </button>
       </div>
 
       {/* ─── Balance cards ─── */}
@@ -157,14 +212,14 @@ export default function ProfilePage() {
           border: "1px solid rgba(96,165,250,0.35)", borderRadius: 16, padding: "14px 16px",
           boxShadow: "0 0 24px rgba(37,99,235,0.15)",
         }}>
-          <div style={{ fontSize: 9, color: "#93c5fd", letterSpacing: "0.2em", fontWeight: 700, marginBottom: 6 }}>TON БАЛАНС</div>
+          <div style={{ fontSize: 9, color: "#93c5fd", letterSpacing: "0.2em", fontWeight: 700, marginBottom: 6 }}>{tp.tonBalance}</div>
           <div style={{ fontSize: 22, fontWeight: 900, color: "#fbbf24", fontVariantNumeric: "tabular-nums" }}>
             {userTon.toFixed(4)}
           </div>
           <div style={{ fontSize: 10, color: "#475569", marginTop: 2 }}>TON</div>
           {boostRate > 0 && (
             <div style={{ fontSize: 10, color: "#4ade80", marginTop: 4, fontWeight: 700 }}>
-              🚀 +{(boostRate * 100).toFixed(1)}% буст
+              {tp.boost((boostRate * 100))}
             </div>
           )}
         </div>
@@ -179,18 +234,17 @@ export default function ProfilePage() {
           <div style={{ fontSize: 22, fontWeight: 900, color: "#a78bfa", fontVariantNumeric: "tabular-nums" }}>
             <CountUp value={userTonyx} />
           </div>
-
-          <div style={{ fontSize: 10, color: "#475569", marginTop: 2 }}>TONYX токены</div>
+          <div style={{ fontSize: 10, color: "#475569", marginTop: 2 }}>{tp.tonyxTokens}</div>
         </div>
       </div>
 
       {/* ─── Action buttons ─── */}
       <div style={{ display: "flex", gap: 8, marginBottom: 18 }}>
-        <ActionButton icon="💸" label="WITHDRAW" active={section === "withdraw"} accent="#16a34a"
+        <ActionButton icon="💸" label={tp.withdraw} active={section === "withdraw"} accent="#16a34a"
           onClick={() => { haptic("light"); setSection(section === "withdraw" ? "main" : "withdraw"); }} />
-        <ActionButton icon="👥" label="INVITE" active={section === "invite"} accent="#a855f7"
+        <ActionButton icon="👥" label={tp.invite} active={section === "invite"} accent="#a855f7"
           onClick={() => { haptic("light"); setSection(section === "invite" ? "main" : "invite"); }} />
-        <ActionButton icon="💎" label="TOP UP" active={section === "topup"} accent="#0891b2"
+        <ActionButton icon="💎" label={tp.topup} active={section === "topup"} accent="#0891b2"
           onClick={() => { haptic("light"); setSection(section === "topup" ? "main" : "topup"); }} />
       </div>
 

@@ -1,22 +1,23 @@
 import { type ReactNode, useEffect, useState } from "react";
 import { useLocation, Link } from "wouter";
 import { haptic, useTelegram } from "@/lib/telegram";
+import { useLang } from "@/lib/LanguageContext";
 
 interface TabDef {
   path: string;
-  label: string;
+  labelKey: "home" | "market" | "games" | "tasks" | "profile";
   icon: (active: boolean) => ReactNode;
 }
 
 const BASE_TABS: TabDef[] = [
-  { path: "/", label: "Home", icon: HomeIcon },
-  { path: "/market", label: "Market", icon: MarketIcon },
-  { path: "/games", label: "Games", icon: GamesIcon },
-  { path: "/tasks", label: "Tasks", icon: TasksIcon },
-  { path: "/profile", label: "Profile", icon: ProfileIcon },
+  { path: "/", labelKey: "home", icon: HomeIcon },
+  { path: "/market", labelKey: "market", icon: MarketIcon },
+  { path: "/games", labelKey: "games", icon: GamesIcon },
+  { path: "/tasks", labelKey: "tasks", icon: TasksIcon },
+  { path: "/profile", labelKey: "profile", icon: ProfileIcon },
 ];
 
-const ADMIN_TAB: TabDef = { path: "/admin", label: "Админ", icon: AdminIcon };
+const ADMIN_TAB = { path: "/admin", label: "Админ", icon: AdminIcon };
 
 function HomeIcon(active: boolean) {
   return (
@@ -91,20 +92,17 @@ async function fetchIsAdmin(rawId: string | number | null | undefined): Promise<
 export default function BottomNav() {
   const [location] = useLocation();
   const { telegramId } = useTelegram();
+  const { t } = useLang();
   const [isAdmin, setIsAdmin] = useState(false);
 
-  // Synchronous check: owner ID is hardcoded — tab appears on FIRST render, no async needed
   const isOwner = telegramId != null && String(telegramId).trim() === OWNER_ID;
 
   useEffect(() => {
     if (!telegramId) return;
-    // Owner tab already shown synchronously above; still fetch for DB admins
     if (String(telegramId).trim() === OWNER_ID) { setIsAdmin(true); return; }
-    const t = setTimeout(() => { fetchIsAdmin(telegramId).then(setIsAdmin); }, 300);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => { fetchIsAdmin(telegramId).then(setIsAdmin); }, 300);
+    return () => clearTimeout(timer);
   }, [telegramId]);
-
-  const tabs = (isOwner || isAdmin) ? [...BASE_TABS, ADMIN_TAB] : BASE_TABS;
 
   return (
     <nav style={{
@@ -122,54 +120,67 @@ export default function BottomNav() {
       paddingBottom: "env(safe-area-inset-bottom, 0px)",
       boxShadow: "0 -8px 30px rgba(0,0,0,0.5)",
     }}>
-      {tabs.map(({ path, label, icon }) => {
+      {BASE_TABS.map(({ path, labelKey, icon }) => {
         const active = location === path || (path !== "/" && location.startsWith(path));
-        const isAdminTab = path === "/admin";
         return (
           <Link key={path} href={path} onClick={() => haptic("light")} style={{
-            flex: 1,
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            padding: "10px 4px 8px",
-            textDecoration: "none",
-            cursor: "pointer",
-            position: "relative",
-            transition: "opacity 0.15s",
-            opacity: active ? 1 : 0.7,
+            flex: 1, display: "flex", flexDirection: "column", alignItems: "center",
+            padding: "10px 4px 8px", textDecoration: "none", cursor: "pointer",
+            position: "relative", transition: "opacity 0.15s", opacity: active ? 1 : 0.7,
           }}>
             <div style={{
-              filter: active
-                ? `drop-shadow(0 0 6px rgba(${isAdminTab ? "251,191,36" : "96,165,250"},0.7))`
-                : "none",
+              filter: active ? "drop-shadow(0 0 6px rgba(96,165,250,0.7))" : "none",
               transform: active ? "translateY(-1px)" : "translateY(0)",
               transition: "transform 0.2s",
             }}>
               {icon(active)}
             </div>
             <span style={{
-              fontSize: 10,
-              fontWeight: active ? 600 : 400,
-              color: active ? (isAdminTab ? "#fbbf24" : "#60a5fa") : "#475569",
-              marginTop: 3,
-              letterSpacing: "0.03em",
-            }}>{label}</span>
+              fontSize: 10, fontWeight: active ? 600 : 400,
+              color: active ? "#60a5fa" : "#475569",
+              marginTop: 3, letterSpacing: "0.03em",
+            }}>{t.nav[labelKey]}</span>
             {active && (
               <div style={{
-                position: "absolute",
-                top: 2,
-                width: 36,
-                height: 3,
-                borderRadius: 2,
-                background: isAdminTab
-                  ? "linear-gradient(90deg, #b45309, #fbbf24)"
-                  : "linear-gradient(90deg, #2563eb, #60a5fa)",
-                boxShadow: `0 0 10px rgba(${isAdminTab ? "251,191,36" : "96,165,250"},0.7)`,
+                position: "absolute", top: 2, width: 36, height: 3, borderRadius: 2,
+                background: "linear-gradient(90deg, #2563eb, #60a5fa)",
+                boxShadow: "0 0 10px rgba(96,165,250,0.7)",
               }} />
             )}
           </Link>
         );
       })}
+
+      {(isOwner || isAdmin) && (() => {
+        const active = location === "/admin";
+        return (
+          <Link href="/admin" onClick={() => haptic("light")} style={{
+            flex: 1, display: "flex", flexDirection: "column", alignItems: "center",
+            padding: "10px 4px 8px", textDecoration: "none", cursor: "pointer",
+            position: "relative", transition: "opacity 0.15s", opacity: active ? 1 : 0.7,
+          }}>
+            <div style={{
+              filter: active ? "drop-shadow(0 0 6px rgba(251,191,36,0.7))" : "none",
+              transform: active ? "translateY(-1px)" : "translateY(0)",
+              transition: "transform 0.2s",
+            }}>
+              {ADMIN_TAB.icon(active)}
+            </div>
+            <span style={{
+              fontSize: 10, fontWeight: active ? 600 : 400,
+              color: active ? "#fbbf24" : "#475569",
+              marginTop: 3, letterSpacing: "0.03em",
+            }}>Админ</span>
+            {active && (
+              <div style={{
+                position: "absolute", top: 2, width: 36, height: 3, borderRadius: 2,
+                background: "linear-gradient(90deg, #b45309, #fbbf24)",
+                boxShadow: "0 0 10px rgba(251,191,36,0.7)",
+              }} />
+            )}
+          </Link>
+        );
+      })()}
     </nav>
   );
 }

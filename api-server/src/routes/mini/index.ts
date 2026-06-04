@@ -12,9 +12,11 @@ import historyRouter from "./history.js";
 import adminRouter from "./admin.js";
 import investmentsRouter from "./investments.js";
 import boostsRouter from "./boosts.js";
+import languageRouter from "./language.js";
 
 const router: IRouter = Router();
 
+router.use("/language", languageRouter);
 router.use("/earn", earnRouter);
 router.use("/market", marketRouter);
 router.use("/games/spin", spinRouter);

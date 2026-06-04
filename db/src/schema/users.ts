@@ -41,6 +41,7 @@ export const usersTable = pgTable("users", {
   /* Misc */
   photoUrl: text("photo_url"),
   lastIp: text("last_ip"),
+  language: text("language").notNull().default("ru"),
   isBlocked: boolean("is_blocked").notNull().default(false),
   isAdmin: boolean("is_admin").notNull().default(false),
   lastLoginAt: timestamp("last_login_at"),

@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { Switch, Route, Router as WouterRouter } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import BottomNav from "@/components/bottom-nav";
+import LanguageModal from "@/components/LanguageModal";
 import HomePage from "@/pages/home";
 import MarketPage from "@/pages/market";
 import GamesPage from "@/pages/games";
@@ -10,6 +11,7 @@ import ProfilePage from "@/pages/profile";
 import LeaderboardPage from "@/pages/leaderboard";
 import AdminPage from "@/pages/admin";
 import { initTelegram, useTelegram } from "@/lib/telegram";
+import { LanguageProvider } from "@/lib/LanguageContext";
 import { useRegisterUser } from "@workspace/api-client-react";
 
 const queryClient = new QueryClient({
@@ -33,7 +35,6 @@ function AppShell() {
           firstName: firstName ?? undefined,
           lastName: lastName ?? undefined,
           photoUrl: photoUrl ?? undefined,
-          // start_param = referral code passed via invite link (?start=REF or ?startapp=REF)
           referredBy: startParam ?? undefined,
         },
       });
@@ -53,6 +54,9 @@ function AppShell() {
       margin: "0 auto",
       overflow: "hidden",
     }}>
+      {/* Language selection modal — shown only on first launch */}
+      <LanguageModal />
+
       <main style={{ flex: 1, overflowY: "auto", overflowX: "hidden", paddingBottom: 74 }}>
         <Switch>
           <Route path="/" component={HomePage} />
@@ -72,9 +76,11 @@ function AppShell() {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-        <AppShell />
-      </WouterRouter>
+      <LanguageProvider>
+        <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+          <AppShell />
+        </WouterRouter>
+      </LanguageProvider>
     </QueryClientProvider>
   );
 }

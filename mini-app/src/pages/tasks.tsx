@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useGetMiniTasks,
@@ -23,6 +23,7 @@ function Toast({ msg, type }: { msg: string; type: "success" | "error" }) {
       background: type === "success" ? "rgba(22,163,74,0.9)" : "rgba(220,38,38,0.9)",
       color: "#fff", padding: "12px 20px", borderRadius: 12,
       fontSize: 14, fontWeight: 600, zIndex: 9999, maxWidth: "calc(100% - 32px)",
+      textAlign: "center",
     }}>{msg}</div>
   );
 }
@@ -48,29 +49,11 @@ export default function TasksPage() {
   const qc = useQueryClient();
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
   const [justEarned, setJustEarned] = useState(0);
-  const [adsgramReady, setAdsgramReady] = useState<boolean | null>(null);
   const bodySnapshotRef = useRef<Set<Element>>(new Set());
-
-  // Silently poll for window.AdsGram in the background — no panic, no errors
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (window.AdsGram) { setAdsgramReady(true); return; }
-    const interval = setInterval(() => {
-      if (window.AdsGram) {
-        setAdsgramReady(true);
-        clearInterval(interval);
-      }
-    }, 300);
-    const timeout = setTimeout(() => {
-      clearInterval(interval);
-      if (!window.AdsGram) setAdsgramReady(false);
-    }, 12000);
-    return () => { clearInterval(interval); clearTimeout(timeout); };
-  }, []);
 
   const showToast = useCallback((msg: string, type: "success" | "error") => {
     setToast({ msg, type });
-    setTimeout(() => setToast(null), 2500);
+    setTimeout(() => setToast(null), 3000);
   }, []);
 
   const { data: tasksData, isLoading } = useGetMiniTasks(telegramId ?? "", {
@@ -90,26 +73,31 @@ export default function TasksPage() {
     mutation: {
       onSuccess: (data) => {
         const tonEarned = (data as unknown as { tonEarned?: number }).tonEarned ?? 0;
-        if (tonEarned > 0 || data.coinsEarned > 0) {
-          hapticNotify("success");
-          setJustEarned(tonEarned || data.coinsEarned);
-          showToast(tonEarned > 0 ? `+${tonEarned} TON заработано!` : `+${data.coinsEarned} pts заработано!`, "success");
-        }
+        hapticNotify("success");
+        setJustEarned(tonEarned || data.coinsEarned);
+        showToast(tonEarned > 0 ? `+${tonEarned} TON заработано!` : `+${data.coinsEarned} pts заработано!`, "success");
         qc.invalidateQueries({ queryKey: getGetMiniEarnStatusQueryKey(telegramId ?? "") });
         qc.invalidateQueries({ queryKey: getGetUserProfileQueryKey(telegramId ?? "") });
         setTimeout(() => setJustEarned(0), 2500);
       },
       onError: (e: unknown) => {
         hapticNotify("error");
-        showToast((e as { data?: { error?: string } })?.data?.error ?? "Ошибка", "error");
+        showToast((e as { data?: { error?: string } })?.data?.error ?? "Ошибка сервера", "error");
       },
     },
   });
 
   const handleWatch = useCallback(async () => {
     haptic("medium");
-    if (!isInTelegram) { showToast("Реклама работает только внутри Telegram", "error"); return; }
-    if (!telegramId) { showToast("Профиль не загружен", "error"); return; }
+    if (!isInTelegram) {
+      showToast("Реклама работает только внутри Telegram", "error");
+      return;
+    }
+    if (!telegramId) {
+      showToast("Профиль не загружен", "error");
+      return;
+    }
+
     bodySnapshotRef.current = new Set(Array.from(document.body.children));
 
     await showRewardedAd({
@@ -123,20 +111,15 @@ export default function TasksPage() {
       },
       onError: (err: AdError) => {
         removeAdsgramOverlays(bodySnapshotRef.current);
-        // Log full error for debugging in browser DevTools
-        console.error("[Tasks] AdsGram onError:", err.reason, err.description ?? "", err.raw ?? "");
+        console.error("[AdsGram] error:", err.reason, err.description);
         if (err.reason === "no_ads") {
-          showToast("Нет доступной рекламы — попробуй через несколько минут", "error");
-        } else if (err.reason === "skipped") {
-          showToast("Досмотри рекламу до конца, чтобы получить TON", "error");
+          showToast("Нет рекламы — блок прогревается, попробуй через несколько минут", "error");
         } else if (err.reason === "not_loaded") {
-          showToast("Реклама ещё загружается — подожди и попробуй снова", "error");
+          showToast("AdsGram не загружен — открой приложение в Telegram", "error");
         } else if (err.reason === "network") {
           showToast("Ошибка сети — проверь интернет и попробуй снова", "error");
         } else {
-          // unknown — show raw AdsGram description so we can read it
-          const detail = err.description ? `: ${err.description.slice(0, 60)}` : "";
-          showToast(`Ошибка AdsGram${detail}`, "error");
+          showToast("Реклама временно недоступна, попробуй позже", "error");
         }
       },
     });
@@ -153,7 +136,7 @@ export default function TasksPage() {
       },
       onError: (e: unknown) => {
         hapticNotify("error");
-        showToast((e as { data?: { error?: string } })?.data?.error ?? "Failed", "error");
+        showToast((e as { data?: { error?: string } })?.data?.error ?? "Ошибка", "error");
       },
     },
   });
@@ -205,9 +188,7 @@ export default function TasksPage() {
           <div style={{ fontSize: 24 }}>📺</div>
           <div>
             <div style={{ fontSize: 14, fontWeight: 800, color: "#f1f5f9" }}>Смотреть рекламу</div>
-            <div style={{ fontSize: 11, color: "#93c5fd" }}>
-              +{TON_PER_AD} TON за просмотр
-            </div>
+            <div style={{ fontSize: 11, color: "#93c5fd" }}>+{TON_PER_AD} TON за просмотр</div>
           </div>
           <div style={{ marginLeft: "auto", textAlign: "right" }}>
             <div style={{ fontSize: 13, fontWeight: 700, color: "#60a5fa", fontVariantNumeric: "tabular-nums" }}>
@@ -258,17 +239,6 @@ export default function TasksPage() {
                 ? "✅ ЛИМИТ ИСЧЕРПАН"
                 : "▶ СМОТРЕТЬ РЕКЛАМУ"}
         </button>
-
-        {/* Silent AdsGram status — no panic, just calm confirmation */}
-        {adsgramReady === true && (
-          <div style={{
-            marginTop: 10, padding: "10px 14px", borderRadius: 10,
-            background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)",
-            color: "#e2e8f0", fontSize: 13, textAlign: "center",
-          }}>
-            ✅ AdsGram успешно загружен. Реклама скоро появится. Спасибо за терпение!
-          </div>
-        )}
 
         <div style={{ textAlign: "center", marginTop: 8, fontSize: 11, color: "#334155" }}>
           Итого за сегодня: <b style={{ color: "#fbbf24" }}>+{(watched * TON_PER_AD).toFixed(4)} TON</b>

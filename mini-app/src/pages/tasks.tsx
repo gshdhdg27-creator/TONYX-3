@@ -123,12 +123,20 @@ export default function TasksPage() {
       },
       onError: (err: AdError) => {
         removeAdsgramOverlays(bodySnapshotRef.current);
+        // Log full error for debugging in browser DevTools
+        console.error("[Tasks] AdsGram onError:", err.reason, err.description ?? "", err.raw ?? "");
         if (err.reason === "no_ads") {
           showToast("Нет доступной рекламы — попробуй через несколько минут", "error");
+        } else if (err.reason === "skipped") {
+          showToast("Досмотри рекламу до конца, чтобы получить TON", "error");
+        } else if (err.reason === "not_loaded") {
+          showToast("Реклама ещё загружается — подожди и попробуй снова", "error");
         } else if (err.reason === "network") {
           showToast("Ошибка сети — проверь интернет и попробуй снова", "error");
         } else {
-          showToast("Реклама временно недоступна, попробуй позже", "error");
+          // unknown — show raw AdsGram description so we can read it
+          const detail = err.description ? `: ${err.description.slice(0, 60)}` : "";
+          showToast(`Ошибка AdsGram${detail}`, "error");
         }
       },
     });

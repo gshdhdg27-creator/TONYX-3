@@ -503,6 +503,9 @@ export default function HomePage() {
             overflow: "hidden",
             position: "relative", zIndex: 1,
             flexShrink: 0,
+            /* force GPU compositing — fixes WebKit overflow+border-radius clipping bug */
+            transform: "translateZ(0)",
+            WebkitMaskImage: "-webkit-radial-gradient(white, black)",
             boxShadow: [
               "0 0 28px rgba(0,162,255,0.6)",
               "0 0 70px rgba(0,162,255,0.30)",

@@ -57,6 +57,14 @@ router.post("/buy", async (req, res) => {
   if (!user) { res.status(404).json({ error: "User not found" }); return; }
   if (user.isBlocked) { res.status(403).json({ error: "Account is blocked" }); return; }
 
+  /* Prevent duplicate purchase of same boost tier */
+  const existing = await db.select().from(miniBoostsTable).where(eq(miniBoostsTable.telegramId, telegramId));
+  const alreadyOwned = existing.some(b => Number(b.boostPct) === pkg.boostPct);
+  if (alreadyOwned) {
+    res.status(409).json({ error: `Буст ${pkg.label} уже куплен. Каждый буст можно купить только один раз.` });
+    return;
+  }
+
   const userTon = Number(user.ton);
   if (userTon < pkg.costTon) {
     res.status(400).json({ error: `Недостаточно TON. Нужно ${pkg.costTon} TON, у вас ${userTon.toFixed(4)} TON` });

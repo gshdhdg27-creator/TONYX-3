@@ -42,7 +42,6 @@ const STARS = Array.from({ length: 80 }, () => ({
   x: Math.random() * 100, y: Math.random() * 100,
   r: Math.random() * 1.5 + 0.5, o: Math.random() * 0.5 + 0.2,
 }));
-
 function Stars() {
   return (
     <div style={{ position: "fixed", inset: 0, pointerEvents: "none", zIndex: 0 }}>
@@ -57,29 +56,71 @@ function Stars() {
   );
 }
 
-/* ─── TON Logo SVG — official diamond crystal ─── */
-function TonLogo({ size = 64 }: { size?: number }) {
+/* ─── Metallic 3-D "T" logo ─── */
+function MetallicT({ size = 80 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 56 56" fill="none">
-      {/* Outer diamond */}
-      <path d="M28 4L52 18V38L28 52L4 38V18L28 4Z" fill="white" opacity="0.95" />
-      {/* Top face (lighter) */}
-      <path d="M28 4L52 18L28 28L4 18L28 4Z" fill="white" opacity="0.3" />
-      {/* Left face */}
-      <path d="M4 18L28 28V52L4 38V18Z" fill="rgba(0,0,0,0.15)" />
-      {/* Center line */}
-      <line x1="28" y1="4" x2="28" y2="52" stroke="rgba(100,160,255,0.4)" strokeWidth="1.5" />
-      <line x1="4" y1="18" x2="52" y2="18" stroke="rgba(100,160,255,0.3)" strokeWidth="1.5" />
-      <line x1="4" y1="38" x2="52" y2="38" stroke="rgba(100,160,255,0.2)" strokeWidth="1" />
+    <svg width={size} height={size} viewBox="0 0 100 112" fill="none">
+      <defs>
+        <linearGradient id="mt-chrome" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%"   stopColor="#f8fafc"/>
+          <stop offset="30%"  stopColor="#ffffff"/>
+          <stop offset="65%"  stopColor="#cbd5e1"/>
+          <stop offset="100%" stopColor="#94a3b8"/>
+        </linearGradient>
+        <linearGradient id="mt-stem" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%"   stopColor="#1e3a8a"/>
+          <stop offset="55%"  stopColor="#2563eb"/>
+          <stop offset="100%" stopColor="#1d4ed8"/>
+        </linearGradient>
+        <linearGradient id="mt-leftface" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%"   stopColor="#0f172a"/>
+          <stop offset="100%" stopColor="#1e3a8a"/>
+        </linearGradient>
+        <linearGradient id="mt-bevel" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%"   stopColor="#60a5fa" stopOpacity="0.6"/>
+          <stop offset="100%" stopColor="#1d4ed8" stopOpacity="0.2"/>
+        </linearGradient>
+      </defs>
+
+      {/* ── Crossbar ── */}
+      {/* top highlight edge */}
+      <polygon points="8,10 92,10 96,14 4,14" fill="rgba(255,255,255,0.85)"/>
+      {/* main chrome face */}
+      <rect x="4" y="14" width="92" height="21" fill="url(#mt-chrome)"/>
+      {/* bottom shadow bevel */}
+      <polygon points="4,35 96,35 92,39 8,39" fill="#64748b"/>
+      {/* left cheek drop */}
+      <polygon points="4,35 8,39 8,44 4,40" fill="#475569"/>
+      {/* right cheek drop */}
+      <polygon points="96,35 92,39 92,44 96,40" fill="#334155"/>
+      {/* left wing underside */}
+      <polygon points="8,39 39,39 39,44 8,44" fill="#334155"/>
+      {/* right wing underside */}
+      <polygon points="61,39 92,39 92,44 61,44" fill="#334155"/>
+
+      {/* ── Stem ── */}
+      {/* left dark face */}
+      <polygon points="39,39 43,43 43,108 39,104" fill="url(#mt-leftface)"/>
+      {/* main stem face */}
+      <polygon points="43,43 57,43 57,108 43,108" fill="url(#mt-stem)"/>
+      {/* diagonal slash / highlight */}
+      <polygon points="43,43 57,43 57,78 43,60" fill="rgba(148,163,184,0.22)"/>
+      {/* silver diagonal line accent */}
+      <line x1="43" y1="43" x2="57" y2="78" stroke="rgba(255,255,255,0.18)" strokeWidth="1.2"/>
+      {/* right shadow edge */}
+      <polygon points="57,43 61,39 61,104 57,108" fill="#172554"/>
+      {/* bottom tip */}
+      <polygon points="43,108 57,108 51,112 49,112" fill="rgba(96,165,250,0.25)"/>
     </svg>
   );
 }
 
 /* ─── Boost Modal ─── */
-function BoostModal({ packages, userTon, boostRate, onClose, onBuy }: {
+function BoostModal({ packages, userTon, boostRate, purchasedPcts, onClose, onBuy }: {
   packages: BoostPkg[];
   userTon: number;
   boostRate: number;
+  purchasedPcts: Set<number>;
   onClose: () => void;
   onBuy: (pkgId: number) => Promise<void>;
 }) {
@@ -101,7 +142,7 @@ function BoostModal({ packages, userTon, boostRate, onClose, onBuy }: {
     >
       <div style={{
         width: "100%", background: "linear-gradient(180deg,#0f172a,#0a0f1e)",
-        border: "1px solid rgba(139,92,246,0.3)", borderTopLeftRadius: 28, borderTopRightRadius: 28,
+        border: "1px solid rgba(0,162,255,0.25)", borderTopLeftRadius: 28, borderTopRightRadius: 28,
         padding: "20px 16px 40px",
       }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
@@ -117,28 +158,36 @@ function BoostModal({ packages, userTon, boostRate, onClose, onBuy }: {
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 16 }}>
           {packages.map(p => {
+            const isPurchased = purchasedPcts.has(p.boostPct);
             const isSelected = selected === p.id;
-            const canAfford = userTon >= p.costTon;
+            const canAfford = userTon >= p.costTon && !isPurchased;
             return (
               <button
                 key={p.id}
-                onClick={() => { haptic("light"); setSelected(p.id); }}
-                disabled={!canAfford}
+                onClick={() => { if (!isPurchased && canAfford) { haptic("light"); setSelected(p.id); } }}
+                disabled={isPurchased || !canAfford}
                 style={{
-                  background: isSelected
-                    ? "linear-gradient(135deg,rgba(109,40,217,0.7),rgba(139,92,246,0.4))"
-                    : "rgba(15,23,42,0.9)",
-                  border: `1px solid ${isSelected ? "#8b5cf6" : "rgba(109,40,217,0.3)"}`,
+                  background: isPurchased
+                    ? "rgba(15,23,42,0.5)"
+                    : isSelected
+                      ? "linear-gradient(135deg,rgba(0,100,200,0.7),rgba(0,162,255,0.3))"
+                      : "rgba(15,23,42,0.9)",
+                  border: `1px solid ${isPurchased ? "rgba(100,116,139,0.3)" : isSelected ? "#00a2ff" : "rgba(0,162,255,0.25)"}`,
                   borderRadius: 14, padding: "12px 6px", textAlign: "center",
-                  cursor: canAfford ? "pointer" : "not-allowed", opacity: canAfford ? 1 : 0.4,
+                  cursor: isPurchased ? "default" : canAfford ? "pointer" : "not-allowed",
+                  opacity: isPurchased ? 0.55 : canAfford ? 1 : 0.4,
                   transition: "all 0.2s",
-                  boxShadow: isSelected ? "0 0 20px rgba(139,92,246,0.4)" : "none",
+                  boxShadow: isSelected ? "0 0 16px rgba(0,162,255,0.35)" : "none",
                 }}
               >
-                <div style={{ fontSize: 22, marginBottom: 4 }}>{p.emoji}</div>
-                <div style={{ fontSize: 15, fontWeight: 900, color: "#4ade80" }}>{p.label}/день</div>
-                <div style={{ fontSize: 8, color: "#475569", fontWeight: 700, margin: "3px 0", letterSpacing: "0.08em" }}>НАВСЕГДА</div>
-                <div style={{ fontSize: 12, fontWeight: 800, color: "#fbbf24" }}>{p.costTon} TON</div>
+                <div style={{ fontSize: 20, marginBottom: 4 }}>{isPurchased ? "✅" : p.emoji}</div>
+                <div style={{ fontSize: 14, fontWeight: 900, color: isPurchased ? "#4ade80" : "#e2e8f0" }}>{p.label}/день</div>
+                <div style={{ fontSize: 8, color: "#475569", fontWeight: 700, margin: "3px 0", letterSpacing: "0.08em" }}>
+                  {isPurchased ? "КУПЛЕНО" : "НАВСЕГДА"}
+                </div>
+                <div style={{ fontSize: 12, fontWeight: 800, color: isPurchased ? "#475569" : "#fbbf24" }}>
+                  {isPurchased ? "—" : `${p.costTon} TON`}
+                </div>
               </button>
             );
           })}
@@ -146,19 +195,21 @@ function BoostModal({ packages, userTon, boostRate, onClose, onBuy }: {
 
         <button
           onClick={() => { haptic("medium"); handleBuy(); }}
-          disabled={!selected || loading || (pkg ? userTon < pkg.costTon : true)}
+          disabled={!selected || loading || (pkg ? userTon < pkg.costTon : true) || (pkg ? purchasedPcts.has(pkg.boostPct) : false)}
           style={{
             width: "100%", padding: "16px 0", borderRadius: 16, border: "none",
             fontFamily: "inherit", fontSize: 16, fontWeight: 900,
-            background: selected && pkg && userTon >= pkg.costTon
-              ? "linear-gradient(135deg,#6d28d9,#8b5cf6)"
-              : "rgba(109,40,217,0.2)",
-            color: selected && pkg && userTon >= pkg.costTon ? "#fff" : "#334155",
+            background: selected && pkg && userTon >= pkg.costTon && !purchasedPcts.has(pkg.boostPct)
+              ? "linear-gradient(135deg,#0064c8,#00a2ff)"
+              : "rgba(0,100,200,0.15)",
+            color: selected && pkg && userTon >= pkg.costTon && !purchasedPcts.has(pkg.boostPct) ? "#fff" : "#334155",
             cursor: selected && pkg && userTon >= pkg.costTon ? "pointer" : "not-allowed",
-            boxShadow: selected && pkg && userTon >= pkg.costTon ? "0 0 28px rgba(139,92,246,0.5)" : "none",
+            boxShadow: selected && pkg && userTon >= pkg.costTon ? "0 0 24px rgba(0,162,255,0.4)" : "none",
           }}
         >
-          {loading ? "⏳ Активация…" : selected && pkg ? `💜 Купить за ${pkg.costTon} TON` : "Выберите буст"}
+          {loading ? "⏳ Активация…" : selected && pkg
+            ? purchasedPcts.has(pkg.boostPct) ? "✅ Уже куплено" : `💙 Купить за ${pkg.costTon} TON`
+            : "Выберите буст"}
         </button>
       </div>
     </div>
@@ -181,13 +232,6 @@ function DepositModal({ userTon, onClose, onDeposit }: {
     presets.sort((a, b) => a - b);
   }
 
-  const handleDeposit = async () => {
-    if (amt <= 0 || amt > userTon) return;
-    setLoading(true);
-    await onDeposit(amt);
-    setLoading(false);
-  };
-
   return (
     <div
       style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", display: "flex", alignItems: "flex-end", zIndex: 600 }}
@@ -205,7 +249,6 @@ function DepositModal({ userTon, onClose, onDeposit }: {
         <div style={{ fontSize: 12, color: "#475569", marginBottom: 14 }}>
           Доступно: <b style={{ color: "#fbbf24" }}>{userTon.toFixed(4)} TON</b>
         </div>
-
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
           {presets.map(p => (
             <button key={p} onClick={() => setInput(String(p))} style={{
@@ -217,15 +260,13 @@ function DepositModal({ userTon, onClose, onDeposit }: {
             </button>
           ))}
         </div>
-
         <input
           value={input} onChange={e => setInput(e.target.value)} type="number" step="0.001"
           placeholder="Сумма TON"
           style={{ width: "100%", background: "rgba(30,45,69,0.6)", border: "1px solid rgba(34,197,94,0.3)", borderRadius: 10, padding: "12px 14px", color: "#f1f5f9", fontFamily: "inherit", fontSize: 14, outline: "none", boxSizing: "border-box", marginBottom: 14 }}
         />
-
         <button
-          onClick={() => { haptic("medium"); handleDeposit(); }}
+          onClick={() => { haptic("medium"); if (amt > 0 && amt <= userTon) { setLoading(true); onDeposit(amt).finally(() => setLoading(false)); } }}
           disabled={loading || amt <= 0 || amt > userTon}
           style={{
             width: "100%", padding: "16px 0", borderRadius: 16, border: "none",
@@ -239,7 +280,7 @@ function DepositModal({ userTon, onClose, onDeposit }: {
           {loading ? "⏳ Пополнение…" : `Пополнить ${amt > 0 ? amt + " TON" : ""}`}
         </button>
         {amt > userTon && amt > 0 && (
-          <div style={{ fontSize: 11, color: "#f87171", textAlign: "center", marginTop: 8 }}>Недостаточно TON на балансе</div>
+          <div style={{ fontSize: 11, color: "#f87171", textAlign: "center", marginTop: 8 }}>Недостаточно TON</div>
         )}
       </div>
     </div>
@@ -259,6 +300,7 @@ export default function HomePage() {
 
   const [inv, setInv] = useState<InvData | null>(null);
   const [boostPkgs, setBoostPkgs] = useState<BoostPkg[]>([]);
+  const [purchasedPcts, setPurchasedPcts] = useState<Set<number>>(new Set());
   const [animMined, setAnimMined] = useState(0);
   const animRef = useRef<number>(0);
 
@@ -283,13 +325,26 @@ export default function HomePage() {
     } catch {}
   }, [telegramId]);
 
+  const fetchPurchasedBoosts = useCallback(async () => {
+    if (!telegramId) return;
+    try {
+      const r = await fetch(`/api/mini/boosts/${encodeURIComponent(telegramId)}`);
+      if (r.ok) {
+        const d = await r.json();
+        const pcts = new Set<number>((d.boosts ?? []).map((b: { boostPct: number }) => b.boostPct));
+        setPurchasedPcts(pcts);
+      }
+    } catch {}
+  }, [telegramId]);
+
   useEffect(() => {
     fetchInv();
+    fetchPurchasedBoosts();
     fetch("/api/mini/boosts/packages")
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (d?.packages) setBoostPkgs(d.packages); })
       .catch(() => {});
-  }, [fetchInv]);
+  }, [fetchInv, fetchPurchasedBoosts]);
 
   /* Live animated counter */
   useEffect(() => {
@@ -312,12 +367,10 @@ export default function HomePage() {
   }, [inv?.startedAt, inv?.principal, inv?.totalClaimed, inv?.boostRate]);
 
   const refreshAll = useCallback(async () => {
-    await fetchInv();
-    await refetchProfile();
+    await Promise.all([fetchInv(), fetchPurchasedBoosts(), refetchProfile()]);
     qc.invalidateQueries({ queryKey: getGetUserProfileQueryKey(telegramId ?? "") });
-  }, [fetchInv, refetchProfile, telegramId, qc]);
+  }, [fetchInv, fetchPurchasedBoosts, refetchProfile, telegramId, qc]);
 
-  /* Buy boost */
   const handleBuyBoost = useCallback(async (pkgId: number) => {
     if (!telegramId) return;
     haptic("medium");
@@ -335,7 +388,6 @@ export default function HomePage() {
     } catch { showToast("Ошибка сети", "error"); }
   }, [telegramId, showToast, refreshAll]);
 
-  /* Deposit TON to mining */
   const handleDeposit = useCallback(async (amount: number) => {
     if (!telegramId) return;
     haptic("medium");
@@ -353,7 +405,6 @@ export default function HomePage() {
     } catch { showToast("Ошибка сети", "error"); }
   }, [telegramId, showToast, refreshAll]);
 
-  /* Withdraw from mining */
   const handleWithdraw = useCallback(async () => {
     if (!telegramId || withdrawing) return;
     if ((inv?.principal ?? 0) <= 0) { showToast("Нет активных вложений", "error"); return; }
@@ -391,8 +442,11 @@ export default function HomePage() {
 
       {toast && <Toast msg={toast.msg} type={toast.type} />}
       {showBoost && (
-        <BoostModal packages={boostPkgs} userTon={userTon} boostRate={boostRate}
-          onClose={() => setShowBoost(false)} onBuy={handleBuyBoost} />
+        <BoostModal
+          packages={boostPkgs} userTon={userTon} boostRate={boostRate}
+          purchasedPcts={purchasedPcts}
+          onClose={() => setShowBoost(false)} onBuy={handleBuyBoost}
+        />
       )}
       {showDeposit && (
         <DepositModal userTon={userTon} onClose={() => setShowDeposit(false)} onDeposit={handleDeposit} />
@@ -400,7 +454,7 @@ export default function HomePage() {
 
       <div style={{ position: "relative", zIndex: 1, padding: "16px 16px 100px" }}>
 
-        {/* ─── Top bar: Online + balances ─── */}
+        {/* ─── Top bar ─── */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#22c55e", boxShadow: "0 0 8px #22c55e" }} />
@@ -412,16 +466,16 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* ─── Rate bar with BOOST button ─── */}
+        {/* ─── Rate bar — only BOOST button ─── */}
         <div style={{
           display: "flex", alignItems: "center", justifyContent: "space-between",
-          background: "rgba(15,23,42,0.7)", border: "1px solid rgba(96,165,250,0.15)",
+          background: "rgba(15,23,42,0.7)", border: "1px solid rgba(0,162,255,0.12)",
           borderRadius: 14, padding: "10px 14px", marginBottom: 20,
         }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <div style={{ display: "flex", gap: 2, alignItems: "flex-end" }}>
               {[4, 7, 10, 13, 10].map((h, i) => (
-                <div key={i} style={{ width: 3, height: h, background: i < 3 ? "#60a5fa" : "rgba(96,165,250,0.3)", borderRadius: 1 }} />
+                <div key={i} style={{ width: 3, height: h, background: i < 3 ? "#00a2ff" : "rgba(0,162,255,0.25)", borderRadius: 1 }} />
               ))}
             </div>
             <div>
@@ -429,35 +483,22 @@ export default function HomePage() {
               <div style={{ fontSize: 9, color: "#475569", letterSpacing: "0.1em" }}>ДОХОДНОСТЬ</div>
             </div>
           </div>
-          {/* UPGRADE + BOOST — both open boost modal */}
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <button
-              onClick={() => { haptic("light"); setShowBoost(true); }}
-              style={{
-                padding: "7px 14px", borderRadius: 10,
-                border: "1px solid rgba(139,92,246,0.5)",
-                background: "linear-gradient(135deg,rgba(109,40,217,0.5),rgba(139,92,246,0.25))",
-                color: "#c4b5fd", fontSize: 12, fontWeight: 800, cursor: "pointer", fontFamily: "inherit",
-                display: "flex", alignItems: "center", gap: 5,
-              }}
-            >
-              🚀 БУСТ
-            </button>
-            <button
-              onClick={() => { haptic("light"); setShowBoost(true); }}
-              style={{
-                padding: "7px 14px", borderRadius: 10,
-                border: "1px solid rgba(96,165,250,0.4)",
-                background: "linear-gradient(135deg,rgba(30,58,143,0.6),rgba(37,99,235,0.3))",
-                color: "#60a5fa", fontSize: 12, fontWeight: 800, cursor: "pointer", fontFamily: "inherit",
-              }}
-            >
-              Upgrade ⬆
-            </button>
-          </div>
+          <button
+            onClick={() => { haptic("light"); setShowBoost(true); }}
+            style={{
+              padding: "8px 18px", borderRadius: 10,
+              border: "1px solid rgba(0,162,255,0.5)",
+              background: "linear-gradient(135deg,rgba(0,80,160,0.6),rgba(0,162,255,0.2))",
+              color: "#7dd3fc", fontSize: 13, fontWeight: 800, cursor: "pointer", fontFamily: "inherit",
+              display: "flex", alignItems: "center", gap: 6,
+              boxShadow: "0 0 12px rgba(0,162,255,0.2)",
+            }}
+          >
+            🚀 БУСТ
+          </button>
         </div>
 
-        {/* ─── Mining status label ─── */}
+        {/* ─── Mining status ─── */}
         <div style={{ textAlign: "center", marginBottom: 6 }}>
           <div style={{ fontSize: 10, color: "#475569", letterSpacing: "0.15em", fontWeight: 700 }}>
             {hasPrincipal ? "ТЕКУЩИЙ ДОХОД" : "МАЙНИНГ АКТИВЕН"}
@@ -465,15 +506,15 @@ export default function HomePage() {
         </div>
 
         {/* ─── Live counter ─── */}
-        <div style={{ textAlign: "center", marginBottom: 6 }}>
+        <div style={{ textAlign: "center", marginBottom: 10 }}>
           <div style={{
-            fontSize: 36, fontWeight: 900, color: "#f1f5f9",
+            fontSize: 34, fontWeight: 900, color: "#f1f5f9",
             fontVariantNumeric: "tabular-nums", letterSpacing: "-0.03em",
-            textShadow: "0 0 40px rgba(96,165,250,0.4)",
+            textShadow: "0 0 32px rgba(0,162,255,0.5)",
             fontFamily: "monospace",
           }}>
             {animMined.toFixed(9)}
-            <span style={{ fontSize: 16, color: "#60a5fa", marginLeft: 8, fontFamily: "inherit" }}>TON</span>
+            <span style={{ fontSize: 15, color: "#00a2ff", marginLeft: 8, fontFamily: "inherit" }}>TON</span>
           </div>
           <div style={{ fontSize: 11, color: "#475569", marginTop: 4 }}>
             {hasPrincipal
@@ -483,40 +524,50 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* ─── Central TON coin ─── */}
-        <div style={{ display: "flex", justifyContent: "center", alignItems: "center", marginBottom: 24, position: "relative", height: 160 }}>
-          {/* Glow */}
+        {/* ─── Central TONYX neon ring ─── */}
+        <div style={{
+          display: "flex", justifyContent: "center", alignItems: "center",
+          marginBottom: 24, position: "relative", height: 168,
+        }}>
+          {/* outer ambient glow */}
           <div style={{
-            position: "absolute", width: 220, height: 220, borderRadius: "50%",
-            background: "radial-gradient(circle,rgba(37,99,235,0.25) 0%,transparent 70%)",
+            position: "absolute", width: 240, height: 240, borderRadius: "50%",
+            background: "radial-gradient(circle, rgba(0,162,255,0.12) 0%, transparent 68%)",
             pointerEvents: "none",
           }} />
 
-          {/* TON Coin with official logo */}
+          {/* neon ring — transparent inside, glowing border */}
           <div style={{
-            width: 134, height: 134, borderRadius: "50%",
-            background: "linear-gradient(145deg,#1e40af,#2563eb,#0ea5e9)",
+            width: 148, height: 148, borderRadius: "50%",
+            background: "radial-gradient(circle at 45% 35%, rgba(0,60,120,0.18), rgba(2,8,23,0.55))",
+            border: "2.5px solid #00a2ff",
+            boxShadow: [
+              "0 0 18px #00a2ff",
+              "0 0 40px #00a2ff",
+              "0 0 70px rgba(0,162,255,0.45)",
+              "0 0 100px rgba(0,162,255,0.2)",
+              "inset 0 0 22px rgba(0,162,255,0.18)",
+            ].join(", "),
             display: "flex", alignItems: "center", justifyContent: "center",
-            boxShadow: "0 0 70px rgba(37,99,235,0.55), 0 0 140px rgba(37,99,235,0.2), inset 0 2px 6px rgba(255,255,255,0.2)",
             position: "relative", zIndex: 1,
           }}>
-            <TonLogo size={68} />
+            <MetallicT size={82} />
           </div>
         </div>
 
-        {/* ─── Deposit / Withdraw ─── */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
+        {/* ─── Deposit / Withdraw — compact ─── */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
           <button
             onClick={() => { haptic("medium"); setShowDeposit(true); }}
             style={{
-              padding: "18px 0", borderRadius: 18, border: "none", fontFamily: "inherit",
+              padding: "12px 0", borderRadius: 14, border: "none", fontFamily: "inherit",
               background: "linear-gradient(135deg,#065f46,#059669)",
-              color: "#fff", fontSize: 16, fontWeight: 900,
-              cursor: "pointer", boxShadow: "0 0 28px rgba(16,185,129,0.4)",
-              display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
+              color: "#fff", fontSize: 14, fontWeight: 800,
+              cursor: "pointer", boxShadow: "0 0 18px rgba(16,185,129,0.3)",
+              display: "flex", alignItems: "center", justifyContent: "center", gap: 7,
             }}
           >
-            <span style={{ fontSize: 24 }}>🔽</span>
+            <span style={{ fontSize: 18 }}>🔽</span>
             <span>Пополнить</span>
           </button>
 
@@ -524,154 +575,48 @@ export default function HomePage() {
             onClick={handleWithdraw}
             disabled={withdrawing || !hasPrincipal}
             style={{
-              padding: "18px 0", borderRadius: 18, border: "none", fontFamily: "inherit",
+              padding: "12px 0", borderRadius: 14, border: "none", fontFamily: "inherit",
               background: hasPrincipal ? "linear-gradient(135deg,#7f1d1d,#dc2626)" : "rgba(30,45,69,0.4)",
-              color: hasPrincipal ? "#fff" : "#334155", fontSize: 16, fontWeight: 900,
+              color: hasPrincipal ? "#fff" : "#334155", fontSize: 14, fontWeight: 800,
               cursor: hasPrincipal ? "pointer" : "not-allowed",
-              boxShadow: hasPrincipal ? "0 0 28px rgba(220,38,38,0.35)" : "none",
-              display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
+              boxShadow: hasPrincipal ? "0 0 18px rgba(220,38,38,0.3)" : "none",
+              display: "flex", alignItems: "center", justifyContent: "center", gap: 7,
               opacity: withdrawing ? 0.7 : 1,
             }}
           >
-            <span style={{ fontSize: 24 }}>🔼</span>
+            <span style={{ fontSize: 18 }}>🔼</span>
             <span>{withdrawing ? "…" : "Вывести"}</span>
           </button>
         </div>
 
-        {/* ─── Start mining CTA if no investment but has TON ─── */}
+        {/* ─── Start mining CTA ─── */}
         {!hasPrincipal && userTon > 0 && (
           <div style={{
             background: "linear-gradient(135deg,rgba(5,46,36,0.8),rgba(6,78,59,0.5))",
-            border: "1px solid rgba(16,185,129,0.5)", borderRadius: 18, padding: "18px 16px",
-            marginBottom: 16, textAlign: "center",
-            boxShadow: "0 0 32px rgba(16,185,129,0.15)",
+            border: "1px solid rgba(16,185,129,0.5)", borderRadius: 18, padding: "16px",
+            textAlign: "center", boxShadow: "0 0 24px rgba(16,185,129,0.1)",
           }}>
-            <div style={{ fontSize: 28, marginBottom: 8 }}>🌱</div>
-            <div style={{ fontSize: 15, fontWeight: 800, color: "#4ade80", marginBottom: 6 }}>
+            <div style={{ fontSize: 24, marginBottom: 6 }}>🌱</div>
+            <div style={{ fontSize: 14, fontWeight: 800, color: "#4ade80", marginBottom: 4 }}>
               Запустите майнинг прямо сейчас!
             </div>
-            <div style={{ fontSize: 12, color: "#6ee7b7", marginBottom: 14, lineHeight: 1.6 }}>
+            <div style={{ fontSize: 11, color: "#6ee7b7", marginBottom: 12, lineHeight: 1.5 }}>
               У вас <b style={{ color: "#fbbf24" }}>{userTon.toFixed(4)} TON</b> на балансе.<br />
-              Вложите их и получайте <b style={{ color: "#4ade80" }}>+{ratePerDay.toFixed(1)}% в день</b> автоматически.
+              Вложите и получайте <b style={{ color: "#4ade80" }}>+{ratePerDay.toFixed(1)}%</b> в день.
             </div>
             <button
               onClick={() => { haptic("medium"); setShowDeposit(true); }}
               style={{
-                padding: "14px 32px", borderRadius: 14, border: "none", fontFamily: "inherit",
+                padding: "11px 28px", borderRadius: 12, border: "none", fontFamily: "inherit",
                 background: "linear-gradient(135deg,#065f46,#059669)",
-                color: "#fff", fontSize: 15, fontWeight: 900, cursor: "pointer",
-                boxShadow: "0 0 24px rgba(16,185,129,0.4)",
+                color: "#fff", fontSize: 14, fontWeight: 900, cursor: "pointer",
+                boxShadow: "0 0 20px rgba(16,185,129,0.4)",
               }}
             >
               🚀 Начать майнинг
             </button>
           </div>
         )}
-
-        {/* ─── Pool: Buy TONYX ─── */}
-        <BuyTonyxPool telegramId={telegramId ?? ""} userTon={userTon} onRefresh={refreshAll} showToast={showToast} />
-      </div>
-    </div>
-  );
-}
-
-/* ─── Buy TONYX from pool ─── */
-function BuyTonyxPool({ telegramId, userTon, onRefresh, showToast }: {
-  telegramId: string;
-  userTon: number;
-  onRefresh: () => void;
-  showToast: (msg: string, type: "success" | "error" | "info") => void;
-}) {
-  const [pool, setPool] = useState<{ sold: number; total: number; remaining: number; isMarketActive: boolean } | null>(null);
-  const [buying, setBuying] = useState(false);
-  const [tonInput, setTonInput] = useState("1");
-
-  useEffect(() => {
-    const load = () => fetch("/api/mini/market/pool")
-      .then(r => r.ok ? r.json() : null)
-      .then(d => { if (d) setPool(d); })
-      .catch(() => {});
-    load();
-    const t = setInterval(load, 12000);
-    return () => clearInterval(t);
-  }, []);
-
-  const handleBuy = async () => {
-    const amt = parseFloat(tonInput) || 0;
-    if (!telegramId || amt <= 0) return;
-    haptic("medium");
-    setBuying(true);
-    try {
-      const r = await fetch("/api/mini/market/reserve", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ telegramId, tonAmount: amt }),
-      });
-      const d = await r.json();
-      if (!r.ok) { showToast(d.error ?? "Ошибка", "error"); return; }
-      hapticNotify("success");
-      showToast(d.message ?? `+${d.coins?.toLocaleString()} TONYX`, "success");
-      onRefresh();
-      const upd = await fetch("/api/mini/market/pool").then(x => x.ok ? x.json() : null);
-      if (upd) setPool(upd);
-    } catch { showToast("Ошибка сети", "error"); }
-    finally { setBuying(false); }
-  };
-
-  if (!pool) return null;
-
-  const pct = Math.min(100, (pool.sold / pool.total) * 100);
-  const presets = [0.1, 0.5, 1, 5];
-  const tonAmt = parseFloat(tonInput) || 0;
-
-  return (
-    <div style={{
-      background: "rgba(15,23,42,0.85)", border: "1px solid rgba(30,58,143,0.35)",
-      borderRadius: 20, padding: "16px 14px",
-    }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-        <div style={{ fontSize: 14, fontWeight: 800, color: "#f1f5f9" }}>🪙 Купить TONYX</div>
-        <div style={{ fontSize: 10, color: pool.isMarketActive ? "#4ade80" : "#fbbf24", fontWeight: 700 }}>
-          {pool.isMarketActive ? "✅ P2P ОТКРЫТ" : `${pct.toFixed(1)}% до P2P рынка`}
-        </div>
-      </div>
-
-      <div style={{ height: 6, borderRadius: 3, background: "rgba(30,45,69,0.8)", marginBottom: 8, overflow: "hidden" }}>
-        <div style={{ height: "100%", width: `${pct}%`, background: "linear-gradient(90deg,#1d4ed8,#22d3ee)", borderRadius: 3, transition: "width 0.6s" }} />
-      </div>
-      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "#334155", marginBottom: 12 }}>
-        <span>{pool.sold.toLocaleString()} продано</span>
-        <span>{pool.remaining.toLocaleString()} осталось</span>
-        <span>1000 TONYX/TON</span>
-      </div>
-
-      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
-        {presets.map(p => (
-          <button key={p} onClick={() => setTonInput(String(p))} style={{
-            padding: "5px 10px", borderRadius: 8, border: "none", fontFamily: "inherit",
-            background: tonAmt === p ? "rgba(37,99,235,0.6)" : "rgba(30,45,69,0.8)",
-            color: tonAmt === p ? "#fff" : "#64748b", fontSize: 11, fontWeight: 700, cursor: "pointer",
-          }}>{p} TON</button>
-        ))}
-      </div>
-
-      <div style={{ display: "flex", gap: 8 }}>
-        <input
-          value={tonInput} onChange={e => setTonInput(e.target.value)} type="number" step="0.01"
-          placeholder="TON"
-          style={{ flex: 1, background: "rgba(30,45,69,0.6)", border: "1px solid rgba(30,58,143,0.4)", borderRadius: 10, padding: "10px 12px", color: "#f1f5f9", fontFamily: "inherit", fontSize: 13, outline: "none" }}
-        />
-        <button
-          onClick={handleBuy}
-          disabled={buying || tonAmt <= 0 || tonAmt > userTon}
-          style={{
-            padding: "10px 12px", borderRadius: 10, border: "none", fontFamily: "inherit",
-            background: "linear-gradient(135deg,#1d4ed8,#2563eb)",
-            color: "#fff", fontSize: 12, fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap",
-            opacity: (buying || tonAmt > userTon) ? 0.5 : 1,
-          }}
-        >
-          {buying ? "…" : `→${Math.floor(tonAmt * 1000).toLocaleString()} TONYX`}
-        </button>
       </div>
     </div>
   );

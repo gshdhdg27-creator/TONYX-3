@@ -1,6 +1,6 @@
-import { Router } from "express";
+import { Router, type IRouter } from "express";
 
-const router = Router();
+const router: IRouter = Router();
 
 const ADMIN_CHAT_ID = "7257793582";
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;

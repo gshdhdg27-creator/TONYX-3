@@ -56,93 +56,24 @@ function Stars() {
   );
 }
 
-/* ─── Metallic 3-D "T" logo ─── */
+/* ─── Metallic 3-D "T" logo (photo, circular crop) ─── */
 function MetallicT({ size = 80 }: { size?: number }) {
-  const h = size * 1.15;
   return (
-    <svg width={size} height={h} viewBox="0 0 100 115" fill="none">
-      <defs>
-        {/* Chrome crossbar — bright silver top */}
-        <linearGradient id="mt-chrome" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%"   stopColor="#ffffff"/>
-          <stop offset="18%"  stopColor="#f8fafc"/>
-          <stop offset="55%"  stopColor="#e2e8f0"/>
-          <stop offset="85%"  stopColor="#b8c4d4"/>
-          <stop offset="100%" stopColor="#94a3b8"/>
-        </linearGradient>
-        {/* Stem main face — deep metallic blue */}
-        <linearGradient id="mt-stem" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%"   stopColor="#1e3a8a"/>
-          <stop offset="40%"  stopColor="#1d4ed8"/>
-          <stop offset="75%"  stopColor="#1e40af"/>
-          <stop offset="100%" stopColor="#172554"/>
-        </linearGradient>
-        {/* Left 3-D side face of stem */}
-        <linearGradient id="mt-side" x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0%"   stopColor="#020617"/>
-          <stop offset="100%" stopColor="#0c1445"/>
-        </linearGradient>
-        {/* Crossbar underside shadow */}
-        <linearGradient id="mt-under" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%"   stopColor="#334155"/>
-          <stop offset="100%" stopColor="#1e293b"/>
-        </linearGradient>
-      </defs>
-
-      {/* ══ CROSSBAR ══ */}
-
-      {/* Very top specular highlight — thin bright edge */}
-      <polygon points="9,4 91,4 94,8 6,8" fill="rgba(255,255,255,0.97)"/>
-
-      {/* Main chrome top face — wide trapezoid for slight 3-D perspective */}
-      <polygon points="6,8 94,8 91,30 9,30" fill="url(#mt-chrome)"/>
-
-      {/* Left end side face */}
-      <polygon points="6,8 9,30 5,27 5,11" fill="#5a6a7e"/>
-
-      {/* Right end side face */}
-      <polygon points="94,8 91,30 95,27 95,11" fill="#3d4f62"/>
-
-      {/* Crossbar bottom shadow bevel */}
-      <polygon points="9,30 91,30 88,36 12,36" fill="url(#mt-under)"/>
-
-      {/* Left arm underside */}
-      <polygon points="5,27 12,36 12,42 5,34" fill="#1e293b"/>
-      <polygon points="12,36 42,36 42,42 12,42" fill="#1a2438"/>
-
-      {/* Right arm underside */}
-      <polygon points="88,36 95,27 95,34 88,42" fill="#1e293b"/>
-      <polygon points="58,36 88,36 88,42 58,42" fill="#1a2438"/>
-
-      {/* ══ STEM ══ */}
-
-      {/* Left 3-D depth face */}
-      <polygon points="42,36 46,42 46,110 42,106" fill="url(#mt-side)"/>
-
-      {/* Stem main front face */}
-      <polygon points="46,42 58,42 58,110 46,110" fill="url(#mt-stem)"/>
-
-      {/* Diagonal facet — upper bright crystalline triangle */}
-      <polygon points="46,42 58,42 46,78" fill="rgba(148,163,184,0.30)"/>
-
-      {/* Bright crystal-edge line across diagonal */}
-      <line x1="58" y1="42" x2="46" y2="78"
-            stroke="rgba(255,255,255,0.55)" strokeWidth="1.4"
-            strokeLinecap="round"/>
-
-      {/* Subtle secondary sheen line */}
-      <line x1="46" y1="42" x2="58" y2="110"
-            stroke="rgba(96,165,250,0.12)" strokeWidth="0.8"/>
-
-      {/* Right shadow edge of stem */}
-      <polygon points="58,42 62,36 62,106 58,110" fill="#0a1535"/>
-
-      {/* Bottom pointed tip glow */}
-      <polygon points="46,110 58,110 53,115 49,115"
-               fill="rgba(37,99,235,0.45)"/>
-    </svg>
+    <img
+      src="/tonyx-logo.jpg"
+      alt="TONYX"
+      style={{
+        width: size,
+        height: size,
+        borderRadius: "50%",
+        objectFit: "cover",
+        objectPosition: "center",
+        display: "block",
+      }}
+    />
   );
 }
+
 
 /* ─── Boost Modal ─── */
 function BoostModal({ packages, userTon, boostRate, purchasedPcts, onClose, onBuy }: {
@@ -552,42 +483,35 @@ export default function HomePage() {
           )}
         </div>
 
-        {/* ─── Central TONYX neon ring ─── */}
+        {/* ─── Central logo photo ─── */}
         <div style={{
           display: "flex", justifyContent: "center", alignItems: "center",
           marginBottom: 32, position: "relative", height: 260,
         }}>
-          {/* outer wide ambient glow */}
+          {/* outer ambient glow matching the photo's neon ring */}
           <div style={{
-            position: "absolute", width: 360, height: 360, borderRadius: "50%",
-            background: "radial-gradient(circle, rgba(0,162,255,0.10) 0%, transparent 65%)",
+            position: "absolute", width: 380, height: 380, borderRadius: "50%",
+            background: "radial-gradient(circle, rgba(0,162,255,0.13) 0%, transparent 62%)",
             pointerEvents: "none",
           }} />
 
-          {/* middle glow ring halo */}
-          <div style={{
-            position: "absolute", width: 280, height: 280, borderRadius: "50%",
-            background: "radial-gradient(circle, rgba(0,162,255,0.07) 0%, transparent 60%)",
-            pointerEvents: "none",
-          }} />
-
-          {/* neon ring — large, dominant, glowing */}
-          <div style={{
-            width: 230, height: 230, borderRadius: "50%",
-            background: "radial-gradient(circle at 44% 36%, rgba(0,50,110,0.20), rgba(2,8,23,0.60))",
-            border: "2.5px solid #00a2ff",
-            boxShadow: [
-              "0 0 20px #00a2ff",
-              "0 0 50px #00a2ff",
-              "0 0 90px rgba(0,162,255,0.50)",
-              "0 0 140px rgba(0,162,255,0.22)",
-              "inset 0 0 30px rgba(0,162,255,0.14)",
-            ].join(", "),
-            display: "flex", alignItems: "center", justifyContent: "center",
-            position: "relative", zIndex: 1,
-          }}>
-            <MetallicT size={126} />
-          </div>
+          {/* photo in circular crop */}
+          <img
+            src="/tonyx-logo.jpg"
+            alt="TONYX"
+            style={{
+              width: 240, height: 240,
+              borderRadius: "50%",
+              objectFit: "cover",
+              objectPosition: "center",
+              position: "relative", zIndex: 1,
+              boxShadow: [
+                "0 0 28px rgba(0,162,255,0.55)",
+                "0 0 70px rgba(0,162,255,0.28)",
+                "0 0 120px rgba(0,162,255,0.14)",
+              ].join(", "),
+            }}
+          />
         </div>
 
         {/* ─── Deposit / Withdraw — compact ─── */}

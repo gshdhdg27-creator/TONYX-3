@@ -58,59 +58,88 @@ function Stars() {
 
 /* ─── Metallic 3-D "T" logo ─── */
 function MetallicT({ size = 80 }: { size?: number }) {
+  const h = size * 1.15;
   return (
-    <svg width={size} height={size} viewBox="0 0 100 112" fill="none">
+    <svg width={size} height={h} viewBox="0 0 100 115" fill="none">
       <defs>
+        {/* Chrome crossbar — bright silver top */}
         <linearGradient id="mt-chrome" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%"   stopColor="#f8fafc"/>
-          <stop offset="30%"  stopColor="#ffffff"/>
-          <stop offset="65%"  stopColor="#cbd5e1"/>
+          <stop offset="0%"   stopColor="#ffffff"/>
+          <stop offset="18%"  stopColor="#f8fafc"/>
+          <stop offset="55%"  stopColor="#e2e8f0"/>
+          <stop offset="85%"  stopColor="#b8c4d4"/>
           <stop offset="100%" stopColor="#94a3b8"/>
         </linearGradient>
+        {/* Stem main face — deep metallic blue */}
         <linearGradient id="mt-stem" x1="0" y1="0" x2="1" y2="1">
           <stop offset="0%"   stopColor="#1e3a8a"/>
-          <stop offset="55%"  stopColor="#2563eb"/>
-          <stop offset="100%" stopColor="#1d4ed8"/>
+          <stop offset="40%"  stopColor="#1d4ed8"/>
+          <stop offset="75%"  stopColor="#1e40af"/>
+          <stop offset="100%" stopColor="#172554"/>
         </linearGradient>
-        <linearGradient id="mt-leftface" x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0%"   stopColor="#0f172a"/>
-          <stop offset="100%" stopColor="#1e3a8a"/>
+        {/* Left 3-D side face of stem */}
+        <linearGradient id="mt-side" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%"   stopColor="#020617"/>
+          <stop offset="100%" stopColor="#0c1445"/>
         </linearGradient>
-        <linearGradient id="mt-bevel" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%"   stopColor="#60a5fa" stopOpacity="0.6"/>
-          <stop offset="100%" stopColor="#1d4ed8" stopOpacity="0.2"/>
+        {/* Crossbar underside shadow */}
+        <linearGradient id="mt-under" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%"   stopColor="#334155"/>
+          <stop offset="100%" stopColor="#1e293b"/>
         </linearGradient>
       </defs>
 
-      {/* ── Crossbar ── */}
-      {/* top highlight edge */}
-      <polygon points="8,10 92,10 96,14 4,14" fill="rgba(255,255,255,0.85)"/>
-      {/* main chrome face */}
-      <rect x="4" y="14" width="92" height="21" fill="url(#mt-chrome)"/>
-      {/* bottom shadow bevel */}
-      <polygon points="4,35 96,35 92,39 8,39" fill="#64748b"/>
-      {/* left cheek drop */}
-      <polygon points="4,35 8,39 8,44 4,40" fill="#475569"/>
-      {/* right cheek drop */}
-      <polygon points="96,35 92,39 92,44 96,40" fill="#334155"/>
-      {/* left wing underside */}
-      <polygon points="8,39 39,39 39,44 8,44" fill="#334155"/>
-      {/* right wing underside */}
-      <polygon points="61,39 92,39 92,44 61,44" fill="#334155"/>
+      {/* ══ CROSSBAR ══ */}
 
-      {/* ── Stem ── */}
-      {/* left dark face */}
-      <polygon points="39,39 43,43 43,108 39,104" fill="url(#mt-leftface)"/>
-      {/* main stem face */}
-      <polygon points="43,43 57,43 57,108 43,108" fill="url(#mt-stem)"/>
-      {/* diagonal slash / highlight */}
-      <polygon points="43,43 57,43 57,78 43,60" fill="rgba(148,163,184,0.22)"/>
-      {/* silver diagonal line accent */}
-      <line x1="43" y1="43" x2="57" y2="78" stroke="rgba(255,255,255,0.18)" strokeWidth="1.2"/>
-      {/* right shadow edge */}
-      <polygon points="57,43 61,39 61,104 57,108" fill="#172554"/>
-      {/* bottom tip */}
-      <polygon points="43,108 57,108 51,112 49,112" fill="rgba(96,165,250,0.25)"/>
+      {/* Very top specular highlight — thin bright edge */}
+      <polygon points="9,4 91,4 94,8 6,8" fill="rgba(255,255,255,0.97)"/>
+
+      {/* Main chrome top face — wide trapezoid for slight 3-D perspective */}
+      <polygon points="6,8 94,8 91,30 9,30" fill="url(#mt-chrome)"/>
+
+      {/* Left end side face */}
+      <polygon points="6,8 9,30 5,27 5,11" fill="#5a6a7e"/>
+
+      {/* Right end side face */}
+      <polygon points="94,8 91,30 95,27 95,11" fill="#3d4f62"/>
+
+      {/* Crossbar bottom shadow bevel */}
+      <polygon points="9,30 91,30 88,36 12,36" fill="url(#mt-under)"/>
+
+      {/* Left arm underside */}
+      <polygon points="5,27 12,36 12,42 5,34" fill="#1e293b"/>
+      <polygon points="12,36 42,36 42,42 12,42" fill="#1a2438"/>
+
+      {/* Right arm underside */}
+      <polygon points="88,36 95,27 95,34 88,42" fill="#1e293b"/>
+      <polygon points="58,36 88,36 88,42 58,42" fill="#1a2438"/>
+
+      {/* ══ STEM ══ */}
+
+      {/* Left 3-D depth face */}
+      <polygon points="42,36 46,42 46,110 42,106" fill="url(#mt-side)"/>
+
+      {/* Stem main front face */}
+      <polygon points="46,42 58,42 58,110 46,110" fill="url(#mt-stem)"/>
+
+      {/* Diagonal facet — upper bright crystalline triangle */}
+      <polygon points="46,42 58,42 46,78" fill="rgba(148,163,184,0.30)"/>
+
+      {/* Bright crystal-edge line across diagonal */}
+      <line x1="58" y1="42" x2="46" y2="78"
+            stroke="rgba(255,255,255,0.55)" strokeWidth="1.4"
+            strokeLinecap="round"/>
+
+      {/* Subtle secondary sheen line */}
+      <line x1="46" y1="42" x2="58" y2="110"
+            stroke="rgba(96,165,250,0.12)" strokeWidth="0.8"/>
+
+      {/* Right shadow edge of stem */}
+      <polygon points="58,42 62,36 62,106 58,110" fill="#0a1535"/>
+
+      {/* Bottom pointed tip glow */}
+      <polygon points="46,110 58,110 53,115 49,115"
+               fill="rgba(37,99,235,0.45)"/>
     </svg>
   );
 }
@@ -516,42 +545,48 @@ export default function HomePage() {
             {animMined.toFixed(9)}
             <span style={{ fontSize: 15, color: "#00a2ff", marginLeft: 8, fontFamily: "inherit" }}>TON</span>
           </div>
-          <div style={{ fontSize: 11, color: "#475569", marginTop: 4 }}>
-            {hasPrincipal
-              ? <>Вложено: <b style={{ color: "#a5f3fc" }}>{inv!.principal.toFixed(4)} TON</b>{" · +"}<b style={{ color: "#4ade80" }}>{dailyEarn.toFixed(6)}</b>/день</>
-              : <>Базовая доходность: <b style={{ color: "#4ade80" }}>+{ratePerDay.toFixed(1)}%</b>/день · пополни чтобы начать</>
-            }
-          </div>
+          {hasPrincipal && (
+            <div style={{ fontSize: 11, color: "#475569", marginTop: 4 }}>
+              Вложено: <b style={{ color: "#a5f3fc" }}>{inv!.principal.toFixed(4)} TON</b>{" · +"}<b style={{ color: "#4ade80" }}>{dailyEarn.toFixed(6)}</b>/день
+            </div>
+          )}
         </div>
 
         {/* ─── Central TONYX neon ring ─── */}
         <div style={{
           display: "flex", justifyContent: "center", alignItems: "center",
-          marginBottom: 24, position: "relative", height: 168,
+          marginBottom: 32, position: "relative", height: 260,
         }}>
-          {/* outer ambient glow */}
+          {/* outer wide ambient glow */}
           <div style={{
-            position: "absolute", width: 240, height: 240, borderRadius: "50%",
-            background: "radial-gradient(circle, rgba(0,162,255,0.12) 0%, transparent 68%)",
+            position: "absolute", width: 360, height: 360, borderRadius: "50%",
+            background: "radial-gradient(circle, rgba(0,162,255,0.10) 0%, transparent 65%)",
             pointerEvents: "none",
           }} />
 
-          {/* neon ring — transparent inside, glowing border */}
+          {/* middle glow ring halo */}
           <div style={{
-            width: 148, height: 148, borderRadius: "50%",
-            background: "radial-gradient(circle at 45% 35%, rgba(0,60,120,0.18), rgba(2,8,23,0.55))",
+            position: "absolute", width: 280, height: 280, borderRadius: "50%",
+            background: "radial-gradient(circle, rgba(0,162,255,0.07) 0%, transparent 60%)",
+            pointerEvents: "none",
+          }} />
+
+          {/* neon ring — large, dominant, glowing */}
+          <div style={{
+            width: 230, height: 230, borderRadius: "50%",
+            background: "radial-gradient(circle at 44% 36%, rgba(0,50,110,0.20), rgba(2,8,23,0.60))",
             border: "2.5px solid #00a2ff",
             boxShadow: [
-              "0 0 18px #00a2ff",
-              "0 0 40px #00a2ff",
-              "0 0 70px rgba(0,162,255,0.45)",
-              "0 0 100px rgba(0,162,255,0.2)",
-              "inset 0 0 22px rgba(0,162,255,0.18)",
+              "0 0 20px #00a2ff",
+              "0 0 50px #00a2ff",
+              "0 0 90px rgba(0,162,255,0.50)",
+              "0 0 140px rgba(0,162,255,0.22)",
+              "inset 0 0 30px rgba(0,162,255,0.14)",
             ].join(", "),
             display: "flex", alignItems: "center", justifyContent: "center",
             position: "relative", zIndex: 1,
           }}>
-            <MetallicT size={82} />
+            <MetallicT size={126} />
           </div>
         </div>
 
@@ -589,34 +624,6 @@ export default function HomePage() {
           </button>
         </div>
 
-        {/* ─── Start mining CTA ─── */}
-        {!hasPrincipal && userTon > 0 && (
-          <div style={{
-            background: "linear-gradient(135deg,rgba(5,46,36,0.8),rgba(6,78,59,0.5))",
-            border: "1px solid rgba(16,185,129,0.5)", borderRadius: 18, padding: "16px",
-            textAlign: "center", boxShadow: "0 0 24px rgba(16,185,129,0.1)",
-          }}>
-            <div style={{ fontSize: 24, marginBottom: 6 }}>🌱</div>
-            <div style={{ fontSize: 14, fontWeight: 800, color: "#4ade80", marginBottom: 4 }}>
-              Запустите майнинг прямо сейчас!
-            </div>
-            <div style={{ fontSize: 11, color: "#6ee7b7", marginBottom: 12, lineHeight: 1.5 }}>
-              У вас <b style={{ color: "#fbbf24" }}>{userTon.toFixed(4)} TON</b> на балансе.<br />
-              Вложите и получайте <b style={{ color: "#4ade80" }}>+{ratePerDay.toFixed(1)}%</b> в день.
-            </div>
-            <button
-              onClick={() => { haptic("medium"); setShowDeposit(true); }}
-              style={{
-                padding: "11px 28px", borderRadius: 12, border: "none", fontFamily: "inherit",
-                background: "linear-gradient(135deg,#065f46,#059669)",
-                color: "#fff", fontSize: 14, fontWeight: 900, cursor: "pointer",
-                boxShadow: "0 0 20px rgba(16,185,129,0.4)",
-              }}
-            >
-              🚀 Начать майнинг
-            </button>
-          </div>
-        )}
       </div>
     </div>
   );

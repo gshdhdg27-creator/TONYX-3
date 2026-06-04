@@ -1,7 +1,7 @@
 // ─── TEST MODE ────────────────────────────────────────────────────────────────
 // Set IS_TEST_MODE = true to use AdsGram's built-in debug banner (no real inventory
 // needed). Switch to false in production once block 33819 has live inventory.
-export const IS_TEST_MODE = false;
+export const IS_TEST_MODE = true;
 
 export const ADSGRAM_BLOCK_ID = import.meta.env.VITE_ADSGRAM_BLOCK_ID ?? "33819";
 

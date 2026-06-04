@@ -514,19 +514,18 @@ export default function HomePage() {
               "inset 0 0 20px rgba(0,162,255,0.08)",
             ].join(", "),
           }}>
-            {/* image scaled so its own neon ring coincides with the container's 250px boundary */}
-            {/* photo ring ≈ 83% of image → 250 / 0.83 ≈ 301px display size */}
             <img
               src="/tonyx-logo.jpg"
               alt="TONYX"
               style={{
-                width: 301,
-                height: 301,
-                position: "absolute",
-                top: "50%",
-                left: "50%",
-                transform: "translate(-50%, -50%)",
+                width: "100%",
+                height: "100%",
+                objectFit: "cover",
+                objectPosition: "center",
                 display: "block",
+                /* zoom in so the photo's neon ring aligns with the clip edge */
+                transform: "scale(1.20)",
+                transformOrigin: "center center",
               }}
             />
           </div>

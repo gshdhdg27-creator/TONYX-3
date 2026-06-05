@@ -415,18 +415,14 @@ export default function HomePage() {
       <div style={{ position: "relative", zIndex: 1, padding: "16px 16px 100px" }}>
 
         {/* ─── Top bar ─── */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
+        <div style={{ display: "flex", alignItems: "center", marginBottom: 18 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#22c55e", boxShadow: "0 0 8px #22c55e" }} />
             <span style={{ fontSize: 11, color: "#22c55e", fontWeight: 700 }}>{onlineUsers.toLocaleString()} онлайн</span>
           </div>
-          <div style={{ textAlign: "right" }}>
-            <div style={{ fontSize: 14, fontWeight: 800, color: "#fbbf24" }}>{userTon.toFixed(4)} TON</div>
-            <div style={{ fontSize: 10, color: "#475569" }}>{userTonyx.toLocaleString()} TONYX</div>
-          </div>
         </div>
 
-        {/* ─── Rate bar — only BOOST button ─── */}
+        {/* ─── Rate bar + BOOST ─── */}
         <div style={{
           display: "flex", alignItems: "center", justifyContent: "space-between",
           background: "rgba(15,23,42,0.7)", border: "1px solid rgba(0,162,255,0.12)",
@@ -533,8 +529,8 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* ─── Deposit / Withdraw — compact ─── */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
+        {/* ─── Deposit / Withdraw ─── */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
           <button
             onClick={() => { haptic("medium"); setShowDeposit(true); }}
             style={{
@@ -545,7 +541,10 @@ export default function HomePage() {
               display: "flex", alignItems: "center", justifyContent: "center", gap: 7,
             }}
           >
-            <span style={{ fontSize: 18 }}>🔽</span>
+            <svg width="18" height="18" viewBox="0 0 56 56" fill="none">
+              <circle cx="28" cy="28" r="28" fill="#0098EA"/>
+              <path d="M36.8 15H19.2c-3.3 0-5.3 3.7-3.4 6.4l10 14.8c1.4 2 4.2 2 5.6 0l10-14.8c1.9-2.7-.1-6.4-3.6-6.4z" fill="white"/>
+            </svg>
             <span>Пополнить</span>
           </button>
 
@@ -562,10 +561,14 @@ export default function HomePage() {
               opacity: withdrawing ? 0.7 : 1,
             }}
           >
-            <span style={{ fontSize: 18 }}>🔼</span>
+            <svg width="18" height="18" viewBox="0 0 56 56" fill="none" style={{ transform: "rotate(180deg)" }}>
+              <circle cx="28" cy="28" r="28" fill={hasPrincipal ? "#fff" : "#475569"}/>
+              <path d="M36.8 15H19.2c-3.3 0-5.3 3.7-3.4 6.4l10 14.8c1.4 2 4.2 2 5.6 0l10-14.8c1.9-2.7-.1-6.4-3.6-6.4z" fill={hasPrincipal ? "#dc2626" : "#1e293b"}/>
+            </svg>
             <span>{withdrawing ? "…" : "Вывести"}</span>
           </button>
         </div>
+
 
       </div>
     </div>

@@ -1621,11 +1621,12 @@ export default function GamesPage() {
           <div style={{ fontSize: 22, fontWeight: 700, color: "#E5E7EB", letterSpacing: "-0.02em" }}>Игры</div>
           <div style={{ fontSize: 13, color: "#6B7280", marginTop: 3 }}>Выбери и начни играть</div>
         </div>
-        <div style={{ background: "#151C26", border: "1px solid #222C3A", borderRadius: 12, padding: "8px 14px", textAlign: "right", cursor: "pointer" }}
-          onClick={() => openHistory("arena")}>
-          <div style={{ fontSize: 16, fontWeight: 700, color: "#F59E0B" }}>{tonBalance.toFixed(3)}</div>
-          <div style={{ fontSize: 9, color: "#6B7280", letterSpacing: "0.07em", fontWeight: 600, marginTop: 1 }}>TON · История</div>
-        </div>
+        <button
+          onClick={() => openHistory("arena")}
+          style={{ background: "#151C26", border: "1px solid #222C3A", borderRadius: 12, padding: "8px 14px", cursor: "pointer", fontFamily: "inherit", color: "#9CA3AF", fontSize: 12, fontWeight: 600 }}
+        >
+          📜 История
+        </button>
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>

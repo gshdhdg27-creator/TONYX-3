@@ -204,42 +204,63 @@ export default function ProfilePage() {
         </button>
       </div>
 
-      {/* ─── Balance cards ─── */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
+      {/* ─── Balance pills ─── */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
         {/* TON */}
         <div style={{
-          background: "linear-gradient(135deg, rgba(30,58,143,0.5), rgba(37,99,235,0.2))",
-          border: "1px solid rgba(96,165,250,0.35)", borderRadius: 16, padding: "14px 16px",
-          boxShadow: "0 0 24px rgba(37,99,235,0.15)",
+          display: "flex", alignItems: "center", gap: 10,
+          background: "rgba(0,152,234,0.13)",
+          border: "1px solid rgba(0,152,234,0.35)",
+          borderRadius: 18, padding: "12px 16px",
+          boxShadow: "0 0 18px rgba(0,152,234,0.1)",
         }}>
-          <div style={{ fontSize: 9, color: "#93c5fd", letterSpacing: "0.2em", fontWeight: 700, marginBottom: 6 }}>{tp.tonBalance}</div>
-          <div style={{ fontSize: 22, fontWeight: 900, color: "#fbbf24", fontVariantNumeric: "tabular-nums" }}>
-            {userTon.toFixed(4)}
-          </div>
-          <div style={{ fontSize: 10, color: "#475569", marginTop: 2 }}>TON</div>
-          {boostRate > 0 && (
-            <div style={{ fontSize: 10, color: "#4ade80", marginTop: 4, fontWeight: 700 }}>
-              {tp.boost((boostRate * 100))}
+          <svg width="36" height="36" viewBox="0 0 56 56" fill="none" style={{ flexShrink: 0 }}>
+            <circle cx="28" cy="28" r="28" fill="#0098EA"/>
+            <path d="M36.8 15H19.2c-3.3 0-5.3 3.7-3.4 6.4l10 14.8c1.4 2 4.2 2 5.6 0l10-14.8c1.9-2.7-.1-6.4-3.6-6.4z" fill="white"/>
+          </svg>
+          <div>
+            <div style={{ fontSize: 9, color: "rgba(0,162,255,0.7)", letterSpacing: "0.15em", fontWeight: 700, textTransform: "uppercase" }}>TON</div>
+            <div style={{ fontSize: 20, fontWeight: 900, color: "#fff", fontVariantNumeric: "tabular-nums", lineHeight: 1.1 }}>
+              {userTon.toFixed(3)}
             </div>
-          )}
+            {boostRate > 0 && (
+              <div style={{ fontSize: 9, color: "#4ade80", fontWeight: 700, marginTop: 2 }}>
+                {tp.boost((boostRate * 100))}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* TONYX */}
         <div style={{
-          background: "linear-gradient(135deg, rgba(109,40,217,0.4), rgba(139,92,246,0.15))",
-          border: "1px solid rgba(167,139,250,0.35)", borderRadius: 16, padding: "14px 16px",
-          boxShadow: "0 0 24px rgba(139,92,246,0.15)",
+          display: "flex", alignItems: "center", gap: 10,
+          background: "rgba(0,100,200,0.13)",
+          border: "1px solid rgba(0,162,255,0.28)",
+          borderRadius: 18, padding: "12px 16px",
+          boxShadow: "0 0 18px rgba(0,162,255,0.08)",
         }}>
-          <div style={{ fontSize: 9, color: "#c4b5fd", letterSpacing: "0.2em", fontWeight: 700, marginBottom: 6 }}>TONYX</div>
-          <div style={{ fontSize: 22, fontWeight: 900, color: "#a78bfa", fontVariantNumeric: "tabular-nums" }}>
-            <CountUp value={userTonyx} />
+          <div style={{
+            width: 36, height: 36, borderRadius: "50%",
+            border: "2px solid rgba(0,162,255,0.5)",
+            overflow: "hidden", flexShrink: 0, position: "relative",
+          }}>
+            <img src="/tonyx-logo.jpg" alt="TONYX" style={{
+              width: "140%", height: "140%", objectFit: "cover",
+              position: "absolute", top: "50%", left: "50%",
+              transform: "translate(-50%, -50%)",
+            }} />
           </div>
-          <div style={{ fontSize: 10, color: "#475569", marginTop: 2 }}>{tp.tonyxTokens}</div>
+          <div>
+            <div style={{ fontSize: 9, color: "rgba(0,162,255,0.7)", letterSpacing: "0.15em", fontWeight: 700, textTransform: "uppercase" }}>TONYX</div>
+            <div style={{ fontSize: 20, fontWeight: 900, color: "#fff", fontVariantNumeric: "tabular-nums", lineHeight: 1.1 }}>
+              <CountUp value={userTonyx} />
+            </div>
+          </div>
         </div>
       </div>
 
       {/* ─── Action buttons ─── */}
-      <div style={{ display: "flex", gap: 8, marginBottom: 18 }}>
+      <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
         <ActionButton icon="💸" label={tp.withdraw} active={section === "withdraw"} accent="#16a34a"
           onClick={() => { haptic("light"); setSection(section === "withdraw" ? "main" : "withdraw"); }} />
         <ActionButton icon="👥" label={tp.invite} active={section === "invite"} accent="#a855f7"

@@ -3,6 +3,7 @@ import { Switch, Route, Router as WouterRouter } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import BottomNav from "@/components/bottom-nav";
 import LanguageModal from "@/components/LanguageModal";
+import Header from "@/components/Header";
 import HomePage from "@/pages/home";
 import MarketPage from "@/pages/market";
 import GamesPage from "@/pages/games";
@@ -57,6 +58,7 @@ function AppShell() {
       {/* Language selection modal — shown only on first launch */}
       <LanguageModal />
 
+      <Header />
       <main style={{ flex: 1, overflowY: "auto", overflowX: "hidden", paddingBottom: 74 }}>
         <Switch>
           <Route path="/" component={HomePage} />

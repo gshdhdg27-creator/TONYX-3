@@ -13,8 +13,11 @@ import adminRouter from "./admin.js";
 import investmentsRouter from "./investments.js";
 import boostsRouter from "./boosts.js";
 import languageRouter from "./language.js";
+import { telegramAuthMiddleware } from "../../middleware/verifyTelegram.js";
 
 const router: IRouter = Router();
+
+router.use(telegramAuthMiddleware);
 
 router.use("/language", languageRouter);
 router.use("/earn", earnRouter);

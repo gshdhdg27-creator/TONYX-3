@@ -92,7 +92,6 @@ export default function TasksPage() {
     return () => clearInterval(timer);
   }, [countdown > 0]); // re-run only when countdown transitions from 0→positive
 
-  const userTon = Number((profile as { ton?: string | number } | undefined)?.ton ?? 0);
 
   /* ── Ad watch ── */
   const recordWatch = useRecordMiniAdWatch({
@@ -190,15 +189,9 @@ export default function TasksPage() {
       {toast && <Toast msg={toast.msg} type={toast.type} />}
 
       {/* Page header */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-        <div>
-          <div style={{ fontSize: 22, fontWeight: 700 }}>{t.tasks.title}</div>
-          <div style={{ fontSize: 13, color: "#64748b" }}>{t.tasks.subtitle}</div>
-        </div>
-        <div style={{ textAlign: "right" }}>
-          <div style={{ fontSize: 16, fontWeight: 700, color: "#fbbf24" }}>{userTon.toFixed(4)}</div>
-          <div style={{ fontSize: 11, color: "#64748b" }}>TON</div>
-        </div>
+      <div style={{ marginBottom: 16 }}>
+        <div style={{ fontSize: 22, fontWeight: 700 }}>{t.tasks.title}</div>
+        <div style={{ fontSize: 13, color: "#64748b" }}>{t.tasks.subtitle}</div>
       </div>
 
       {/* ── WATCH AD SECTION ── */}

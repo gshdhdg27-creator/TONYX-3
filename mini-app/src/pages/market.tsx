@@ -649,18 +649,12 @@ export default function MarketPage() {
       )}
 
       {/* ── HEADER ── */}
-      <div style={{ padding: "14px 16px 0" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
-          <div>
-            <div style={{ fontSize: 22, fontWeight: 900, color: "#f1f5f9", letterSpacing: "-0.01em" }}>🏪 {m.title}</div>
-            <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 3 }}>
-              <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#22c55e", boxShadow: "0 0 8px #22c55e" }} />
-              <span style={{ fontSize: 11, color: "#22c55e", fontWeight: 800, letterSpacing: "0.1em" }}>{m.liveStatus}</span>
-            </div>
-          </div>
-          <div style={{ background: "rgba(10,18,40,0.95)", border: "1px solid rgba(30,58,143,0.4)", borderRadius: 14, padding: "8px 12px", textAlign: "right" }}>
-            <div style={{ fontSize: 13, fontWeight: 900, color: "#60a5fa" }}>{tonyxBalance.toLocaleString()} <span style={{ fontSize: 10, color: "#3b5998" }}>TONYX</span></div>
-            <div style={{ fontSize: 12, fontWeight: 800, color: "#fbbf24" }}>{tonBalance.toFixed(3)} <span style={{ fontSize: 10, color: "#92400e" }}>TON</span></div>
+      <div style={{ padding: "16px 16px 0" }}>
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ fontSize: 22, fontWeight: 900, color: "#f1f5f9", letterSpacing: "-0.01em" }}>🏪 {m.title}</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 3 }}>
+            <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#22c55e", boxShadow: "0 0 8px #22c55e" }} />
+            <span style={{ fontSize: 11, color: "#22c55e", fontWeight: 800, letterSpacing: "0.1em" }}>{m.liveStatus}</span>
           </div>
         </div>
 

@@ -1,102 +1,179 @@
-import { useState, useEffect, useCallback } from "react";
-import { useGetMiniMarketPool, useGetUserProfile, getGetUserProfileQueryKey } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { useGetMiniMarketPool, useGetUserProfile } from "@workspace/api-client-react";
 import { useTelegram, haptic, hapticNotify } from "@/lib/telegram";
+import { useLang } from "@/lib/LanguageContext";
 
-/* ─── Types ─── */
-type Category = "start" | "pro" | "elite";
-type Tab = "all" | Category;
+/* ══════════════════════════════════════════════
+   CONSTANTS & TYPES
+══════════════════════════════════════════════ */
+const RATE = 50;        // 1 TON = 50 TONYX
+const EXP_PER_BUY = 25;
+
+type Tier = "start" | "base" | "pro" | "elite";
+type MainTab = "market" | "mine";
+type TierFilter = "all" | Tier;
+
+const TIER_CFG = {
+  start: { label: "START", range: "3–10 TON",   min: 3,   max: 10,       bonusPct: 0.5, bonusLabel: "+0.5%", color: "#22d3ee", bg: "rgba(6,182,212,0.12)",  border: "rgba(6,182,212,0.3)"   },
+  base:  { label: "BASE",  range: "10–50 TON",  min: 10,  max: 50,       bonusPct: 1,   bonusLabel: "+1%",   color: "#60a5fa", bg: "rgba(37,99,235,0.12)",  border: "rgba(96,165,250,0.3)"  },
+  pro:   { label: "PRO",   range: "50–100 TON", min: 50,  max: 100,      bonusPct: 2,   bonusLabel: "+2%",   color: "#a78bfa", bg: "rgba(109,40,217,0.12)", border: "rgba(167,139,250,0.3)" },
+  elite: { label: "ELITE", range: "100+ TON",   min: 100, max: Infinity, bonusPct: 3,   bonusLabel: "+3%",   color: "#fbbf24", bg: "rgba(180,83,9,0.15)",   border: "rgba(251,191,36,0.35)" },
+} as const;
+
+function detectTier(ton: number): Tier | null {
+  if (ton >= 3   && ton <= 10)  return "start";
+  if (ton > 10   && ton <= 50)  return "base";
+  if (ton > 50   && ton <= 100) return "pro";
+  if (ton > 100)                return "elite";
+  return null;
+}
 
 interface Order {
-  id: number; sellerId: string; sellerUsername: string | null;
-  amount: number; pricePerCoin: number; totalTon: number;
-  category: Category; bonusPct: number; bonusCoins: number; returnTon: number;
-  status: string; buyerId: string | null; createdAt: string;
+  id: number;
+  sellerId: string;
+  sellerUsername: string | null;
+  amount: number;
+  pricePerCoin: number;
+  totalTon: number;
+  category: Tier;
+  bonusPct: number;
+  bonusCoins: number;
+  returnTon: number;
+  status: string;
+  buyerId: string | null;
+  createdAt: string;
 }
 
-const CAT_CONFIG: Record<Category, { label: string; color: string; bg: string; range: string; bonus: string }> = {
-  start: { label: "START",  color: "#60a5fa", bg: "rgba(30,64,175,0.15)", range: "1–10 TON",   bonus: "+1%" },
-  pro:   { label: "PRO",    color: "#a78bfa", bg: "rgba(109,40,217,0.15)", range: "10–25 TON", bonus: "+2%" },
-  elite: { label: "ELITE",  color: "#fbbf24", bg: "rgba(180,83,9,0.15)",  range: "25+ TON",   bonus: "+3%" },
-};
-
-/* ─── Toast ─── */
-function Toast({ msg, type }: { msg: string; type: "success"|"error"|"info" }) {
-  const bg = type==="success"?"rgba(22,163,74,0.95)":type==="error"?"rgba(220,38,38,0.95)":"rgba(30,64,175,0.95)";
-  return <div style={{position:"fixed",top:16,left:"50%",transform:"translateX(-50%)",background:bg,color:"#fff",padding:"12px 20px",borderRadius:12,fontSize:14,fontWeight:600,zIndex:9999,maxWidth:"calc(100% - 32px)",boxShadow:"0 8px 28px rgba(0,0,0,0.5)"}}>{msg}</div>;
+interface MarketStats {
+  inOrdersTon: number;
+  volume24h: number;
+  avgProfit: number;
+  openCount: number;
 }
 
-/* ─── Category badge ─── */
-function CatBadge({ cat }: { cat: Category }) {
-  const c = CAT_CONFIG[cat];
-  return <div style={{display:"inline-block",padding:"2px 8px",borderRadius:6,background:c.bg,color:c.color,fontSize:9,fontWeight:800,letterSpacing:"0.12em",border:`1px solid ${c.color}30`}}>{c.label}</div>;
+/* ══════════════════════════════════════════════
+   LIVE TICKER EVENTS
+══════════════════════════════════════════════ */
+const LIVE_EVENTS_RU = [
+  "Alex купил 500 TONYX · 10 TON · START",
+  "Maria выкупила ордер BASE · 1500 TONYX · 30 TON",
+  "Dmitry получил +3% бонус · ELITE · 100 TON",
+  "Ivan создал ордер PRO · 2500 TONYX · 50 TON",
+  "Olga купила 250 TONYX · 5 TON · START",
+  "Sergey выкупил ордер BASE · 3000 TONYX · 60 TON",
+  "Anna получила +1% бонус · BASE · 25 TON",
+];
+const LIVE_EVENTS_EN = [
+  "Alex bought 500 TONYX · 10 TON · START",
+  "Maria filled BASE order · 1500 TONYX · 30 TON",
+  "Dmitry earned +3% bonus · ELITE · 100 TON",
+  "Ivan created PRO offer · 2500 TONYX · 50 TON",
+  "Olga bought 250 TONYX · 5 TON · START",
+  "Sergey filled BASE order · 3000 TONYX · 60 TON",
+  "Anna earned +1% bonus · BASE · 25 TON",
+];
+
+/* ══════════════════════════════════════════════
+   SMALL REUSABLE COMPONENTS
+══════════════════════════════════════════════ */
+function Toast({ msg, type }: { msg: string; type: "success" | "error" | "info" }) {
+  const bg = type === "success" ? "rgba(22,163,74,0.97)" : type === "error" ? "rgba(220,38,38,0.97)" : "rgba(30,64,175,0.97)";
+  return (
+    <div style={{ position: "fixed", top: 16, left: "50%", transform: "translateX(-50%)", background: bg, color: "#fff", padding: "12px 20px", borderRadius: 14, fontSize: 14, fontWeight: 700, zIndex: 9999, maxWidth: "calc(100% - 32px)", boxShadow: "0 8px 32px rgba(0,0,0,0.5)", whiteSpace: "nowrap" }}>
+      {msg}
+    </div>
+  );
 }
 
-/* ─── Avatar ─── */
-function Avatar({ name, size=40 }: { name:string; size?:number }) {
-  const initials=(name??"?").slice(0,2).toUpperCase();
-  const colors=["#1d4ed8","#dc2626","#15803d","#b45309","#6d28d9","#0e7490","#be185d"];
-  const idx=name.charCodeAt(0)%colors.length;
-  return <div style={{width:size,height:size,borderRadius:"50%",background:colors[idx],display:"flex",alignItems:"center",justifyContent:"center",fontSize:size*0.35,fontWeight:700,color:"#fff",flexShrink:0,border:"2px solid rgba(255,255,255,0.1)"}}>{initials}</div>;
+function Avatar({ name, size = 42 }: { name: string; size?: number }) {
+  const initials = (name ?? "?").slice(0, 2).toUpperCase();
+  const palette = ["#1d4ed8","#dc2626","#15803d","#b45309","#6d28d9","#0e7490","#be185d","#0369a1"];
+  const idx = (name.charCodeAt(0) + (name.charCodeAt(1) || 0)) % palette.length;
+  return (
+    <div style={{ width: size, height: size, borderRadius: "50%", background: `radial-gradient(circle at 30% 30%, ${palette[idx]}cc, ${palette[idx]})`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: size * 0.36, fontWeight: 800, color: "#fff", flexShrink: 0, border: "2px solid rgba(255,255,255,0.12)", boxShadow: `0 2px 8px ${palette[idx]}60` }}>
+      {initials}
+    </div>
+  );
 }
 
-/* ─── Order card ─── */
-function OrderCard({ order, isMine, onBuy, onCancel, buying, cancelling }: {
+function TierBadge({ tier }: { tier: Tier }) {
+  const c = TIER_CFG[tier];
+  return (
+    <span style={{ display: "inline-block", padding: "2px 9px", borderRadius: 6, background: c.bg, color: c.color, fontSize: 9, fontWeight: 900, letterSpacing: "0.12em", border: `1px solid ${c.border}` }}>
+      {c.label}
+    </span>
+  );
+}
+
+function InfoCell({ label, value, unit, color = "#e2e8f0", highlight = false }: { label: string; value: string; unit: string; color?: string; highlight?: boolean }) {
+  return (
+    <div style={{ background: highlight ? "rgba(30,58,143,0.2)" : "rgba(15,28,55,0.7)", border: highlight ? "1px solid rgba(96,165,250,0.2)" : "1px solid rgba(30,45,80,0.6)", borderRadius: 11, padding: "9px 10px" }}>
+      <div style={{ fontSize: 8, color: "#475569", fontWeight: 700, letterSpacing: "0.1em", marginBottom: 3 }}>{label}</div>
+      <div style={{ fontSize: 15, fontWeight: 900, color, lineHeight: 1.1 }}>{value}</div>
+      <div style={{ fontSize: 9, color: "#4a5568", marginTop: 1 }}>{unit}</div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════
+   ORDER CARD
+══════════════════════════════════════════════ */
+function OrderCard({ order, isMine, onBuy, onCancel, buying, cancelling, t }: {
   order: Order; isMine: boolean;
-  onBuy:(id:number)=>void; onCancel:(id:number)=>void;
-  buying:boolean; cancelling:boolean;
+  onBuy: (o: Order) => void; onCancel: (id: number) => void;
+  buying: boolean; cancelling: boolean;
+  t: ReturnType<typeof useLang>["t"]["market"];
 }) {
-  const sellerName = order.sellerUsername ?? order.sellerId.slice(-6);
-  const cc = CAT_CONFIG[order.category] ?? CAT_CONFIG.start;
-  const statusColor = order.status==="open"?"#22c55e":order.status==="sold"?"#60a5fa":"#94a3b8";
+  const tier = TIER_CFG[order.category] ?? TIER_CFG.start;
+  const profit = Math.max(0, order.returnTon - order.totalTon);
+  const sellerName = order.sellerUsername ?? `user_${order.sellerId.slice(-5)}`;
 
   return (
-    <div style={{background:"rgba(15,23,42,0.95)",border:"1px solid rgba(30,58,143,0.3)",borderRadius:16,padding:14,marginBottom:10}}>
-      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
-        <Avatar name={sellerName} size={38}/>
-        <div style={{flex:1}}>
-          <div style={{fontSize:13,fontWeight:700,color:"#e2e8f0"}}>@{sellerName}</div>
-          <div style={{display:"flex",gap:6,alignItems:"center",marginTop:3}}>
-            <CatBadge cat={order.category}/>
-            <span style={{fontSize:10,color:"#475569"}}>· {cc.range}</span>
+    <div style={{ background: "linear-gradient(160deg, rgba(10,18,40,0.99) 0%, rgba(15,25,52,0.97) 100%)", border: `1px solid ${tier.border}`, borderRadius: 20, padding: "15px 14px 14px", marginBottom: 12, boxShadow: `0 4px 24px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.04)` }}>
+
+      {/* Row 1: Avatar + name + tier + LIVE badge */}
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+        <Avatar name={sellerName} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 14, fontWeight: 800, color: "#e2e8f0", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>@{sellerName}</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 3 }}>
+            <TierBadge tier={order.category} />
+            <span style={{ fontSize: 9, color: "#64748b" }}>{tier.range}</span>
           </div>
         </div>
-        <div style={{fontSize:9,fontWeight:800,letterSpacing:"0.12em",color:statusColor,background:`${statusColor}18`,padding:"3px 8px",borderRadius:6,border:`1px solid ${statusColor}40`}}>
-          {order.status==="open"?"LIVE":order.status==="sold"?"ПРОДАН":"ОТМЕНЁН"}
+        <div style={{ display: "flex", alignItems: "center", gap: 4, background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.25)", borderRadius: 8, padding: "3px 8px" }}>
+          <div style={{ width: 5, height: 5, borderRadius: "50%", background: "#22c55e", boxShadow: "0 0 5px #22c55e" }} />
+          <span style={{ fontSize: 9, color: "#22c55e", fontWeight: 800, letterSpacing: "0.08em" }}>LIVE</span>
         </div>
       </div>
 
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>
-        <div style={{background:"rgba(30,45,69,0.6)",borderRadius:10,padding:"10px 12px"}}>
-          <div style={{fontSize:9,color:"#475569",fontWeight:700,letterSpacing:"0.1em",marginBottom:4}}>ПЛАТИТЕ</div>
-          <div style={{fontSize:16,fontWeight:800,color:"#f1f5f9"}}>{order.totalTon.toFixed(2)}</div>
-          <div style={{fontSize:10,color:"#64748b"}}>TON</div>
+      {/* Row 2: Green profit block */}
+      <div style={{ background: "linear-gradient(135deg, rgba(22,163,74,0.13), rgba(34,197,94,0.06))", border: "1px solid rgba(34,197,94,0.25)", borderRadius: 14, padding: "10px 14px", marginBottom: 12, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div>
+          <div style={{ fontSize: 9, color: "#16a34a", fontWeight: 800, letterSpacing: "0.12em", marginBottom: 3 }}>{t.cardNetProfit}</div>
+          <div style={{ fontSize: 19, fontWeight: 900, color: "#4ade80", lineHeight: 1 }}>+{profit.toFixed(3)} TON</div>
         </div>
-        <div style={{background:"rgba(30,45,69,0.6)",borderRadius:10,padding:"10px 12px"}}>
-          <div style={{fontSize:9,color:"#475569",fontWeight:700,letterSpacing:"0.1em",marginBottom:4}}>ПОЛУЧАЕТЕ</div>
-          <div style={{fontSize:16,fontWeight:800,color:"#f1f5f9"}}>{order.bonusCoins.toLocaleString()}</div>
-          <div style={{fontSize:10,color:"#64748b"}}>TONYX</div>
-        </div>
-        <div style={{background:`${cc.color}10`,border:`1px solid ${cc.color}30`,borderRadius:10,padding:"10px 12px"}}>
-          <div style={{fontSize:9,color:"#475569",fontWeight:700,letterSpacing:"0.1em",marginBottom:4}}>БОНУС</div>
-          <div style={{fontSize:16,fontWeight:800,color:"#4ade80"}}>{cc.bonus}</div>
-          <div style={{fontSize:10,color:"#16a34a"}}>к монетам</div>
-        </div>
-        <div style={{background:"rgba(30,45,69,0.6)",borderRadius:10,padding:"10px 12px"}}>
-          <div style={{fontSize:9,color:"#475569",fontWeight:700,letterSpacing:"0.1em",marginBottom:4}}>ВОЗВРАТ</div>
-          <div style={{fontSize:16,fontWeight:800,color:"#67e8f9"}}>{order.returnTon.toFixed(2)}</div>
-          <div style={{fontSize:10,color:"#64748b"}}>TON</div>
+        <div style={{ background: "rgba(34,197,94,0.15)", border: "1px solid rgba(74,222,128,0.3)", borderRadius: 10, padding: "5px 12px", textAlign: "center" }}>
+          <div style={{ fontSize: 13, fontWeight: 900, color: "#4ade80" }}>{t.cardExp(EXP_PER_BUY)}</div>
         </div>
       </div>
 
-      {order.status==="open" && (
+      {/* Row 3: 3 info cells */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, marginBottom: 12 }}>
+        <InfoCell label={t.cardPay}     value={order.totalTon.toFixed(2)} unit="TON" />
+        <InfoCell label={t.cardReceive} value={order.bonusCoins.toLocaleString()} unit="TONYX" color="#60a5fa" highlight />
+        <InfoCell label={t.cardReturn}  value={order.returnTon.toFixed(3)} unit="TON" color="#22d3ee" />
+      </div>
+
+      {/* Row 4: Action button */}
+      {order.status === "open" && (
         isMine ? (
-          <button onClick={()=>onCancel(order.id)} disabled={cancelling} style={{width:"100%",padding:"12px 0",borderRadius:10,border:"1px solid rgba(248,113,113,0.3)",background:"rgba(220,38,38,0.08)",color:"#f87171",fontSize:13,fontWeight:700,fontFamily:"inherit",cursor:"pointer"}}>
-            {cancelling?"Отмена...":"Отозвать ордер"}
+          <button onClick={() => onCancel(order.id)} disabled={cancelling} style={{ width: "100%", padding: "11px 0", borderRadius: 11, border: "1px solid rgba(248,113,113,0.3)", background: "rgba(220,38,38,0.08)", color: "#f87171", fontSize: 13, fontWeight: 700, fontFamily: "inherit", cursor: cancelling ? "not-allowed" : "pointer", opacity: cancelling ? 0.7 : 1 }}>
+            {cancelling ? t.cardCancelling : t.cardCancelBtn}
           </button>
-        ):(
-          <button onClick={()=>onBuy(order.id)} disabled={buying} style={{width:"100%",padding:"12px 0",borderRadius:10,border:"none",background:"linear-gradient(135deg,#1d4ed8,#2563eb)",color:"#fff",fontSize:14,fontWeight:800,fontFamily:"inherit",cursor:"pointer",boxShadow:"0 0 20px rgba(37,99,235,0.35)"}}>
-            {buying?"⏳ Обработка...":`Выкупить · ${order.totalTon.toFixed(2)} TON`}
+        ) : (
+          <button onClick={() => { haptic("medium"); onBuy(order); }} disabled={buying} style={{ width: "100%", padding: "13px 0", borderRadius: 11, border: "none", background: buying ? "rgba(37,99,235,0.4)" : "linear-gradient(135deg,#1d4ed8,#3b82f6)", color: "#fff", fontSize: 14, fontWeight: 800, fontFamily: "inherit", cursor: buying ? "not-allowed" : "pointer", boxShadow: buying ? "none" : "0 0 24px rgba(59,130,246,0.4)", transition: "all 0.2s" }}>
+            {buying ? t.cardProcessing : `${t.cardBuyBtn} · ${order.totalTon.toFixed(2)} TON`}
           </button>
         )
       )}
@@ -104,183 +181,312 @@ function OrderCard({ order, isMine, onBuy, onCancel, buying, cancelling }: {
   );
 }
 
-/* ─── Create order modal ─── */
-function CreateOrderModal({ onClose, telegramId, tonyxBalance, tonBalance, onCreated }: {
-  onClose:()=>void; telegramId:string; tonyxBalance:number; tonBalance:number; onCreated:()=>void;
+/* ══════════════════════════════════════════════
+   CREATE ORDER MODAL
+══════════════════════════════════════════════ */
+function CreateOrderModal({ onClose, telegramId, tonyxBalance, onCreated, t }: {
+  onClose: () => void; telegramId: string; tonyxBalance: number; onCreated: () => void;
+  t: ReturnType<typeof useLang>["t"]["market"];
 }) {
-  const [amount, setAmount]   = useState("100");
-  const [price, setPrice]     = useState("0.01");
+  const [tonInput, setTonInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [toast, setToast]     = useState<{msg:string;type:"success"|"error"|"info"}|null>(null);
+  const [toast, setToast] = useState<{ msg: string; type: "success" | "error" | "info" } | null>(null);
 
-  const flash=(msg:string,type:"success"|"error"|"info")=>{setToast({msg,type});setTimeout(()=>setToast(null),2500);};
+  const flash = (msg: string, type: "success" | "error" | "info") => { setToast({ msg, type }); setTimeout(() => setToast(null), 2500); };
 
-  const amtNum   = parseInt(amount)||0;
-  const priceNum = parseFloat(price)||0;
-  const totalTon = parseFloat((amtNum*priceNum).toFixed(6));
+  const tonNum    = parseFloat(tonInput) || 0;
+  const tier      = detectTier(tonNum);
+  const escrow    = Math.floor(tonNum * RATE);    // TONYX locked
+  const bonusPct  = tier ? TIER_CFG[tier].bonusPct : 0;
+  const buyerGets = tier ? Math.floor(escrow * (1 + bonusPct / 100)) : 0;
+  const profit    = tier ? parseFloat(((buyerGets / RATE) - tonNum).toFixed(4)) : 0;
+  const tierCfg   = tier ? TIER_CFG[tier] : null;
+  const hasEnough = escrow <= tonyxBalance;
+  const canCreate = !!tier && tonNum >= 3 && hasEnough && !loading;
 
-  let category:Category|null=null;
-  if(totalTon>=1&&totalTon<=10)       category="start";
-  else if(totalTon>10&&totalTon<=25)  category="pro";
-  else if(totalTon>25)                category="elite";
+  const QUICK_AMOUNTS = [3, 10, 50, 100];
 
-  const bonusPct  = category ? (category==="start"?1:category==="pro"?2:3) : 0;
-  const bonusCoins = Math.floor(amtNum*(1+bonusPct/100));
-  const returnTon  = parseFloat((bonusCoins*priceNum).toFixed(6));
-
-  const submit = async ()=>{
-    if(!category){flash("Итоговая сумма должна быть ≥ 1 TON","error");return;}
-    if(amtNum>tonyxBalance){flash("Недостаточно TONYX","error");return;}
+  const submit = async () => {
+    if (!canCreate) return;
+    haptic("medium");
     setLoading(true);
-    try{
-      const r=await fetch("/api/mini/market/orders",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({telegramId,amount:amtNum,pricePerCoin:priceNum})});
-      const d=await r.json();
-      if(!r.ok){flash(d.error||"Ошибка","error");}
-      else{hapticNotify("success");onCreated();onClose();}
-    }catch{flash("Ошибка сети","error");}
-    finally{setLoading(false);}
+    try {
+      const r = await fetch("/api/mini/market/orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ telegramId, tonAmount: tonNum }),
+      });
+      const d = await r.json();
+      if (!r.ok) { flash(d.error || "Ошибка", "error"); }
+      else { hapticNotify("success"); onCreated(); onClose(); }
+    } catch { flash(t.errNetwork, "error"); }
+    finally { setLoading(false); }
   };
 
   return (
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",display:"flex",alignItems:"flex-end",zIndex:500}} onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
-      {toast&&<Toast msg={toast.msg} type={toast.type}/>}
-      <div style={{width:"100%",background:"#0f172a",border:"1px solid rgba(30,58,143,0.4)",borderTopLeftRadius:24,borderTopRightRadius:24,padding:"20px 16px 32px"}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-          <div style={{fontSize:17,fontWeight:800,color:"#f1f5f9"}}>Создать предложение</div>
-          <button onClick={onClose} style={{background:"none",border:"none",color:"#475569",fontSize:22,cursor:"pointer"}}>×</button>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", display: "flex", alignItems: "flex-end", zIndex: 500 }} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      {toast && <Toast msg={toast.msg} type={toast.type} />}
+      <div style={{ width: "100%", background: "linear-gradient(180deg,#0d1526 0%,#0a1020 100%)", border: "1px solid rgba(30,58,143,0.4)", borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: "20px 16px 36px", maxHeight: "90dvh", overflowY: "auto" }}>
+
+        {/* Header */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+          <div style={{ fontSize: 18, fontWeight: 900, color: "#f1f5f9" }}>{t.createTitle}</div>
+          <button onClick={onClose} style={{ background: "rgba(255,255,255,0.07)", border: "none", color: "#94a3b8", fontSize: 18, width: 32, height: 32, borderRadius: "50%", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "inherit" }}>×</button>
         </div>
 
-        <div style={{display:"flex",gap:8,marginBottom:12,fontSize:11,color:"#334155"}}>
-          <span>TONYX: <b style={{color:"#60a5fa"}}>{tonyxBalance.toLocaleString()}</b></span>
-          <span>·</span>
-          <span>TON: <b style={{color:"#fbbf24"}}>{tonBalance.toFixed(2)}</b></span>
+        {/* Rate badge */}
+        <div style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "rgba(251,191,36,0.1)", border: "1px solid rgba(251,191,36,0.3)", borderRadius: 8, padding: "4px 12px", marginBottom: 16 }}>
+          <span style={{ fontSize: 10, color: "#fbbf24", fontWeight: 800, letterSpacing: "0.1em" }}>{t.createRateLabel}:</span>
+          <span style={{ fontSize: 12, color: "#fde68a", fontWeight: 900 }}>{t.createRate}</span>
         </div>
 
-        {/* Category selector display */}
-        <div style={{display:"flex",gap:6,marginBottom:12}}>
-          {(["start","pro","elite"] as Category[]).map(c=>{
-            const cc=CAT_CONFIG[c];
-            const active=category===c;
-            return(
-              <div key={c} style={{flex:1,padding:"8px 4px",borderRadius:10,border:`1px solid ${active?cc.color:cc.color+"30"}`,background:active?cc.bg:"transparent",textAlign:"center",transition:"all 0.2s"}}>
-                <div style={{fontSize:10,fontWeight:800,color:active?cc.color:"#334155",letterSpacing:"0.1em"}}>{cc.label}</div>
-                <div style={{fontSize:9,color:"#475569",marginTop:2}}>{cc.range}</div>
-                <div style={{fontSize:11,fontWeight:800,color:"#4ade80",marginTop:2}}>{cc.bonus}</div>
-              </div>
+        {/* Balance row */}
+        <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+          <div style={{ flex: 1, background: "rgba(30,45,80,0.5)", border: "1px solid rgba(30,58,143,0.3)", borderRadius: 10, padding: "8px 12px", textAlign: "center" }}>
+            <div style={{ fontSize: 9, color: "#475569", fontWeight: 700, letterSpacing: "0.1em", marginBottom: 2 }}>TONYX</div>
+            <div style={{ fontSize: 15, fontWeight: 900, color: "#60a5fa" }}>{tonyxBalance.toLocaleString()}</div>
+          </div>
+          <div style={{ flex: 1, background: "rgba(30,45,80,0.5)", border: "1px solid rgba(30,58,143,0.3)", borderRadius: 10, padding: "8px 12px", textAlign: "center" }}>
+            <div style={{ fontSize: 9, color: "#475569", fontWeight: 700, letterSpacing: "0.1em", marginBottom: 2 }}>{t.createEscrow}</div>
+            <div style={{ fontSize: 15, fontWeight: 900, color: escrow > tonyxBalance ? "#f87171" : "#e2e8f0" }}>{escrow.toLocaleString()}</div>
+          </div>
+        </div>
+
+        {/* TON Amount input */}
+        <div style={{ fontSize: 10, color: "#475569", fontWeight: 700, letterSpacing: "0.1em", marginBottom: 6 }}>{t.createTonLabel}</div>
+        <div style={{ display: "flex", gap: 5, marginBottom: 8, flexWrap: "wrap" }}>
+          {QUICK_AMOUNTS.map(v => {
+            const qtier = detectTier(v);
+            const qcfg = qtier ? TIER_CFG[qtier] : null;
+            const active = tonNum === v;
+            return (
+              <button key={v} onClick={() => setTonInput(String(v))} style={{ flex: "none", padding: "6px 12px", borderRadius: 8, border: active ? `1px solid ${qcfg?.color ?? "#60a5fa"}` : "1px solid rgba(30,58,143,0.35)", background: active ? (qcfg?.bg ?? "rgba(37,99,235,0.2)") : "rgba(15,25,50,0.6)", color: active ? (qcfg?.color ?? "#60a5fa") : "#475569", fontSize: 12, fontWeight: 800, fontFamily: "inherit", cursor: "pointer" }}>
+                {v} TON
+              </button>
             );
           })}
         </div>
+        <input
+          value={tonInput}
+          onChange={e => setTonInput(e.target.value)}
+          type="number"
+          min="3"
+          placeholder={t.createTonPlaceholder}
+          style={{ width: "100%", background: "rgba(15,25,55,0.7)", border: `1px solid ${tier ? TIER_CFG[tier].border : "rgba(30,58,143,0.4)"}`, borderRadius: 12, padding: "12px 14px", color: "#f1f5f9", fontFamily: "inherit", fontSize: 16, outline: "none", boxSizing: "border-box", marginBottom: 14, transition: "border-color 0.2s" }}
+        />
 
-        <div style={{fontSize:11,color:"#475569",fontWeight:700,marginBottom:5,letterSpacing:"0.1em"}}>КОЛ-ВО TONYX</div>
-        <div style={{display:"flex",gap:6,marginBottom:8,flexWrap:"wrap"}}>
-          {[100,500,1000,5000].map(v=>(
-            <button key={v} onClick={()=>setAmount(String(v))} style={{padding:"6px 12px",borderRadius:8,border:"none",fontFamily:"inherit",background:amtNum===v?"linear-gradient(135deg,#1e3a8a,#2563eb)":"rgba(30,45,69,0.8)",color:amtNum===v?"#fff":"#64748b",fontSize:12,fontWeight:700,cursor:"pointer"}}>{v.toLocaleString()}</button>
-          ))}
-        </div>
-        <input value={amount} onChange={e=>setAmount(e.target.value)} type="number" placeholder="Кол-во TONYX"
-          style={{width:"100%",background:"rgba(30,45,69,0.6)",border:"1px solid rgba(30,58,143,0.4)",borderRadius:10,padding:"11px 14px",color:"#f1f5f9",fontFamily:"inherit",fontSize:14,outline:"none",boxSizing:"border-box",marginBottom:12}}/>
+        {/* Tier auto-detect */}
+        {tonNum > 0 && (
+          <div style={{ marginBottom: 14 }}>
+            {tier ? (
+              <div style={{ display: "flex", alignItems: "center", gap: 8, background: TIER_CFG[tier].bg, border: `1px solid ${TIER_CFG[tier].border}`, borderRadius: 12, padding: "10px 14px" }}>
+                <div>
+                  <div style={{ fontSize: 9, color: "#475569", fontWeight: 700, letterSpacing: "0.1em", marginBottom: 2 }}>{t.createTierDetect}</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <TierBadge tier={tier} />
+                    <span style={{ fontSize: 12, color: TIER_CFG[tier].color, fontWeight: 800 }}>{TIER_CFG[tier].bonusLabel} бонус</span>
+                    <span style={{ fontSize: 11, color: "#64748b" }}>{TIER_CFG[tier].range}</span>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div style={{ background: "rgba(220,38,38,0.08)", border: "1px solid rgba(248,113,113,0.25)", borderRadius: 12, padding: "10px 14px", fontSize: 12, color: "#f87171" }}>
+                ⚠️ {t.createNoTier}
+              </div>
+            )}
+          </div>
+        )}
 
-        <div style={{fontSize:11,color:"#475569",fontWeight:700,marginBottom:5,letterSpacing:"0.1em"}}>ЦЕНА ЗА МОНЕТУ (TON)</div>
-        <div style={{display:"flex",gap:6,marginBottom:8}}>
-          {[0.001,0.01,0.05,0.1].map(v=>(
-            <button key={v} onClick={()=>setPrice(String(v))} style={{flex:1,padding:"6px 0",borderRadius:8,border:"none",fontFamily:"inherit",background:priceNum===v?"linear-gradient(135deg,#1e3a8a,#2563eb)":"rgba(30,45,69,0.8)",color:priceNum===v?"#fff":"#64748b",fontSize:11,fontWeight:700,cursor:"pointer"}}>{v}</button>
-          ))}
-        </div>
-        <input value={price} onChange={e=>setPrice(e.target.value)} type="number" step="0.001" placeholder="TON за TONYX"
-          style={{width:"100%",background:"rgba(30,45,69,0.6)",border:"1px solid rgba(30,58,143,0.4)",borderRadius:10,padding:"11px 14px",color:"#f1f5f9",fontFamily:"inherit",fontSize:14,outline:"none",boxSizing:"border-box",marginBottom:12}}/>
-
-        {/* Preview */}
-        {category&&amtNum>0&&priceNum>0&&(
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>
+        {/* Preview grid */}
+        {tier && tonNum >= 3 && (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 16 }}>
             {[
-              {label:"ИТОГО TON",val:`${totalTon} TON`,color:"#f1f5f9"},
-              {label:`БОНУС ${CAT_CONFIG[category].bonus}`,val:`${bonusCoins.toLocaleString()} TONYX`,color:"#4ade80"},
-              {label:"КАТЕГОРИЯ",val:CAT_CONFIG[category].label,color:CAT_CONFIG[category].color},
-              {label:"ВОЗВРАТ",val:`${returnTon} TON`,color:"#67e8f9"},
-            ].map(({label,val,color})=>(
-              <div key={label} style={{background:"rgba(30,45,69,0.5)",borderRadius:10,padding:"8px 10px"}}>
-                <div style={{fontSize:8,color:"#334155",fontWeight:700,letterSpacing:"0.1em",marginBottom:2}}>{label}</div>
-                <div style={{fontSize:13,fontWeight:800,color}}>{val}</div>
+              { label: t.createEscrow,  val: `${escrow.toLocaleString()} TONYX`, color: escrow > tonyxBalance ? "#f87171" : "#e2e8f0" },
+              { label: t.createReceive, val: `${buyerGets.toLocaleString()} TONYX`, color: "#4ade80" },
+              { label: t.createBonus,   val: TIER_CFG[tier].bonusLabel, color: TIER_CFG[tier].color },
+              { label: "ПРОФИТ ПОКУПАТЕЛЯ", val: `+${profit} TON`, color: "#4ade80" },
+            ].map(({ label, val, color }) => (
+              <div key={label} style={{ background: "rgba(10,20,45,0.8)", border: "1px solid rgba(30,45,80,0.6)", borderRadius: 10, padding: "9px 11px" }}>
+                <div style={{ fontSize: 8, color: "#334155", fontWeight: 700, letterSpacing: "0.1em", marginBottom: 3 }}>{label}</div>
+                <div style={{ fontSize: 13, fontWeight: 900, color }}>{val}</div>
               </div>
             ))}
           </div>
         )}
 
-        {!category&&amtNum>0&&priceNum>0&&(
-          <div style={{background:"rgba(220,38,38,0.1)",border:"1px solid rgba(248,113,113,0.3)",borderRadius:10,padding:"10px 12px",marginBottom:12,fontSize:12,color:"#f87171"}}>
-            ⚠️ Итоговая сумма {totalTon} TON — ниже минимума (1 TON для START)
+        {/* Insufficient warning */}
+        {tier && !hasEnough && (
+          <div style={{ background: "rgba(220,38,38,0.08)", border: "1px solid rgba(248,113,113,0.25)", borderRadius: 10, padding: "10px 14px", marginBottom: 12, fontSize: 12, color: "#f87171" }}>
+            {t.createInsufficient}: нужно {escrow.toLocaleString()}, есть {tonyxBalance.toLocaleString()}
           </div>
         )}
 
-        <button onClick={()=>{haptic("medium");submit();}} disabled={loading||!category||amtNum<=0||amtNum>tonyxBalance}
-          style={{width:"100%",padding:"16px 0",borderRadius:14,border:"none",fontFamily:"inherit",background:(!category||amtNum>tonyxBalance)?"rgba(30,58,143,0.15)":"linear-gradient(135deg,#1d4ed8,#2563eb)",color:(!category||amtNum>tonyxBalance)?"#334155":"#fff",fontSize:16,fontWeight:800,cursor:(!category||amtNum>tonyxBalance)?"not-allowed":"pointer",boxShadow:category&&amtNum<=tonyxBalance?"0 0 28px rgba(37,99,235,0.4)":"none"}}>
-          {loading?"⏳ Размещаем...":"Создать предложение"}
+        {/* Submit */}
+        <button onClick={submit} disabled={!canCreate} style={{ width: "100%", padding: "15px 0", borderRadius: 14, border: "none", fontFamily: "inherit", background: canCreate ? `linear-gradient(135deg, ${tierCfg?.color ?? "#3b82f6"}60, #1d4ed8)` : "rgba(30,45,80,0.3)", color: canCreate ? "#fff" : "#334155", fontSize: 16, fontWeight: 900, cursor: canCreate ? "pointer" : "not-allowed", boxShadow: canCreate ? `0 0 28px ${tierCfg?.color ?? "#3b82f6"}40` : "none", transition: "all 0.2s" }}>
+          {loading ? t.createCreating : t.createConfirm}
         </button>
-        {amtNum>tonyxBalance&&<div style={{fontSize:11,color:"#f87171",textAlign:"center",marginTop:8}}>Недостаточно TONYX</div>}
-        <div style={{fontSize:10,color:"#1e3a8a",textAlign:"center",marginTop:8}}>Лимит: 3 ордера в каждой категории в сутки</div>
+
+        <div style={{ fontSize: 10, color: "#1e3a8a", textAlign: "center", marginTop: 10 }}>{t.createLimitNote}</div>
       </div>
     </div>
   );
 }
 
-/* ─── Locked market stub ─── */
-function LockedMarket({ sold, total }: { sold:number; total:number }) {
-  const pct = Math.min(100,(sold/total)*100);
+/* ══════════════════════════════════════════════
+   BUY ORDER MODAL
+══════════════════════════════════════════════ */
+function BuyOrderModal({ order, onClose, telegramId, tonBalance, onBought, t }: {
+  order: Order; onClose: () => void; telegramId: string; tonBalance: number; onBought: () => void;
+  t: ReturnType<typeof useLang>["t"]["market"];
+}) {
+  const [loading, setLoading] = useState(false);
+  const [toast, setToast] = useState<{ msg: string; type: "success" | "error" | "info" } | null>(null);
+  const flash = (msg: string, type: "success" | "error" | "info") => { setToast({ msg, type }); setTimeout(() => setToast(null), 2500); };
+
+  const tier = TIER_CFG[order.category] ?? TIER_CFG.start;
+  const profit = Math.max(0, order.returnTon - order.totalTon);
+  const hasEnough = tonBalance >= order.totalTon;
+  const sellerName = order.sellerUsername ?? `user_${order.sellerId.slice(-5)}`;
+
+  const confirm = async () => {
+    if (!hasEnough || loading) return;
+    haptic("medium");
+    setLoading(true);
+    try {
+      const r = await fetch(`/api/mini/market/orders/${order.id}/buy`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ telegramId }),
+      });
+      const d = await r.json();
+      if (!r.ok) { flash(d.error || "Ошибка", "error"); }
+      else {
+        hapticNotify("success");
+        flash(t.toastBought(d.bonusCoins ?? order.bonusCoins, d.bonusPct ?? order.bonusPct), "success");
+        setTimeout(() => { onBought(); onClose(); }, 1200);
+      }
+    } catch { flash(t.errNetwork, "error"); }
+    finally { setLoading(false); }
+  };
+
   return (
-    <div style={{padding:"0 16px 90px"}}>
-      <div style={{textAlign:"center",marginBottom:24,marginTop:8}}>
-        <div style={{fontSize:22,fontWeight:900,color:"#f1f5f9",marginBottom:4}}>🏪 P2P Рынок</div>
-        <div style={{fontSize:12,color:"#475569"}}>Откроется когда будет продан системный пул</div>
-      </div>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.78)", display: "flex", alignItems: "flex-end", zIndex: 500 }} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      {toast && <Toast msg={toast.msg} type={toast.type} />}
+      <div style={{ width: "100%", background: "linear-gradient(180deg,#0d1526 0%,#0a1020 100%)", border: "1px solid rgba(30,58,143,0.4)", borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: "20px 16px 36px" }}>
 
-      <div style={{background:"rgba(15,23,42,0.95)",border:"1px solid rgba(30,58,143,0.35)",borderRadius:20,padding:20,marginBottom:16,textAlign:"center"}}>
-        <div style={{fontSize:48,marginBottom:8}}>🔒</div>
-        <div style={{fontSize:16,fontWeight:800,color:"#f1f5f9",marginBottom:4}}>Рынок заблокирован</div>
-        <div style={{fontSize:12,color:"#475569",lineHeight:1.5,marginBottom:16}}>
-          P2P-торговля откроется после продажи<br/>
-          <b style={{color:"#60a5fa"}}>1 000 000 TONYX</b> из системного пула
+        {/* Header */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+          <div style={{ fontSize: 18, fontWeight: 900, color: "#f1f5f9" }}>{t.buyTitle}</div>
+          <button onClick={onClose} style={{ background: "rgba(255,255,255,0.07)", border: "none", color: "#94a3b8", fontSize: 18, width: 32, height: 32, borderRadius: "50%", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "inherit" }}>×</button>
         </div>
 
-        <div style={{marginBottom:10}}>
-          <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
-            <span style={{fontSize:11,color:"#475569",fontWeight:700}}>ПРОГРЕСС ПУЛА</span>
-            <span style={{fontSize:11,color:"#60a5fa",fontWeight:700}}>{pct.toFixed(2)}%</span>
+        {/* Seller row */}
+        <div style={{ display: "flex", alignItems: "center", gap: 10, background: "rgba(15,28,55,0.7)", border: "1px solid rgba(30,45,80,0.6)", borderRadius: 14, padding: "10px 14px", marginBottom: 14 }}>
+          <Avatar name={sellerName} size={38} />
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 9, color: "#475569", fontWeight: 700, letterSpacing: "0.1em", marginBottom: 2 }}>{t.buyFrom}</div>
+            <div style={{ fontSize: 14, fontWeight: 800, color: "#e2e8f0" }}>@{sellerName}</div>
           </div>
-          <div style={{height:12,borderRadius:6,background:"rgba(30,45,69,0.8)",overflow:"hidden"}}>
-            <div style={{height:"100%",width:`${pct}%`,background:"linear-gradient(90deg,#1d4ed8,#22d3ee)",borderRadius:6,transition:"width 0.8s"}}/>
+          <div>
+            <div style={{ fontSize: 9, color: "#475569", fontWeight: 700, letterSpacing: "0.1em", marginBottom: 3 }}>{t.buyTier}</div>
+            <TierBadge tier={order.category} />
           </div>
         </div>
 
-        <div style={{display:"flex",justifyContent:"space-between",fontSize:12}}>
-          <div style={{textAlign:"center"}}>
-            <div style={{fontSize:18,fontWeight:900,color:"#60a5fa"}}>{sold.toLocaleString()}</div>
-            <div style={{color:"#334155"}}>продано</div>
+        {/* Deal summary */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 14 }}>
+          <div style={{ background: "rgba(220,38,38,0.08)", border: "1px solid rgba(248,113,113,0.2)", borderRadius: 12, padding: "12px 14px" }}>
+            <div style={{ fontSize: 9, color: "#f87171", fontWeight: 700, letterSpacing: "0.1em", marginBottom: 4 }}>{t.buyPayLabel}</div>
+            <div style={{ fontSize: 22, fontWeight: 900, color: "#fca5a5" }}>{order.totalTon.toFixed(2)}</div>
+            <div style={{ fontSize: 10, color: "#f87171" }}>TON</div>
           </div>
-          <div style={{textAlign:"center"}}>
-            <div style={{fontSize:18,fontWeight:900,color:"#f1f5f9"}}>{(total-sold).toLocaleString()}</div>
-            <div style={{color:"#334155"}}>осталось</div>
-          </div>
-          <div style={{textAlign:"center"}}>
-            <div style={{fontSize:18,fontWeight:900,color:"#fbbf24"}}>{total.toLocaleString()}</div>
-            <div style={{color:"#334155"}}>всего</div>
+          <div style={{ background: tier.bg, border: `1px solid ${tier.border}`, borderRadius: 12, padding: "12px 14px" }}>
+            <div style={{ fontSize: 9, color: tier.color, fontWeight: 700, letterSpacing: "0.1em", marginBottom: 4 }}>{t.buyReceiveLabel}</div>
+            <div style={{ fontSize: 22, fontWeight: 900, color: "#f1f5f9" }}>{order.bonusCoins.toLocaleString()}</div>
+            <div style={{ fontSize: 10, color: tier.color }}>TONYX</div>
           </div>
         </div>
-      </div>
 
-      {/* Category preview cards */}
-      <div style={{fontSize:12,color:"#475569",fontWeight:700,marginBottom:10,letterSpacing:"0.1em"}}>КАТЕГОРИИ ПОСЛЕ ЗАПУСКА</div>
-      {(["start","pro","elite"] as Category[]).map(c=>{
-        const cc=CAT_CONFIG[c];
-        return(
-          <div key={c} style={{display:"flex",alignItems:"center",gap:12,background:"rgba(15,23,42,0.9)",border:`1px solid ${cc.color}20`,borderRadius:14,padding:"12px 14px",marginBottom:8,opacity:0.7}}>
-            <div style={{width:44,height:44,borderRadius:12,background:cc.bg,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-              <span style={{fontSize:20}}>{c==="start"?"🟢":c==="pro"?"🔵":"🔥"}</span>
+        {/* Profit + EXP + Return */}
+        <div style={{ background: "linear-gradient(135deg, rgba(22,163,74,0.12), rgba(34,197,94,0.06))", border: "1px solid rgba(34,197,94,0.25)", borderRadius: 14, padding: "12px 14px", marginBottom: 14 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div>
+              <div style={{ fontSize: 9, color: "#16a34a", fontWeight: 700, letterSpacing: "0.1em", marginBottom: 3 }}>{t.buyProfitLabel}</div>
+              <div style={{ fontSize: 20, fontWeight: 900, color: "#4ade80" }}>+{profit.toFixed(4)} TON</div>
             </div>
-            <div style={{flex:1}}>
-              <div style={{fontSize:14,fontWeight:800,color:cc.color}}>{cc.label}</div>
-              <div style={{fontSize:11,color:"#475569"}}>{cc.range}</div>
+            <div style={{ textAlign: "center" }}>
+              <div style={{ fontSize: 9, color: "#475569", fontWeight: 700, marginBottom: 3 }}>{t.buyExpLabel}</div>
+              <div style={{ background: "rgba(34,197,94,0.15)", border: "1px solid rgba(74,222,128,0.3)", borderRadius: 8, padding: "4px 12px", fontSize: 14, fontWeight: 900, color: "#4ade80" }}>{t.cardExp(EXP_PER_BUY)}</div>
             </div>
-            <div style={{fontSize:20,fontWeight:900,color:"#4ade80"}}>{cc.bonus}</div>
+          </div>
+          <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid rgba(34,197,94,0.15)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span style={{ fontSize: 10, color: "#475569", fontWeight: 700, letterSpacing: "0.08em" }}>{t.buyReturnLabel}</span>
+            <span style={{ fontSize: 13, fontWeight: 800, color: "#22d3ee" }}>{order.returnTon.toFixed(4)} TON</span>
+          </div>
+        </div>
+
+        {/* Balance warning */}
+        {!hasEnough && (
+          <div style={{ background: "rgba(220,38,38,0.08)", border: "1px solid rgba(248,113,113,0.25)", borderRadius: 10, padding: "10px 14px", marginBottom: 12, fontSize: 12, color: "#f87171" }}>
+            {t.buyInsufficient}: {tonBalance.toFixed(4)} TON (нужно {order.totalTon.toFixed(4)})
+          </div>
+        )}
+
+        {/* Confirm button */}
+        <button onClick={confirm} disabled={!hasEnough || loading} style={{ width: "100%", padding: "15px 0", borderRadius: 14, border: "none", fontFamily: "inherit", background: (!hasEnough || loading) ? "rgba(30,45,80,0.3)" : "linear-gradient(135deg,#1d4ed8,#3b82f6)", color: (!hasEnough || loading) ? "#334155" : "#fff", fontSize: 16, fontWeight: 900, cursor: (!hasEnough || loading) ? "not-allowed" : "pointer", boxShadow: hasEnough && !loading ? "0 0 28px rgba(59,130,246,0.4)" : "none" }}>
+          {loading ? t.buyProcessing : t.buyConfirm}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════
+   LOCKED MARKET
+══════════════════════════════════════════════ */
+function LockedMarket({ sold, total, t }: { sold: number; total: number; t: ReturnType<typeof useLang>["t"]["market"] }) {
+  const pct = Math.min(100, (sold / total) * 100);
+  return (
+    <div style={{ padding: "0 16px 90px" }}>
+      <div style={{ textAlign: "center", marginBottom: 20, marginTop: 8 }}>
+        <div style={{ fontSize: 22, fontWeight: 900, color: "#f1f5f9", marginBottom: 4 }}>🏪 {t.title}</div>
+        <div style={{ fontSize: 12, color: "#475569" }}>{t.lockedDesc}</div>
+      </div>
+      <div style={{ background: "rgba(15,23,42,0.95)", border: "1px solid rgba(30,58,143,0.35)", borderRadius: 20, padding: 20, marginBottom: 16, textAlign: "center" }}>
+        <div style={{ fontSize: 48, marginBottom: 8 }}>🔒</div>
+        <div style={{ fontSize: 16, fontWeight: 800, color: "#f1f5f9", marginBottom: 4 }}>{t.locked}</div>
+        <div style={{ fontSize: 12, color: "#475569", lineHeight: 1.5, marginBottom: 16 }}>{t.lockedDesc}</div>
+        <div style={{ marginBottom: 10 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+            <span style={{ fontSize: 11, color: "#475569", fontWeight: 700 }}>{t.poolProgress}</span>
+            <span style={{ fontSize: 11, color: "#60a5fa", fontWeight: 700 }}>{pct.toFixed(2)}%</span>
+          </div>
+          <div style={{ height: 12, borderRadius: 6, background: "rgba(30,45,69,0.8)", overflow: "hidden" }}>
+            <div style={{ height: "100%", width: `${pct}%`, background: "linear-gradient(90deg,#1d4ed8,#22d3ee)", borderRadius: 6, transition: "width 0.8s" }} />
+          </div>
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
+          {[{ n: sold, label: t.poolSold, c: "#60a5fa" }, { n: total - sold, label: t.poolLeft, c: "#f1f5f9" }, { n: total, label: t.poolTotal, c: "#fbbf24" }].map(({ n, label, c }) => (
+            <div key={label} style={{ textAlign: "center" }}>
+              <div style={{ fontSize: 17, fontWeight: 900, color: c }}>{n.toLocaleString()}</div>
+              <div style={{ color: "#334155" }}>{label}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div style={{ fontSize: 11, color: "#475569", fontWeight: 700, marginBottom: 10, letterSpacing: "0.1em" }}>{t.afterLaunch}</div>
+      {(["start", "base", "pro", "elite"] as Tier[]).map(tier => {
+        const c = TIER_CFG[tier];
+        return (
+          <div key={tier} style={{ display: "flex", alignItems: "center", gap: 12, background: "rgba(15,23,42,0.9)", border: `1px solid ${c.color}25`, borderRadius: 14, padding: "12px 14px", marginBottom: 8, opacity: 0.75 }}>
+            <div style={{ width: 44, height: 44, borderRadius: 12, background: c.bg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              <span style={{ fontSize: 20 }}>{tier === "start" ? "🟢" : tier === "base" ? "🔵" : tier === "pro" ? "🟣" : "🔥"}</span>
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 14, fontWeight: 800, color: c.color }}>{c.label}</div>
+              <div style={{ fontSize: 11, color: "#475569" }}>{c.range}</div>
+            </div>
+            <div style={{ fontSize: 18, fontWeight: 900, color: "#4ade80" }}>{c.bonusLabel}</div>
           </div>
         );
       })}
@@ -288,165 +494,270 @@ function LockedMarket({ sold, total }: { sold:number; total:number }) {
   );
 }
 
-/* ═══════════════════════════════
-   MAIN PAGE
-═══════════════════════════════ */
-export default function MarketPage() {
-  const { telegramId } = useTelegram();
-  const qc = useQueryClient();
-  const [tab, setTab]   = useState<Tab>("all");
-  const [showCreate, setShowCreate] = useState(false);
-  const [toast, setToast] = useState<{msg:string;type:"success"|"error"|"info"}|null>(null);
-  const [myOrders, setMyOrders] = useState<Order[]>([]);
-  const [allOrders, setAllOrders] = useState<Order[]>([]);
-  const [ordersLoading, setOrdersLoading] = useState(true);
-  const [buyingId, setBuyingId]       = useState<number|null>(null);
-  const [cancellingId, setCancellingId] = useState<number|null>(null);
+/* ══════════════════════════════════════════════
+   TICKER
+══════════════════════════════════════════════ */
+function LiveTicker({ lang }: { lang: string }) {
+  const events = lang === "en" ? LIVE_EVENTS_EN : LIVE_EVENTS_RU;
+  const tickerRef = useRef<HTMLDivElement>(null);
 
-  const flash=(msg:string,type:"success"|"error"|"info")=>{setToast({msg,type});setTimeout(()=>setToast(null),3000);};
+  useEffect(() => {
+    const el = tickerRef.current;
+    if (!el) return;
+    let pos = 0;
+    const speed = 0.5;
+    const step = () => {
+      pos -= speed;
+      if (Math.abs(pos) >= el.scrollWidth / 2) pos = 0;
+      el.style.transform = `translateX(${pos}px)`;
+      requestAnimationFrame(step);
+    };
+    const raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, []);
 
-  const {data:pool,refetch:refetchPool} = useGetMiniMarketPool({query:{refetchInterval:10000}});
-  const {data:profile,refetch:refetchProfile} = useGetUserProfile(telegramId??"",(
-    {query:{enabled:!!telegramId,refetchInterval:8000}} as Parameters<typeof useGetUserProfile>[1]
-  ));
-
-  const isMarketActive = (pool as {isMarketActive?:boolean}|undefined)?.isMarketActive === true;
-
-  const fetchOrders = useCallback(async (cat:Tab)=>{
-    if(!isMarketActive)return;
-    setOrdersLoading(true);
-    try{
-      const url=cat==="all"?"/api/mini/market/orders":`/api/mini/market/orders?category=${cat}`;
-      const r=await fetch(url);
-      if(r.ok){const d=await r.json();setAllOrders(d.orders??[]);}
-    }catch{}
-    finally{setOrdersLoading(false);}
-  },[isMarketActive]);
-
-  const fetchMyOrders = useCallback(async()=>{
-    if(!telegramId)return;
-    try{
-      const r=await fetch(`/api/mini/market/orders/mine?telegramId=${telegramId}`);
-      if(r.ok){const d=await r.json();setMyOrders(d.orders??[]);}
-    }catch{}
-  },[telegramId]);
-
-  const refreshAll=()=>{
-    fetchOrders(tab);fetchMyOrders();refetchPool();refetchProfile();
-  };
-
-  useEffect(()=>{if(isMarketActive)fetchOrders(tab);},[tab,isMarketActive]);
-  useEffect(()=>{fetchMyOrders();},[telegramId]);
-  useEffect(()=>{if(isMarketActive){const t=setInterval(()=>fetchOrders(tab),6000);return()=>clearInterval(t);}},[tab,isMarketActive]);
-
-  const handleBuy=async(id:number)=>{
-    if(!telegramId)return;
-    haptic("medium");setBuyingId(id);
-    try{
-      const r=await fetch(`/api/mini/market/orders/${id}/buy`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({telegramId})});
-      const d=await r.json();
-      if(!r.ok){flash(d.error||"Ошибка","error");}
-      else{hapticNotify("success");flash(`🎉 +${d.bonusCoins?.toLocaleString()} TONYX (${d.bonusPct}% бонус)!`,"success");refreshAll();}
-    }catch{flash("Ошибка сети","error");}
-    finally{setBuyingId(null);}
-  };
-
-  const handleCancel=async(id:number)=>{
-    if(!telegramId)return;
-    haptic("medium");setCancellingId(id);
-    try{
-      const r=await fetch(`/api/mini/market/orders/${id}`,{method:"DELETE",headers:{"Content-Type":"application/json"},body:JSON.stringify({telegramId})});
-      const d=await r.json();
-      if(!r.ok){flash(d.error||"Ошибка","error");}
-      else{hapticNotify("success");flash("Ордер отозван, TONYX возвращены","info");refreshAll();}
-    }catch{flash("Ошибка сети","error");}
-    finally{setCancellingId(null);}
-  };
-
-  const tonyxBalance=(profile as {tonyxCoins?:number}|undefined)?.tonyxCoins??0;
-  const tonBalance=Number((profile as {ton?:string|number}|undefined)?.ton??0);
-  const poolSold  = pool?.sold??0;
-  const poolTotal = pool?.total??1_000_000;
-
-  if(!isMarketActive){
-    return <LockedMarket sold={poolSold} total={poolTotal}/>;
-  }
-
-  const displayOrders = tab==="mine" ? myOrders : allOrders;
-  const activeOrders  = displayOrders.filter(o=>tab==="mine"||o.status==="open");
+  const text = [...events, ...events].join("  ·  ");
 
   return (
-    <div style={{padding:"16px 16px 100px"}}>
-      {toast&&<Toast msg={toast.msg} type={toast.type}/>}
-      {showCreate&&telegramId&&(
-        <CreateOrderModal telegramId={telegramId} tonyxBalance={tonyxBalance} tonBalance={tonBalance} onClose={()=>setShowCreate(false)} onCreated={refreshAll}/>
+    <div style={{ background: "rgba(22,163,74,0.08)", border: "1px solid rgba(34,197,94,0.2)", borderRadius: 10, padding: "6px 0", marginBottom: 12, overflow: "hidden", display: "flex", alignItems: "center", gap: 8 }}>
+      <div style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 4, padding: "0 10px", borderRight: "1px solid rgba(34,197,94,0.2)" }}>
+        <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#22c55e", boxShadow: "0 0 5px #22c55e" }} />
+        <span style={{ fontSize: 9, color: "#22c55e", fontWeight: 800, letterSpacing: "0.12em" }}>LIVE</span>
+      </div>
+      <div style={{ overflow: "hidden", flex: 1 }}>
+        <div ref={tickerRef} style={{ display: "inline-block", whiteSpace: "nowrap", fontSize: 10, color: "#4ade80", fontWeight: 600 }}>
+          {text}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════
+   MAIN PAGE
+══════════════════════════════════════════════ */
+export default function MarketPage() {
+  const { telegramId } = useTelegram();
+  const { t, lang } = useLang();
+  const m = t.market;
+
+  const [tab, setTab]                 = useState<MainTab>("market");
+  const [tierFilter, setTierFilter]   = useState<TierFilter>("all");
+  const [showCreate, setShowCreate]   = useState(false);
+  const [buyOrder, setBuyOrder]       = useState<Order | null>(null);
+  const [toast, setToast]             = useState<{ msg: string; type: "success" | "error" | "info" } | null>(null);
+  const [allOrders, setAllOrders]     = useState<Order[]>([]);
+  const [myOrders, setMyOrders]       = useState<Order[]>([]);
+  const [stats, setStats]             = useState<MarketStats>({ inOrdersTon: 0, volume24h: 0, avgProfit: 1.5, openCount: 0 });
+  const [ordersLoading, setOrdersLoading] = useState(true);
+  const [buyingId, setBuyingId]       = useState<number | null>(null);
+  const [cancellingId, setCancellingId] = useState<number | null>(null);
+
+  const flash = (msg: string, type: "success" | "error" | "info") => { setToast({ msg, type }); setTimeout(() => setToast(null), 3000); };
+
+  const { data: pool } = useGetMiniMarketPool({ query: { refetchInterval: 10000 } });
+  const { data: profile, refetch: refetchProfile } = useGetUserProfile(telegramId ?? "", (
+    { query: { enabled: !!telegramId, refetchInterval: 8000 } } as Parameters<typeof useGetUserProfile>[1]
+  ));
+
+  const isMarketActive = (pool as { isMarketActive?: boolean } | undefined)?.isMarketActive === true;
+  const tonyxBalance = (profile as { tonyxCoins?: number } | undefined)?.tonyxCoins ?? 0;
+  const tonBalance   = Number((profile as { ton?: string | number } | undefined)?.ton ?? 0);
+  const poolSold     = pool?.sold ?? 0;
+  const poolTotal    = pool?.total ?? 1_000_000;
+
+  const fetchOrders = useCallback(async (filter: TierFilter) => {
+    if (!isMarketActive) return;
+    setOrdersLoading(true);
+    try {
+      const url = filter === "all" ? "/api/mini/market/orders" : `/api/mini/market/orders?category=${filter}`;
+      const r = await fetch(url);
+      if (r.ok) { const d = await r.json(); setAllOrders(d.orders ?? []); }
+    } catch { /* silent */ }
+    finally { setOrdersLoading(false); }
+  }, [isMarketActive]);
+
+  const fetchMyOrders = useCallback(async () => {
+    if (!telegramId) return;
+    try {
+      const r = await fetch(`/api/mini/market/orders/mine?telegramId=${telegramId}`);
+      if (r.ok) { const d = await r.json(); setMyOrders(d.orders ?? []); }
+    } catch { /* silent */ }
+  }, [telegramId]);
+
+  const fetchStats = useCallback(async () => {
+    try {
+      const r = await fetch("/api/mini/market/stats");
+      if (r.ok) { const d = await r.json(); setStats(d); }
+    } catch { /* silent */ }
+  }, []);
+
+  const refreshAll = useCallback(() => {
+    fetchOrders(tierFilter); fetchMyOrders(); fetchStats(); refetchProfile();
+  }, [fetchOrders, fetchMyOrders, fetchStats, refetchProfile, tierFilter]);
+
+  useEffect(() => { if (isMarketActive) { fetchOrders(tierFilter); fetchStats(); } }, [tierFilter, isMarketActive]);
+  useEffect(() => { fetchMyOrders(); }, [telegramId]);
+  useEffect(() => {
+    if (!isMarketActive) return;
+    const iv = setInterval(() => { fetchOrders(tierFilter); fetchStats(); }, 8000);
+    return () => clearInterval(iv);
+  }, [tierFilter, isMarketActive]);
+
+  const handleBuy = (order: Order) => { setBuyOrder(order); };
+  const handleBuyConfirmed = () => { refreshAll(); setBuyOrder(null); };
+
+  const handleCancel = async (id: number) => {
+    if (!telegramId) return;
+    haptic("medium"); setCancellingId(id);
+    try {
+      const r = await fetch(`/api/mini/market/orders/${id}`, { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ telegramId }) });
+      const d = await r.json();
+      if (!r.ok) { flash(d.error || "Ошибка", "error"); }
+      else { hapticNotify("success"); flash(m.toastCancelled, "info"); refreshAll(); }
+    } catch { flash(m.errNetwork, "error"); }
+    finally { setCancellingId(null); }
+  };
+
+  /* ─── Locked market ─── */
+  if (!isMarketActive) {
+    return <LockedMarket sold={poolSold} total={poolTotal} t={m} />;
+  }
+
+  const displayOrders = tab === "mine"
+    ? myOrders
+    : allOrders.filter(o => o.status === "open");
+
+  const TIERS: { key: TierFilter; label: string }[] = [
+    { key: "all",   label: m.filterAll  },
+    { key: "start", label: m.tierStart  },
+    { key: "base",  label: m.tierBase   },
+    { key: "pro",   label: m.tierPro    },
+    { key: "elite", label: m.tierElite  },
+  ];
+
+  return (
+    <div style={{ padding: "0 0 90px", minHeight: "100%" }}>
+      {toast && <Toast msg={toast.msg} type={toast.type} />}
+
+      {/* Modals */}
+      {showCreate && telegramId && (
+        <CreateOrderModal telegramId={telegramId} tonyxBalance={tonyxBalance} onClose={() => setShowCreate(false)} onCreated={() => { flash(m.toastCreated, "success"); refreshAll(); }} t={m} />
+      )}
+      {buyOrder && telegramId && (
+        <BuyOrderModal order={buyOrder} telegramId={telegramId} tonBalance={tonBalance} onClose={() => setBuyOrder(null)} onBought={handleBuyConfirmed} t={m} />
       )}
 
-      {/* Header */}
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-        <div>
-          <div style={{fontSize:21,fontWeight:900,color:"#f1f5f9"}}>🏪 P2P Рынок</div>
-          <div style={{display:"flex",alignItems:"center",gap:6,marginTop:2}}>
-            <div style={{width:6,height:6,borderRadius:"50%",background:"#22c55e",boxShadow:"0 0 6px #22c55e"}}/>
-            <span style={{fontSize:11,color:"#22c55e",fontWeight:700,letterSpacing:"0.1em"}}>LIVE · ОТКРЫТ</span>
+      {/* ── HEADER ── */}
+      <div style={{ padding: "14px 16px 0" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
+          <div>
+            <div style={{ fontSize: 22, fontWeight: 900, color: "#f1f5f9", letterSpacing: "-0.01em" }}>🏪 {m.title}</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 3 }}>
+              <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#22c55e", boxShadow: "0 0 8px #22c55e" }} />
+              <span style={{ fontSize: 11, color: "#22c55e", fontWeight: 800, letterSpacing: "0.1em" }}>{m.liveStatus}</span>
+            </div>
+          </div>
+          <div style={{ background: "rgba(10,18,40,0.95)", border: "1px solid rgba(30,58,143,0.4)", borderRadius: 14, padding: "8px 12px", textAlign: "right" }}>
+            <div style={{ fontSize: 13, fontWeight: 900, color: "#60a5fa" }}>{tonyxBalance.toLocaleString()} <span style={{ fontSize: 10, color: "#3b5998" }}>TONYX</span></div>
+            <div style={{ fontSize: 12, fontWeight: 800, color: "#fbbf24" }}>{tonBalance.toFixed(3)} <span style={{ fontSize: 10, color: "#92400e" }}>TON</span></div>
           </div>
         </div>
-        <div style={{background:"rgba(15,23,42,0.95)",border:"1px solid rgba(30,58,143,0.35)",borderRadius:12,padding:"8px 12px",textAlign:"right"}}>
-          <div style={{fontSize:12,fontWeight:900,color:"#60a5fa"}}>{tonyxBalance.toLocaleString()} TONYX</div>
-          <div style={{fontSize:11,fontWeight:800,color:"#fbbf24"}}>{tonBalance.toFixed(2)} TON</div>
-        </div>
-      </div>
 
-      {/* Stats row */}
-      <div style={{display:"flex",gap:6,marginBottom:12}}>
-        {[
-          {label:"ОРДЕРОВ",val:String(allOrders.length),sub:"активных"},
-          {label:"ПРИБЫЛЬ",val:"1-3%",sub:"по категориям"},
-          {label:"ЛИМИТ",val:"3/сут",sub:"по категории"},
-        ].map(({label,val,sub})=>(
-          <div key={label} style={{flex:1,background:"rgba(15,23,42,0.95)",border:"1px solid rgba(30,58,143,0.3)",borderRadius:12,padding:"8px 6px",textAlign:"center"}}>
-            <div style={{fontSize:8,color:"#334155",fontWeight:700,letterSpacing:"0.1em",marginBottom:2}}>{label}</div>
-            <div style={{fontSize:15,fontWeight:900,color:"#f1f5f9"}}>{val}</div>
-            <div style={{fontSize:9,color:"#475569",marginTop:1}}>{sub}</div>
+        {/* ── TAB SWITCHER ── */}
+        <div style={{ display: "flex", background: "rgba(10,18,40,0.9)", border: "1px solid rgba(30,58,143,0.35)", borderRadius: 14, padding: 4, marginBottom: 12 }}>
+          {(["market", "mine"] as MainTab[]).map(tabKey => {
+            const active = tab === tabKey;
+            const label = tabKey === "market" ? m.tabMarket : m.tabMine;
+            return (
+              <button key={tabKey} onClick={() => { haptic("light"); setTab(tabKey); }} style={{ flex: 1, padding: "10px 0", borderRadius: 10, border: "none", fontFamily: "inherit", background: active ? "linear-gradient(135deg,#1e3a8a,#2563eb)" : "transparent", color: active ? "#fff" : "#475569", fontSize: 13, fontWeight: 800, cursor: "pointer", transition: "all 0.2s" }}>
+                {label}
+                {tabKey === "mine" && myOrders.filter(o => o.status === "open").length > 0 && (
+                  <span style={{ marginLeft: 6, background: "#2563eb", borderRadius: 10, padding: "1px 6px", fontSize: 10, color: active ? "#93c5fd" : "#3b82f6" }}>
+                    {myOrders.filter(o => o.status === "open").length}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* ── LIVE TICKER ── */}
+        <LiveTicker lang={lang} />
+
+        {/* ── STATS ROW ── */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, marginBottom: 12 }}>
+          {[
+            { label: m.statsInOrders, val: stats.inOrdersTon.toFixed(1), unit: "TON",  color: "#60a5fa" },
+            { label: m.statsVolume,   val: stats.volume24h.toFixed(1),   unit: "TON",  color: "#a78bfa" },
+            { label: m.statsProfit,   val: `${stats.avgProfit}%`,         unit: "avg",  color: "#4ade80" },
+          ].map(({ label, val, unit, color }) => (
+            <div key={label} style={{ background: "rgba(10,18,42,0.9)", border: "1px solid rgba(30,45,80,0.6)", borderRadius: 13, padding: "9px 8px", textAlign: "center" }}>
+              <div style={{ fontSize: 7, color: "#334155", fontWeight: 700, letterSpacing: "0.1em", marginBottom: 4, lineHeight: 1.3 }}>{label}</div>
+              <div style={{ fontSize: 16, fontWeight: 900, color }}>{val}</div>
+              <div style={{ fontSize: 8, color: "#3b4a63", marginTop: 1 }}>{unit}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* ── LEADERBOARD CARD ── */}
+        <div style={{ background: "linear-gradient(135deg, rgba(180,83,9,0.18) 0%, rgba(251,191,36,0.08) 100%)", border: "1px solid rgba(251,191,36,0.3)", borderRadius: 16, padding: "12px 16px", marginBottom: 14, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={{ fontSize: 28 }}>🏆</div>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 900, color: "#fbbf24" }}>{m.leaderTitle}</div>
+              <div style={{ fontSize: 11, color: "#92400e", marginTop: 2 }}>{m.leaderSub}</div>
+            </div>
           </div>
-        ))}
-      </div>
-
-      {/* Tabs: ALL + categories + MINE */}
-      <div style={{display:"flex",gap:4,background:"rgba(15,23,42,0.95)",border:"1px solid rgba(30,58,143,0.3)",borderRadius:14,padding:4,marginBottom:12,overflowX:"auto"}}>
-        {(["all","start","pro","elite","mine"] as (Tab|"mine")[]).map(t=>{
-          const cc = t!=="all"&&t!=="mine" ? CAT_CONFIG[t as Category] : null;
-          const active=tab===t;
-          return(
-            <button key={t} onClick={()=>{haptic("light");setTab(t as Tab);}} style={{flex:"none",padding:"9px 10px",borderRadius:10,border:"none",fontFamily:"inherit",background:active?cc?cc.bg:"linear-gradient(135deg,#1e3a8a,#2563eb)":"transparent",color:active?cc?cc.color:"#fff":"#475569",fontSize:11,fontWeight:800,cursor:"pointer",transition:"all 0.2s",whiteSpace:"nowrap"}}>
-              {t==="all"?"Все":t==="mine"?"Мои":cc?.label}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Orders */}
-      {ordersLoading ? (
-        <div style={{textAlign:"center",color:"#334155",padding:"32px 0"}}>Загрузка...</div>
-      ) : activeOrders.length===0 ? (
-        <div style={{background:"rgba(15,23,42,0.9)",border:"1px solid rgba(30,58,143,0.2)",borderRadius:14,padding:"36px 16px",textAlign:"center"}}>
-          <div style={{fontSize:28,marginBottom:8}}>{tab==="mine"?"📦":"📋"}</div>
-          <div style={{fontSize:14,color:"#475569"}}>{tab==="mine"?"Вы ещё не создавали ордеров":"Нет активных ордеров"}</div>
-          {tab!=="mine"&&<div style={{fontSize:12,color:"#334155",marginTop:4}}>Будь первым — создай предложение!</div>}
+          <div style={{ display: "flex", gap: -8 }}>
+            {["A","M","D"].map((l, i) => (
+              <div key={i} style={{ width: 28, height: 28, borderRadius: "50%", background: ["#1d4ed8","#dc2626","#15803d"][i], border: "2px solid #0a1020", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 800, color: "#fff", marginLeft: i > 0 ? -8 : 0 }}>{l}</div>
+            ))}
+          </div>
         </div>
-      ) : (
-        activeOrders.map(order=>(
-          <OrderCard key={order.id} order={order} isMine={order.sellerId===telegramId}
-            onBuy={handleBuy} onCancel={handleCancel}
-            buying={buyingId===order.id} cancelling={cancellingId===order.id}/>
-        ))
-      )}
 
-      {/* Sticky CTA */}
-      {telegramId&&(
-        <div style={{position:"fixed",bottom:68,left:0,right:0,padding:"0 16px",zIndex:50}}>
-          <button onClick={()=>{haptic("medium");setShowCreate(true);}} style={{width:"100%",padding:"16px 0",borderRadius:14,border:"none",fontFamily:"inherit",background:"linear-gradient(135deg,#1d4ed8,#2563eb)",color:"#fff",fontSize:16,fontWeight:800,cursor:"pointer",boxShadow:"0 0 32px rgba(37,99,235,0.5)"}}>
-            + Создать предложение
+        {/* ── TIER FILTERS (only on market tab) ── */}
+        {tab === "market" && (
+          <div style={{ display: "flex", gap: 5, marginBottom: 14, overflowX: "auto", padding: "0 0 2px" }}>
+            {TIERS.map(({ key, label }) => {
+              const active = tierFilter === key;
+              const cfg = key !== "all" ? TIER_CFG[key as Tier] : null;
+              return (
+                <button key={key} onClick={() => { haptic("light"); setTierFilter(key); }} style={{ flexShrink: 0, padding: "8px 14px", borderRadius: 22, border: active ? `1.5px solid ${cfg?.color ?? "#3b82f6"}` : "1.5px solid rgba(30,45,80,0.5)", background: active ? (cfg?.bg ?? "rgba(37,99,235,0.18)") : "rgba(10,18,40,0.8)", color: active ? (cfg?.color ?? "#60a5fa") : "#4a5568", fontSize: 12, fontWeight: 800, fontFamily: "inherit", cursor: "pointer", transition: "all 0.18s", letterSpacing: "0.04em" }}>
+                  {label}
+                  {key !== "all" && <span style={{ marginLeft: 4, fontSize: 9, opacity: 0.7 }}>{cfg?.bonusLabel}</span>}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* ── ORDERS LIST ── */}
+      <div style={{ padding: "0 16px" }}>
+        {ordersLoading && tab === "market" ? (
+          <div style={{ textAlign: "center", color: "#334155", padding: "40px 0", fontSize: 13 }}>{m.loading}</div>
+        ) : displayOrders.length === 0 ? (
+          <div style={{ background: "rgba(10,18,40,0.9)", border: "1px solid rgba(30,45,80,0.4)", borderRadius: 16, padding: "40px 16px", textAlign: "center" }}>
+            <div style={{ fontSize: 32, marginBottom: 10 }}>{tab === "mine" ? "📦" : "📋"}</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "#475569" }}>{tab === "mine" ? m.emptyMine : m.emptyOrders}</div>
+            <div style={{ fontSize: 12, color: "#334155", marginTop: 5 }}>{tab === "mine" ? m.emptyMineSub : m.emptyOrdersSub}</div>
+          </div>
+        ) : (
+          displayOrders.map(order => (
+            <OrderCard key={order.id} order={order} isMine={order.sellerId === telegramId}
+              onBuy={handleBuy} onCancel={handleCancel}
+              buying={buyingId === order.id} cancelling={cancellingId === order.id}
+              t={m} />
+          ))
+        )}
+      </div>
+
+      {/* ── FIXED BOTTOM BUTTON ── */}
+      {telegramId && (
+        <div style={{ position: "fixed", bottom: 66, left: 0, right: 0, padding: "0 16px", zIndex: 50, maxWidth: 480, margin: "0 auto" }}>
+          <button onClick={() => { haptic("medium"); setShowCreate(true); }} style={{ width: "100%", padding: "15px 0", borderRadius: 16, border: "none", fontFamily: "inherit", background: "linear-gradient(135deg,#1d4ed8 0%,#3b82f6 50%,#1d4ed8 100%)", backgroundSize: "200% 100%", color: "#fff", fontSize: 15, fontWeight: 900, cursor: "pointer", boxShadow: "0 0 32px rgba(59,130,246,0.5), 0 4px 12px rgba(0,0,0,0.4)", letterSpacing: "0.02em" }}>
+            {m.createBtn}
           </button>
         </div>
       )}

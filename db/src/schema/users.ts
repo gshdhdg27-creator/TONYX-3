@@ -30,6 +30,7 @@ export const usersTable = pgTable("users", {
 
   /* Daily order limits (3 per category per 24h) */
   dailyOrdersStart: integer("daily_orders_start").notNull().default(0),
+  dailyOrdersBase: integer("daily_orders_base").notNull().default(0),
   dailyOrdersPro: integer("daily_orders_pro").notNull().default(0),
   dailyOrdersElite: integer("daily_orders_elite").notNull().default(0),
   dailyOrdersResetAt: timestamp("daily_orders_reset_at"),

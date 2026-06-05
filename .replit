@@ -22,44 +22,29 @@ args = "Start application"
 task = "workflow.run"
 args = "Backend API"
 
-[[workflows.workflow.tasks]]
-task = "workflow.run"
-args = "GitHub Sync"
-
 [[workflows.workflow]]
 name = "Start application"
 author = "agent"
 
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "cd mini-app && pnpm run dev"
-waitForPort = 5000
-
 [workflows.workflow.metadata]
 outputType = "webview"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "cd mini-app && PORT=5000 pnpm run dev"
+waitForPort = 5000
 
 [[workflows.workflow]]
 name = "Backend API"
 author = "agent"
 
+[workflows.workflow.metadata]
+outputType = "console"
+
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "cd api-server && PORT=3001 pnpm run dev"
 waitForPort = 3001
-
-[workflows.workflow.metadata]
-outputType = "console"
-
-[[workflows.workflow]]
-name = "GitHub Sync"
-author = "agent"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "bash scripts/sync-scheduler.sh"
-
-[workflows.workflow.metadata]
-outputType = "console"
 
 [[ports]]
 localPort = 3001
@@ -67,11 +52,7 @@ externalPort = 3001
 
 [[ports]]
 localPort = 5000
-externalPort = 80
-
-[[ports]]
-localPort = 8080
-externalPort = 8080
+externalPort = 5000
 
 [[ports]]
 localPort = 18801
@@ -85,3 +66,9 @@ build = ["bash", "-c", "pnpm install && pnpm run build"]
 [postMerge]
 path = "scripts/post-merge.sh"
 timeoutMs = 120000
+
+[userenv]
+
+[userenv.shared]
+PORT = "3001"
+API_PORT = "3001"

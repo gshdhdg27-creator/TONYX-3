@@ -229,8 +229,8 @@ function MinesGame({ telegramId, balance, lang, onBalanceChange }: {
       <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
         {[
           { label: t.stake, val: game.stake + " TONYX", col: "#94a3b8" },
-          { label: "МИН", val: "💣 " + game.minesCount, col: "#f87171" },
-          { label: "МНОЖИТЕЛЬ", val: "×" + game.multiplier, col: "#22d3ee" },
+          { label: translations[lang].games.minesLabel, val: "💣 " + game.minesCount, col: "#f87171" },
+          { label: translations[lang].games.multLabel, val: "×" + game.multiplier, col: "#22d3ee" },
         ].map(({ label, val, col }) => (
           <div key={label} style={{ flex: 1, background: "rgba(15,23,42,0.95)", border: "1px solid rgba(30,58,143,0.3)", borderRadius: 14, padding: "10px 0", textAlign: "center" }}>
             <div style={{ fontSize: 8, color: "#334155", letterSpacing: "0.12em", marginBottom: 3 }}>{label}</div>
@@ -1682,7 +1682,7 @@ function GameCard({
       <div style={{ flex: 1, padding: "16px 10px 16px 22px", display: "flex", flexDirection: "column", justifyContent: "space-between", zIndex: 1 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
           <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#22C55E", boxShadow: "0 0 7px rgba(34,197,94,0.8)", animation: "pulse-dot 2s ease-in-out infinite", flexShrink: 0 }} />
-          <span style={{ fontSize: 11, fontWeight: 500, color: "#6B7280" }}>{online} онлайн</span>
+          <span style={{ fontSize: 11, fontWeight: 500, color: "#6B7280" }}>{online} {translations[lang].games.onlineText}</span>
         </div>
         <div style={{ fontSize: 20, fontWeight: 800, color: "#F1F5F9", letterSpacing: "-0.02em", lineHeight: 1.15, marginBottom: 5 }}>{title}</div>
         <div style={{ fontSize: 13, fontWeight: 400, color: "#6B7280", lineHeight: 1.45 }}>{desc}</div>

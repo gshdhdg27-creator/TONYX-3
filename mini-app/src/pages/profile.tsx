@@ -142,6 +142,12 @@ export default function ProfilePage() {
     finally { setWithdrawPending(false); }
   };
 
+  useEffect(() => {
+    if (section === "withdraw" && telegramId) {
+      loadWithdrawHistory();
+    }
+  }, [section, telegramId]);
+
   if (!telegramId) return <LoadingScreen />;
 
   const userTon   = Number((profile as { ton?: string | number } | undefined)?.ton ?? 0);

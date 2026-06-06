@@ -4,6 +4,13 @@ import { translations } from "./i18n";
 
 const LS_KEY = "tonyx_lang";
 
+function safeGet(key: string): string | null {
+  try { return localStorage.getItem(key); } catch { return null; }
+}
+function safeSet(key: string, val: string): void {
+  try { localStorage.setItem(key, val); } catch { /* ignore */ }
+}
+
 interface LangCtx {
   lang: Lang;
   t: typeof translations.ru;
@@ -19,12 +26,14 @@ const LanguageContext = createContext<LangCtx>({
 });
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
-  const stored = localStorage.getItem(LS_KEY) as Lang | null;
-  const [lang, setLangState] = useState<Lang>(stored ?? "ru");
-  const [isChosen, setIsChosen] = useState<boolean>(!!stored);
+  const [lang, setLangState] = useState<Lang>(() => {
+    const stored = safeGet(LS_KEY) as Lang | null;
+    return stored ?? "ru";
+  });
+  const [isChosen, setIsChosen] = useState<boolean>(() => !!safeGet(LS_KEY));
 
   const setLang = useCallback((l: Lang) => {
-    localStorage.setItem(LS_KEY, l);
+    safeSet(LS_KEY, l);
     setLangState(l);
     setIsChosen(true);
   }, []);

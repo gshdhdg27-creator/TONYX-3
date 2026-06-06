@@ -296,44 +296,50 @@ router.post("/users/:id/adjust-balance", async (req, res) => {
 /* GET /admin/withdrawals?status=pending */
 router.get("/withdrawals", async (req, res) => {
   const status = String(req.query.status ?? "pending");
+  try {
+    const rows = await db.select()
+      .from(miniWithdrawalsTable)
+      .where(eq(miniWithdrawalsTable.status, status))
+      .orderBy(desc(miniWithdrawalsTable.createdAt));
 
-  const rows = await db.select()
-    .from(miniWithdrawalsTable)
-    .where(eq(miniWithdrawalsTable.status, status))
-    .orderBy(desc(miniWithdrawalsTable.createdAt));
+    const enriched = await Promise.all(rows.map(async (w) => {
+      const userRow = await db.select({
+        firstName: usersTable.firstName,
+        username: usersTable.username,
+        lastIp: usersTable.lastIp,
+      }).from(usersTable).where(eq(usersTable.telegramId, w.telegramId)).then((r) => r[0] ?? null);
 
-  const enriched = await Promise.all(rows.map(async (w) => {
-    const userRow = await db.select({
-      firstName: usersTable.firstName,
-      username: usersTable.username,
-      lastIp: usersTable.lastIp,
-    }).from(usersTable).where(eq(usersTable.telegramId, w.telegramId)).then((r) => r[0] ?? null);
+      let isTwin = false;
+      if (userRow?.lastIp) {
+        try {
+          const twins = await db.execute<{ cnt: number }>(
+            sql`SELECT COUNT(*)::int AS cnt FROM users WHERE last_ip = ${userRow.lastIp} AND telegram_id != ${w.telegramId}`,
+          );
+          isTwin = (twins.rows[0]?.cnt ?? 0) > 0;
+        } catch { /* ignore twin check error */ }
+      }
 
-    let isTwin = false;
-    if (userRow?.lastIp) {
-      const twins = await db.execute<{ cnt: number }>(
-        sql`SELECT COUNT(*)::int AS cnt FROM users WHERE last_ip = ${userRow.lastIp} AND telegram_id != ${w.telegramId}`,
-      );
-      isTwin = (twins.rows[0]?.cnt ?? 0) > 0;
-    }
+      return {
+        id: w.id,
+        telegramId: w.telegramId,
+        tonAmount: w.tonAmount,
+        amount: w.amount,
+        address: w.address,
+        status: w.status,
+        txHash: w.txHash ?? null,
+        createdAt: w.createdAt.toISOString(),
+        userFirstName: userRow?.firstName ?? null,
+        userUsername: userRow?.username ?? null,
+        userLastIp: userRow?.lastIp ?? null,
+        isTwin,
+      };
+    }));
 
-    return {
-      id: w.id,
-      telegramId: w.telegramId,
-      tonAmount: w.tonAmount,
-      amount: w.amount,
-      address: w.address,
-      status: w.status,
-      txHash: w.txHash ?? null,
-      createdAt: w.createdAt.toISOString(),
-      userFirstName: userRow?.firstName ?? null,
-      userUsername: userRow?.username ?? null,
-      userLastIp: userRow?.lastIp ?? null,
-      isTwin,
-    };
-  }));
-
-  res.json({ withdrawals: enriched });
+    res.json({ withdrawals: enriched });
+  } catch (e) {
+    console.error("[Admin] GET withdrawals error:", e);
+    res.status(500).json({ error: "Database error" });
+  }
 });
 
 /* POST /admin/withdrawals/:id/approve */
@@ -341,9 +347,16 @@ router.post("/withdrawals/:id/approve", async (req, res) => {
   const id = parseInt(req.params.id);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid withdrawal ID" }); return; }
 
-  const row = await db.select().from(miniWithdrawalsTable)
-    .where(eq(miniWithdrawalsTable.id, id))
-    .then((r) => r[0] ?? null);
+  let row;
+  try {
+    row = await db.select().from(miniWithdrawalsTable)
+      .where(eq(miniWithdrawalsTable.id, id))
+      .then((r) => r[0] ?? null);
+  } catch (e) {
+    console.error("[Admin] approve fetch error:", e);
+    res.status(500).json({ error: "Database error" });
+    return;
+  }
 
   if (!row) { res.status(404).json({ error: "Withdrawal not found" }); return; }
   if (row.status !== "pending") { res.status(400).json({ error: "Withdrawal is not in pending state" }); return; }

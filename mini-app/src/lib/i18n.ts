@@ -94,6 +94,9 @@ export const translations = {
       },
       arena: { desc: "Сражайся в реальном времени" },
       spin: { desc: "Крути барабан и забирай банк" },
+      onlineText: "онлайн",
+      minesLabel: "МИН",
+      multLabel: "МНОЖИТЕЛЬ",
     },
     market: {
       title: "P2P Рынок",
@@ -256,6 +259,9 @@ export const translations = {
       },
       arena: { desc: "Fight in real-time" },
       spin: { desc: "Spin the wheel and take the bank" },
+      onlineText: "online",
+      minesLabel: "MINES",
+      multLabel: "MULTIPLIER",
     },
     market: {
       title: "P2P Market",

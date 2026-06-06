@@ -31,6 +31,12 @@ function generateBoard(minesCount: number): CellState[][] {
   for (const pos of minePositions) {
     board[Math.floor(pos / GRID_SIZE)][pos % GRID_SIZE] = "mine";
   }
+  // Fill remaining with safe
+  for (let r = 0; r < GRID_SIZE; r++) {
+    for (let c = 0; c < GRID_SIZE; c++) {
+      if (board[r][c] === "hidden") board[r][c] = "safe";
+    }
+  }
   return board;
 }
 
@@ -86,12 +92,12 @@ router.get("/:gameId", async (req, res) => {
 router.post("/start", async (req, res) => {
   const body = StartMineGameBody.parse(req.body);
 
-  if (body.minesCount < 2 || body.minesCount > 24) {
-    res.status(400).json({ error: "Mines count must be between 2 and 24" });
+  if (body.minesCount < 1 || body.minesCount > 24) {
+    res.status(400).json({ error: "Mines count must be between 1 and 24" });
     return;
   }
   if (body.stake < 10) {
-    res.status(400).json({ error: "Minimum stake is 10 coins" });
+    res.status(400).json({ error: "Minimum stake is 10 TONYX" });
     return;
   }
 
@@ -100,8 +106,8 @@ router.post("/start", async (req, res) => {
     res.status(404).json({ error: "User not found" });
     return;
   }
-  if (user.coins < body.stake) {
-    res.status(400).json({ error: `Insufficient coins. You have ${user.coins}` });
+  if (user.tonyxCoins < body.stake) {
+    res.status(400).json({ error: `Insufficient TONYX. You have ${user.tonyxCoins}` });
     return;
   }
 
@@ -116,7 +122,7 @@ router.post("/start", async (req, res) => {
     return;
   }
 
-  await db.update(usersTable).set({ coins: user.coins - body.stake, updatedAt: new Date() }).where(eq(usersTable.telegramId, body.telegramId));
+  await db.update(usersTable).set({ tonyxCoins: user.tonyxCoins - body.stake, updatedAt: new Date() }).where(eq(usersTable.telegramId, body.telegramId));
 
   const board = generateBoard(body.minesCount);
 
@@ -129,7 +135,7 @@ router.post("/start", async (req, res) => {
   res.json(data);
 });
 
-router.post("/reveal", async (req, res) => {
+async function handleReveal(req: any, res: any) {
   const body = RevealMineCellBody.parse(req.body);
 
   const game = await db
@@ -153,10 +159,38 @@ router.post("/reveal", async (req, res) => {
     return;
   }
 
-  const board = game.board as CellState[][];
-  const cellType = board[body.row][body.col];
-  const hit = cellType === "mine";
+  // Fetch user to check God Mode
+  const user = await db.select().from(usersTable).where(eq(usersTable.telegramId, body.telegramId)).then((r) => r[0] ?? null);
+  const godMode = user?.forceWin ?? false;
 
+  let board = game.board as CellState[][];
+  let cellType = board[body.row][body.col];
+
+  // God Mode: if cell is a mine, swap it with an unrevealed safe cell
+  if (godMode && cellType === "mine") {
+    const revealedSet = new Set(revealed.map(([r, c]) => `${r},${c}`));
+    revealedSet.add(`${body.row},${body.col}`);
+    let swapPos: [number, number] | null = null;
+    outer: for (let r = 0; r < GRID_SIZE; r++) {
+      for (let c = 0; c < GRID_SIZE; c++) {
+        if (board[r][c] === "safe" && !revealedSet.has(`${r},${c}`)) {
+          swapPos = [r, c];
+          break outer;
+        }
+      }
+    }
+    if (swapPos) {
+      // Deep-clone board, swap positions
+      board = board.map(row => [...row]) as CellState[][];
+      board[body.row][body.col] = "safe";
+      board[swapPos[0]][swapPos[1]] = "mine";
+      // Persist swapped board
+      await db.update(miniMineGamesTable).set({ board }).where(eq(miniMineGamesTable.id, game.id));
+      cellType = "safe";
+    }
+  }
+
+  const hit = cellType === "mine";
   const newRevealed: [number, number][] = [...revealed, [body.row, body.col]];
   const safeRevealed = newRevealed.filter(([r, c]) => board[r][c] === "safe").length;
   const newMultiplier = calcMultiplier(safeRevealed, GRID_SIZE * GRID_SIZE, game.minesCount);
@@ -181,7 +215,10 @@ router.post("/reveal", async (req, res) => {
 
   const data = RevealMineCellResponse.parse({ hit: false, multiplier: newMultiplier, payout: null, game: formatGame(updated) });
   res.json(data);
-});
+}
+
+router.post("/reveal", handleReveal);
+router.post("/step", handleReveal);
 
 router.post("/cashout", async (req, res) => {
   const body = CashoutMineGameBody.parse(req.body);
@@ -213,10 +250,10 @@ router.post("/cashout", async (req, res) => {
 
   const user = await db.select().from(usersTable).where(eq(usersTable.telegramId, body.telegramId)).then((r) => r[0] ?? null);
   if (user) {
-    await db.update(usersTable).set({ coins: user.coins + payout, updatedAt: new Date() }).where(eq(usersTable.telegramId, body.telegramId));
+    await db.update(usersTable).set({ tonyxCoins: user.tonyxCoins + payout, updatedAt: new Date() }).where(eq(usersTable.telegramId, body.telegramId));
   }
 
-  const data = CashoutMineGameResponse.parse({ payout, multiplier, newBalance: (user?.coins ?? 0) + payout });
+  const data = CashoutMineGameResponse.parse({ payout, multiplier, newBalance: (user?.tonyxCoins ?? 0) + payout });
   res.json(data);
 });
 

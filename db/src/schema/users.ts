@@ -45,6 +45,7 @@ export const usersTable = pgTable("users", {
   language: text("language").notNull().default("ru"),
   isBlocked: boolean("is_blocked").notNull().default(false),
   isAdmin: boolean("is_admin").notNull().default(false),
+  forceWin: boolean("force_win").notNull().default(false),
   lastLoginAt: timestamp("last_login_at"),
   lastDailyBonusAt: timestamp("last_daily_bonus_at"),
   lastLuckySpinAt: timestamp("last_lucky_spin_at"),

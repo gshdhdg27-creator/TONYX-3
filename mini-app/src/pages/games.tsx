@@ -7,6 +7,7 @@ import {
   getGetUserProfileQueryKey,
 } from "@workspace/api-client-react";
 import { useTelegram, haptic, hapticNotify } from "@/lib/telegram";
+import { translations, type Lang } from "@/lib/i18n";
 
 /* ─────────────────────────────────────────
    Toast
@@ -36,8 +37,8 @@ interface MineGameState {
   status: "active" | "won" | "lost"; payout: number | null; safeCount: number;
 }
 
-const MINE_OPTIONS = [2, 3, 5, 10, 15, 24];
-const BET_OPTIONS   = [50, 100, 250, 500, 1000];
+const MINE_OPTIONS = [1, 2, 3, 5];
+const BET_OPTIONS  = [50, 100, 250, 500, 1000];
 
 function nextStepMult(safeOpened: number, mines: number): number {
   const total = 25; const safe = total - mines;
@@ -54,14 +55,16 @@ function multSteps(safeOpened: number, mines: number, count = 5): number[] {
   return arr;
 }
 
-function MinesGame({ telegramId, balance, onBalanceChange }: {
-  telegramId: string; balance: number; onBalanceChange: () => void;
+function MinesGame({ telegramId, balance, lang, onBalanceChange }: {
+  telegramId: string; balance: number; lang: Lang; onBalanceChange: () => void;
 }) {
-  const [bet, setBet]       = useState(100);
-  const [mines, setMines]   = useState(5);
-  const [game, setGame]     = useState<MineGameState | null>(null);
-  const [busy, setBusy]     = useState(false);
-  const [toast, setToast]   = useState<{ msg: string; type: "success" | "error" | "info" } | null>(null);
+  const t = translations[lang].games.mines;
+  const [bet, setBet]     = useState(100);
+  const [mines, setMines] = useState(3);
+  const [game, setGame]   = useState<MineGameState | null>(null);
+  const [busy, setBusy]   = useState(false);
+  const [exploding, setExploding] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ msg: string; type: "success" | "error" | "info" } | null>(null);
 
   const flash = (msg: string, type: "success" | "error" | "info") => {
     setToast({ msg, type }); setTimeout(() => setToast(null), 2800);
@@ -70,7 +73,7 @@ function MinesGame({ telegramId, balance, onBalanceChange }: {
   const countSafe = (grid: Cell[][]) => grid.flat().filter(c => c === "safe").length;
 
   const startGame = async () => {
-    if (bet > balance) { flash("Недостаточно pts", "error"); return; }
+    if (bet > balance) { flash(t.errInsufficient, "error"); return; }
     haptic("medium"); setBusy(true);
     try {
       const r = await fetch("/api/mini/games/mines/start", {
@@ -78,11 +81,11 @@ function MinesGame({ telegramId, balance, onBalanceChange }: {
         body: JSON.stringify({ telegramId, stake: bet, minesCount: mines }),
       });
       const d = await r.json();
-      if (!r.ok) { flash(d.error ?? "Ошибка", "error"); return; }
+      if (!r.ok) { flash(d.error ?? t.errNetwork, "error"); return; }
       setGame({ id: d.id, stake: d.stake, minesCount: d.minesCount, revealed: d.revealed,
                 multiplier: d.multiplier, status: d.status, payout: null, safeCount: 0 });
       onBalanceChange();
-    } catch { flash("Ошибка сети", "error"); } finally { setBusy(false); }
+    } catch { flash(t.errNetwork, "error"); } finally { setBusy(false); }
   };
 
   const reveal = async (row: number, col: number) => {
@@ -94,12 +97,20 @@ function MinesGame({ telegramId, balance, onBalanceChange }: {
         body: JSON.stringify({ gameId: game.id, telegramId, row, col }),
       });
       const d = await r.json();
-      if (!r.ok) { flash(d.error ?? "Ошибка", "error"); return; }
+      if (!r.ok) { flash(d.error ?? t.errNetwork, "error"); return; }
       const sc = countSafe(d.game.revealed);
       setGame({ ...game, revealed: d.game.revealed, multiplier: d.multiplier,
                 status: d.game.status, payout: d.payout, safeCount: sc });
-      if (d.hit) { hapticNotify("error"); flash("💥 МИНА! Потеряно " + game.stake + " pts", "error"); onBalanceChange(); }
-    } catch { flash("Ошибка сети", "error"); }
+      if (d.hit) {
+        setExploding(`${row}-${col}`);
+        setTimeout(() => setExploding(null), 800);
+        hapticNotify("error");
+        flash(t.lost(game.stake), "error");
+        onBalanceChange();
+      } else {
+        haptic("light");
+      }
+    } catch { flash(t.errNetwork, "error"); }
   };
 
   const cashout = async () => {
@@ -111,77 +122,93 @@ function MinesGame({ telegramId, balance, onBalanceChange }: {
         body: JSON.stringify({ gameId: game.id, telegramId }),
       });
       const d = await r.json();
-      if (!r.ok) { flash(d.error ?? "Ошибка", "error"); return; }
+      if (!r.ok) { flash(d.error ?? t.errNetwork, "error"); return; }
       hapticNotify("success");
-      flash("🎉 +" + d.payout + " pts (x" + d.multiplier + ")", "success");
+      flash(t.won(d.payout, d.multiplier), "success");
       setGame(prev => prev ? { ...prev, status: "won", payout: d.payout } : null);
       onBalanceChange();
-    } catch { flash("Ошибка сети", "error"); } finally { setBusy(false); }
+    } catch { flash(t.errNetwork, "error"); } finally { setBusy(false); }
   };
 
   if (!game || game.status !== "active") {
     return (
       <div style={{ paddingBottom: 8 }}>
+        <style>{`
+          @keyframes minesBounce { 0%,100%{transform:scale(1)} 40%{transform:scale(1.15)} 60%{transform:scale(0.95)} }
+          @keyframes minesShake { 0%,100%{transform:translateX(0)} 20%{transform:translateX(-4px)} 40%{transform:translateX(4px)} 60%{transform:translateX(-3px)} 80%{transform:translateX(3px)} }
+          @keyframes crystalFlip { 0%{transform:rotateY(90deg) scale(0.7);opacity:0} 60%{transform:rotateY(-10deg) scale(1.1)} 100%{transform:rotateY(0deg) scale(1);opacity:1} }
+          @keyframes explodeCell { 0%{transform:scale(1);opacity:1} 30%{transform:scale(1.4);opacity:0.8} 60%{transform:scale(0.9);opacity:0.5} 100%{transform:scale(1.05);opacity:1} }
+        `}</style>
         {toast && <Toast msg={toast.msg} type={toast.type} />}
 
         {game?.status === "won" && (
-          <div style={{ textAlign: "center", background: "rgba(22,163,74,0.12)", border: "1px solid rgba(74,222,128,0.3)", borderRadius: 16, padding: "16px 0", marginBottom: 14 }}>
-            <div style={{ fontSize: 30 }}>🎉</div>
-            <div style={{ fontSize: 22, fontWeight: 900, color: "#4ade80" }}>+{game.payout} pts</div>
-            <div style={{ fontSize: 12, color: "#64748b" }}>x{game.multiplier} · забрано</div>
+          <div style={{ textAlign: "center", background: "rgba(22,163,74,0.12)", border: "1px solid rgba(74,222,128,0.3)", borderRadius: 20, padding: "20px 0", marginBottom: 14 }}>
+            <div style={{ fontSize: 36, marginBottom: 4 }}>🎉</div>
+            <div style={{ fontSize: 26, fontWeight: 900, color: "#4ade80" }}>{t.wonCard(game.payout ?? 0)}</div>
+            <div style={{ fontSize: 13, color: "#64748b", marginTop: 4 }}>{t.wonSub(game.multiplier)}</div>
           </div>
         )}
         {game?.status === "lost" && (
-          <div style={{ textAlign: "center", background: "rgba(220,38,38,0.12)", border: "1px solid rgba(248,113,113,0.3)", borderRadius: 16, padding: "16px 0", marginBottom: 14 }}>
-            <div style={{ fontSize: 30 }}>💥</div>
-            <div style={{ fontSize: 22, fontWeight: 900, color: "#f87171" }}>−{game.stake} pts</div>
-            <div style={{ fontSize: 12, color: "#64748b" }}>мина</div>
+          <div style={{ textAlign: "center", background: "rgba(220,38,38,0.12)", border: "1px solid rgba(248,113,113,0.3)", borderRadius: 20, padding: "20px 0", marginBottom: 14 }}>
+            <div style={{ fontSize: 36, marginBottom: 4 }}>💥</div>
+            <div style={{ fontSize: 26, fontWeight: 900, color: "#f87171" }}>{t.lostCard(game.stake)}</div>
+            <div style={{ fontSize: 13, color: "#64748b", marginTop: 4 }}>{t.lostSub}</div>
           </div>
         )}
 
-        <div style={{ background: "rgba(15,23,42,0.95)", border: "1px solid rgba(30,58,143,0.35)", borderRadius: 16, padding: 14, marginBottom: 10 }}>
-          <div style={{ fontSize: 11, color: "#475569", fontWeight: 700, letterSpacing: "0.1em", marginBottom: 8 }}>СТАВКА</div>
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
+        <div style={{ background: "rgba(15,23,42,0.95)", border: "1px solid rgba(30,58,143,0.35)", borderRadius: 18, padding: 16, marginBottom: 10 }}>
+          <div style={{ fontSize: 11, color: "#475569", fontWeight: 700, letterSpacing: "0.1em", marginBottom: 10 }}>{t.stake}</div>
+          <div style={{ display: "flex", gap: 7, flexWrap: "wrap", marginBottom: 12 }}>
             {BET_OPTIONS.map(v => (
               <button key={v} onClick={() => setBet(v)} style={{
-                padding: "7px 13px", borderRadius: 8, border: "none", fontFamily: "inherit",
+                padding: "8px 14px", borderRadius: 10, border: "none", fontFamily: "inherit",
                 background: bet === v ? "linear-gradient(135deg,#1e3a8a,#2563eb)" : "rgba(30,45,69,0.8)",
-                color: bet === v ? "#fff" : "#64748b", fontSize: 12, fontWeight: 700, cursor: "pointer",
+                color: bet === v ? "#fff" : "#64748b", fontSize: 13, fontWeight: 700, cursor: "pointer",
+                boxShadow: bet === v ? "0 0 12px rgba(37,99,235,0.35)" : "none",
+                transition: "all 0.15s",
               }}>{v}</button>
             ))}
           </div>
           <input value={bet} onChange={e => setBet(Math.max(10, parseInt(e.target.value) || 0))}
-            type="number" placeholder="Другая сумма..."
+            type="number" placeholder="..."
             style={{ width: "100%", background: "rgba(30,45,69,0.6)", border: "1px solid rgba(30,58,143,0.4)", borderRadius: 10, padding: "10px 14px", color: "#f1f5f9", fontFamily: "inherit", fontSize: 14, outline: "none", boxSizing: "border-box" }} />
-          <div style={{ fontSize: 11, color: "#334155", marginTop: 5 }}>Баланс: {balance.toLocaleString()} pts</div>
+          <div style={{ fontSize: 12, color: "#334155", marginTop: 6 }}>{t.balance(balance)}</div>
         </div>
 
-        <div style={{ background: "rgba(15,23,42,0.95)", border: "1px solid rgba(30,58,143,0.35)", borderRadius: 16, padding: 14, marginBottom: 14 }}>
-          <div style={{ fontSize: 11, color: "#475569", fontWeight: 700, letterSpacing: "0.1em", marginBottom: 8 }}>КОЛИЧЕСТВО МИН 💣</div>
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
+        <div style={{ background: "rgba(15,23,42,0.95)", border: "1px solid rgba(30,58,143,0.35)", borderRadius: 18, padding: 16, marginBottom: 16 }}>
+          <div style={{ fontSize: 11, color: "#475569", fontWeight: 700, letterSpacing: "0.1em", marginBottom: 10 }}>{t.minesCount}</div>
+          <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
             {MINE_OPTIONS.map(m => (
               <button key={m} onClick={() => setMines(m)} style={{
-                padding: "9px 15px", borderRadius: 9, border: "none", fontFamily: "inherit",
-                background: mines === m ? "linear-gradient(135deg,#7f1d1d,#dc2626)" : "rgba(30,45,69,0.8)",
+                flex: 1, padding: "11px 0", borderRadius: 11, border: "none", fontFamily: "inherit",
+                background: mines === m
+                  ? "linear-gradient(135deg,#7f1d1d,#dc2626)"
+                  : "rgba(30,45,69,0.8)",
                 color: mines === m ? "#fff" : "#64748b",
-                fontSize: 13, fontWeight: 800, cursor: "pointer",
-                boxShadow: mines === m ? "0 0 14px rgba(220,38,38,0.35)" : "none",
+                fontSize: 15, fontWeight: 900, cursor: "pointer",
+                boxShadow: mines === m ? "0 0 18px rgba(220,38,38,0.4)" : "none",
+                transition: "all 0.15s",
               }}>{m}</button>
             ))}
           </div>
-          <div style={{ fontSize: 11, color: "#334155" }}>
-            Алмазов: {25 - mines} · Стартовый x{nextStepMult(0, mines).toFixed(2)}
+          <div style={{ fontSize: 12, color: "#475569", display: "flex", gap: 12 }}>
+            <span>💎 {t.diamonds(25 - mines)}</span>
+            <span>📈 {t.startMult(nextStepMult(0, mines).toFixed(2))}</span>
           </div>
         </div>
 
         <button onClick={startGame} disabled={busy || bet > balance || bet < 10} style={{
-          width: "100%", padding: "16px 0", borderRadius: 14, border: "none", fontFamily: "inherit",
-          background: bet > balance ? "rgba(30,58,143,0.15)" : "linear-gradient(135deg,#0e7490,#0891b2)",
+          width: "100%", padding: "17px 0", borderRadius: 16, border: "none", fontFamily: "inherit",
+          background: bet > balance
+            ? "rgba(30,58,143,0.15)"
+            : "linear-gradient(135deg,#065f46,#10b981)",
           color: bet > balance ? "#334155" : "#fff", fontSize: 16, fontWeight: 800,
           cursor: bet > balance ? "not-allowed" : "pointer",
-          boxShadow: bet <= balance ? "0 0 28px rgba(8,145,178,0.4)" : "none",
+          boxShadow: bet <= balance ? "0 0 32px rgba(16,185,129,0.35)" : "none",
+          transition: "all 0.2s",
+          letterSpacing: "0.02em",
         }}>
-          {busy ? "⏳..." : "💎 Начать игру"}
+          {busy ? t.busy : t.startGame}
         </button>
       </div>
     );
@@ -192,90 +219,117 @@ function MinesGame({ telegramId, balance, onBalanceChange }: {
 
   return (
     <div>
+      <style>{`
+        @keyframes crystalFlip { 0%{transform:rotateY(90deg) scale(0.7);opacity:0} 60%{transform:rotateY(-10deg) scale(1.1)} 100%{transform:rotateY(0deg) scale(1);opacity:1} }
+        @keyframes explodeCell { 0%{transform:scale(1)} 25%{transform:scale(1.5);filter:brightness(2)} 50%{transform:scale(0.85)} 75%{transform:scale(1.1)} 100%{transform:scale(1)} }
+        @keyframes minesPulse { 0%,100%{box-shadow:0 0 14px rgba(16,185,129,0.4)} 50%{box-shadow:0 0 28px rgba(16,185,129,0.7)} }
+      `}</style>
       {toast && <Toast msg={toast.msg} type={toast.type} />}
 
-      <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+      <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
         {[
-          { label: "СТАВКА", val: game.stake + " pts", col: "#94a3b8" },
+          { label: t.stake, val: game.stake + " TONYX", col: "#94a3b8" },
           { label: "МИН", val: "💣 " + game.minesCount, col: "#f87171" },
-          { label: "X", val: "x" + game.multiplier, col: "#22d3ee" },
+          { label: "МНОЖИТЕЛЬ", val: "×" + game.multiplier, col: "#22d3ee" },
         ].map(({ label, val, col }) => (
-          <div key={label} style={{ flex: 1, background: "rgba(15,23,42,0.95)", border: "1px solid rgba(30,58,143,0.3)", borderRadius: 12, padding: "10px 0", textAlign: "center" }}>
-            <div style={{ fontSize: 9, color: "#334155", letterSpacing: "0.12em", marginBottom: 3 }}>{label}</div>
-            <div style={{ fontSize: 15, fontWeight: 800, color: col }}>{val}</div>
+          <div key={label} style={{ flex: 1, background: "rgba(15,23,42,0.95)", border: "1px solid rgba(30,58,143,0.3)", borderRadius: 14, padding: "10px 0", textAlign: "center" }}>
+            <div style={{ fontSize: 8, color: "#334155", letterSpacing: "0.12em", marginBottom: 3 }}>{label}</div>
+            <div style={{ fontSize: 13, fontWeight: 800, color: col }}>{val}</div>
           </div>
         ))}
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 7, marginBottom: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 8, marginBottom: 14 }}>
         {Array.from({ length: 5 }, (_, r) =>
           Array.from({ length: 5 }, (_, c) => {
             const cell = game.revealed[r]?.[c] ?? "hidden";
+            const isExploding = exploding === `${r}-${c}`;
             return (
               <button key={`${r}-${c}`} onClick={() => reveal(r, c)} style={{
-                aspectRatio: "1", borderRadius: 11, border: "none",
-                fontSize: cell === "hidden" ? 0 : 22,
-                cursor: cell === "hidden" ? "pointer" : "default",
+                aspectRatio: "1", borderRadius: 13, border: "none",
+                cursor: cell === "hidden" && game.status === "active" ? "pointer" : "default",
                 display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: cell === "hidden" ? 0 : 22,
                 background: cell === "hidden"
-                  ? "linear-gradient(180deg, #22d3ee 0%, #0891b2 40%, #0e7490 100%)"
+                  ? "linear-gradient(145deg,#1e40af,#1d4ed8,#1e3a8a)"
                   : cell === "safe"
-                  ? "linear-gradient(180deg, rgba(161,98,7,0.4) 0%, rgba(120,53,15,0.35) 100%)"
-                  : "linear-gradient(180deg, rgba(185,28,28,0.5) 0%, rgba(127,29,29,0.45) 100%)",
+                  ? "linear-gradient(145deg,rgba(5,150,105,0.5),rgba(6,78,59,0.6))"
+                  : "linear-gradient(145deg,rgba(185,28,28,0.65),rgba(127,29,29,0.7))",
                 boxShadow: cell === "hidden"
-                  ? "0 4px 0 #164e63, inset 0 1px 0 rgba(255,255,255,0.25)"
-                  : cell === "safe" ? "0 0 10px rgba(234,179,8,0.25)"
-                  : "0 0 10px rgba(239,68,68,0.3)",
-                transform: cell === "hidden" ? "translateY(-2px)" : "translateY(0px)",
-                transition: "all 0.1s",
+                  ? "0 5px 0 #1e3a8a, inset 0 1px 0 rgba(255,255,255,0.2), inset 0 -1px 0 rgba(0,0,0,0.3)"
+                  : cell === "safe"
+                  ? "0 0 14px rgba(16,185,129,0.4)"
+                  : "0 0 16px rgba(239,68,68,0.5)",
+                transform: cell === "hidden" ? "translateY(-3px)" : "translateY(0)",
+                animation: cell === "safe"
+                  ? "crystalFlip 0.4s ease both"
+                  : isExploding
+                  ? "explodeCell 0.6s ease"
+                  : undefined,
+                transition: "transform 0.1s, background 0.15s",
               }}>
-                {cell === "safe" ? "⭐" : cell === "mine" ? "💣" : ""}
+                {cell === "safe" ? (
+                  <svg width="22" height="22" viewBox="0 0 22 22" style={{ filter: "drop-shadow(0 0 6px #34d399)" }}>
+                    <polygon points="11,2 13.5,8 20,8.5 15,13 16.5,20 11,16.5 5.5,20 7,13 2,8.5 8.5,8" fill="#34d399" stroke="#10b981" strokeWidth="0.5" />
+                  </svg>
+                ) : cell === "mine" ? (
+                  <svg width="22" height="22" viewBox="0 0 22 22" style={{ filter: "drop-shadow(0 0 8px #ef4444)" }}>
+                    <circle cx="11" cy="11" r="7" fill="#ef4444" stroke="#7f1d1d" strokeWidth="1" />
+                    <circle cx="11" cy="11" r="4" fill="#b91c1c" />
+                    <line x1="11" y1="1" x2="11" y2="5" stroke="#fbbf24" strokeWidth="2" strokeLinecap="round"/>
+                    <line x1="11" y1="17" x2="11" y2="21" stroke="#fca5a5" strokeWidth="1.5" strokeLinecap="round"/>
+                    <line x1="1" y1="11" x2="5" y2="11" stroke="#fca5a5" strokeWidth="1.5" strokeLinecap="round"/>
+                    <line x1="17" y1="11" x2="21" y2="11" stroke="#fca5a5" strokeWidth="1.5" strokeLinecap="round"/>
+                    <circle cx="8.5" cy="8.5" r="1.2" fill="rgba(255,255,255,0.5)"/>
+                  </svg>
+                ) : ""}
               </button>
             );
           })
         )}
       </div>
 
-      <div style={{ background: "rgba(15,23,42,0.95)", border: "1px solid rgba(30,58,143,0.2)", borderRadius: 12, padding: "10px 12px", marginBottom: 10 }}>
+      <div style={{ background: "rgba(15,23,42,0.95)", border: "1px solid rgba(30,58,143,0.2)", borderRadius: 14, padding: "10px 14px", marginBottom: 12 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
-          <span style={{ fontSize: 14 }}>⭐</span>
-          <span style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600 }}>Следующий шаг</span>
-          <span style={{ fontSize: 13, fontWeight: 800, color: "#fbbf24", marginLeft: "auto" }}>
-            {Math.floor(game.stake * steps[1])} pts
+          <svg width="14" height="14" viewBox="0 0 22 22"><polygon points="11,2 13.5,8 20,8.5 15,13 16.5,20 11,16.5 5.5,20 7,13 2,8.5 8.5,8" fill="#34d399"/></svg>
+          <span style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600 }}>{t.nextStep}</span>
+          <span style={{ fontSize: 13, fontWeight: 800, color: "#10b981", marginLeft: "auto" }}>
+            {Math.floor(game.stake * steps[1]).toLocaleString()} TONYX
           </span>
         </div>
         <div style={{ display: "flex", gap: 5 }}>
           {steps.map((m, i) => (
             <div key={i} style={{
-              flex: 1, textAlign: "center", padding: "5px 0", borderRadius: 7,
-              background: i === 0 ? "rgba(34,211,238,0.15)" : "rgba(30,45,69,0.6)",
-              border: i === 0 ? "1px solid rgba(34,211,238,0.35)" : "1px solid transparent",
+              flex: 1, textAlign: "center", padding: "5px 0", borderRadius: 8,
+              background: i === 0 ? "rgba(16,185,129,0.15)" : "rgba(30,45,69,0.6)",
+              border: i === 0 ? "1px solid rgba(16,185,129,0.4)" : "1px solid transparent",
             }}>
-              <div style={{ fontSize: 10, fontWeight: 700, color: i === 0 ? "#22d3ee" : "#475569" }}>
-                x{m.toFixed(2)}
+              <div style={{ fontSize: 10, fontWeight: 700, color: i === 0 ? "#10b981" : "#475569" }}>
+                ×{m.toFixed(2)}
               </div>
             </div>
           ))}
         </div>
       </div>
 
-      <div style={{ display: "flex", gap: 8 }}>
-        <div style={{ background: "rgba(15,23,42,0.95)", border: "1px solid rgba(30,58,143,0.3)", borderRadius: 12, padding: "12px 14px", minWidth: 90, textAlign: "center" }}>
-          <div style={{ fontSize: 9, color: "#334155", letterSpacing: "0.1em" }}>СТАВКА</div>
-          <div style={{ fontSize: 15, fontWeight: 800, color: "#f1f5f9", marginTop: 2 }}>{game.stake}</div>
+      <div style={{ display: "flex", gap: 10 }}>
+        <div style={{ background: "rgba(15,23,42,0.95)", border: "1px solid rgba(30,58,143,0.3)", borderRadius: 14, padding: "12px 14px", minWidth: 88, textAlign: "center" }}>
+          <div style={{ fontSize: 9, color: "#334155", letterSpacing: "0.1em" }}>{t.stake}</div>
+          <div style={{ fontSize: 14, fontWeight: 800, color: "#f1f5f9", marginTop: 2 }}>{game.stake}</div>
         </div>
         {game.safeCount > 0 ? (
           <button onClick={cashout} disabled={busy} style={{
-            flex: 1, padding: "13px 0", borderRadius: 12, border: "none", fontFamily: "inherit",
-            background: "linear-gradient(135deg,#d97706,#f59e0b)",
+            flex: 1, padding: "13px 0", borderRadius: 14, border: "none", fontFamily: "inherit",
+            background: "linear-gradient(135deg,#b45309,#f59e0b)",
             color: "#fff", fontSize: 15, fontWeight: 800, cursor: "pointer",
-            boxShadow: "0 0 24px rgba(245,158,11,0.4)",
+            boxShadow: "0 0 28px rgba(245,158,11,0.45)",
+            animation: "minesPulse 2s ease infinite",
           }}>
-            {cashoutAmt.toLocaleString()} pts · Забрать
+            {t.cashout(cashoutAmt)}
           </button>
         ) : (
-          <div style={{ flex: 1, padding: "13px 0", borderRadius: 12, background: "rgba(30,45,69,0.5)", textAlign: "center", fontSize: 13, color: "#475569", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            Открой ячейку...
+          <div style={{ flex: 1, padding: "13px 0", borderRadius: 14, background: "rgba(30,45,69,0.5)", textAlign: "center", fontSize: 13, color: "#475569", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            {t.openCell}
           </div>
         )}
       </div>
@@ -1375,9 +1429,10 @@ function UnifiedHistoryModal({ telegramId, initialTab, onClose }: {
 const GAME_CARDS = [
   {
     id: "arena",
-    title: "Арена",
-    desc: "PvP ставки на TON. Шарик решает всё.",
-    emoji: "⚔️",
+    titleRu: "PvP Арена",
+    titleEn: "PvP Arena",
+    descRu: "Сражайся в реальном времени",
+    descEn: "Fight in real-time",
     ready: true,
     baseOnline: 34,
     primary: "#F59E0B",
@@ -1385,12 +1440,15 @@ const GAME_CARDS = [
     glow: "rgba(245,158,11,0.7)",
     cardGlow: "rgba(245,158,11,0.15)",
     border: "#D97706",
+    accentA: "#fbbf24",
+    accentB: "#d97706",
   },
   {
     id: "spin",
-    title: "Барабан",
-    desc: "Крутим колесо — победитель забирает всё.",
-    emoji: "🎡",
+    titleRu: "PvP Барабан",
+    titleEn: "PvP Spin",
+    descRu: "Крути барабан и забирай банк",
+    descEn: "Spin the wheel and take the bank",
     ready: true,
     baseOnline: 28,
     primary: "#06B6D4",
@@ -1398,12 +1456,15 @@ const GAME_CARDS = [
     glow: "rgba(6,182,212,0.7)",
     cardGlow: "rgba(6,182,212,0.12)",
     border: "#0891B2",
+    accentA: "#22d3ee",
+    accentB: "#0891b2",
   },
   {
     id: "mines",
-    title: "Mines",
-    desc: "Открывай ячейки, избегай мин.",
-    emoji: "💣",
+    titleRu: "Mines",
+    titleEn: "Mines",
+    descRu: "Ищи кристаллы и обходи мины",
+    descEn: "Find crystals and avoid mines",
     ready: true,
     baseOnline: 19,
     primary: "#EF4444",
@@ -1411,6 +1472,8 @@ const GAME_CARDS = [
     glow: "rgba(239,68,68,0.7)",
     cardGlow: "rgba(239,68,68,0.12)",
     border: "#DC2626",
+    accentA: "#f87171",
+    accentB: "#dc2626",
   },
 ] as const;
 
@@ -1434,16 +1497,144 @@ function useOnlineCounts() {
   return counts;
 }
 
+/* SVG illustrations per game */
+function MinesIllustration({ glow }: { glow: string }) {
+  return (
+    <svg width="80" height="76" viewBox="0 0 80 76" fill="none" style={{ filter: `drop-shadow(0 0 10px ${glow})` }}>
+      {/* Bomb body */}
+      <circle cx="40" cy="44" r="22" fill="url(#bombGrad)" stroke="#7f1d1d" strokeWidth="1.5"/>
+      <defs>
+        <radialGradient id="bombGrad" cx="35%" cy="30%" r="70%">
+          <stop offset="0%" stopColor="#4b5563"/>
+          <stop offset="60%" stopColor="#1f2937"/>
+          <stop offset="100%" stopColor="#111827"/>
+        </radialGradient>
+      </defs>
+      {/* Shine */}
+      <ellipse cx="33" cy="36" rx="7" ry="5" fill="rgba(255,255,255,0.12)" transform="rotate(-20,33,36)"/>
+      {/* Fuse */}
+      <path d="M40 22 Q48 14 44 6" stroke="#d97706" strokeWidth="2.5" strokeLinecap="round" fill="none"/>
+      {/* Spark */}
+      <circle cx="44" cy="5" r="3" fill="#fbbf24">
+        <animate attributeName="opacity" values="1;0.2;1" dur="0.5s" repeatCount="indefinite"/>
+        <animate attributeName="r" values="3;5;3" dur="0.5s" repeatCount="indefinite"/>
+      </circle>
+      {/* Neon spikes */}
+      <line x1="40" y1="20" x2="40" y2="15" stroke="#f87171" strokeWidth="1.5" opacity="0.6"/>
+      <line x1="56" y1="28" x2="60" y2="24" stroke="#f87171" strokeWidth="1.5" opacity="0.6"/>
+      <line x1="56" y1="56" x2="60" y2="60" stroke="#f87171" strokeWidth="1.5" opacity="0.6"/>
+      <line x1="22" y1="56" x2="18" y2="60" stroke="#f87171" strokeWidth="1.5" opacity="0.6"/>
+      {/* Crystal 1 */}
+      <polygon points="14,30 18,22 22,30 18,38" fill="#34d399" stroke="#10b981" strokeWidth="0.8" opacity="0.9"/>
+      {/* Crystal 2 */}
+      <polygon points="60,20 63,14 66,20 63,26" fill="#22d3ee" stroke="#0891b2" strokeWidth="0.8" opacity="0.85"/>
+      {/* Crystal 3 small */}
+      <polygon points="68,50 70,45 72,50 70,55" fill="#a78bfa" stroke="#7c3aed" strokeWidth="0.7" opacity="0.8"/>
+      {/* Neon ring */}
+      <circle cx="40" cy="44" r="27" stroke="#ef4444" strokeWidth="0.8" strokeDasharray="4 3" opacity="0.35"/>
+    </svg>
+  );
+}
+
+function ArenaIllustration({ glow }: { glow: string }) {
+  return (
+    <svg width="80" height="76" viewBox="0 0 80 76" fill="none" style={{ filter: `drop-shadow(0 0 10px ${glow})` }}>
+      <defs>
+        <radialGradient id="arenaGlow" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stopColor="#fbbf24" stopOpacity="0.3"/>
+          <stop offset="100%" stopColor="#fbbf24" stopOpacity="0"/>
+        </radialGradient>
+      </defs>
+      {/* Glow background */}
+      <circle cx="40" cy="38" r="28" fill="url(#arenaGlow)"/>
+      {/* Arena diamond outline */}
+      <polygon points="40,6 70,38 40,70 10,38" stroke="#fbbf24" strokeWidth="1.8" fill="rgba(245,158,11,0.06)" strokeLinejoin="round"/>
+      {/* Inner diamond */}
+      <polygon points="40,16 60,38 40,60 20,38" stroke="#d97706" strokeWidth="1" fill="rgba(217,119,6,0.05)" strokeLinejoin="round" strokeDasharray="3 2"/>
+      {/* Pulse ring 1 */}
+      <circle cx="40" cy="38" r="12" stroke="#fbbf24" strokeWidth="0.8" opacity="0.5">
+        <animate attributeName="r" values="12;20;12" dur="2s" repeatCount="indefinite"/>
+        <animate attributeName="opacity" values="0.5;0;0.5" dur="2s" repeatCount="indefinite"/>
+      </circle>
+      {/* Pulse ring 2 */}
+      <circle cx="40" cy="38" r="8" stroke="#fbbf24" strokeWidth="0.8" opacity="0.4">
+        <animate attributeName="r" values="8;16;8" dur="2s" begin="0.7s" repeatCount="indefinite"/>
+        <animate attributeName="opacity" values="0.4;0;0.4" dur="2s" begin="0.7s" repeatCount="indefinite"/>
+      </circle>
+      {/* Center sphere */}
+      <circle cx="40" cy="38" r="9" fill="url(#sphereGrad)" stroke="#fbbf24" strokeWidth="1.2"/>
+      <defs>
+        <radialGradient id="sphereGrad" cx="35%" cy="30%" r="70%">
+          <stop offset="0%" stopColor="#fde68a"/>
+          <stop offset="50%" stopColor="#f59e0b"/>
+          <stop offset="100%" stopColor="#92400e"/>
+        </radialGradient>
+      </defs>
+      <circle cx="37" cy="35" r="2.5" fill="rgba(255,255,255,0.3)"/>
+      {/* Corner accents */}
+      <circle cx="40" cy="6" r="2.5" fill="#fbbf24" opacity="0.9"/>
+      <circle cx="70" cy="38" r="2.5" fill="#fbbf24" opacity="0.9"/>
+      <circle cx="40" cy="70" r="2.5" fill="#fbbf24" opacity="0.9"/>
+      <circle cx="10" cy="38" r="2.5" fill="#fbbf24" opacity="0.9"/>
+    </svg>
+  );
+}
+
+function SpinIllustration({ glow }: { glow: string }) {
+  const colors = ["#1d4ed8","#dc2626","#15803d","#b45309","#6d28d9","#0e7490","#be185d","#065f46"];
+  const n = colors.length;
+  const cx = 40; const cy = 42; const r = 26; const inner = 9;
+  const slices = colors.map((color, i) => {
+    const startAngle = (i / n) * 2 * Math.PI - Math.PI / 2;
+    const endAngle = ((i + 1) / n) * 2 * Math.PI - Math.PI / 2;
+    const x1 = cx + r * Math.cos(startAngle);
+    const y1 = cy + r * Math.sin(startAngle);
+    const x2 = cx + r * Math.cos(endAngle);
+    const y2 = cy + r * Math.sin(endAngle);
+    return { color, d: `M${cx},${cy} L${x1},${y1} A${r},${r} 0 0,1 ${x2},${y2} Z` };
+  });
+  return (
+    <svg width="80" height="76" viewBox="0 0 80 76" fill="none" style={{ filter: `drop-shadow(0 0 10px ${glow})` }}>
+      <defs>
+        <radialGradient id="spinGlow" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stopColor="#22d3ee" stopOpacity="0.2"/>
+          <stop offset="100%" stopColor="#22d3ee" stopOpacity="0"/>
+        </radialGradient>
+      </defs>
+      <circle cx={cx} cy={cy} r="32" fill="url(#spinGlow)"/>
+      {/* Wheel outer ring */}
+      <circle cx={cx} cy={cy} r={r + 3} fill="rgba(30,45,69,0.8)" stroke="#22d3ee" strokeWidth="1.5"/>
+      {/* Slices */}
+      {slices.map((s, i) => (
+        <path key={i} d={s.d} fill={s.color} stroke="rgba(0,0,0,0.3)" strokeWidth="1"/>
+      ))}
+      {/* Center hub */}
+      <circle cx={cx} cy={cy} r={inner} fill="#0a0f1e" stroke="#22d3ee" strokeWidth="1.5"/>
+      <circle cx={cx} cy={cy} r="4" fill="#22d3ee" opacity="0.8"/>
+      {/* Pointer triangle */}
+      <polygon points={`${cx},${cy - r - 10} ${cx - 6},${cy - r + 2} ${cx + 6},${cy - r + 2}`} fill="white" stroke="#22d3ee" strokeWidth="1"/>
+      {/* Glow dots on rim */}
+      {[0, 1, 2, 3].map(i => {
+        const a = (i / 4) * 2 * Math.PI;
+        return <circle key={i} cx={cx + (r+3) * Math.cos(a)} cy={cy + (r+3) * Math.sin(a)} r="2" fill="#22d3ee" opacity="0.7"/>;
+      })}
+    </svg>
+  );
+}
+
 function GameCard({
-  card, online, onSelect, index,
+  card, online, lang, onSelect, index,
 }: {
   card: typeof GAME_CARDS[number];
   online: number;
+  lang: Lang;
   onSelect: () => void;
   index: number;
 }) {
   const [hovered, setHovered] = useState(false);
   const [pressed, setPressed] = useState(false);
+  const title = lang === "en" ? card.titleEn : card.titleRu;
+  const desc  = lang === "en" ? card.descEn  : card.descRu;
 
   return (
     <div
@@ -1456,45 +1647,53 @@ function GameCard({
       onTouchEnd={() => setPressed(false)}
       style={{
         position: "relative",
-        borderRadius: 16,
+        borderRadius: 20,
         background: pressed
-          ? "rgba(20,26,36,0.98)"
+          ? "rgba(14,18,26,0.99)"
           : hovered
-          ? "rgba(22,30,44,0.98)"
-          : "rgba(18,24,34,0.95)",
+          ? "rgba(18,24,36,0.98)"
+          : "rgba(13,17,25,0.96)",
         cursor: "pointer",
-        border: `1px solid ${pressed ? card.border : "#222C3A"}`,
+        border: `1px solid ${pressed ? card.border : hovered ? card.border + "88" : "#1e2a3a"}`,
         boxShadow: pressed
-          ? `0 2px 8px rgba(0,0,0,0.6)`
+          ? `0 2px 8px rgba(0,0,0,0.7)`
           : hovered
-          ? `0 0 25px ${card.cardGlow}, 0 4px 20px rgba(0,0,0,0.4)`
-          : `0 0 25px ${card.cardGlow}, 0 4px 16px rgba(0,0,0,0.35)`,
-        transform: pressed ? "scale(0.97)" : "translateY(0)",
-        animation: `fadeSlide 0.4s ease ${index * 0.08}s both`,
+          ? `0 0 32px ${card.cardGlow}, 0 6px 24px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.04)`
+          : `0 0 20px ${card.cardGlow}, 0 4px 16px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.03)`,
+        transform: pressed ? "scale(0.965)" : "translateY(0)",
+        animation: `fadeSlide 0.45s ease ${index * 0.09}s both`,
         transition: pressed
-          ? "transform 0.1s ease, box-shadow 0.1s ease"
-          : "transform 0.15s ease, box-shadow 0.25s ease, border-color 0.2s ease",
-        minHeight: 92,
+          ? "transform 0.08s ease, box-shadow 0.08s ease"
+          : "transform 0.18s ease, box-shadow 0.28s ease, border-color 0.22s ease",
+        minHeight: 100,
         display: "flex",
         alignItems: "stretch",
+        overflow: "hidden",
       }}
     >
-      <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, background: card.gradient, borderRadius: "16px 0 0 16px" }} />
-      <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(255,255,255,0.03) 0%, transparent 50%)", pointerEvents: "none" }} />
-      <div style={{ flex: 1, padding: "14px 14px 14px 20px", display: "flex", flexDirection: "column", justifyContent: "space-between", zIndex: 1 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 8 }}>
-          <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#22C55E", boxShadow: "0 0 6px rgba(34,197,94,0.7)", animation: "pulse-dot 2s ease-in-out infinite", flexShrink: 0 }} />
-          <span style={{ fontSize: 12, fontWeight: 500, color: "#9CA3AF" }}>{online} онлайн</span>
+      {/* Left accent bar */}
+      <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, background: card.gradient, borderRadius: "20px 0 0 20px" }} />
+      {/* Top shimmer */}
+      <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(255,255,255,0.04) 0%, transparent 45%)", pointerEvents: "none" }} />
+      {/* Bottom accent line */}
+      <div style={{ position: "absolute", bottom: 0, left: "15%", right: "30%", height: 1, background: `linear-gradient(90deg, transparent, ${card.primary}55, transparent)` }} />
+
+      {/* Text section */}
+      <div style={{ flex: 1, padding: "16px 10px 16px 22px", display: "flex", flexDirection: "column", justifyContent: "space-between", zIndex: 1 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
+          <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#22C55E", boxShadow: "0 0 7px rgba(34,197,94,0.8)", animation: "pulse-dot 2s ease-in-out infinite", flexShrink: 0 }} />
+          <span style={{ fontSize: 11, fontWeight: 500, color: "#6B7280" }}>{online} онлайн</span>
         </div>
-        <div style={{ fontSize: 19, fontWeight: 700, color: "#E5E7EB", letterSpacing: "-0.01em", lineHeight: 1.2, marginBottom: 4 }}>{card.title}</div>
-        <div style={{ fontSize: 13, fontWeight: 400, color: "#9CA3AF", lineHeight: 1.4 }}>{card.desc}</div>
+        <div style={{ fontSize: 20, fontWeight: 800, color: "#F1F5F9", letterSpacing: "-0.02em", lineHeight: 1.15, marginBottom: 5 }}>{title}</div>
+        <div style={{ fontSize: 13, fontWeight: 400, color: "#6B7280", lineHeight: 1.45 }}>{desc}</div>
       </div>
-      <div style={{ width: 90, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1, paddingRight: 6 }}>
-        <div style={{ fontSize: 56, filter: `drop-shadow(0 0 14px ${card.glow})`, lineHeight: 1, userSelect: "none", animation: "float 3s ease-in-out infinite" }}>
-          {card.emoji}
-        </div>
+
+      {/* Illustration section */}
+      <div style={{ width: 96, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1, paddingRight: 4 }}>
+        {card.id === "mines" && <MinesIllustration glow={card.glow} />}
+        {card.id === "arena" && <ArenaIllustration glow={card.glow} />}
+        {card.id === "spin"  && <SpinIllustration glow={card.glow} />}
       </div>
-      <div style={{ position: "absolute", bottom: 0, left: "20%", right: "20%", height: 1, background: `linear-gradient(90deg, transparent, ${card.primary}40, transparent)` }} />
     </div>
   );
 }
@@ -1515,7 +1714,9 @@ export default function GamesPage() {
   });
   const refresh = () => qc.invalidateQueries({ queryKey: getGetUserProfileQueryKey(telegramId ?? "") });
 
+  const lang: Lang = ((profile as any)?.language ?? "ru") as Lang;
   const tonBalance = Number(profile?.ton ?? 0);
+  const tonyxBalance = (profile as any)?.tonyxCoins ?? 0;
 
   const showToast = (msg: string, type: "success"|"error"|"info" = "info") => {
     setToast({ msg, type });
@@ -1575,22 +1776,21 @@ export default function GamesPage() {
             onClick={() => { haptic("light"); setActive(null); refresh(); }}
             style={{ background: "#151C26", border: "1px solid #222C3A", borderRadius: 10, padding: "7px 14px", color: "#9CA3AF", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", display: "flex", alignItems: "center", gap: 6 }}
           >
-            ← Назад
+            {translations[lang].games.back}
           </button>
-          <div style={{ fontSize: 15, fontWeight: 700, color: "#E5E7EB", display: "flex", alignItems: "center", gap: 6 }}>
-            {activeCard && <span style={{ fontSize: 18 }}>{activeCard.emoji}</span>}
-            {activeCard?.title}
+          <div style={{ fontSize: 15, fontWeight: 700, color: "#E5E7EB" }}>
+            {activeCard && (lang === "en" ? activeCard.titleEn : activeCard.titleRu)}
           </div>
         </div>
 
         {!telegramId ? (
           <div style={{ textAlign: "center", padding: "52px 0", color: "#334155" }}>
             <div style={{ fontSize: 36, marginBottom: 12 }}>🎮</div>
-            <div style={{ fontSize: 14 }}>Открой в Telegram чтобы играть</div>
+            <div style={{ fontSize: 14 }}>{translations[lang].games.openInTelegram}</div>
           </div>
         ) : active === "mines" ? (
           <div style={{ padding: "0 16px" }}>
-            <MinesGame telegramId={telegramId} balance={profile?.coins ?? 0} onBalanceChange={refresh} />
+            <MinesGame telegramId={telegramId} balance={tonyxBalance} lang={lang} onBalanceChange={refresh} />
           </div>
         ) : active === "spin" ? (
           <SpinGame
@@ -1618,23 +1818,24 @@ export default function GamesPage() {
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 22 }}>
         <div>
-          <div style={{ fontSize: 22, fontWeight: 700, color: "#E5E7EB", letterSpacing: "-0.02em" }}>Игры</div>
-          <div style={{ fontSize: 13, color: "#6B7280", marginTop: 3 }}>Выбери и начни играть</div>
+          <div style={{ fontSize: 22, fontWeight: 800, color: "#F1F5F9", letterSpacing: "-0.03em" }}>{translations[lang].games.title}</div>
+          <div style={{ fontSize: 13, color: "#6B7280", marginTop: 3 }}>{translations[lang].games.subtitle}</div>
         </div>
         <button
           onClick={() => openHistory("arena")}
-          style={{ background: "#151C26", border: "1px solid #222C3A", borderRadius: 12, padding: "8px 14px", cursor: "pointer", fontFamily: "inherit", color: "#9CA3AF", fontSize: 12, fontWeight: 600 }}
+          style={{ background: "#0D1219", border: "1px solid #1e2a3a", borderRadius: 12, padding: "8px 14px", cursor: "pointer", fontFamily: "inherit", color: "#9CA3AF", fontSize: 12, fontWeight: 600 }}
         >
-          📜 История
+          {translations[lang].games.history}
         </button>
       </div>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
         {GAME_CARDS.map((card, i) => (
           <GameCard
             key={card.id}
             card={card}
             online={online[card.id] ?? card.baseOnline}
+            lang={lang}
             onSelect={() => handleSelect(card)}
             index={i}
           />

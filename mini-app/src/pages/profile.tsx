@@ -4,9 +4,6 @@ import {
   useGetUserProfile,
   getGetUserProfileQueryKey,
   useGetReferrals,
-  useRequestMiniWithdraw,
-  useGetMiniWithdrawals,
-  getGetMiniWithdrawalsQueryKey,
   useGetMiniHistory,
 } from "@workspace/api-client-react";
 import { useTelegram, haptic, hapticNotify } from "@/lib/telegram";
@@ -59,16 +56,27 @@ function LoadingScreen() {
   );
 }
 
+interface WithdrawalHistoryItem {
+  id: number;
+  tonAmount: number | null;
+  amount: number;
+  address: string;
+  status: string;
+  txHash: string | null;
+  createdAt: string;
+}
+
 function StatusBadge({ status }: { status: string }) {
-  const cfg: Record<string, { bg: string; color: string }> = {
-    pending: { bg: "rgba(217,119,6,0.2)", color: "#fbbf24" },
-    completed: { bg: "rgba(22,163,74,0.2)", color: "#4ade80" },
-    rejected: { bg: "rgba(220,38,38,0.2)", color: "#f87171" },
+  const cfg: Record<string, { bg: string; color: string; label: string }> = {
+    pending:   { bg: "rgba(217,119,6,0.2)",   color: "#fbbf24", label: "⏳ ожидает" },
+    completed: { bg: "rgba(22,163,74,0.2)",   color: "#4ade80", label: "✅ выплачено" },
+    approved:  { bg: "rgba(22,163,74,0.2)",   color: "#4ade80", label: "✅ одобрено" },
+    rejected:  { bg: "rgba(220,38,38,0.2)",   color: "#f87171", label: "❌ отклонено" },
   };
   const c = cfg[status] ?? cfg.pending;
   return (
     <span style={{ background: c.bg, color: c.color, padding: "3px 10px", borderRadius: 8, fontSize: 11, fontWeight: 700 }}>
-      {status}
+      {c.label}
     </span>
   );
 }
@@ -79,15 +87,16 @@ export default function ProfilePage() {
   const tp = t.profile;
   const qc = useQueryClient();
   const [section, setSection] = useState<Section>("main");
-  const [withdrawAmount, setWithdrawAmount] = useState("");
+  const [tonWithdrawAmount, setTonWithdrawAmount] = useState("");
   const [withdrawAddress, setWithdrawAddress] = useState("");
+  const [withdrawPending, setWithdrawPending] = useState(false);
+  const [withdrawHistory, setWithdrawHistory] = useState<WithdrawalHistoryItem[]>([]);
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
   const [copied, setCopied] = useState(false);
   const [showLangPicker, setShowLangPicker] = useState(false);
 
   const { data: profile } = useGetUserProfile(telegramId ?? "", { query: { enabled: !!telegramId, refetchInterval: 15000 } });
   const { data: referrals } = useGetReferrals(telegramId ?? "", { query: { enabled: !!telegramId } });
-  const { data: withdrawals } = useGetMiniWithdrawals(telegramId ?? "", { query: { enabled: !!telegramId && section === "withdraw" } });
   const { data: history } = useGetMiniHistory(telegramId ?? "", { query: { enabled: !!telegramId && section === "main", refetchInterval: 20000 } });
 
   const showToast = (msg: string, type: "success" | "error") => {
@@ -95,26 +104,49 @@ export default function ProfilePage() {
     setTimeout(() => setToast(null), 2500);
   };
 
-  const withdraw = useRequestMiniWithdraw({
-    mutation: {
-      onSuccess: (data) => {
-        hapticNotify("success");
-        showToast(data.message, "success");
-        setWithdrawAmount(""); setWithdrawAddress("");
-        qc.invalidateQueries({ queryKey: getGetUserProfileQueryKey(telegramId ?? "") });
-        qc.invalidateQueries({ queryKey: getGetMiniWithdrawalsQueryKey(telegramId ?? "") });
-      },
-      onError: (e: unknown) => showToast((e as { data?: { error?: string } })?.data?.error ?? "Failed", "error"),
-    },
-  });
+  const loadWithdrawHistory = async () => {
+    if (!telegramId) return;
+    try {
+      const r = await fetch(`/api/mini/wallet/withdrawals/${telegramId}`);
+      if (r.ok) {
+        const d = await r.json();
+        setWithdrawHistory(d.withdrawals ?? []);
+      }
+    } catch { /* ignore */ }
+  };
+
+  const submitWithdraw = async () => {
+    if (!telegramId) return;
+    haptic("heavy");
+    const amount = parseFloat(tonWithdrawAmount);
+    if (isNaN(amount) || amount < 0.1) { showToast("Минимум 0.1 TON", "error"); return; }
+    if (amount > userTon) { showToast("Недостаточно TON на балансе", "error"); return; }
+    const addr = withdrawAddress.trim();
+    if (!addr) { showToast("Введите TON адрес", "error"); return; }
+
+    setWithdrawPending(true);
+    try {
+      const r = await fetch("/api/mini/wallet/withdraw", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ telegramId, tonAmount: amount, address: addr }),
+      });
+      const d = await r.json();
+      if (!r.ok) { showToast(d.error ?? "Ошибка сервера", "error"); return; }
+      hapticNotify("success");
+      showToast(d.message ?? "Заявка отправлена!", "success");
+      setTonWithdrawAmount(""); setWithdrawAddress("");
+      qc.invalidateQueries({ queryKey: getGetUserProfileQueryKey(telegramId) });
+      await loadWithdrawHistory();
+    } catch { showToast("Ошибка сети, попробуйте снова", "error"); }
+    finally { setWithdrawPending(false); }
+  };
 
   if (!telegramId) return <LoadingScreen />;
 
-  const userTon    = Number((profile as { ton?: string | number } | undefined)?.ton ?? 0);
-  const userTonyx  = Number((profile as { tonyxCoins?: number } | undefined)?.tonyxCoins ?? 0);
-  const boostRate  = Number((profile as { boostRate?: number } | undefined)?.boostRate ?? 0);
-  const minWithdraw = withdrawals?.minimumAmount ?? 1000;
-  const tonFromWithdraw = withdrawAmount ? parseInt(withdrawAmount) / 1000 : 0;
+  const userTon   = Number((profile as { ton?: string | number } | undefined)?.ton ?? 0);
+  const userTonyx = Number((profile as { tonyxCoins?: number } | undefined)?.tonyxCoins ?? 0);
+  const boostRate = Number((profile as { boostRate?: number } | undefined)?.boostRate ?? 0);
   const inviteLink = `https://t.me/TONYX_game_bot?start=${telegramId ?? ""}`;
 
   const copyLink = async () => {
@@ -272,60 +304,112 @@ export default function ProfilePage() {
       {/* ─── Withdraw section ─── */}
       {section === "withdraw" && (
         <div style={{ marginBottom: 16 }}>
-          <div style={{ background: "rgba(17,24,39,0.9)", border: "1px solid rgba(30,58,143,0.3)", borderRadius: 16, padding: 16, marginBottom: 14 }}>
-            <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>Вывод TON</div>
-            <div style={{ fontSize: 12, color: "#64748b", marginBottom: 14 }}>Мин: {minWithdraw} pts = {minWithdraw / 1000} TON</div>
+          <div style={{ background: "rgba(17,24,39,0.9)", border: "1px solid rgba(22,163,74,0.3)", borderRadius: 16, padding: 16, marginBottom: 14 }}>
+            {/* Header */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: "#f1f5f9" }}>💸 Вывод TON</div>
+              <div style={{ fontSize: 11, color: "#475569", fontWeight: 600 }}>
+                Баланс: <span style={{ color: "#4ade80" }}>{userTon.toFixed(4)} TON</span>
+              </div>
+            </div>
+            <div style={{ fontSize: 12, color: "#64748b", marginBottom: 14 }}>
+              Минимум: 0.1 TON · Обработка до 24 часов
+            </div>
+
+            {/* TON amount */}
             <input
-              value={withdrawAmount} onChange={(e) => setWithdrawAmount(e.target.value)}
-              type="number" step="1000" placeholder={`Мин. ${minWithdraw} pts`}
-              style={{ width: "100%", background: "rgba(30,45,69,0.6)", border: "1px solid rgba(30,58,143,0.4)", borderRadius: 10, padding: "12px 14px", color: "#f1f5f9", fontFamily: "inherit", fontSize: 14, outline: "none", boxSizing: "border-box", marginBottom: 10 }}
+              value={tonWithdrawAmount}
+              onChange={(e) => setTonWithdrawAmount(e.target.value)}
+              type="number" step="0.01" min="0.1"
+              placeholder="Сумма в TON (мин. 0.1)"
+              style={{
+                width: "100%", background: "rgba(30,45,69,0.6)",
+                border: `1px solid ${parseFloat(tonWithdrawAmount) > userTon ? "rgba(220,38,38,0.6)" : "rgba(30,58,143,0.4)"}`,
+                borderRadius: 10, padding: "12px 14px", color: "#f1f5f9",
+                fontFamily: "inherit", fontSize: 14, outline: "none",
+                boxSizing: "border-box", marginBottom: 10,
+              }}
             />
+
+            {/* TON address */}
             <input
-              value={withdrawAddress} onChange={(e) => setWithdrawAddress(e.target.value)}
-              type="text" placeholder="TON адрес кошелька (UQ…)"
-              style={{ width: "100%", background: "rgba(30,45,69,0.6)", border: "1px solid rgba(30,58,143,0.4)", borderRadius: 10, padding: "12px 14px", color: "#f1f5f9", fontFamily: "inherit", fontSize: 14, outline: "none", boxSizing: "border-box", marginBottom: 10 }}
+              value={withdrawAddress}
+              onChange={(e) => setWithdrawAddress(e.target.value)}
+              type="text"
+              placeholder="TON адрес (UQ… / EQ… / 0:hex)"
+              style={{
+                width: "100%", background: "rgba(30,45,69,0.6)",
+                border: "1px solid rgba(30,58,143,0.4)",
+                borderRadius: 10, padding: "12px 14px", color: "#f1f5f9",
+                fontFamily: "inherit", fontSize: 14, outline: "none",
+                boxSizing: "border-box", marginBottom: 10,
+              }}
             />
-            {tonFromWithdraw > 0 && (
-              <div style={{ background: "rgba(22,163,74,0.12)", borderRadius: 10, padding: "10px 14px", fontSize: 13, color: "#4ade80", marginBottom: 12, fontWeight: 600 }}>
-                Вы получите: {tonFromWithdraw.toFixed(4)} TON
+
+            {/* Validation hint */}
+            {tonWithdrawAmount && parseFloat(tonWithdrawAmount) > userTon && (
+              <div style={{ background: "rgba(220,38,38,0.12)", borderRadius: 10, padding: "9px 14px", fontSize: 12, color: "#f87171", marginBottom: 10, fontWeight: 600 }}>
+                ⚠️ Недостаточно TON. Ваш баланс: {userTon.toFixed(4)} TON
               </div>
             )}
+
             <button
-              onClick={() => {
-                try {
-                  haptic("heavy");
-                  const amount = parseInt(withdrawAmount, 10);
-                  if (!telegramId || isNaN(amount) || amount < minWithdraw || !withdrawAddress.trim()) {
-                    showToast("Проверьте сумму и адрес кошелька", "error"); return;
-                  }
-                  withdraw.mutate({ data: { telegramId, amount, address: withdrawAddress.trim() } });
-                } catch { showToast("Ошибка — попробуйте ещё раз", "error"); }
-              }}
-              disabled={!withdrawAmount || !withdrawAddress || withdraw.isPending || parseInt(withdrawAmount, 10) < minWithdraw}
+              onClick={submitWithdraw}
+              disabled={
+                withdrawPending ||
+                !tonWithdrawAmount ||
+                !withdrawAddress ||
+                parseFloat(tonWithdrawAmount) < 0.1 ||
+                parseFloat(tonWithdrawAmount) > userTon
+              }
               style={{
                 width: "100%", padding: "13px 0", borderRadius: 12, border: "none",
                 background: "linear-gradient(135deg, #15803d, #22c55e)",
                 color: "#fff", fontSize: 15, fontWeight: 700, fontFamily: "inherit",
-                cursor: "pointer", opacity: withdraw.isPending ? 0.6 : 1,
+                cursor: "pointer",
+                opacity: (withdrawPending || parseFloat(tonWithdrawAmount || "0") > userTon) ? 0.5 : 1,
               }}
             >
-              {withdraw.isPending ? "Отправляем…" : "Запросить вывод"}
+              {withdrawPending ? "⏳ Отправляем…" : "Запросить вывод"}
             </button>
           </div>
 
-          {withdrawals?.withdrawals && withdrawals.withdrawals.length > 0 && (
+          {/* Withdrawal history */}
+          {withdrawHistory.length > 0 && (
             <div style={{ background: "rgba(17,24,39,0.9)", border: "1px solid rgba(30,58,143,0.3)", borderRadius: 16, padding: 16 }}>
               <div style={{ fontSize: 11, color: "#64748b", marginBottom: 10, letterSpacing: "0.12em", fontWeight: 600 }}>ИСТОРИЯ ВЫВОДОВ</div>
-              {withdrawals.withdrawals.slice().reverse().map(w => (
+              {withdrawHistory.slice().reverse().map(w => (
                 <div key={w.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: "1px solid rgba(30,58,143,0.15)" }}>
                   <div>
-                    <div style={{ fontSize: 13, fontWeight: 600 }}>{w.amount} pts → {w.tonAmount?.toFixed(4) ?? "?"} TON</div>
-                    <div style={{ fontSize: 11, color: "#475569" }}>{new Date(w.createdAt).toLocaleDateString()}</div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: "#f1f5f9" }}>
+                      {w.tonAmount != null ? `${Number(w.tonAmount).toFixed(4)} TON` : `${w.amount} pts`}
+                    </div>
+                    <div style={{ fontSize: 10, color: "#475569", marginTop: 2 }}>
+                      {w.address.slice(0, 12)}…{w.address.slice(-6)}
+                    </div>
+                    <div style={{ fontSize: 10, color: "#334155" }}>{new Date(w.createdAt).toLocaleDateString()}</div>
                   </div>
-                  <StatusBadge status={w.status} />
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
+                    <StatusBadge status={w.status} />
+                    {w.txHash && (
+                      <div style={{ fontSize: 9, color: "#4ade80", fontFamily: "monospace", maxWidth: 80, overflow: "hidden", textOverflow: "ellipsis" }}>
+                        {w.txHash}
+                      </div>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
+          )}
+
+          {/* Load history button */}
+          {withdrawHistory.length === 0 && (
+            <button
+              onClick={loadWithdrawHistory}
+              style={{ width: "100%", padding: "10px 0", borderRadius: 10, border: "1px solid rgba(30,58,143,0.25)", background: "transparent", color: "#475569", fontSize: 12, fontFamily: "inherit", cursor: "pointer" }}
+            >
+              📜 Показать историю выводов
+            </button>
           )}
         </div>
       )}

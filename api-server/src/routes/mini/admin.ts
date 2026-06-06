@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
-import { usersTable, miniMarketOrdersTable, systemSettingsTable } from "@workspace/db/schema";
+import { usersTable, miniMarketOrdersTable, systemSettingsTable, miniWithdrawalsTable } from "@workspace/db/schema";
 import { eq, sql, or, ilike, desc } from "drizzle-orm";
 
 const router: IRouter = Router();
@@ -287,6 +287,137 @@ router.post("/users/:id/adjust-balance", async (req, res) => {
     await db.update(usersTable).set({ tonyxCoins: newVal, updatedAt: new Date() }).where(eq(usersTable.telegramId, id));
     res.json({ success: true, currency, action, newBalance: newVal });
   }
+});
+
+/* ══════════════════════════════════════════════════════════════════
+   WITHDRAWAL MANAGEMENT
+══════════════════════════════════════════════════════════════════ */
+
+/* GET /admin/withdrawals?status=pending */
+router.get("/withdrawals", async (req, res) => {
+  const status = String(req.query.status ?? "pending");
+
+  const rows = await db.select()
+    .from(miniWithdrawalsTable)
+    .where(eq(miniWithdrawalsTable.status, status))
+    .orderBy(desc(miniWithdrawalsTable.createdAt));
+
+  const enriched = await Promise.all(rows.map(async (w) => {
+    const userRow = await db.select({
+      firstName: usersTable.firstName,
+      username: usersTable.username,
+      lastIp: usersTable.lastIp,
+    }).from(usersTable).where(eq(usersTable.telegramId, w.telegramId)).then((r) => r[0] ?? null);
+
+    let isTwin = false;
+    if (userRow?.lastIp) {
+      const twins = await db.execute<{ cnt: number }>(
+        sql`SELECT COUNT(*)::int AS cnt FROM users WHERE last_ip = ${userRow.lastIp} AND telegram_id != ${w.telegramId}`,
+      );
+      isTwin = (twins.rows[0]?.cnt ?? 0) > 0;
+    }
+
+    return {
+      id: w.id,
+      telegramId: w.telegramId,
+      tonAmount: w.tonAmount,
+      amount: w.amount,
+      address: w.address,
+      status: w.status,
+      txHash: w.txHash ?? null,
+      createdAt: w.createdAt.toISOString(),
+      userFirstName: userRow?.firstName ?? null,
+      userUsername: userRow?.username ?? null,
+      userLastIp: userRow?.lastIp ?? null,
+      isTwin,
+    };
+  }));
+
+  res.json({ withdrawals: enriched });
+});
+
+/* POST /admin/withdrawals/:id/approve */
+router.post("/withdrawals/:id/approve", async (req, res) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid withdrawal ID" }); return; }
+
+  const row = await db.select().from(miniWithdrawalsTable)
+    .where(eq(miniWithdrawalsTable.id, id))
+    .then((r) => r[0] ?? null);
+
+  if (!row) { res.status(404).json({ error: "Withdrawal not found" }); return; }
+  if (row.status !== "pending") { res.status(400).json({ error: "Withdrawal is not in pending state" }); return; }
+
+  const manualTxHash: string | null = req.body?.txHash ? String(req.body.txHash) : null;
+  let txHash: string | null = manualTxHash;
+
+  const mnemonic = process.env.ADMIN_WALLET_MNEMONIC;
+  if (mnemonic && !txHash && row.tonAmount) {
+    try {
+      const { TonClient, WalletContractV4, internal, toNano } = await import("@ton/ton");
+      const { mnemonicToPrivateKey } = await import("@ton/crypto");
+      const endpoint = process.env.TON_ENDPOINT ?? "https://toncenter.com/api/v2/jsonRPC";
+      const apiKey = process.env.TON_API_KEY ?? "";
+
+      const keyPair = await mnemonicToPrivateKey(mnemonic.split(" "));
+      const wallet = WalletContractV4.create({ publicKey: keyPair.publicKey, workchain: 0 });
+      const client = new TonClient({ endpoint, apiKey });
+      const contract = client.open(wallet);
+      const seqno = await contract.getSeqno();
+
+      await contract.sendTransfer({
+        secretKey: keyPair.secretKey,
+        seqno,
+        messages: [internal({ to: row.address, value: toNano(row.tonAmount), bounce: false })],
+      });
+
+      txHash = `auto_${Date.now()}_seqno${seqno}`;
+      console.log(`[Withdrawal] Auto-sent ${row.tonAmount} TON to ${row.address}, seqno=${seqno}`);
+    } catch (e) {
+      console.error("[Withdrawal] Auto-send failed:", e);
+      res.status(500).json({ error: `Auto-send failed: ${String(e)}. Add txHash manually to approve.` });
+      return;
+    }
+  }
+
+  await db.update(miniWithdrawalsTable)
+    .set({ status: "approved", txHash: txHash ?? undefined })
+    .where(eq(miniWithdrawalsTable.id, id));
+
+  console.log(`[Withdrawal] id=${id} approved by admin. txHash=${txHash ?? "manual"}`);
+  res.json({ ok: true, txHash, message: "Withdrawal approved" + (txHash ? `. TX: ${txHash}` : " (manual process)") });
+});
+
+/* POST /admin/withdrawals/:id/reject */
+router.post("/withdrawals/:id/reject", async (req, res) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid withdrawal ID" }); return; }
+
+  const row = await db.select().from(miniWithdrawalsTable)
+    .where(eq(miniWithdrawalsTable.id, id))
+    .then((r) => r[0] ?? null);
+
+  if (!row) { res.status(404).json({ error: "Withdrawal not found" }); return; }
+  if (row.status !== "pending") { res.status(400).json({ error: "Withdrawal is not in pending state" }); return; }
+
+  if (row.tonAmount) {
+    const user = await db.select().from(usersTable)
+      .where(eq(usersTable.telegramId, row.telegramId))
+      .then((r) => r[0] ?? null);
+    if (user) {
+      const refunded = parseFloat((Number(user.ton ?? 0) + Number(row.tonAmount)).toFixed(8));
+      await db.update(usersTable)
+        .set({ ton: String(refunded), updatedAt: new Date() })
+        .where(eq(usersTable.telegramId, row.telegramId));
+      console.log(`[Withdrawal] id=${id} rejected — refunded ${row.tonAmount} TON to ${row.telegramId}`);
+    }
+  }
+
+  await db.update(miniWithdrawalsTable)
+    .set({ status: "rejected" })
+    .where(eq(miniWithdrawalsTable.id, id));
+
+  res.json({ ok: true, message: "Withdrawal rejected. TON balance returned to user." });
 });
 
 export default router;

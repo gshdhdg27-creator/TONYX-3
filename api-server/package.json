@@ -9,6 +9,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@ton/crypto": "^3.3.0",
+    "@ton/ton": "^16.3.0",
     "@types/pino": "^7.0.5",
     "@workspace/api-zod": "workspace:*",
     "@workspace/db": "workspace:*",

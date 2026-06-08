@@ -127,6 +127,20 @@ router.get("/stats", async (req, res) => {
   }
 });
 
+/* GET /admin/online-count */
+router.get("/online-count", async (_req, res) => {
+  try {
+    const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000);
+    const row = await db.execute<{ cnt: number }>(
+      sql`SELECT COUNT(*)::int AS cnt FROM users WHERE last_login_at >= ${fiveMinAgo}`
+    );
+    res.json({ count: row.rows[0]?.cnt ?? 0 });
+  } catch (e) {
+    console.error("[Admin] online-count error:", e);
+    res.status(500).json({ count: 0 });
+  }
+});
+
 /* GET /admin/users */
 router.get("/users", async (req, res) => {
   const search = normalizeId(req.query.search);
@@ -148,6 +162,8 @@ router.get("/users", async (req, res) => {
     const enriched = await Promise.all(rows.map(async (u) => {
       let ordersCount = 0;
       let referralsCount = 0;
+      let twinCount = 0;
+      let isMainAccount = false;
       try {
         const [ordersRow, referralsRow] = await Promise.all([
           db.execute<{ cnt: number }>(sql`SELECT COUNT(*)::int AS cnt FROM mini_market_orders WHERE seller_id = ${u.telegramId}`),
@@ -155,6 +171,19 @@ router.get("/users", async (req, res) => {
         ]);
         ordersCount = ordersRow.rows[0]?.cnt ?? 0;
         referralsCount = referralsRow.rows[0]?.cnt ?? 0;
+
+        if (u.lastIp) {
+          const twinRow = await db.execute<{ cnt: number }>(
+            sql`SELECT COUNT(*)::int AS cnt FROM users WHERE last_ip = ${u.lastIp} AND telegram_id != ${u.telegramId}`
+          );
+          twinCount = twinRow.rows[0]?.cnt ?? 0;
+          if (twinCount > 0) {
+            const firstRow = await db.execute<{ telegram_id: string }>(
+              sql`SELECT telegram_id FROM users WHERE last_ip = ${u.lastIp} ORDER BY created_at ASC LIMIT 1`
+            );
+            isMainAccount = firstRow.rows[0]?.telegram_id === u.telegramId;
+          }
+        }
       } catch { /* non-fatal */ }
 
       const isOnline = u.lastLoginAt && (Date.now() - u.lastLoginAt.getTime() < 5 * 60 * 1000);
@@ -169,6 +198,10 @@ router.get("/users", async (req, res) => {
         totalOrders: ordersCount,
         referrals: referralsCount,
         isBlocked: u.isBlocked ?? false, isAdmin: u.isAdmin ?? false,
+        forceWin: u.forceWin ?? false,
+        lastIp: u.lastIp ?? null,
+        twinCount,
+        isMainAccount,
         isOnline: !!isOnline, lastLoginAt: u.lastLoginAt?.toISOString() ?? null,
         createdAt: u.createdAt.toISOString(),
         dailyOrdersStart: u.dailyOrdersStart ?? 0,
@@ -258,6 +291,47 @@ router.post("/users/:id/block", async (req, res) => {
   await db.update(usersTable).set({ isBlocked: !!block, updatedAt: new Date() })
     .where(eq(usersTable.telegramId, id));
   res.json({ success: true });
+});
+
+/* POST /admin/users/:id/force-win */
+router.post("/users/:id/force-win", async (req, res) => {
+  const { id } = req.params;
+  const { enable } = req.body as { enable: boolean };
+  const user = await db.select().from(usersTable).where(eq(usersTable.telegramId, id)).then(r => r[0] ?? null);
+  if (!user) { res.status(404).json({ error: "Пользователь не найден" }); return; }
+  await db.update(usersTable).set({ forceWin: !!enable, updatedAt: new Date() }).where(eq(usersTable.telegramId, id));
+  console.log(`[Admin] force_win=${enable} set for user ${id}`);
+  res.json({ success: true, forceWin: !!enable, message: enable ? "🎮 Режим Бога включён" : "🎮 Режим Бога выключен" });
+});
+
+/* POST /admin/users/:id/delete-data */
+router.post("/users/:id/delete-data", async (req, res) => {
+  const adminId = extractAdminId(req);
+  if (adminId !== OWNER_ID) {
+    res.status(403).json({ error: "Только суперадмин может удалять данные пользователей" }); return;
+  }
+  const { id } = req.params;
+  if (id === OWNER_ID) { res.status(400).json({ error: "Нельзя удалить данные суперадмина" }); return; }
+  try {
+    await db.execute(sql`DELETE FROM ad_views WHERE telegram_id = ${id}`);
+    await db.execute(sql`DELETE FROM mini_market_orders WHERE seller_id = ${id} OR buyer_id = ${id}`);
+    await db.execute(sql`DELETE FROM mini_withdrawals WHERE telegram_id = ${id}`);
+    await db.execute(sql`DELETE FROM mini_topup_requests WHERE telegram_id = ${id}`);
+    await db.execute(sql`DELETE FROM user_tasks WHERE user_id = ${id}`);
+    await db.execute(sql`DELETE FROM user_achievements WHERE user_id = ${id}`);
+    await db.update(usersTable).set({
+      coins: 0, ton: "0", tonyxCoins: 0, boostRate: "0",
+      totalAdsWatched: 0, totalTonDeposited: "0", totalGamesPlayed: 0,
+      wins: 0, losses: 0, referralEarnings: 0,
+      dailyOrdersStart: 0, dailyOrdersBase: 0, dailyOrdersPro: 0, dailyOrdersElite: 0,
+      forceWin: false, isAdmin: false, updatedAt: new Date(),
+    }).where(eq(usersTable.telegramId, id));
+    console.log(`[Admin] ${adminId} deleted data for user ${id}`);
+    res.json({ success: true, message: "✅ Данные пользователя полностью очищены" });
+  } catch (e) {
+    console.error("[Admin] delete-data error:", e);
+    res.status(500).json({ error: "Ошибка при удалении данных" });
+  }
 });
 
 /* POST /admin/users/:id/adjust-balance */

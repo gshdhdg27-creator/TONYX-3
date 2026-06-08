@@ -16,6 +16,7 @@ interface UserInfo {
   coins: number; ton: number; tonyxCoins: number; boostRate?: number; totalTonDeposited: number;
   totalAdsWatched: number; totalGamesPlayed: number; wins: number; losses: number;
   totalOrders: number; referrals: number; isBlocked: boolean; isAdmin: boolean; isOnline: boolean;
+  forceWin: boolean; lastIp: string | null; twinCount: number; isMainAccount: boolean;
   lastLoginAt: string | null; createdAt: string;
   dailyOrdersStart?: number; dailyOrdersPro?: number; dailyOrdersElite?: number;
 }
@@ -34,6 +35,18 @@ function formatDate(iso: string | null) {
   return d.toLocaleDateString("ru", { day: "2-digit", month: "2-digit", year: "2-digit" })
     + " " + d.toLocaleTimeString("ru", { hour: "2-digit", minute: "2-digit" });
 }
+
+function toUZT(iso: string | null): string {
+  if (!iso) return "—";
+  const utc = new Date(iso).getTime();
+  const uzt = new Date(utc + 5 * 60 * 60 * 1000);
+  const d = uzt.getUTCDate().toString().padStart(2, "0");
+  const mo = (uzt.getUTCMonth() + 1).toString().padStart(2, "0");
+  const h = uzt.getUTCHours().toString().padStart(2, "0");
+  const m = uzt.getUTCMinutes().toString().padStart(2, "0");
+  return `${d}.${mo} ${h}:${m} UZT`;
+}
+
 function timeAgo(iso: string | null) {
   if (!iso) return "никогда";
   const sec = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
@@ -151,9 +164,10 @@ function BalanceAdjuster({ userId, adminId, onDone }: { userId: string; adminId:
 function UserCard({ user, adminId, isSuperAdmin, onRefresh }: {
   user: UserInfo; adminId: string; isSuperAdmin: boolean; onRefresh: () => void;
 }) {
-  const [expanded, setExpanded] = useState(false);
-  const [loading, setLoading]   = useState(false);
-  const [toast, setToast]       = useState<{ msg: string; type: "success" | "error" | "info" } | null>(null);
+  const [expanded, setExpanded]       = useState(false);
+  const [loading, setLoading]         = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [toast, setToast]             = useState<{ msg: string; type: "success" | "error" | "info" } | null>(null);
 
   const flash = (msg: string, type: "success" | "error" | "info") => { setToast({ msg, type }); setTimeout(() => setToast(null), 2500); };
 
@@ -168,35 +182,62 @@ function UserCard({ user, adminId, isSuperAdmin, onRefresh }: {
     finally { setLoading(false); }
   };
 
+  const handleDeleteData = async () => {
+    if (!confirmDelete) { setConfirmDelete(true); setTimeout(() => setConfirmDelete(false), 4000); return; }
+    setConfirmDelete(false);
+    await callApi(`users/${user.telegramId}/delete-data`);
+  };
+
   const name = user.firstName ?? user.username ?? user.telegramId;
   const initial = name.slice(0, 1).toUpperCase();
   const isOwnerUser = user.telegramId === OWNER_ID;
+  const hasTwins = (user.twinCount ?? 0) > 0;
 
   return (
-    <div style={{ background: "rgba(15,23,42,0.95)", border: "1px solid rgba(30,58,143,0.25)", borderRadius: 16, padding: 14, marginBottom: 10 }}>
+    <div style={{ background: "rgba(15,23,42,0.95)", border: `1px solid ${hasTwins ? "rgba(251,191,36,0.35)" : "rgba(30,58,143,0.25)"}`, borderRadius: 16, padding: 14, marginBottom: 10 }}>
       {toast && <Toast msg={toast.msg} type={toast.type} />}
 
       <div style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }} onClick={() => setExpanded(!expanded)}>
-        <div style={{ width: 44, height: 44, borderRadius: "50%", background: isOwnerUser ? "linear-gradient(135deg,#92400e,#b45309)" : "#1d4ed8", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, fontWeight: 800, color: "#fff", flexShrink: 0 }}>
+        <div style={{ width: 44, height: 44, borderRadius: "50%", background: isOwnerUser ? "linear-gradient(135deg,#92400e,#b45309)" : "#1d4ed8", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, fontWeight: 800, color: "#fff", flexShrink: 0, position: "relative" }}>
           {initial}
+          {user.isOnline && (
+            <div style={{ position: "absolute", bottom: 1, right: 1, width: 10, height: 10, borderRadius: "50%", background: "#22c55e", border: "2px solid #0f172a", boxShadow: "0 0 6px #22c55e" }} />
+          )}
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 5, flexWrap: "wrap" }}>
             <span style={{ fontSize: 13, fontWeight: 700, color: "#f1f5f9" }}>{name}</span>
             {user.username && <span style={{ fontSize: 11, color: "#475569" }}>@{user.username}</span>}
             {isOwnerUser && <span style={{ fontSize: 9, background: "rgba(251,191,36,0.2)", color: "#fbbf24", padding: "2px 6px", borderRadius: 6, fontWeight: 700 }}>👑 OWNER</span>}
             {user.isOnline
-              ? <span style={{ fontSize: 9, background: "rgba(22,163,74,0.15)", color: "#4ade80", padding: "2px 6px", borderRadius: 6, fontWeight: 700 }}>В сети</span>
-              : <span style={{ fontSize: 9, background: "rgba(30,45,69,0.5)", color: "#475569", padding: "2px 6px", borderRadius: 6 }}>Офлайн</span>}
+              ? <span style={{ fontSize: 9, background: "rgba(22,163,74,0.2)", color: "#4ade80", padding: "2px 6px", borderRadius: 6, fontWeight: 700, display: "flex", alignItems: "center", gap: 3 }}><span style={{ width: 5, height: 5, borderRadius: "50%", background: "#4ade80", display: "inline-block" }} />В СЕТИ</span>
+              : <span style={{ fontSize: 9, background: "rgba(30,45,69,0.5)", color: "#475569", padding: "2px 6px", borderRadius: 6 }}>ОФЛАЙН</span>}
             {user.isAdmin && !isOwnerUser && <span style={{ fontSize: 9, background: "rgba(251,191,36,0.15)", color: "#fbbf24", padding: "2px 6px", borderRadius: 6, fontWeight: 700 }}>АДМИН</span>}
             {user.isBlocked && <span style={{ fontSize: 9, background: "rgba(220,38,38,0.15)", color: "#f87171", padding: "2px 6px", borderRadius: 6, fontWeight: 700 }}>ЗАБЛОК</span>}
+            {user.forceWin && <span style={{ fontSize: 9, background: "rgba(250,204,21,0.2)", color: "#facc15", padding: "2px 6px", borderRadius: 6, fontWeight: 700 }}>⚡ БОГ</span>}
           </div>
           <div style={{ fontSize: 10, color: "#334155", marginTop: 2 }}>
-            ID: {user.telegramId} · {timeAgo(user.lastLoginAt)}
+            ID: {user.telegramId} · {toUZT(user.lastLoginAt)}
           </div>
         </div>
         <div style={{ fontSize: 16, color: "#475569" }}>{expanded ? "▲" : "▼"}</div>
       </div>
+
+      {/* Twin detection badge */}
+      {hasTwins && (
+        <div style={{ marginTop: 8, background: "rgba(251,191,36,0.08)", border: "1px solid rgba(251,191,36,0.35)", borderRadius: 10, padding: "7px 12px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 800, color: "#fbbf24" }}>⚠️ Найдено {user.twinCount} аккаунт(ов) на этом IP</div>
+            {user.lastIp && <div style={{ fontSize: 9, color: "#92400e", marginTop: 2, fontFamily: "monospace" }}>IP: {user.lastIp}</div>}
+          </div>
+          <span style={{ fontSize: 9, fontWeight: 900, padding: "3px 8px", borderRadius: 6, background: user.isMainAccount ? "rgba(34,197,94,0.15)" : "rgba(220,38,38,0.15)", color: user.isMainAccount ? "#4ade80" : "#f87171" }}>
+            {user.isMainAccount ? "ГЛАВНЫЙ" : "ТВИНК"}
+          </span>
+        </div>
+      )}
+      {!hasTwins && user.lastIp && (
+        <div style={{ marginTop: 6, fontSize: 9, color: "#334155", fontFamily: "monospace" }}>IP: {user.lastIp}</div>
+      )}
 
       {/* Balance pills */}
       <div style={{ display: "flex", gap: 5, marginTop: 10, flexWrap: "wrap" }}>
@@ -248,6 +289,25 @@ function UserCard({ user, adminId, isSuperAdmin, onRefresh }: {
           <BalanceAdjuster userId={user.telegramId} adminId={adminId} onDone={onRefresh} />
 
           <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 8 }}>
+
+            {/* God mode toggle */}
+            {!isOwnerUser && (
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: user.forceWin ? "rgba(250,204,21,0.1)" : "rgba(30,45,69,0.5)", border: `1px solid ${user.forceWin ? "rgba(250,204,21,0.4)" : "rgba(30,58,143,0.25)"}`, borderRadius: 10, padding: "10px 14px" }}>
+                <div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: user.forceWin ? "#facc15" : "#94a3b8" }}>⚡ Режим Бога (100% выигрыш в Минах)</div>
+                  <div style={{ fontSize: 9, color: "#475569", marginTop: 2 }}>{user.forceWin ? "АКТИВЕН" : "ВЫКЛЮЧЕН"}</div>
+                </div>
+                <button
+                  onClick={() => callApi(`users/${user.telegramId}/force-win`, { enable: !user.forceWin })}
+                  disabled={loading}
+                  style={{ padding: "8px 16px", borderRadius: 8, border: "none", fontFamily: "inherit", background: user.forceWin ? "rgba(250,204,21,0.2)" : "rgba(30,58,143,0.4)", color: user.forceWin ? "#facc15" : "#60a5fa", fontSize: 12, fontWeight: 800, cursor: "pointer" }}
+                >
+                  {user.forceWin ? "ВЫКЛ" : "ВКЛ"}
+                </button>
+              </div>
+            )}
+
+            {/* Block / Unblock */}
             {!isOwnerUser && (
               <button onClick={() => callApi(`users/${user.telegramId}/block`, { block: !user.isBlocked })} disabled={loading}
                 style={{ padding: "11px 0", borderRadius: 10, border: "none", fontFamily: "inherit", background: user.isBlocked ? "rgba(22,163,74,0.12)" : "rgba(220,38,38,0.1)", color: user.isBlocked ? "#4ade80" : "#f87171", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
@@ -255,6 +315,7 @@ function UserCard({ user, adminId, isSuperAdmin, onRefresh }: {
               </button>
             )}
 
+            {/* Admin grant / revoke */}
             {isSuperAdmin && !isOwnerUser && (
               <div style={{ display: "flex", gap: 8 }}>
                 <button
@@ -270,6 +331,17 @@ function UserCard({ user, adminId, isSuperAdmin, onRefresh }: {
                   🔻 Снять с должности
                 </button>
               </div>
+            )}
+
+            {/* Delete data — super admin only */}
+            {isSuperAdmin && !isOwnerUser && (
+              <button
+                onClick={handleDeleteData}
+                disabled={loading}
+                style={{ padding: "11px 0", borderRadius: 10, border: `1px solid ${confirmDelete ? "rgba(239,68,68,0.7)" : "rgba(239,68,68,0.25)"}`, fontFamily: "inherit", background: confirmDelete ? "rgba(220,38,38,0.25)" : "rgba(220,38,38,0.06)", color: confirmDelete ? "#fca5a5" : "#f87171", fontSize: 13, fontWeight: 700, cursor: "pointer", transition: "all 0.2s" }}
+              >
+                {confirmDelete ? "⚠️ НАЖМИТЕ ЕЩЁ РАЗ для подтверждения" : "🗑️ УДАЛИТЬ ДАННЫЕ профиля"}
+              </button>
             )}
           </div>
         </div>
@@ -667,11 +739,20 @@ export default function AdminPage() {
   const [toast, setToast]                 = useState<{ msg: string; type: "success" | "error" | "info" } | null>(null);
   const [page, setPage]                   = useState(1);
   const [hasMore, setHasMore]             = useState(false);
+  const [onlineCount, setOnlineCount]     = useState<number | null>(null);
 
   const flash = (msg: string, type: "success" | "error" | "info") => {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 3000);
   };
+
+  /* ── Fetch online count ── */
+  const fetchOnlineCount = useCallback(async (id: string) => {
+    try {
+      const r = await fetch(`/api/mini/admin/online-count`, { headers: { "X-Admin-Id": id } });
+      if (r.ok) { const d = await r.json(); setOnlineCount(d.count ?? 0); }
+    } catch { /* non-fatal */ }
+  }, []);
 
   /* ── Fetch stats ── */
   const fetchStats = useCallback(async (id: string) => {
@@ -687,7 +768,8 @@ export default function AdminPage() {
     } catch (e) {
       setStatsError(String(e));
     }
-  }, []);
+    fetchOnlineCount(id);
+  }, [fetchOnlineCount]);
 
   /* ── Fetch users ── */
   const fetchUsers = useCallback(async (id: string, q = "", pg = 1) => {
@@ -841,6 +923,7 @@ export default function AdminPage() {
 
   return (
     <div style={{ padding: "16px 16px 100px" }}>
+      <style>{`@keyframes pulse-green { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.5;transform:scale(0.8)} }`}</style>
       {toast && <Toast msg={toast.msg} type={toast.type} />}
 
       {/* Header */}
@@ -866,6 +949,22 @@ export default function AdminPage() {
       {/* Stats */}
       {stats && (
         <>
+          {/* Live online counter */}
+          <div style={{ background: "rgba(15,23,42,0.95)", border: "1px solid rgba(34,197,94,0.35)", borderRadius: 14, padding: "12px 16px", marginBottom: 10, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <div style={{ width: 10, height: 10, borderRadius: "50%", background: "#22c55e", boxShadow: "0 0 8px #22c55e", animation: "pulse-green 1.5s ease-in-out infinite" }} />
+              <div>
+                <div style={{ fontSize: 11, color: "#475569" }}>🟢 Онлайн прямо сейчас (5 мин)</div>
+                <div style={{ fontSize: 8, color: "#334155", marginTop: 1 }}>
+                  {(() => { const now = new Date(Date.now() + 5 * 60 * 60 * 1000); return `${now.getUTCHours().toString().padStart(2,"0")}:${now.getUTCMinutes().toString().padStart(2,"0")} UZT`; })()}
+                </div>
+              </div>
+            </div>
+            <div style={{ fontSize: 32, fontWeight: 900, color: "#4ade80" }}>
+              {onlineCount ?? "—"}
+            </div>
+          </div>
+
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
             {[
               { label: "Пользователей", val: Number(stats.totalUsers ?? 0).toLocaleString(), color: "#60a5fa", icon: "👥" },

@@ -5,7 +5,8 @@ import { eq, desc } from "drizzle-orm";
 
 const router: IRouter = Router();
 
-const MIN_WITHDRAWAL_TON = 0.1;
+const MIN_WITHDRAWAL_TON = 1.0;
+const WITHDRAWAL_COMMISSION_PCT = 0.05; // 5%
 
 function isValidTonAddress(addr: string): boolean {
   const cleaned = addr.trim();
@@ -22,7 +23,7 @@ router.post("/withdraw", async (req, res) => {
 
   const amount = Number(tonAmount);
   if (isNaN(amount) || amount < MIN_WITHDRAWAL_TON) {
-    res.status(400).json({ error: `Minimum withdrawal is ${MIN_WITHDRAWAL_TON} TON` });
+    res.status(400).json({ error: `Минимальная сумма вывода: ${MIN_WITHDRAWAL_TON} TON` });
     return;
   }
   if (amount > 10000) {
@@ -36,13 +37,17 @@ router.post("/withdraw", async (req, res) => {
     return;
   }
 
+  // 5% commission: user is debited full amount; they receive 95%
+  const commission = parseFloat((amount * WITHDRAWAL_COMMISSION_PCT).toFixed(8));
+  const netAmount  = parseFloat((amount - commission).toFixed(8));
+
   try {
     const user = await db.select().from(usersTable).where(eq(usersTable.telegramId, String(telegramId))).then((r) => r[0] ?? null);
     if (!user) { res.status(404).json({ error: "User not found" }); return; }
 
     const currentTon = Number(user.ton ?? 0);
     if (currentTon < amount) {
-      res.status(400).json({ error: `Insufficient TON. Your balance: ${currentTon.toFixed(4)} TON` });
+      res.status(400).json({ error: `Недостаточно TON. Ваш баланс: ${currentTon.toFixed(4)} TON` });
       return;
     }
 
@@ -55,20 +60,23 @@ router.post("/withdraw", async (req, res) => {
       telegramId: String(telegramId),
       amount: 0,
       address: cleanAddress,
-      tonAmount: String(amount),
+      tonAmount: String(netAmount),
       tonPrice: null,
       status: "pending",
     }).returning();
 
-    console.log(`[Wallet] Withdrawal created: id=${withdrawal.id} user=${telegramId} amount=${amount} TON to ${cleanAddress}`);
+    console.log(`[Wallet] Withdrawal: id=${withdrawal.id} user=${telegramId} gross=${amount} commission=${commission} net=${netAmount} TON → ${cleanAddress}`);
 
     res.json({
       id: withdrawal.id,
       status: "pending",
-      tonAmount: amount,
+      tonAmount: netAmount,
+      grossAmount: amount,
+      commission,
+      commissionPct: WITHDRAWAL_COMMISSION_PCT * 100,
       address: cleanAddress,
       newBalance: newTon,
-      message: `Заявка на вывод ${amount} TON принята. Обработка в течение 24 часов.`,
+      message: `Заявка принята. К выплате: ${netAmount.toFixed(4)} TON (комиссия 5%: ${commission.toFixed(4)} TON). Обработка до 24ч.`,
     });
   } catch (e) {
     console.error("[Wallet] POST withdraw error:", e);

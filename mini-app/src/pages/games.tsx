@@ -1821,12 +1821,6 @@ export default function GamesPage() {
           <div style={{ fontSize: 22, fontWeight: 800, color: "#F1F5F9", letterSpacing: "-0.03em" }}>{translations[lang].games.title}</div>
           <div style={{ fontSize: 13, color: "#6B7280", marginTop: 3 }}>{translations[lang].games.subtitle}</div>
         </div>
-        <button
-          onClick={() => openHistory("arena")}
-          style={{ background: "#0D1219", border: "1px solid #1e2a3a", borderRadius: 12, padding: "8px 14px", cursor: "pointer", fontFamily: "inherit", color: "#9CA3AF", fontSize: 12, fontWeight: 600 }}
-        >
-          {translations[lang].games.history}
-        </button>
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>

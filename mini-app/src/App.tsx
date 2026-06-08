@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { Switch, Route, Router as WouterRouter } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { TonConnectUIProvider } from "@tonconnect/ui-react";
 import BottomNav from "@/components/bottom-nav";
 import LanguageModal from "@/components/LanguageModal";
 import Header from "@/components/Header";
@@ -14,6 +15,10 @@ import AdminPage from "@/pages/admin";
 import { initTelegram, useTelegram } from "@/lib/telegram";
 import { LanguageProvider } from "@/lib/LanguageContext";
 import { useRegisterUser } from "@workspace/api-client-react";
+
+const MANIFEST_URL = typeof window !== "undefined"
+  ? `${window.location.origin}/tonconnect-manifest.json`
+  : "/tonconnect-manifest.json";
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },
@@ -77,13 +82,15 @@ function AppShell() {
 
 function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <LanguageProvider>
-        <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-          <AppShell />
-        </WouterRouter>
-      </LanguageProvider>
-    </QueryClientProvider>
+    <TonConnectUIProvider manifestUrl={MANIFEST_URL}>
+      <QueryClientProvider client={queryClient}>
+        <LanguageProvider>
+          <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+            <AppShell />
+          </WouterRouter>
+        </LanguageProvider>
+      </QueryClientProvider>
+    </TonConnectUIProvider>
   );
 }
 

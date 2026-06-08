@@ -503,6 +503,149 @@ function WithdrawalsSection({ adminId }: { adminId: string }) {
   );
 }
 
+/* ─── Topup management ─── */
+interface AdminTopup {
+  id: number; telegramId: string; tonAmount: string;
+  memo: string | null; walletAddress: string | null;
+  status: string; createdAt: string;
+  userFirstName: string | null; userUsername: string | null;
+}
+
+function TopupsSection({ adminId }: { adminId: string }) {
+  const [topups, setTopups]   = useState<AdminTopup[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [filter, setFilter]   = useState<"pending"|"approved"|"rejected">("pending");
+  const [toast, setToast]     = useState<{ msg: string; type: "success"|"error"|"info" } | null>(null);
+  const [busy, setBusy]       = useState<Record<number, boolean>>({});
+
+  const flash = (msg: string, type: "success"|"error"|"info") => { setToast({ msg, type }); setTimeout(() => setToast(null), 3500); };
+
+  const load = useCallback(async (f: string) => {
+    setLoading(true);
+    try {
+      const r = await apiCall(`topups?status=${f}`, { adminId, method: "GET" });
+      const d = await r.json();
+      setTopups(d.topups ?? []);
+    } catch { flash("Ошибка загрузки", "error"); }
+    finally { setLoading(false); }
+  }, [adminId]);
+
+  useEffect(() => { load(filter); }, [filter, load]);
+
+  const approve = async (id: number) => {
+    setBusy(prev => ({ ...prev, [id]: true }));
+    try {
+      const r = await apiCall(`topups/${id}/approve`, { adminId, method: "POST" });
+      const d = await r.json();
+      if (!r.ok) flash(d.error || "Ошибка", "error");
+      else { flash(d.message || "✅ Зачислено", "success"); load(filter); }
+    } catch { flash("Ошибка сети", "error"); }
+    finally { setBusy(prev => ({ ...prev, [id]: false })); }
+  };
+
+  const reject = async (id: number) => {
+    setBusy(prev => ({ ...prev, [id]: true }));
+    try {
+      const r = await apiCall(`topups/${id}/reject`, { adminId, method: "POST" });
+      const d = await r.json();
+      if (!r.ok) flash(d.error || "Ошибка", "error");
+      else { flash("❌ Топап отклонён", "success"); load(filter); }
+    } catch { flash("Ошибка сети", "error"); }
+    finally { setBusy(prev => ({ ...prev, [id]: false })); }
+  };
+
+  const pendingCount = filter === "pending" ? topups.length : 0;
+
+  return (
+    <div style={{ marginBottom: 14 }}>
+      {toast && <Toast msg={toast.msg} type={toast.type} />}
+
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+        <div style={{ fontSize: 13, fontWeight: 800, color: "#f1f5f9", display: "flex", alignItems: "center", gap: 8 }}>
+          💎 Заявки на пополнение
+          {pendingCount > 0 && (
+            <span style={{ background: "rgba(30,58,143,0.3)", color: "#60a5fa", borderRadius: 8, padding: "2px 8px", fontSize: 11, fontWeight: 700 }}>
+              {pendingCount}
+            </span>
+          )}
+        </div>
+        <button onClick={() => load(filter)} style={{ padding: "6px 12px", borderRadius: 8, border: "1px solid rgba(30,58,143,0.3)", background: "rgba(30,45,69,0.5)", color: "#60a5fa", fontFamily: "inherit", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+          🔄
+        </button>
+      </div>
+
+      <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+        {(["pending", "approved", "rejected"] as const).map(s => (
+          <button key={s} onClick={() => setFilter(s)} style={{
+            flex: 1, padding: "7px 0", borderRadius: 8, border: "none", fontFamily: "inherit",
+            background: filter === s
+              ? (s === "pending" ? "rgba(30,58,143,0.3)" : s === "approved" ? "rgba(22,163,74,0.22)" : "rgba(100,116,139,0.22)")
+              : "rgba(30,45,69,0.4)",
+            color: filter === s
+              ? (s === "pending" ? "#60a5fa" : s === "approved" ? "#4ade80" : "#94a3b8")
+              : "#475569",
+            fontSize: 11, fontWeight: 700, cursor: "pointer",
+          }}>
+            {s === "pending" ? "⏳ Ожидают" : s === "approved" ? "✅ Одобрены" : "❌ Отклонены"}
+          </button>
+        ))}
+      </div>
+
+      {loading && topups.length === 0 ? (
+        <div style={{ textAlign: "center", color: "#475569", padding: "20px 0" }}>⏳ Загрузка…</div>
+      ) : topups.length === 0 ? (
+        <div style={{ textAlign: "center", color: "#475569", padding: "20px 0", fontSize: 13 }}>Заявок нет</div>
+      ) : (
+        topups.map(t => {
+          const name = t.userFirstName ?? (t.userUsername ? `@${t.userUsername}` : t.telegramId);
+          const isbusy = busy[t.id] ?? false;
+          return (
+            <div key={t.id} style={{
+              background: "rgba(15,23,42,0.95)",
+              border: "1px solid rgba(30,58,143,0.3)",
+              borderRadius: 14, padding: 14, marginBottom: 10,
+            }}>
+              <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 8 }}>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: "#f1f5f9" }}>{name}</div>
+                  <div style={{ fontSize: 10, color: "#475569", marginTop: 2 }}>ID: {t.telegramId}</div>
+                  <div style={{ fontSize: 10, color: "#334155", marginTop: 2 }}>{new Date(t.createdAt).toLocaleString("ru")}</div>
+                </div>
+                <div style={{ textAlign: "right", flexShrink: 0, marginLeft: 8 }}>
+                  <div style={{ fontSize: 20, fontWeight: 900, color: "#60a5fa", lineHeight: 1 }}>{Number(t.tonAmount).toFixed(4)}</div>
+                  <div style={{ fontSize: 10, color: "#60a5fa", fontWeight: 700 }}>TON</div>
+                </div>
+              </div>
+
+              {t.memo && (
+                <div style={{ background: "rgba(30,45,69,0.5)", borderRadius: 8, padding: "5px 10px", marginBottom: 6, fontSize: 10, color: "#94a3b8", fontFamily: "monospace" }}>
+                  Memo: {t.memo}
+                </div>
+              )}
+              {t.walletAddress && (
+                <div style={{ background: "rgba(30,45,69,0.5)", borderRadius: 8, padding: "5px 10px", marginBottom: 8, fontSize: 10, color: "#94a3b8", wordBreak: "break-all", fontFamily: "monospace" }}>
+                  From: {t.walletAddress}
+                </div>
+              )}
+
+              {t.status === "pending" && (
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button onClick={() => approve(t.id)} disabled={isbusy} style={{ flex: 2, padding: "11px 0", borderRadius: 10, border: "none", fontFamily: "inherit", background: "linear-gradient(135deg,#1d4ed8,#2563eb)", color: "#fff", fontSize: 13, fontWeight: 800, cursor: "pointer", opacity: isbusy ? 0.6 : 1 }}>
+                    {isbusy ? "…" : "✅ ЗАЧИСЛИТЬ"}
+                  </button>
+                  <button onClick={() => reject(t.id)} disabled={isbusy} style={{ flex: 1, padding: "11px 0", borderRadius: 10, border: "none", fontFamily: "inherit", background: "rgba(220,38,38,0.14)", color: "#f87171", fontSize: 13, fontWeight: 800, cursor: "pointer", opacity: isbusy ? 0.6 : 1 }}>
+                    {isbusy ? "…" : "❌"}
+                  </button>
+                </div>
+              )}
+            </div>
+          );
+        })
+      )}
+    </div>
+  );
+}
+
 /* ══════════════════════════════
    ADMIN PAGE
 ══════════════════════════════ */
@@ -776,6 +919,9 @@ export default function AdminPage() {
           )}
         </>
       )}
+
+      {/* Topup requests section */}
+      <TopupsSection adminId={adminId} />
 
       {/* Withdrawals section */}
       <WithdrawalsSection adminId={adminId} />

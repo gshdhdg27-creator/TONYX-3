@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
-import { usersTable, miniWithdrawalsTable } from "@workspace/db/schema";
+import { usersTable, miniWithdrawalsTable, miniTopupRequestsTable } from "@workspace/db/schema";
 import { eq, desc } from "drizzle-orm";
 
 const router: IRouter = Router();
@@ -98,6 +98,36 @@ router.get("/withdrawals/:telegramId", async (req, res) => {
   } catch (e) {
     console.error("[Wallet] GET withdrawals error:", e);
     res.status(500).json({ error: "Database error" });
+  }
+});
+
+router.post("/topup", async (req, res) => {
+  try {
+    const { telegramId, amount, memo, txBoc, walletAddress } = req.body ?? {};
+    if (!telegramId || !amount) {
+      res.status(400).json({ error: "Missing telegramId or amount" });
+      return;
+    }
+    const tonAmount = Number(amount);
+    if (isNaN(tonAmount) || tonAmount <= 0) {
+      res.status(400).json({ error: "Invalid amount" });
+      return;
+    }
+
+    await db.insert(miniTopupRequestsTable).values({
+      telegramId: String(telegramId),
+      tonAmount: String(tonAmount),
+      memo: memo ?? null,
+      txBoc: txBoc ?? null,
+      walletAddress: walletAddress ?? null,
+      status: "pending",
+    });
+
+    console.log(`[Topup] ${telegramId}: ${tonAmount} TON via TON Connect, wallet=${walletAddress ?? "?"}`);
+    res.json({ ok: true, message: "Topup request registered. Admin will verify and credit." });
+  } catch (e) {
+    console.error("[Topup] error:", e);
+    res.status(500).json({ error: "Server error" });
   }
 });
 

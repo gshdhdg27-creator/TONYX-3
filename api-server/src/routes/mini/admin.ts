@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
-import { usersTable, miniMarketOrdersTable, systemSettingsTable, miniWithdrawalsTable } from "@workspace/db/schema";
+import { usersTable, miniMarketOrdersTable, systemSettingsTable, miniWithdrawalsTable, miniTopupRequestsTable } from "@workspace/db/schema";
 import { eq, sql, or, ilike, desc } from "drizzle-orm";
 
 const router: IRouter = Router();
@@ -445,6 +445,111 @@ router.post("/withdrawals/:id/reject", async (req, res) => {
     .where(eq(miniWithdrawalsTable.id, id));
 
   res.json({ ok: true, message: "Withdrawal rejected. TON balance returned to user." });
+});
+
+/* ══════════════════════════════════════════════════════════════════
+   TOPUP MANAGEMENT
+══════════════════════════════════════════════════════════════════ */
+
+/* GET /admin/topups?status=pending */
+router.get("/topups", async (req, res) => {
+  const adminId = normalizeId(req.query.adminId ?? req.body?.adminId ?? req.headers["x-admin-id"]);
+  if (!(await checkAdmin(adminId))) { res.status(403).json({ error: "Forbidden" }); return; }
+  const status = String(req.query.status ?? "pending");
+  try {
+    const rows = await db.select().from(miniTopupRequestsTable)
+      .where(eq(miniTopupRequestsTable.status, status))
+      .orderBy(desc(miniTopupRequestsTable.createdAt));
+
+    const enriched = await Promise.all(rows.map(async (t) => {
+      const userRow = await db.select({
+        firstName: usersTable.firstName,
+        username: usersTable.username,
+      }).from(usersTable).where(eq(usersTable.telegramId, t.telegramId)).then(r => r[0] ?? null);
+      return {
+        id: t.id,
+        telegramId: t.telegramId,
+        tonAmount: t.tonAmount,
+        memo: t.memo,
+        walletAddress: t.walletAddress,
+        status: t.status,
+        createdAt: t.createdAt.toISOString(),
+        userFirstName: userRow?.firstName ?? null,
+        userUsername: userRow?.username ?? null,
+      };
+    }));
+
+    res.json({ topups: enriched });
+  } catch (e) {
+    console.error("[Admin] GET topups error:", e);
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
+/* POST /admin/topups/:id/approve — credit TON to user */
+router.post("/topups/:id/approve", async (req, res) => {
+  const adminId = normalizeId(req.body?.adminId ?? req.query.adminId ?? req.headers["x-admin-id"]);
+  if (!(await checkAdmin(adminId))) { res.status(403).json({ error: "Forbidden" }); return; }
+
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid topup ID" }); return; }
+
+  try {
+    const row = await db.select().from(miniTopupRequestsTable)
+      .where(eq(miniTopupRequestsTable.id, id))
+      .then(r => r[0] ?? null);
+    if (!row) { res.status(404).json({ error: "Topup request not found" }); return; }
+    if (row.status !== "pending") { res.status(400).json({ error: "Topup already processed" }); return; }
+
+    const tonAmount = Number(row.tonAmount);
+    if (!isNaN(tonAmount) && tonAmount > 0) {
+      const user = await db.select({ ton: usersTable.ton })
+        .from(usersTable).where(eq(usersTable.telegramId, row.telegramId))
+        .then(r => r[0] ?? null);
+      if (user) {
+        const newTon = parseFloat((Number(user.ton ?? 0) + tonAmount).toFixed(8));
+        await db.update(usersTable)
+          .set({ ton: String(newTon), updatedAt: new Date() })
+          .where(eq(usersTable.telegramId, row.telegramId));
+        console.log(`[Topup] id=${id} approved — credited ${tonAmount} TON to ${row.telegramId}`);
+      }
+    }
+
+    await db.update(miniTopupRequestsTable)
+      .set({ status: "approved" })
+      .where(eq(miniTopupRequestsTable.id, id));
+
+    res.json({ ok: true, message: `Топап одобрен: +${row.tonAmount} TON зачислено пользователю` });
+  } catch (e) {
+    console.error("[Admin] topup approve error:", e);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+/* POST /admin/topups/:id/reject */
+router.post("/topups/:id/reject", async (req, res) => {
+  const adminId = normalizeId(req.body?.adminId ?? req.query.adminId ?? req.headers["x-admin-id"]);
+  if (!(await checkAdmin(adminId))) { res.status(403).json({ error: "Forbidden" }); return; }
+
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid topup ID" }); return; }
+
+  try {
+    const row = await db.select().from(miniTopupRequestsTable)
+      .where(eq(miniTopupRequestsTable.id, id))
+      .then(r => r[0] ?? null);
+    if (!row) { res.status(404).json({ error: "Topup request not found" }); return; }
+    if (row.status !== "pending") { res.status(400).json({ error: "Topup already processed" }); return; }
+
+    await db.update(miniTopupRequestsTable)
+      .set({ status: "rejected" })
+      .where(eq(miniTopupRequestsTable.id, id));
+
+    res.json({ ok: true, message: "Топап отклонён" });
+  } catch (e) {
+    console.error("[Admin] topup reject error:", e);
+    res.status(500).json({ error: "Server error" });
+  }
 });
 
 export default router;

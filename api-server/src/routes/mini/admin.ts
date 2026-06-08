@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import { usersTable, miniMarketOrdersTable, systemSettingsTable, miniWithdrawalsTable, miniTopupRequestsTable } from "@workspace/db/schema";
 import { eq, sql, or, ilike, desc } from "drizzle-orm";
+import { sendTgMessage, TgMsg } from "../../lib/tg-notify";
 
 const router: IRouter = Router();
 
@@ -412,6 +413,7 @@ router.post("/withdrawals/:id/approve", async (req, res) => {
     .where(eq(miniWithdrawalsTable.id, id));
 
   console.log(`[Withdrawal] id=${id} approved by admin. txHash=${txHash ?? "manual"}`);
+  sendTgMessage(row.telegramId, TgMsg.withdrawApproved(row.tonAmount ?? row.amount / 1000, txHash)).catch(() => {});
   res.json({ ok: true, txHash, message: "Withdrawal approved" + (txHash ? `. TX: ${txHash}` : " (manual process)") });
 });
 
@@ -444,6 +446,7 @@ router.post("/withdrawals/:id/reject", async (req, res) => {
     .set({ status: "rejected" })
     .where(eq(miniWithdrawalsTable.id, id));
 
+  sendTgMessage(row.telegramId, TgMsg.withdrawRejected(row.tonAmount ?? row.amount / 1000)).catch(() => {});
   res.json({ ok: true, message: "Withdrawal rejected. TON balance returned to user." });
 });
 
@@ -519,6 +522,7 @@ router.post("/topups/:id/approve", async (req, res) => {
       .set({ status: "approved" })
       .where(eq(miniTopupRequestsTable.id, id));
 
+    sendTgMessage(row.telegramId, TgMsg.topupApproved(row.tonAmount)).catch(() => {});
     res.json({ ok: true, message: `Топап одобрен: +${row.tonAmount} TON зачислено пользователю` });
   } catch (e) {
     console.error("[Admin] topup approve error:", e);

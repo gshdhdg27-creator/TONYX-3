@@ -25,12 +25,23 @@ const LanguageContext = createContext<LangCtx>({
   isChosen: false,
 });
 
+function isTelegramContext(): boolean {
+  try {
+    return !!(window as { Telegram?: { WebApp?: { initData?: string } } })?.Telegram?.WebApp?.initData;
+  } catch { return false; }
+}
+
 export function LanguageProvider({ children }: { children: ReactNode }) {
   const [lang, setLangState] = useState<Lang>(() => {
     const stored = safeGet(LS_KEY) as Lang | null;
     return stored ?? "ru";
   });
-  const [isChosen, setIsChosen] = useState<boolean>(() => !!safeGet(LS_KEY));
+  const [isChosen, setIsChosen] = useState<boolean>(() => {
+    if (safeGet(LS_KEY)) return true;
+    // In browser (non-Telegram) preview — auto-select RU so the UI is visible
+    if (!isTelegramContext()) return true;
+    return false;
+  });
 
   const setLang = useCallback((l: Lang) => {
     safeSet(LS_KEY, l);

@@ -89,38 +89,41 @@ router.use(async (req, res, next) => {
 router.get("/stats", async (req, res) => {
   const adminId = extractAdminId(req);
   const isSuperAdmin = adminId === OWNER_ID;
+  try {
+    const [usersCount, soldRow, activeOrders, settingsRows, adminRows] = await Promise.all([
+      db.execute<{ cnt: number }>(sql`SELECT COUNT(*)::int AS cnt FROM users`),
+      db.execute<{ sold: number; total_ton: number }>(
+        sql`SELECT COALESCE(SUM(amount),0)::int AS sold, COALESCE(SUM(total_ton::float),0) AS total_ton FROM mini_market_orders WHERE status = 'sold'`,
+      ),
+      db.execute<{ cnt: number }>(sql`SELECT COUNT(*)::int AS cnt FROM mini_market_orders WHERE status = 'open'`),
+      db.select().from(systemSettingsTable),
+      db.execute<{ telegram_id: string; username: string | null; is_admin: boolean }>(
+        sql`SELECT telegram_id, username, is_admin FROM users WHERE is_admin = TRUE ORDER BY created_at`,
+      ),
+    ]);
 
-  const [usersCount, soldRow, activeOrders, settingsRows, adminRows] = await Promise.all([
-    db.execute<{ cnt: number }>(sql`SELECT COUNT(*)::int AS cnt FROM users`),
-    db.execute<{ sold: number; total_ton: number }>(
-      sql`SELECT COALESCE(SUM(amount),0)::int AS sold, COALESCE(SUM(total_ton::float),0) AS total_ton FROM mini_market_orders WHERE status = 'sold'`,
-    ),
-    db.execute<{ cnt: number }>(sql`SELECT COUNT(*)::int AS cnt FROM mini_market_orders WHERE status = 'open'`),
-    db.select().from(systemSettingsTable),
-    db.execute<{ telegram_id: string; username: string | null; is_admin: boolean }>(
-      sql`SELECT telegram_id, username, is_admin FROM users WHERE is_admin = TRUE ORDER BY created_at`,
-    ),
-  ]);
+    const settings: Record<string, string> = {};
+    for (const s of settingsRows) settings[s.key] = s.value;
 
-  // Also pull total_tonyx_sold from system_settings
-  const settings: Record<string, string> = {};
-  for (const s of settingsRows) settings[s.key] = s.value;
+    const tonyxSoldFromSettings = parseInt(settings["total_tonyx_sold"] ?? "0") || 0;
+    const totalCoinsSold = Math.max(soldRow.rows[0]?.sold ?? 0, tonyxSoldFromSettings);
 
-  const tonyxSoldFromSettings = parseInt(settings["total_tonyx_sold"] ?? "0") || 0;
-  const totalCoinsSold = Math.max(soldRow.rows[0]?.sold ?? 0, tonyxSoldFromSettings);
-
-  res.json({
-    totalUsers:     usersCount.rows[0]?.cnt ?? 0,
-    totalCoinsSold,
-    totalTonVolume: soldRow.rows[0]?.total_ton ?? 0,
-    activeOrders:   activeOrders.rows[0]?.cnt ?? 0,
-    isMarketActive: settings["is_market_active"] === "true",
-    canActivate:    totalCoinsSold >= 1_000_000,
-    poolProgress:   Math.min(100, (totalCoinsSold / 1_000_000) * 100).toFixed(2),
-    settings,
-    isSuperAdmin,
-    admins: adminRows.rows.map(a => ({ telegramId: a.telegram_id, username: a.username })),
-  });
+    res.json({
+      totalUsers:     usersCount.rows[0]?.cnt ?? 0,
+      totalCoinsSold,
+      totalTonVolume: Number(soldRow.rows[0]?.total_ton ?? 0),
+      activeOrders:   activeOrders.rows[0]?.cnt ?? 0,
+      isMarketActive: settings["is_market_active"] === "true",
+      canActivate:    totalCoinsSold >= 1_000_000,
+      poolProgress:   Math.min(100, (totalCoinsSold / 1_000_000) * 100).toFixed(2),
+      settings,
+      isSuperAdmin,
+      admins: adminRows.rows.map(a => ({ telegramId: a.telegram_id, username: a.username })),
+    });
+  } catch (e) {
+    console.error("[Admin] GET stats error:", e);
+    res.status(500).json({ error: "Database error fetching stats" });
+  }
 });
 
 /* GET /admin/users */
@@ -129,44 +132,55 @@ router.get("/users", async (req, res) => {
   const page   = Math.max(1, parseInt(String(req.query.page ?? "1")));
   const limit  = 20;
   const offset = (page - 1) * limit;
+  try {
+    const rows = search
+      ? await db.select().from(usersTable)
+          .where(or(
+            eq(usersTable.telegramId, search),
+            ilike(usersTable.username, `%${search.replace(/^@/, "")}%`),
+            ilike(usersTable.firstName, `%${search}%`),
+          ))
+          .orderBy(desc(usersTable.createdAt)).limit(limit).offset(offset)
+      : await db.select().from(usersTable)
+          .orderBy(desc(usersTable.createdAt)).limit(limit).offset(offset);
 
-  const rows = search
-    ? await db.select().from(usersTable)
-        .where(or(
-          eq(usersTable.telegramId, search),
-          ilike(usersTable.username, `%${search.replace(/^@/, "")}%`),
-          ilike(usersTable.firstName, `%${search}%`),
-        ))
-        .orderBy(desc(usersTable.createdAt)).limit(limit).offset(offset)
-    : await db.select().from(usersTable)
-        .orderBy(desc(usersTable.createdAt)).limit(limit).offset(offset);
+    const enriched = await Promise.all(rows.map(async (u) => {
+      let ordersCount = 0;
+      let referralsCount = 0;
+      try {
+        const [ordersRow, referralsRow] = await Promise.all([
+          db.execute<{ cnt: number }>(sql`SELECT COUNT(*)::int AS cnt FROM mini_market_orders WHERE seller_id = ${u.telegramId}`),
+          db.execute<{ cnt: number }>(sql`SELECT COUNT(*)::int AS cnt FROM users WHERE referred_by = ${u.telegramId}`),
+        ]);
+        ordersCount = ordersRow.rows[0]?.cnt ?? 0;
+        referralsCount = referralsRow.rows[0]?.cnt ?? 0;
+      } catch { /* non-fatal */ }
 
-  const enriched = await Promise.all(rows.map(async (u) => {
-    const [ordersRow, referralsRow] = await Promise.all([
-      db.execute<{ cnt: number }>(sql`SELECT COUNT(*)::int AS cnt FROM mini_market_orders WHERE seller_id = ${u.telegramId}`),
-      db.execute<{ cnt: number }>(sql`SELECT COUNT(*)::int AS cnt FROM users WHERE referred_by = ${u.telegramId}`),
-    ]);
-    const isOnline = u.lastLoginAt && (Date.now() - u.lastLoginAt.getTime() < 5 * 60 * 1000);
-    return {
-      id: u.id, telegramId: u.telegramId, username: u.username ?? null,
-      firstName: u.firstName ?? null, lastName: u.lastName ?? null,
-      coins: u.coins, ton: Number(u.ton), tonyxCoins: u.tonyxCoins,
-      boostRate: Number(u.boostRate ?? 0),
-      totalTonDeposited: Number(u.totalTonDeposited),
-      totalAdsWatched: u.totalAdsWatched, totalGamesPlayed: u.totalGamesPlayed,
-      wins: u.wins, losses: u.losses,
-      totalOrders: ordersRow.rows[0]?.cnt ?? 0,
-      referrals: referralsRow.rows[0]?.cnt ?? 0,
-      isBlocked: u.isBlocked, isAdmin: u.isAdmin,
-      isOnline: !!isOnline, lastLoginAt: u.lastLoginAt?.toISOString() ?? null,
-      createdAt: u.createdAt.toISOString(),
-      dailyOrdersStart: u.dailyOrdersStart,
-      dailyOrdersPro: u.dailyOrdersPro,
-      dailyOrdersElite: u.dailyOrdersElite,
-    };
-  }));
+      const isOnline = u.lastLoginAt && (Date.now() - u.lastLoginAt.getTime() < 5 * 60 * 1000);
+      return {
+        id: u.id, telegramId: u.telegramId, username: u.username ?? null,
+        firstName: u.firstName ?? null, lastName: u.lastName ?? null,
+        coins: Number(u.coins ?? 0), ton: Number(u.ton ?? 0), tonyxCoins: Number(u.tonyxCoins ?? 0),
+        boostRate: Number(u.boostRate ?? 0),
+        totalTonDeposited: Number(u.totalTonDeposited ?? 0),
+        totalAdsWatched: u.totalAdsWatched ?? 0, totalGamesPlayed: u.totalGamesPlayed ?? 0,
+        wins: u.wins ?? 0, losses: u.losses ?? 0,
+        totalOrders: ordersCount,
+        referrals: referralsCount,
+        isBlocked: u.isBlocked ?? false, isAdmin: u.isAdmin ?? false,
+        isOnline: !!isOnline, lastLoginAt: u.lastLoginAt?.toISOString() ?? null,
+        createdAt: u.createdAt.toISOString(),
+        dailyOrdersStart: u.dailyOrdersStart ?? 0,
+        dailyOrdersPro: u.dailyOrdersPro ?? 0,
+        dailyOrdersElite: u.dailyOrdersElite ?? 0,
+      };
+    }));
 
-  res.json({ users: enriched, page, hasMore: rows.length === limit });
+    res.json({ users: enriched, page, hasMore: rows.length === limit });
+  } catch (e) {
+    console.error("[Admin] GET users error:", e);
+    res.status(500).json({ error: "Database error fetching users" });
+  }
 });
 
 /* POST /admin/market/activate */

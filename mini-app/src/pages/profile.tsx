@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useGetUserProfile,
@@ -49,9 +49,28 @@ function ActionButton({ icon, label, active, onClick, accent }: ActionButtonProp
 
 function LoadingScreen() {
   return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "60vh", flexDirection: "column", gap: 12 }}>
-      <div style={{ fontSize: 32 }}>⏳</div>
-      <div style={{ fontSize: 13, color: "#475569" }}>Загрузка профиля…</div>
+    <div style={{ padding: "16px 16px 28px" }}>
+      {/* Avatar + name skeleton */}
+      <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 18 }}>
+        <div style={{ width: 60, height: 60, borderRadius: "50%", background: "rgba(30,58,143,0.25)", animation: "pulse 1.4s ease-in-out infinite" }} />
+        <div style={{ flex: 1 }}>
+          <div style={{ width: "55%", height: 16, borderRadius: 8, background: "rgba(30,58,143,0.2)", marginBottom: 8, animation: "pulse 1.4s ease-in-out infinite" }} />
+          <div style={{ width: "35%", height: 11, borderRadius: 6, background: "rgba(30,58,143,0.15)", animation: "pulse 1.4s ease-in-out infinite" }} />
+        </div>
+      </div>
+      {/* Balance pills skeleton */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
+        {[0, 1].map(i => (
+          <div key={i} style={{ borderRadius: 18, background: "rgba(30,58,143,0.15)", height: 68, animation: "pulse 1.4s ease-in-out infinite" }} />
+        ))}
+      </div>
+      {/* Action buttons skeleton */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+        {[0, 1, 2].map(i => (
+          <div key={i} style={{ flex: 1, borderRadius: 14, height: 64, background: "rgba(30,58,143,0.12)", animation: "pulse 1.4s ease-in-out infinite" }} />
+        ))}
+      </div>
+      <style>{`@keyframes pulse { 0%,100%{opacity:.6} 50%{opacity:1} }`}</style>
     </div>
   );
 }

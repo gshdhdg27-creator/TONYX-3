@@ -201,10 +201,10 @@ function UserCard({ user, adminId, isSuperAdmin, onRefresh }: {
       {/* Balance pills */}
       <div style={{ display: "flex", gap: 5, marginTop: 10, flexWrap: "wrap" }}>
         {[
-          { label: "TON",    val: user.ton.toFixed(4),          color: "#fbbf24" },
-          { label: "TONYX",  val: user.tonyxCoins.toLocaleString(), color: "#a78bfa" },
-          { label: "Pts",    val: user.coins.toLocaleString(),  color: "#60a5fa" },
-          { label: "Boost",  val: `+${((user.boostRate ?? 0) * 100).toFixed(1)}%`, color: "#4ade80" },
+          { label: "TON",    val: Number(user.ton ?? 0).toFixed(4),              color: "#fbbf24" },
+          { label: "TONYX",  val: Number(user.tonyxCoins ?? 0).toLocaleString(), color: "#a78bfa" },
+          { label: "Pts",    val: Number(user.coins ?? 0).toLocaleString(),      color: "#60a5fa" },
+          { label: "Boost",  val: `+${(Number(user.boostRate ?? 0) * 100).toFixed(1)}%`, color: "#4ade80" },
         ].map(({ label, val, color }) => (
           <div key={label} style={{ flex: 1, minWidth: 60, background: "rgba(30,45,69,0.5)", borderRadius: 10, padding: "5px 8px", textAlign: "center" }}>
             <div style={{ fontSize: 8, color: "#334155", marginBottom: 2 }}>{label}</div>
@@ -223,7 +223,7 @@ function UserCard({ user, adminId, isSuperAdmin, onRefresh }: {
               { label: "Поражений",   val: user.losses },
               { label: "P2P ордеров", val: user.totalOrders },
               { label: "Рефералов",   val: user.referrals },
-              { label: "TON внесено", val: user.totalTonDeposited.toFixed(4) },
+              { label: "TON внесено", val: Number(user.totalTonDeposited ?? 0).toFixed(4) },
               { label: "Регистрация", val: formatDate(user.createdAt) },
             ].map(({ label, val }) => (
               <div key={label} style={{ background: "rgba(30,45,69,0.4)", borderRadius: 8, padding: "8px 10px" }}>
@@ -725,10 +725,10 @@ export default function AdminPage() {
         <>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
             {[
-              { label: "Пользователей", val: stats.totalUsers.toLocaleString(), color: "#60a5fa", icon: "👥" },
-              { label: "TONYX продано", val: stats.totalCoinsSold.toLocaleString(), color: "#a78bfa", icon: "🪙" },
-              { label: "TON оборот",   val: stats.totalTonVolume.toFixed(2), color: "#fbbf24", icon: "💰" },
-              { label: "Активных P2P", val: stats.activeOrders.toLocaleString(), color: "#4ade80", icon: "📊" },
+              { label: "Пользователей", val: Number(stats.totalUsers ?? 0).toLocaleString(), color: "#60a5fa", icon: "👥" },
+              { label: "TONYX продано", val: Number(stats.totalCoinsSold ?? 0).toLocaleString(), color: "#a78bfa", icon: "🪙" },
+              { label: "TON оборот",   val: Number(stats.totalTonVolume ?? 0).toFixed(2), color: "#fbbf24", icon: "💰" },
+              { label: "Активных P2P", val: Number(stats.activeOrders ?? 0).toLocaleString(), color: "#4ade80", icon: "📊" },
             ].map(({ label, val, color, icon }) => (
               <div key={label} style={{ background: "rgba(15,23,42,0.9)", border: "1px solid rgba(30,58,143,0.25)", borderRadius: 14, padding: "14px 16px" }}>
                 <div style={{ fontSize: 11, color: "#334155", marginBottom: 6 }}>{icon} {label}</div>
@@ -749,8 +749,8 @@ export default function AdminPage() {
               <div style={{ height: "100%", width: `${poolPct}%`, background: "linear-gradient(90deg,#1d4ed8,#a78bfa)", borderRadius: 4, transition: "width 0.5s" }} />
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "#334155" }}>
-              <span>{stats.totalCoinsSold.toLocaleString()} / 1 000 000 TONYX</span>
-              <span>TON: {stats.totalTonVolume.toFixed(2)}</span>
+              <span>{Number(stats.totalCoinsSold ?? 0).toLocaleString()} / 1 000 000 TONYX</span>
+              <span>TON: {Number(stats.totalTonVolume ?? 0).toFixed(2)}</span>
             </div>
 
             {/* Market controls */}

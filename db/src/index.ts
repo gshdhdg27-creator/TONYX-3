@@ -11,7 +11,15 @@ if (connectionString && connectionString.startsWith("postgresql")) {
   const { Pool } = await import("pg");
   const { drizzle } = await import("drizzle-orm/node-postgres");
 
-  client = new Pool({ connectionString });
+  client = new Pool({
+    connectionString,
+    max: 10,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 5000,
+  });
+  client.on("error", (err: Error) => {
+    console.error("[DB] Unexpected pool client error:", err.message);
+  });
   db = drizzle(client, { schema });
   console.log("Connected to PostgreSQL database");
 } else {

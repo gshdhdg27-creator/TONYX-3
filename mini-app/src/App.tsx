@@ -24,8 +24,38 @@ const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },
 });
 
+function TelegramOnlyScreen() {
+  return (
+    <div style={{
+      height: "100dvh",
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+      justifyContent: "center",
+      background: "radial-gradient(circle at 50% -10%, rgba(37,99,235,0.18), transparent 55%), hsl(240 16% 4%)",
+      color: "hsl(210 40% 96%)",
+      fontFamily: "'Space Grotesk', 'Inter', system-ui, sans-serif",
+      padding: "0 32px",
+      textAlign: "center",
+      gap: 0,
+    }}>
+      <div style={{ fontSize: 64, marginBottom: 24 }}>✈️</div>
+      <div style={{ fontSize: 22, fontWeight: 900, color: "#f1f5f9", marginBottom: 12 }}>
+        Откройте в Telegram
+      </div>
+      <div style={{ fontSize: 14, color: "#475569", lineHeight: 1.6, maxWidth: 300 }}>
+        Это приложение работает только внутри официального Telegram WebApp.
+        Пожалуйста, запустите его через бота в Telegram.
+      </div>
+      <div style={{ marginTop: 32, padding: "12px 28px", borderRadius: 14, background: "rgba(37,99,235,0.15)", border: "1px solid rgba(37,99,235,0.35)", fontSize: 13, color: "#60a5fa", fontWeight: 700 }}>
+        @TONYX_Bot
+      </div>
+    </div>
+  );
+}
+
 function AppShell() {
-  const { telegramId, username, firstName, lastName, photoUrl, startParam } = useTelegram();
+  const { telegramId, isInTelegram, username, firstName, lastName, photoUrl, startParam } = useTelegram();
   const register = useRegisterUser();
 
   useEffect(() => {
@@ -47,6 +77,10 @@ function AppShell() {
     }
   }, [telegramId]);
 
+  if (!isInTelegram || !telegramId) {
+    return <TelegramOnlyScreen />;
+  }
+
   return (
     <div style={{
       height: "100dvh",
@@ -60,9 +94,7 @@ function AppShell() {
       margin: "0 auto",
       overflow: "hidden",
     }}>
-      {/* Language selection modal — shown only on first launch */}
       <LanguageModal />
-
       <Header />
       <main style={{ flex: 1, overflowY: "auto", overflowX: "hidden", paddingBottom: 74 }}>
         <Switch>

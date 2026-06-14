@@ -1,3 +1,4 @@
 - [TONYX tokenomics refactor](tonyx-tokenomics.md) — TON+TONYX only, no pts/coins UI; mining screen with boost modal; market locks until 1M TONYX sold.
 - [Withdrawal system architecture](withdrawal-system.md) — TON-based withdrawals via /api/mini/wallet/withdraw; admin panel approve/reject; TWIN IP fraud detection; @ton/ton auto-send optional.
 - [Header floating design](header-design.md) — Header uses position:fixed top-right, transparent background, toncoin.png circular icon, doesn't take flex layout space.
+- [Admin panel features](admin-panel-features.md) — Online counter, UZT time, IP twin detection, forceWin toggle, delete-data button all implemented; DB tables use telegram_id not user_id.

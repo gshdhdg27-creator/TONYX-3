@@ -135,10 +135,6 @@ router.post("/orders", async (req, res) => {
     res.status(400).json({ error: "telegramId, tonAmount required" }); return;
   }
 
-  if (!(await isMarketActive())) {
-    res.status(403).json({ error: "P2P рынок ещё не активирован администратором" }); return;
-  }
-
   const totalTon = parseFloat(tonAmount.toFixed(8));
   const category = getCategory(totalTon);
 
@@ -223,10 +219,6 @@ router.delete("/orders/:id", async (req, res) => {
 router.post("/orders/:id/buy", async (req, res) => {
   const id = parseInt(req.params.id);
   const { telegramId, tonAmount: rawTonAmount } = req.body as { telegramId: string; tonAmount?: number };
-
-  if (!(await isMarketActive())) {
-    res.status(403).json({ error: "P2P рынок ещё не активирован" }); return;
-  }
 
   const order = await db.select().from(miniMarketOrdersTable)
     .where(and(eq(miniMarketOrdersTable.id, id), eq(miniMarketOrdersTable.status, "open")))

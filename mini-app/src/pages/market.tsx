@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useGetMiniMarketPool, useGetUserProfile } from "@workspace/api-client-react";
+import { useGetUserProfile } from "@workspace/api-client-react";
 import { useTelegram, haptic, hapticNotify } from "@/lib/telegram";
 import { useLang } from "@/lib/LanguageContext";
 
@@ -526,59 +526,6 @@ function BuyOrderModal({ order, onClose, telegramId, tonBalance, onBought, t }: 
 }
 
 /* ══════════════════════════════════════════════
-   LOCKED MARKET
-══════════════════════════════════════════════ */
-function LockedMarket({ sold, total, t }: { sold: number; total: number; t: ReturnType<typeof useLang>["t"]["market"] }) {
-  const pct = Math.min(100, (sold / total) * 100);
-  return (
-    <div style={{ padding: "0 16px 90px" }}>
-      <div style={{ textAlign: "center", marginBottom: 20, marginTop: 8 }}>
-        <div style={{ fontSize: 22, fontWeight: 900, color: "#f1f5f9", marginBottom: 4 }}>🏪 {t.title}</div>
-        <div style={{ fontSize: 12, color: "#475569" }}>{t.lockedDesc}</div>
-      </div>
-      <div style={{ background: "rgba(15,23,42,0.95)", border: "1px solid rgba(30,58,143,0.35)", borderRadius: 20, padding: 20, marginBottom: 16, textAlign: "center" }}>
-        <div style={{ fontSize: 48, marginBottom: 8 }}>🔒</div>
-        <div style={{ fontSize: 16, fontWeight: 800, color: "#f1f5f9", marginBottom: 4 }}>{t.locked}</div>
-        <div style={{ fontSize: 12, color: "#475569", lineHeight: 1.5, marginBottom: 16 }}>{t.lockedDesc}</div>
-        <div style={{ marginBottom: 10 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-            <span style={{ fontSize: 11, color: "#475569", fontWeight: 700 }}>{t.poolProgress}</span>
-            <span style={{ fontSize: 11, color: "#60a5fa", fontWeight: 700 }}>{pct.toFixed(2)}%</span>
-          </div>
-          <div style={{ height: 12, borderRadius: 6, background: "rgba(30,45,69,0.8)", overflow: "hidden" }}>
-            <div style={{ height: "100%", width: `${pct}%`, background: "linear-gradient(90deg,#1d4ed8,#22d3ee)", borderRadius: 6, transition: "width 0.8s" }} />
-          </div>
-        </div>
-        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
-          {[{ n: sold, label: t.poolSold, c: "#60a5fa" }, { n: total - sold, label: t.poolLeft, c: "#f1f5f9" }, { n: total, label: t.poolTotal, c: "#fbbf24" }].map(({ n, label, c }) => (
-            <div key={label} style={{ textAlign: "center" }}>
-              <div style={{ fontSize: 17, fontWeight: 900, color: c }}>{n.toLocaleString()}</div>
-              <div style={{ color: "#334155" }}>{label}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-      <div style={{ fontSize: 11, color: "#475569", fontWeight: 700, marginBottom: 10, letterSpacing: "0.1em" }}>{t.afterLaunch}</div>
-      {(["start", "base", "pro", "elite"] as Tier[]).map(tier => {
-        const c = TIER_CFG[tier];
-        return (
-          <div key={tier} style={{ display: "flex", alignItems: "center", gap: 12, background: "rgba(15,23,42,0.9)", border: `1px solid ${c.color}25`, borderRadius: 14, padding: "12px 14px", marginBottom: 8, opacity: 0.75 }}>
-            <div style={{ width: 44, height: 44, borderRadius: 12, background: c.bg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-              <span style={{ fontSize: 20 }}>{tier === "start" ? "🟢" : tier === "base" ? "🔵" : tier === "pro" ? "🟣" : "🔥"}</span>
-            </div>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 14, fontWeight: 800, color: c.color }}>{c.label}</div>
-              <div style={{ fontSize: 11, color: "#475569" }}>{c.range}</div>
-            </div>
-            <div style={{ fontSize: 18, fontWeight: 900, color: "#4ade80" }}>{c.bonusLabel}</div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-/* ══════════════════════════════════════════════
    TICKER
 ══════════════════════════════════════════════ */
 function LiveTicker({ lang }: { lang: string }) {
@@ -639,19 +586,14 @@ export default function MarketPage() {
 
   const flash = (msg: string, type: "success" | "error" | "info") => { setToast({ msg, type }); setTimeout(() => setToast(null), 3000); };
 
-  const { data: pool } = useGetMiniMarketPool({ query: { refetchInterval: 10000 } });
   const { data: profile, refetch: refetchProfile } = useGetUserProfile(telegramId ?? "", (
     { query: { enabled: !!telegramId, refetchInterval: 8000 } } as Parameters<typeof useGetUserProfile>[1]
   ));
 
-  const isMarketActive = (pool as { isMarketActive?: boolean } | undefined)?.isMarketActive === true;
   const tonyxBalance = (profile as { tonyxCoins?: number } | undefined)?.tonyxCoins ?? 0;
   const tonBalance   = Number((profile as { ton?: string | number } | undefined)?.ton ?? 0);
-  const poolSold     = pool?.sold ?? 0;
-  const poolTotal    = pool?.total ?? 1_000_000;
 
   const fetchOrders = useCallback(async (filter: TierFilter) => {
-    if (!isMarketActive) return;
     setOrdersLoading(true);
     try {
       const url = filter === "all" ? "/api/mini/market/orders" : `/api/mini/market/orders?category=${filter}`;
@@ -659,7 +601,7 @@ export default function MarketPage() {
       if (r.ok) { const d = await r.json(); setAllOrders(d.orders ?? []); }
     } catch { /* silent */ }
     finally { setOrdersLoading(false); }
-  }, [isMarketActive]);
+  }, []);
 
   const fetchMyOrders = useCallback(async () => {
     if (!telegramId) return;
@@ -680,13 +622,12 @@ export default function MarketPage() {
     fetchOrders(tierFilter); fetchMyOrders(); fetchStats(); refetchProfile();
   }, [fetchOrders, fetchMyOrders, fetchStats, refetchProfile, tierFilter]);
 
-  useEffect(() => { if (isMarketActive) { fetchOrders(tierFilter); fetchStats(); } }, [tierFilter, isMarketActive]);
+  useEffect(() => { fetchOrders(tierFilter); fetchStats(); }, [tierFilter]);
   useEffect(() => { fetchMyOrders(); }, [telegramId]);
   useEffect(() => {
-    if (!isMarketActive) return;
     const iv = setInterval(() => { fetchOrders(tierFilter); fetchStats(); }, 8000);
     return () => clearInterval(iv);
-  }, [tierFilter, isMarketActive]);
+  }, [tierFilter]);
 
   const handleBuy = (order: Order) => { setBuyOrder(order); };
   const handleBuyConfirmed = () => { refreshAll(); setBuyOrder(null); };
@@ -702,11 +643,6 @@ export default function MarketPage() {
     } catch { flash(m.errNetwork, "error"); }
     finally { setCancellingId(null); }
   };
-
-  /* ─── Locked market ─── */
-  if (!isMarketActive) {
-    return <LockedMarket sold={poolSold} total={poolTotal} t={m} />;
-  }
 
   const displayOrders = tab === "mine"
     ? myOrders

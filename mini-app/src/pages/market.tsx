@@ -6,8 +6,7 @@ import { useLang } from "@/lib/LanguageContext";
 /* ══════════════════════════════════════════════
    CONSTANTS & TYPES
 ══════════════════════════════════════════════ */
-const RATE = 50;        // 1 TON = 50 TONYX
-const EXP_PER_BUY = 25;
+const RATE = 1000;      // 1 TON = 1000 TONYX
 
 type Tier = "start" | "base" | "pro" | "elite";
 type MainTab = "market" | "mine";
@@ -148,14 +147,9 @@ function OrderCard({ order, isMine, onBuy, onCancel, buying, cancelling, t }: {
       </div>
 
       {/* Row 2: Green profit block */}
-      <div style={{ background: "linear-gradient(135deg, rgba(22,163,74,0.13), rgba(34,197,94,0.06))", border: "1px solid rgba(34,197,94,0.25)", borderRadius: 14, padding: "10px 14px", marginBottom: 12, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <div>
-          <div style={{ fontSize: 9, color: "#16a34a", fontWeight: 800, letterSpacing: "0.12em", marginBottom: 3 }}>{t.cardNetProfit}</div>
-          <div style={{ fontSize: 19, fontWeight: 900, color: "#4ade80", lineHeight: 1 }}>+{profit.toFixed(3)} TON</div>
-        </div>
-        <div style={{ background: "rgba(34,197,94,0.15)", border: "1px solid rgba(74,222,128,0.3)", borderRadius: 10, padding: "5px 12px", textAlign: "center" }}>
-          <div style={{ fontSize: 13, fontWeight: 900, color: "#4ade80" }}>{t.cardExp(EXP_PER_BUY)}</div>
-        </div>
+      <div style={{ background: "linear-gradient(135deg, rgba(22,163,74,0.13), rgba(34,197,94,0.06))", border: "1px solid rgba(34,197,94,0.25)", borderRadius: 14, padding: "10px 14px", marginBottom: 12 }}>
+        <div style={{ fontSize: 9, color: "#16a34a", fontWeight: 800, letterSpacing: "0.12em", marginBottom: 3 }}>{t.cardNetProfit}</div>
+        <div style={{ fontSize: 19, fontWeight: 900, color: "#4ade80", lineHeight: 1 }}>+{profit.toFixed(3)} TON</div>
       </div>
 
       {/* Row 3: 3 info cells */}
@@ -407,19 +401,13 @@ function BuyOrderModal({ order, onClose, telegramId, tonBalance, onBought, t }: 
           </div>
         </div>
 
-        {/* Profit + EXP + Return */}
+        {/* Profit + Return */}
         <div style={{ background: "linear-gradient(135deg, rgba(22,163,74,0.12), rgba(34,197,94,0.06))", border: "1px solid rgba(34,197,94,0.25)", borderRadius: 14, padding: "12px 14px", marginBottom: 14 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <div>
-              <div style={{ fontSize: 9, color: "#16a34a", fontWeight: 700, letterSpacing: "0.1em", marginBottom: 3 }}>{t.buyProfitLabel}</div>
-              <div style={{ fontSize: 20, fontWeight: 900, color: "#4ade80" }}>+{profit.toFixed(4)} TON</div>
-            </div>
-            <div style={{ textAlign: "center" }}>
-              <div style={{ fontSize: 9, color: "#475569", fontWeight: 700, marginBottom: 3 }}>{t.buyExpLabel}</div>
-              <div style={{ background: "rgba(34,197,94,0.15)", border: "1px solid rgba(74,222,128,0.3)", borderRadius: 8, padding: "4px 12px", fontSize: 14, fontWeight: 900, color: "#4ade80" }}>{t.cardExp(EXP_PER_BUY)}</div>
-            </div>
+          <div style={{ marginBottom: 8 }}>
+            <div style={{ fontSize: 9, color: "#16a34a", fontWeight: 700, letterSpacing: "0.1em", marginBottom: 3 }}>{t.buyProfitLabel}</div>
+            <div style={{ fontSize: 20, fontWeight: 900, color: "#4ade80" }}>+{profit.toFixed(4)} TON</div>
           </div>
-          <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid rgba(34,197,94,0.15)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div style={{ paddingTop: 8, borderTop: "1px solid rgba(34,197,94,0.15)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <span style={{ fontSize: 10, color: "#475569", fontWeight: 700, letterSpacing: "0.08em" }}>{t.buyReturnLabel}</span>
             <span style={{ fontSize: 13, fontWeight: 800, color: "#22d3ee" }}>{order.returnTon.toFixed(4)} TON</span>
           </div>

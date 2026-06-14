@@ -14,7 +14,7 @@ const CATEGORIES = {
 } as const;
 type Category = keyof typeof CATEGORIES;
 const DAILY_LIMIT = 3;
-const FIXED_RATE = 50; // 1 TON = 50 TONYX
+const FIXED_RATE = 1000; // 1 TON = 1000 TONYX
 
 function getCategory(totalTon: number): Category | null {
   if (totalTon >= 3   && totalTon <= 10)  return "start";
@@ -123,7 +123,7 @@ router.get("/stats", async (_req, res) => {
   });
 });
 
-/* ─── POST /orders — create sell order (fixed rate: 1 TON = 50 TONYX) ─── */
+/* ─── POST /orders — create sell order (fixed rate: 1 TON = 1000 TONYX) ─── */
 router.post("/orders", async (req, res) => {
   const { telegramId, tonAmount } = req.body as {
     telegramId?: string; tonAmount?: number;
@@ -245,7 +245,6 @@ router.post("/orders/:id/buy", async (req, res) => {
 
   const bonusPct   = order.bonusPct;
   const bonusCoins = Math.floor(order.amount * (1 + bonusPct / 100));
-  const EXP_REWARD = 25;
 
   const [updated] = await db.update(miniMarketOrdersTable)
     .set({ status: "sold", buyerId: telegramId, updatedAt: new Date() })
@@ -267,7 +266,7 @@ router.post("/orders/:id/buy", async (req, res) => {
   }
 
   console.log(`[Market] Order #${id} (${order.category}): buyer ${telegramId} paid ${totalTon} TON, got ${bonusCoins} TONYX (+${bonusPct}%)`);
-  res.json({ ...formatOrder(updated), bonusCoins, bonusPct, expReward: EXP_REWARD });
+  res.json({ ...formatOrder(updated), bonusCoins, bonusPct });
 });
 
 export default router;

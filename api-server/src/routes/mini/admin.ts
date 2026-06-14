@@ -55,13 +55,26 @@ async function checkAdmin(id: string): Promise<boolean> {
 router.get("/check", async (req, res) => {
   const id = normalizeId(req.query.telegramId);
   const isSuperAdmin = id === OWNER_ID;
-  // Fast path: owner always admin
   if (isSuperAdmin) {
     res.json({ isAdmin: true, isSuperAdmin: true, ownerId: OWNER_ID });
     return;
   }
   const isAdmin = await checkAdmin(id);
   res.json({ isAdmin, isSuperAdmin: false });
+});
+
+/* GET /admin/online-count — public, no auth required */
+router.get("/online-count", async (_req, res) => {
+  try {
+    const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000);
+    const row = await db.execute<{ cnt: number }>(
+      sql`SELECT COUNT(*)::int AS cnt FROM users WHERE last_login_at >= ${fiveMinAgo}`
+    );
+    res.json({ count: row.rows[0]?.cnt ?? 0 });
+  } catch (e) {
+    console.error("[Admin] online-count error:", e);
+    res.status(500).json({ count: 0 });
+  }
 });
 
 /* ════════════════════════════════════════════════════
@@ -306,6 +319,35 @@ router.post("/users/:id/force-win", async (req, res) => {
   await db.update(usersTable).set({ forceWin: !!enable, updatedAt: new Date() }).where(eq(usersTable.telegramId, id));
   console.log(`[Admin] force_win=${enable} set for user ${id}`);
   res.json({ success: true, forceWin: !!enable, message: enable ? "🎮 Режим Бога включён" : "🎮 Режим Бога выключен" });
+});
+
+/* DELETE /admin/users/:id — permanently removes user and all their data */
+router.delete("/users/:id", async (req, res) => {
+  const adminId = extractAdminId(req);
+  if (adminId !== OWNER_ID) {
+    res.status(403).json({ error: "Только суперадмин может удалять пользователей" }); return;
+  }
+  const { id } = req.params;
+  if (id === OWNER_ID) { res.status(400).json({ error: "Нельзя удалить суперадмина" }); return; }
+  try {
+    await db.execute(sql`DELETE FROM ad_views WHERE telegram_id = ${id}`);
+    await db.execute(sql`DELETE FROM mini_market_orders WHERE seller_id = ${id} OR buyer_id = ${id}`);
+    await db.execute(sql`DELETE FROM mini_withdrawals WHERE telegram_id = ${id}`);
+    await db.execute(sql`DELETE FROM mini_topup_requests WHERE telegram_id = ${id}`);
+    await db.execute(sql`DELETE FROM user_tasks WHERE telegram_id = ${id}`);
+    await db.execute(sql`DELETE FROM user_achievements WHERE telegram_id = ${id}`);
+    await db.execute(sql`DELETE FROM mini_investments WHERE telegram_id = ${id}`);
+    await db.execute(sql`DELETE FROM mini_spin_rooms WHERE winner_id = ${id}`);
+    const deleted = await db.execute<{ telegram_id: string }>(
+      sql`DELETE FROM users WHERE telegram_id = ${id} RETURNING telegram_id`
+    );
+    if (!deleted.rows.length) { res.status(404).json({ error: "Пользователь не найден" }); return; }
+    console.log(`[Admin] ${adminId} DELETED user ${id}`);
+    res.json({ success: true, message: `✅ Пользователь ${id} удалён` });
+  } catch (e) {
+    console.error("[Admin] delete user error:", e);
+    res.status(500).json({ error: "Ошибка при удалении пользователя" });
+  }
 });
 
 /* POST /admin/users/:id/delete-data */

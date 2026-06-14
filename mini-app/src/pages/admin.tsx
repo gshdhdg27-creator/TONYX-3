@@ -188,8 +188,8 @@ function UserCard({ user, adminId, isSuperAdmin, onRefresh }: {
     await callApi(`users/${user.telegramId}/delete-data`);
   };
 
-  const name = user.firstName ?? user.username ?? user.telegramId;
-  const initial = name.slice(0, 1).toUpperCase();
+  const name = user.firstName ?? user.username ?? user.telegramId ?? "?";
+  const initial = (name ?? "?").slice(0, 1).toUpperCase();
   const isOwnerUser = user.telegramId === OWNER_ID;
   const hasTwins = (user.twinCount ?? 0) > 0;
 

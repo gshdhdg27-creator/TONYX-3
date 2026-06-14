@@ -390,7 +390,13 @@ export default function HomePage() {
   const ratePerDay = (BASE_RATE + boostRate) * 100;
   const hasPrincipal = (inv?.principal ?? 0) > 0;
   const dailyEarn  = hasPrincipal ? inv!.principal * (BASE_RATE + boostRate) : 0;
-  const onlineUsers = 1247 + (Math.floor(Date.now() / 60000) % 300);
+  const [onlineUsers, setOnlineUsers] = useState(0);
+  useEffect(() => {
+    fetch("/api/mini/admin/online-count")
+      .then(r => r.json())
+      .then(d => { if (typeof d?.count === "number") setOnlineUsers(d.count); })
+      .catch(() => {});
+  }, []);
 
   return (
     <div style={{

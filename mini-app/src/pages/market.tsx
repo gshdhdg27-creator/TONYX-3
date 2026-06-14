@@ -304,7 +304,7 @@ function CreateOrderModal({ onClose, telegramId, tonyxBalance, onCreated, t }: {
               { label: t.createEscrow,  val: `${escrow.toLocaleString()} TONYX`, color: escrow > tonyxBalance ? "#f87171" : "#e2e8f0" },
               { label: t.createReceive, val: `${buyerGets.toLocaleString()} TONYX`, color: "#4ade80" },
               { label: t.createBonus,   val: TIER_CFG[tier].bonusLabel, color: TIER_CFG[tier].color },
-              { label: "ПРОФИТ ПОКУПАТЕЛЯ", val: `+${profit} TON`, color: "#4ade80" },
+              { label: t.createBuyerProfit, val: `+${profit} TON`, color: "#4ade80" },
             ].map(({ label, val, color }) => (
               <div key={label} style={{ background: "rgba(10,20,45,0.8)", border: "1px solid rgba(30,45,80,0.6)", borderRadius: 10, padding: "9px 11px" }}>
                 <div style={{ fontSize: 8, color: "#334155", fontWeight: 700, letterSpacing: "0.1em", marginBottom: 3 }}>{label}</div>

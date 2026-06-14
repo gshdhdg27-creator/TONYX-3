@@ -7,7 +7,7 @@
     { "source": "/api/:path*", "destination": "/api/server" }
   ],
   "functions": {
-    "api/server.mjs": {
+    "api/server.ts": {
       "maxDuration": 30
     }
   }

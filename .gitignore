@@ -2,7 +2,6 @@ node_modules/
 build/
 dist/
 api/_bundled.mjs
-api/server.mjs
 coverage/
 .DS_Store
 *.log

@@ -1,11 +1,9 @@
 /**
- * Vercel-specific bundle: api-server/src/app.ts → ../api/server.mjs
- *
- * Outputs a single self-contained ESM file that Vercel picks up directly
- * as a serverless function at /api/server (no extra import indirection).
+ * Vercel build script — bundles api-server/src/app.ts into api/_bundled.mjs
+ * api/server.ts (committed) imports this generated file at runtime.
  *
  * Run from root: node scripts/bundle-api.mjs
- *   or:          pnpm --filter @workspace/api-server exec node build-vercel.mjs
+ * Or:           pnpm --filter @workspace/api-server exec node build-vercel.mjs
  */
 import { build } from "esbuild";
 import path from "path";
@@ -18,7 +16,7 @@ const root = path.resolve(__dirname, "..");
 
 mkdirSync(path.resolve(root, "api"), { recursive: true });
 
-// CJS shim — required for ESM output that uses require() internally (express, pg, etc.)
+// CJS shim — required for ESM output that uses require() internally
 const CJS_SHIM =
   "import { createRequire } from 'module';" +
   "import { fileURLToPath as __ftu } from 'url';" +
@@ -27,7 +25,6 @@ const CJS_SHIM =
   "const __filename = __ftu(import.meta.url);" +
   "const __dirname = __dn(__filename);";
 
-// Packages that cannot be bundled (native addons, optional drivers)
 const EXTERNAL = [
   "pg-native",
   "better-sqlite3",
@@ -45,9 +42,7 @@ await build({
   platform: "node",
   target: ["node20"],
   format: "esm",
-  // Output DIRECTLY as api/server.mjs — Vercel treats this as the serverless
-  // function for /api/server without any extra wrapper file.
-  outfile: path.resolve(root, "api/server.mjs"),
+  outfile: path.resolve(root, "api/_bundled.mjs"),
   external: EXTERNAL,
   define: {
     "process.env.NODE_ENV": '"production"',
@@ -63,4 +58,4 @@ await build({
   tsconfig: path.resolve(__dirname, "tsconfig.json"),
 });
 
-console.log("✅  api/server.mjs ready");
+console.log("✅  api/_bundled.mjs ready");

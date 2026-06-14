@@ -50,19 +50,30 @@ if (isPostgres) {
   db = drizzle(client, { schema });
   console.log("[DB] PostgreSQL pool created for:", connectionString.substring(0, 50) + "…");
 } else {
-  console.warn("[DB] WARNING: No PostgreSQL URL found.");
-  console.warn("[DB] Set NEON_DATABASE_URL or DATABASE_URL in your environment.");
-  console.warn("[DB] Falling back to in-memory PGlite — tables may not exist, DB ops will fail in production.");
+  console.error("╔══════════════════════════════════════════════════════════════╗");
+  console.error("║  DB FATAL: NEON_DATABASE_URL / DATABASE_URL is NOT SET!      ║");
+  console.error("║  Go to Vercel Dashboard → Settings → Environment Variables   ║");
+  console.error("║  and add:  NEON_DATABASE_URL = your-neon-postgres-url         ║");
+  console.error("║  Without this ALL API calls will return 500 errors.           ║");
+  console.error("╚══════════════════════════════════════════════════════════════╝");
 
+  if (process.env.NODE_ENV === "production") {
+    // In production throw immediately so the 500 message is clear in Vercel logs
+    throw new Error(
+      "DATABASE NOT CONFIGURED: Set NEON_DATABASE_URL in Vercel Environment Variables. " +
+      "Go to https://vercel.com → your project → Settings → Environment Variables."
+    );
+  }
+
+  // Dev/test fallback — in-memory PGlite (data does NOT persist)
+  console.warn("[DB] DEV MODE: Falling back to in-memory PGlite — data will NOT persist.");
   const { PGlite } = await import("@electric-sql/pglite");
   const { drizzle } = await import("drizzle-orm/pglite");
   const { migrate } = await import("drizzle-orm/pglite/migrator");
 
-  // Use memory mode (no file path) — works in Vercel serverless
   client = new PGlite();
   db = drizzle(client, { schema }) as any;
 
-  // Migrations are async and non-blocking
   migrate(db as any, { migrationsFolder: path.join(__dirname, "..", "migrations") })
     .then(() => console.log("[DB] PGlite migrations applied"))
     .catch((err: Error) => console.error("[DB] PGlite migration failed:", err.message));

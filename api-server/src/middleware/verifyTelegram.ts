@@ -51,11 +51,13 @@ export function telegramAuthMiddleware(
       next();
       return;
     }
+    console.warn(`[Auth] Missing x-telegram-init-data header on ${req.method} ${req.path}`);
     res.status(401).json({ error: "Missing Telegram auth" });
     return;
   }
 
   if (!verifyInitData(initData, botToken)) {
+    console.warn(`[Auth] Invalid Telegram signature on ${req.method} ${req.path} — initData length: ${initData.length}`);
     res.status(401).json({ error: "Invalid Telegram signature" });
     return;
   }

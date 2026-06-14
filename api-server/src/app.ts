@@ -9,7 +9,13 @@ const __dirname = path.dirname(__filename);
 
 const app: Express = express();
 
-app.use(cors());
+// Allow all origins — required for Telegram WebApp (origin is the bot URL, varies per user)
+app.use(cors({
+  origin: true,
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "x-telegram-init-data", "x-telegram-user-id"],
+}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 

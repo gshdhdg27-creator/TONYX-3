@@ -43,11 +43,13 @@ export function requireInitData(req: Request, res: Response, next: NextFunction)
     (req.body?.initData as string | undefined);
 
   if (!initData) {
+    console.warn(`[Auth/initData] Missing initData header on ${req.method} ${req.path}`);
     res.status(401).json({ error: "Missing Telegram initData" });
     return;
   }
 
   if (!verifyTelegramInitData(initData, botToken)) {
+    console.warn(`[Auth/initData] Invalid signature on ${req.method} ${req.path} — length: ${initData.length}`);
     res.status(401).json({ error: "Invalid Telegram initData signature" });
     return;
   }

@@ -757,18 +757,19 @@ export default function AdminPage() {
   /* ── Fetch stats ── */
   const fetchStats = useCallback(async (id: string) => {
     setStatsError(null);
+    // Always fetch online count — independent of stats success/failure
+    fetchOnlineCount(id);
     try {
       const r = await apiCall("stats", { adminId: id });
+      const d = await r.json().catch(() => ({}));
       if (!r.ok) {
-        const d = await r.json().catch(() => ({}));
         setStatsError(d.error ?? `HTTP ${r.status}`);
         return;
       }
-      setStats(await r.json());
+      setStats(d);
     } catch (e) {
-      setStatsError(String(e));
+      setStatsError(e instanceof Error ? e.message : String(e));
     }
-    fetchOnlineCount(id);
   }, [fetchOnlineCount]);
 
   /* ── Fetch users ── */
@@ -939,31 +940,44 @@ export default function AdminPage() {
         </button>
       </div>
 
-      {/* Stats error */}
+      {/* Live online counter — always visible regardless of stats status */}
+      <div style={{ background: "rgba(15,23,42,0.95)", border: "1px solid rgba(34,197,94,0.35)", borderRadius: 14, padding: "12px 16px", marginBottom: 10, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ width: 10, height: 10, borderRadius: "50%", background: "#22c55e", boxShadow: "0 0 8px #22c55e", animation: "pulse-green 1.5s ease-in-out infinite" }} />
+          <div>
+            <div style={{ fontSize: 11, color: "#475569" }}>🟢 Онлайн прямо сейчас (5 мин)</div>
+            <div style={{ fontSize: 8, color: "#334155", marginTop: 1 }}>
+              {(() => { const now = new Date(Date.now() + 5 * 60 * 60 * 1000); return `${now.getUTCHours().toString().padStart(2,"0")}:${now.getUTCMinutes().toString().padStart(2,"0")} UZT`; })()}
+            </div>
+          </div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ fontSize: 32, fontWeight: 900, color: "#4ade80" }}>
+            {onlineCount ?? "—"}
+          </div>
+          <button onClick={() => fetchOnlineCount(adminId)} style={{ padding: "4px 8px", borderRadius: 6, border: "none", background: "rgba(34,197,94,0.15)", color: "#4ade80", fontSize: 11, cursor: "pointer", fontFamily: "inherit" }}>🔄</button>
+        </div>
+      </div>
+
+      {/* Stats error — diagnostic strip with retry */}
       {statsError && (
-        <div style={{ background: "rgba(220,38,38,0.1)", border: "1px solid rgba(220,38,38,0.3)", borderRadius: 12, padding: "10px 14px", marginBottom: 14, fontSize: 12, color: "#f87171" }}>
-          ⚠️ Ошибка загрузки статистики: {statsError}
+        <div style={{ background: "rgba(220,38,38,0.08)", border: "1px solid rgba(220,38,38,0.3)", borderRadius: 12, padding: "12px 14px", marginBottom: 14 }}>
+          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10 }}>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "#f87171", marginBottom: 4 }}>⚠️ Ошибка загрузки статистики</div>
+              <div style={{ fontSize: 11, color: "#f87171", fontFamily: "monospace", wordBreak: "break-all" }}>{statsError}</div>
+              <div style={{ fontSize: 10, color: "#475569", marginTop: 6 }}>Разделы Топапы, Выводы и Пользователи работают независимо ↓</div>
+            </div>
+            <button onClick={() => fetchStats(adminId)} style={{ flexShrink: 0, padding: "6px 12px", borderRadius: 8, border: "none", background: "rgba(220,38,38,0.15)", color: "#f87171", fontFamily: "inherit", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+              🔄 Retry
+            </button>
+          </div>
         </div>
       )}
 
       {/* Stats */}
       {stats && (
         <>
-          {/* Live online counter */}
-          <div style={{ background: "rgba(15,23,42,0.95)", border: "1px solid rgba(34,197,94,0.35)", borderRadius: 14, padding: "12px 16px", marginBottom: 10, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <div style={{ width: 10, height: 10, borderRadius: "50%", background: "#22c55e", boxShadow: "0 0 8px #22c55e", animation: "pulse-green 1.5s ease-in-out infinite" }} />
-              <div>
-                <div style={{ fontSize: 11, color: "#475569" }}>🟢 Онлайн прямо сейчас (5 мин)</div>
-                <div style={{ fontSize: 8, color: "#334155", marginTop: 1 }}>
-                  {(() => { const now = new Date(Date.now() + 5 * 60 * 60 * 1000); return `${now.getUTCHours().toString().padStart(2,"0")}:${now.getUTCMinutes().toString().padStart(2,"0")} UZT`; })()}
-                </div>
-              </div>
-            </div>
-            <div style={{ fontSize: 32, fontWeight: 900, color: "#4ade80" }}>
-              {onlineCount ?? "—"}
-            </div>
-          </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
             {[
@@ -1042,8 +1056,16 @@ export default function AdminPage() {
         </div>
 
         {usersError && (
-          <div style={{ background: "rgba(220,38,38,0.1)", border: "1px solid rgba(220,38,38,0.3)", borderRadius: 12, padding: "10px 14px", marginBottom: 12, fontSize: 12, color: "#f87171" }}>
-            ⚠️ Ошибка загрузки: {usersError}
+          <div style={{ background: "rgba(220,38,38,0.08)", border: "1px solid rgba(220,38,38,0.3)", borderRadius: 12, padding: "12px 14px", marginBottom: 12 }}>
+            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: "#f87171", marginBottom: 3 }}>⚠️ Ошибка загрузки пользователей</div>
+                <div style={{ fontSize: 11, color: "#f87171", fontFamily: "monospace", wordBreak: "break-all" }}>{usersError}</div>
+              </div>
+              <button onClick={() => fetchUsers(adminId, search, 1)} style={{ flexShrink: 0, padding: "6px 10px", borderRadius: 8, border: "none", background: "rgba(220,38,38,0.15)", color: "#f87171", fontFamily: "inherit", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                🔄
+              </button>
+            </div>
           </div>
         )}
 

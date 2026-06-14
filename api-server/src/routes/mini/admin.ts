@@ -122,8 +122,10 @@ router.get("/stats", async (req, res) => {
       admins: adminRows.rows.map(a => ({ telegramId: a.telegram_id, username: a.username })),
     });
   } catch (e) {
-    console.error("[Admin] GET stats error:", e);
-    res.status(500).json({ error: "Database error fetching stats" });
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error("[Admin] GET /stats FAILED:", msg);
+    console.error("[Admin] Full error:", e);
+    res.status(500).json({ error: `DB error: ${msg}` });
   }
 });
 
@@ -212,8 +214,10 @@ router.get("/users", async (req, res) => {
 
     res.json({ users: enriched, page, hasMore: rows.length === limit });
   } catch (e) {
-    console.error("[Admin] GET users error:", e);
-    res.status(500).json({ error: "Database error fetching users" });
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error("[Admin] GET /users FAILED:", msg);
+    console.error("[Admin] Full error:", e);
+    res.status(500).json({ error: `DB error: ${msg}` });
   }
 });
 

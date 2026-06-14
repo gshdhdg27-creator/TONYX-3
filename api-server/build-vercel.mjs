@@ -17,13 +17,13 @@ const root = path.resolve(__dirname, "..");
 mkdirSync(path.resolve(root, "api"), { recursive: true });
 
 // CJS shim — required for ESM output that uses require() internally
+// Note: __filename/__dirname are NOT declared here because app.ts (the entry
+// point) already declares them with the same names. Declaring them in the
+// banner too causes "Identifier '__filename' has already been declared" when
+// esbuild inlines the entry-point module into the top-level bundle scope.
 const CJS_SHIM =
   "import { createRequire } from 'module';" +
-  "import { fileURLToPath as __ftu } from 'url';" +
-  "import { dirname as __dn } from 'path';" +
-  "const require = createRequire(import.meta.url);" +
-  "const __filename = __ftu(import.meta.url);" +
-  "const __dirname = __dn(__filename);";
+  "const require = createRequire(import.meta.url);";
 
 const EXTERNAL = [
   "pg-native",

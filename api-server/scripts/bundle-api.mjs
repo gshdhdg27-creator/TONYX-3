@@ -19,7 +19,10 @@ await build({
     'zod',
   ],
   banner: {
-    js: `import { createRequire } from 'module'; import { fileURLToPath as _ftu } from 'url'; import { dirname as _dn } from 'path'; const require = createRequire(import.meta.url); const __filename = _ftu(import.meta.url); const __dirname = _dn(__filename);`,
+    // __filename/__dirname omitted — app.ts (entry point) already declares them.
+    // Adding them here too causes "Identifier '__filename' has already been declared"
+    // when esbuild inlines the entry module into the top-level bundle scope.
+    js: `import { createRequire } from 'module'; const require = createRequire(import.meta.url);`,
   },
   logLevel: 'info',
 });

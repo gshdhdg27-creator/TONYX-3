@@ -1,11 +1,11 @@
 /**
- * Vercel-specific bundle: api-server/src/app.ts → ../api/_bundled.mjs
+ * Vercel-specific bundle: api-server/src/app.ts → ../api/server.mjs
  *
- * Bundles the Express app (without server.listen) into a single ESM file
- * for use as a Vercel serverless function.
+ * Outputs a single self-contained ESM file that Vercel picks up directly
+ * as a serverless function at /api/server (no extra import indirection).
  *
- * Run from api-server directory: node build-vercel.mjs
- * Or from root: pnpm --filter @workspace/api-server exec node build-vercel.mjs
+ * Run from root: node scripts/bundle-api.mjs
+ *   or:          pnpm --filter @workspace/api-server exec node build-vercel.mjs
  */
 import { build } from "esbuild";
 import path from "path";
@@ -16,7 +16,6 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const root = path.resolve(__dirname, "..");
 
-// Ensure output directory exists
 mkdirSync(path.resolve(root, "api"), { recursive: true });
 
 // CJS shim — required for ESM output that uses require() internally (express, pg, etc.)
@@ -28,7 +27,7 @@ const CJS_SHIM =
   "const __filename = __ftu(import.meta.url);" +
   "const __dirname = __dn(__filename);";
 
-// Packages that CANNOT be bundled (native addons, optional DB drivers)
+// Packages that cannot be bundled (native addons, optional drivers)
 const EXTERNAL = [
   "pg-native",
   "better-sqlite3",
@@ -46,7 +45,9 @@ await build({
   platform: "node",
   target: ["node20"],
   format: "esm",
-  outfile: path.resolve(root, "api/_bundled.mjs"),
+  // Output DIRECTLY as api/server.mjs — Vercel treats this as the serverless
+  // function for /api/server without any extra wrapper file.
+  outfile: path.resolve(root, "api/server.mjs"),
   external: EXTERNAL,
   define: {
     "process.env.NODE_ENV": '"production"',
@@ -54,14 +55,12 @@ await build({
   banner: { js: CJS_SHIM },
   minify: false,
   logLevel: "info",
-  // esbuild resolves @workspace/* through node_modules symlinks;
-  // the aliases below are a safety fallback in case pnpm hoisting differs
   alias: {
-    "@workspace/db":      path.resolve(root, "db/src/index.ts"),
+    "@workspace/db":        path.resolve(root, "db/src/index.ts"),
     "@workspace/db/schema": path.resolve(root, "db/src/schema/index.ts"),
-    "@workspace/api-zod": path.resolve(root, "api-zod/src/index.ts"),
+    "@workspace/api-zod":   path.resolve(root, "api-zod/src/index.ts"),
   },
   tsconfig: path.resolve(__dirname, "tsconfig.json"),
 });
 
-console.log("✅  api/_bundled.mjs ready");
+console.log("✅  api/server.mjs ready");

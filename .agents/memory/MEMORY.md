@@ -2,3 +2,4 @@
 - [Withdrawal system architecture](withdrawal-system.md) — TON-based withdrawals via /api/mini/wallet/withdraw; admin panel approve/reject; TWIN IP fraud detection; @ton/ton auto-send optional.
 - [Header floating design](header-design.md) — Header uses position:fixed top-right, transparent background, toncoin.png circular icon, doesn't take flex layout space.
 - [Admin panel features](admin-panel-features.md) — Online counter, UZT time, IP twin detection, forceWin toggle, delete-data button all implemented; DB tables use telegram_id not user_id.
+- [Production Vercel stabilization](vercel-production-fix.md) — Root cause of HTTP 500s + silent data loss; required env vars; all known backend/frontend bugs fixed as of June 2026.

@@ -51,7 +51,7 @@ router.get("/history/:telegramId", async (req: Request, res: Response) => {
     });
   }
   for (const m of mines.rows) {
-    const won = m.status === "cashout" && m.payout && m.payout > 0;
+    const won = m.status === "won" && m.payout && m.payout > 0;
     items.push({
       kind: "game",
       id: m.id,

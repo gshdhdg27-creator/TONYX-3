@@ -28,7 +28,7 @@ export default function LeaderboardPage() {
   const entries = data?.entries ?? [];
 
   const valueLabel = (n: number) =>
-    cat === "referrals" ? `${n} refs` : cat === "top_players" ? `${n} ads` : `${n.toLocaleString()} coins`;
+    cat === "referrals" ? `${n} refs` : cat === "top_players" ? `${n} ads` : `${n.toLocaleString()} TONYX`;
 
   return (
     <div style={{ padding: "20px 16px 32px", minHeight: "100%" }}>

@@ -142,20 +142,6 @@ router.get("/stats", async (req, res) => {
   }
 });
 
-/* GET /admin/online-count */
-router.get("/online-count", async (_req, res) => {
-  try {
-    const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000);
-    const row = await db.execute<{ cnt: number }>(
-      sql`SELECT COUNT(*)::int AS cnt FROM users WHERE last_login_at >= ${fiveMinAgo}`
-    );
-    res.json({ count: row.rows[0]?.cnt ?? 0 });
-  } catch (e) {
-    console.error("[Admin] online-count error:", e);
-    res.status(500).json({ count: 0 });
-  }
-});
-
 /* GET /admin/users */
 router.get("/users", async (req, res) => {
   const search = normalizeId(req.query.search);

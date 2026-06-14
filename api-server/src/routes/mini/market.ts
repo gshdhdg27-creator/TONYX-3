@@ -46,7 +46,7 @@ function formatOrder(order: typeof miniMarketOrdersTable.$inferSelect) {
   const price    = Number(order.pricePerCoin);
   const totalTon = Number(order.totalTon) || parseFloat((order.amount * price).toFixed(8));
   const cat      = order.category as Category;
-  const bonusPct = order.bonusPct;
+  const bonusPct = Number(order.bonusPct); // numeric column returns string in Drizzle
   const bonusCoins = Math.floor(order.amount * (1 + bonusPct / 100));
   const returnTon  = parseFloat((bonusCoins * price).toFixed(8));
   return {
@@ -186,7 +186,7 @@ router.post("/orders", async (req, res) => {
     pricePerCoin: String(pricePerCoin),
     totalTon: String(totalTon),
     category,
-    bonusPct,
+    bonusPct: String(bonusPct),
     status: "open",
   }).returning();
 
@@ -222,7 +222,7 @@ router.delete("/orders/:id", async (req, res) => {
 /* ─── POST /orders/:id/buy ─── */
 router.post("/orders/:id/buy", async (req, res) => {
   const id = parseInt(req.params.id);
-  const { telegramId } = req.body as { telegramId: string };
+  const { telegramId, tonAmount: rawTonAmount } = req.body as { telegramId: string; tonAmount?: number };
 
   if (!(await isMarketActive())) {
     res.status(403).json({ error: "P2P рынок ещё не активирован" }); return;
@@ -238,37 +238,89 @@ router.post("/orders/:id/buy", async (req, res) => {
   const buyer = await db.select().from(usersTable).where(eq(usersTable.telegramId, telegramId)).then(r => r[0] ?? null);
   if (!buyer) { res.status(404).json({ error: "Покупатель не найден" }); return; }
 
-  const totalTon  = Number(order.totalTon);
-  const buyerTon  = Number(buyer.ton);
+  const cat          = order.category as Category;
+  const minPartialBuy = CATEGORIES[cat].minPartialBuy;
+  const bonusPct     = Number(order.bonusPct); // numeric column → string in Drizzle, convert
+  const totalTon     = Number(order.totalTon);
+  const buyerTon     = Number(buyer.ton);
 
-  if (buyerTon < totalTon) {
-    res.status(400).json({ error: `Недостаточно TON. Нужно ${totalTon.toFixed(4)}, у вас ${buyerTon.toFixed(4)}` }); return;
+  // Determine purchase amount; default = full order
+  const purchaseTon = (rawTonAmount !== undefined && rawTonAmount < totalTon)
+    ? parseFloat(rawTonAmount.toFixed(8))
+    : totalTon;
+  const isPartial = purchaseTon < totalTon;
+
+  // ── Server-side partial-buy rule enforcement ──
+  if (isPartial) {
+    if (purchaseTon < minPartialBuy) {
+      res.status(400).json({ error: `Минимальная сумма выкупа для тира ${CATEGORIES[cat].label}: ${minPartialBuy} TON` }); return;
+    }
+    const remaining = parseFloat((totalTon - purchaseTon).toFixed(8));
+    if (remaining > 0 && remaining < minPartialBuy) {
+      const maxPartial = parseFloat((totalTon - minPartialBuy).toFixed(8));
+      res.status(400).json({ error: `Остаток ордера (${remaining.toFixed(4)} TON) меньше минимума тира. Максимально для частичного выкупа: ${maxPartial} TON` }); return;
+    }
   }
 
-  const bonusPct   = order.bonusPct;
-  const bonusCoins = Math.floor(order.amount * (1 + bonusPct / 100));
+  if (buyerTon < purchaseTon) {
+    res.status(400).json({ error: `Недостаточно TON. Нужно ${purchaseTon.toFixed(4)}, у вас ${buyerTon.toFixed(4)}` }); return;
+  }
 
-  const [updated] = await db.update(miniMarketOrdersTable)
-    .set({ status: "sold", buyerId: telegramId, updatedAt: new Date() })
-    .where(eq(miniMarketOrdersTable.id, id))
-    .returning();
+  // TONYX from escrow proportional to purchaseTon; buyer gets +bonus on top
+  const partialEscrowTonyx = Math.floor(purchaseTon * FIXED_RATE);
+  const bonusCoins         = Math.floor(partialEscrowTonyx * (1 + bonusPct / 100));
 
-  await db.update(usersTable).set({
-    ton: String(buyerTon - totalTon),
-    tonyxCoins: buyer.tonyxCoins + bonusCoins,
-    updatedAt: new Date(),
-  }).where(eq(usersTable.telegramId, telegramId));
+  if (!isPartial) {
+    // ── Full buy: close the order ──
+    const [updated] = await db.update(miniMarketOrdersTable)
+      .set({ status: "sold", buyerId: telegramId, updatedAt: new Date() })
+      .where(eq(miniMarketOrdersTable.id, id))
+      .returning();
 
-  const seller = await db.select().from(usersTable).where(eq(usersTable.telegramId, order.sellerId)).then(r => r[0]);
-  if (seller) {
     await db.update(usersTable).set({
-      ton: String(Number(seller.ton) + totalTon),
+      ton: String(buyerTon - purchaseTon),
+      tonyxCoins: buyer.tonyxCoins + bonusCoins,
       updatedAt: new Date(),
-    }).where(eq(usersTable.telegramId, order.sellerId));
-  }
+    }).where(eq(usersTable.telegramId, telegramId));
 
-  console.log(`[Market] Order #${id} (${order.category}): buyer ${telegramId} paid ${totalTon} TON, got ${bonusCoins} TONYX (+${bonusPct}%)`);
-  res.json({ ...formatOrder(updated), bonusCoins, bonusPct });
+    const seller = await db.select().from(usersTable).where(eq(usersTable.telegramId, order.sellerId)).then(r => r[0]);
+    if (seller) {
+      await db.update(usersTable).set({
+        ton: String(Number(seller.ton) + purchaseTon),
+        updatedAt: new Date(),
+      }).where(eq(usersTable.telegramId, order.sellerId));
+    }
+
+    console.log(`[Market] Order #${id} FULL (${cat}): buyer ${telegramId} paid ${purchaseTon} TON → ${bonusCoins} TONYX (+${bonusPct}%)`);
+    res.json({ ...formatOrder(updated), bonusCoins, bonusPct, isPartial: false });
+
+  } else {
+    // ── Partial buy: reduce order in-place ──
+    const newAmount   = order.amount - partialEscrowTonyx;
+    const newTotalTon = parseFloat((totalTon - purchaseTon).toFixed(8));
+
+    const [updated] = await db.update(miniMarketOrdersTable)
+      .set({ amount: newAmount, totalTon: String(newTotalTon), updatedAt: new Date() })
+      .where(eq(miniMarketOrdersTable.id, id))
+      .returning();
+
+    await db.update(usersTable).set({
+      ton: String(buyerTon - purchaseTon),
+      tonyxCoins: buyer.tonyxCoins + bonusCoins,
+      updatedAt: new Date(),
+    }).where(eq(usersTable.telegramId, telegramId));
+
+    const seller = await db.select().from(usersTable).where(eq(usersTable.telegramId, order.sellerId)).then(r => r[0]);
+    if (seller) {
+      await db.update(usersTable).set({
+        ton: String(Number(seller.ton) + purchaseTon),
+        updatedAt: new Date(),
+      }).where(eq(usersTable.telegramId, order.sellerId));
+    }
+
+    console.log(`[Market] Order #${id} PARTIAL (${cat}): buyer ${telegramId} paid ${purchaseTon}/${totalTon} TON → ${bonusCoins} TONYX (+${bonusPct}%), remaining ${newTotalTon} TON`);
+    res.json({ ...formatOrder(updated), bonusCoins, bonusPct, isPartial: true, remaining: newTotalTon });
+  }
 });
 
 export default router;

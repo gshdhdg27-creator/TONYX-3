@@ -339,30 +339,64 @@ function BuyOrderModal({ order, onClose, telegramId, tonBalance, onBought, t }: 
   order: Order; onClose: () => void; telegramId: string; tonBalance: number; onBought: () => void;
   t: ReturnType<typeof useLang>["t"]["market"];
 }) {
-  const [loading, setLoading] = useState(false);
-  const [toast, setToast] = useState<{ msg: string; type: "success" | "error" | "info" } | null>(null);
+  const tier        = TIER_CFG[order.category] ?? TIER_CFG.start;
+  const minBuy      = tier.minPartialBuy;
+  const totalTon    = order.totalTon;
+  // Max amount for a valid partial buy — remainder must stay ≥ minBuy
+  const maxPartial  = parseFloat((totalTon - minBuy).toFixed(8));
+  // Partial buy is only possible when there is a valid range: minBuy ≤ X ≤ maxPartial
+  const canPartial  = maxPartial >= minBuy;
+
+  const [rawInput, setRawInput] = useState(String(totalTon));
+  const [loading, setLoading]   = useState(false);
+  const [toast, setToast]       = useState<{ msg: string; type: "success" | "error" | "info" } | null>(null);
   const flash = (msg: string, type: "success" | "error" | "info") => { setToast({ msg, type }); setTimeout(() => setToast(null), 2500); };
 
-  const tier = TIER_CFG[order.category] ?? TIER_CFG.start;
-  const profit = Math.max(0, order.returnTon - order.totalTon);
-  const hasEnough = tonBalance >= order.totalTon;
-  const sellerName = order.sellerUsername ?? `user_${order.sellerId.slice(-5)}`;
+  // Derive valid buy amount from raw input (always safe)
+  const parsed    = parseFloat(rawInput) || 0;
+  const buyAmount = (() => {
+    if (!canPartial || parsed >= totalTon) return totalTon;
+    if (parsed <= minBuy)                  return minBuy;
+    if (parsed > maxPartial)               return maxPartial; // forbidden zone → snap
+    return parsed;
+  })();
+
+  const isFullBuy      = buyAmount >= totalTon;
+  const RATE           = 1000;
+  const escrowTonyx    = Math.floor(buyAmount * RATE);
+  const estimatedTonyx = Math.floor(escrowTonyx * (1 + tier.bonusPct / 100));
+  const estimatedReturn= parseFloat((estimatedTonyx / RATE).toFixed(4));
+  const estimatedProfit= parseFloat(Math.max(0, estimatedReturn - buyAmount).toFixed(4));
+  const remaining      = isFullBuy ? 0 : parseFloat((totalTon - buyAmount).toFixed(4));
+  const hasEnough      = tonBalance >= buyAmount;
+  const canConfirm     = hasEnough && !loading && buyAmount > 0;
+  const sellerName     = order.sellerUsername ?? `user_${order.sellerId.slice(-5)}`;
+
+  // Auto-correction rules applied on every keystroke
+  const handleInput = (val: string) => {
+    const num = parseFloat(val);
+    if (val === "" || isNaN(num)) { setRawInput(val); return; }
+    if (!canPartial || num >= totalTon)  { setRawInput(String(totalTon)); return; }
+    if (num < minBuy)                    { setRawInput(String(minBuy)); return; }
+    if (num > maxPartial)                { setRawInput(String(maxPartial)); return; } // forbidden → snap to maxPartial
+    setRawInput(val);
+  };
 
   const confirm = async () => {
-    if (!hasEnough || loading) return;
+    if (!canConfirm) return;
     haptic("medium");
     setLoading(true);
     try {
       const r = await fetch(`/api/mini/market/orders/${order.id}/buy`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ telegramId }),
+        body: JSON.stringify({ telegramId, tonAmount: buyAmount }),
       });
       const d = await r.json();
       if (!r.ok) { flash(d.error || "Ошибка", "error"); }
       else {
         hapticNotify("success");
-        flash(t.toastBought(d.bonusCoins ?? order.bonusCoins, d.bonusPct ?? order.bonusPct), "success");
+        flash(t.toastBought(d.bonusCoins ?? estimatedTonyx, tier.bonusPct), "success");
         setTimeout(() => { onBought(); onClose(); }, 1200);
       }
     } catch { flash(t.errNetwork, "error"); }
@@ -372,63 +406,119 @@ function BuyOrderModal({ order, onClose, telegramId, tonBalance, onBought, t }: 
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.78)", display: "flex", alignItems: "flex-end", zIndex: 500 }} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
       {toast && <Toast msg={toast.msg} type={toast.type} />}
-      <div style={{ width: "100%", background: "linear-gradient(180deg,#0d1526 0%,#0a1020 100%)", border: "1px solid rgba(30,58,143,0.4)", borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: "20px 16px 36px" }}>
+      <div style={{ width: "100%", background: "linear-gradient(180deg,#0d1526 0%,#0a1020 100%)", border: "1px solid rgba(30,58,143,0.4)", borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: "20px 16px 36px", maxHeight: "92dvh", overflowY: "auto" }}>
 
         {/* Header */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-          <div style={{ fontSize: 18, fontWeight: 900, color: "#f1f5f9" }}>{t.buyTitle}</div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ fontSize: 18, fontWeight: 900, color: "#f1f5f9" }}>{t.buyTitle}</div>
+            <div style={{ padding: "3px 10px", borderRadius: 6, fontSize: 9, fontWeight: 900, letterSpacing: "0.08em", background: isFullBuy ? "rgba(37,99,235,0.2)" : "rgba(251,191,36,0.13)", color: isFullBuy ? "#60a5fa" : "#fbbf24", border: `1px solid ${isFullBuy ? "rgba(96,165,250,0.3)" : "rgba(251,191,36,0.3)"}` }}>
+              {isFullBuy ? t.buyModeFull : t.buyModePartial}
+            </div>
+          </div>
           <button onClick={onClose} style={{ background: "rgba(255,255,255,0.07)", border: "none", color: "#94a3b8", fontSize: 18, width: 32, height: 32, borderRadius: "50%", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "inherit" }}>×</button>
         </div>
 
         {/* Seller row */}
         <div style={{ display: "flex", alignItems: "center", gap: 10, background: "rgba(15,28,55,0.7)", border: "1px solid rgba(30,45,80,0.6)", borderRadius: 14, padding: "10px 14px", marginBottom: 14 }}>
-          <Avatar name={sellerName} size={38} />
+          <Avatar name={sellerName} size={36} />
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 9, color: "#475569", fontWeight: 700, letterSpacing: "0.1em", marginBottom: 2 }}>{t.buyFrom}</div>
             <div style={{ fontSize: 14, fontWeight: 800, color: "#e2e8f0" }}>@{sellerName}</div>
           </div>
-          <div>
+          <div style={{ textAlign: "right" }}>
             <div style={{ fontSize: 9, color: "#475569", fontWeight: 700, letterSpacing: "0.1em", marginBottom: 3 }}>{t.buyTier}</div>
             <TierBadge tier={order.category} />
           </div>
         </div>
 
-        {/* Deal summary */}
+        {/* Amount input */}
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+            <div style={{ fontSize: 10, color: "#475569", fontWeight: 700, letterSpacing: "0.1em" }}>{t.buyAmountLabel}</div>
+            <div style={{ fontSize: 9, color: "#334155" }}>
+              {t.buyMinHint(minBuy)}{canPartial ? ` · ${t.buyMaxPartialHint(maxPartial)}` : ` · ${t.buyFullOnly}`}
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <input
+              type="number"
+              value={rawInput}
+              onChange={e => handleInput(e.target.value)}
+              onBlur={e => { const n = parseFloat(e.target.value); if (!n || n <= 0) setRawInput(String(minBuy)); }}
+              min={minBuy}
+              max={totalTon}
+              step="any"
+              style={{ flex: 1, background: "rgba(15,25,55,0.8)", border: `1px solid ${hasEnough ? tier.border : "rgba(248,113,113,0.5)"}`, borderRadius: 12, padding: "12px 14px", color: "#f1f5f9", fontFamily: "inherit", fontSize: 16, fontWeight: 800, outline: "none", boxSizing: "border-box" as const }}
+            />
+            <button
+              onClick={() => { haptic("light"); setRawInput(String(totalTon)); }}
+              style={{ padding: "0 18px", borderRadius: 12, border: "1px solid rgba(96,165,250,0.4)", background: "rgba(37,99,235,0.18)", color: "#60a5fa", fontSize: 13, fontWeight: 900, fontFamily: "inherit", cursor: "pointer", whiteSpace: "nowrap" as const }}
+            >
+              MAX
+            </button>
+          </div>
+          {/* Quick-select buttons — only when partial buy is meaningful */}
+          {canPartial && (
+            <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+              <button onClick={() => { haptic("light"); setRawInput(String(minBuy)); }} style={{ flex: 1, padding: "7px 0", borderRadius: 8, border: "1px solid rgba(30,45,80,0.5)", background: !isFullBuy && Math.abs(buyAmount - minBuy) < 0.001 ? "rgba(37,99,235,0.2)" : "rgba(10,18,40,0.8)", color: !isFullBuy && Math.abs(buyAmount - minBuy) < 0.001 ? "#60a5fa" : "#475569", fontSize: 10, fontWeight: 800, fontFamily: "inherit", cursor: "pointer" }}>
+                {t.buyMinBtn(minBuy)} TON
+              </button>
+              {maxPartial > minBuy && (
+                <button onClick={() => { haptic("light"); setRawInput(String(maxPartial)); }} style={{ flex: 1, padding: "7px 0", borderRadius: 8, border: "1px solid rgba(30,45,80,0.5)", background: !isFullBuy && Math.abs(buyAmount - maxPartial) < 0.001 ? "rgba(251,191,36,0.15)" : "rgba(10,18,40,0.8)", color: !isFullBuy && Math.abs(buyAmount - maxPartial) < 0.001 ? "#fbbf24" : "#475569", fontSize: 10, fontWeight: 800, fontFamily: "inherit", cursor: "pointer" }}>
+                  {t.buyMaxPartialBtn(maxPartial)} TON
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Deal preview grid */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 14 }}>
-          <div style={{ background: "rgba(220,38,38,0.08)", border: "1px solid rgba(248,113,113,0.2)", borderRadius: 12, padding: "12px 14px" }}>
+          <div style={{ background: "rgba(220,38,38,0.08)", border: "1px solid rgba(248,113,113,0.2)", borderRadius: 12, padding: "11px 12px" }}>
             <div style={{ fontSize: 9, color: "#f87171", fontWeight: 700, letterSpacing: "0.1em", marginBottom: 4 }}>{t.buyPayLabel}</div>
-            <div style={{ fontSize: 22, fontWeight: 900, color: "#fca5a5" }}>{order.totalTon.toFixed(2)}</div>
+            <div style={{ fontSize: 22, fontWeight: 900, color: "#fca5a5" }}>{buyAmount.toFixed(2)}</div>
             <div style={{ fontSize: 10, color: "#f87171" }}>TON</div>
           </div>
-          <div style={{ background: tier.bg, border: `1px solid ${tier.border}`, borderRadius: 12, padding: "12px 14px" }}>
+          <div style={{ background: tier.bg, border: `1px solid ${tier.border}`, borderRadius: 12, padding: "11px 12px" }}>
             <div style={{ fontSize: 9, color: tier.color, fontWeight: 700, letterSpacing: "0.1em", marginBottom: 4 }}>{t.buyReceiveLabel}</div>
-            <div style={{ fontSize: 22, fontWeight: 900, color: "#f1f5f9" }}>{order.bonusCoins.toLocaleString()}</div>
-            <div style={{ fontSize: 10, color: tier.color }}>TONYX</div>
+            <div style={{ fontSize: 22, fontWeight: 900, color: "#f1f5f9" }}>{estimatedTonyx.toLocaleString()}</div>
+            <div style={{ fontSize: 10, color: tier.color }}>TONYX {tier.bonusLabel}</div>
           </div>
         </div>
 
-        {/* Profit + Return */}
+        {/* Profit + Return + Remaining */}
         <div style={{ background: "linear-gradient(135deg, rgba(22,163,74,0.12), rgba(34,197,94,0.06))", border: "1px solid rgba(34,197,94,0.25)", borderRadius: 14, padding: "12px 14px", marginBottom: 14 }}>
           <div style={{ marginBottom: 8 }}>
             <div style={{ fontSize: 9, color: "#16a34a", fontWeight: 700, letterSpacing: "0.1em", marginBottom: 3 }}>{t.buyProfitLabel}</div>
-            <div style={{ fontSize: 20, fontWeight: 900, color: "#4ade80" }}>+{profit.toFixed(4)} TON</div>
+            <div style={{ fontSize: 20, fontWeight: 900, color: "#4ade80" }}>+{estimatedProfit.toFixed(4)} TON</div>
           </div>
           <div style={{ paddingTop: 8, borderTop: "1px solid rgba(34,197,94,0.15)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <span style={{ fontSize: 10, color: "#475569", fontWeight: 700, letterSpacing: "0.08em" }}>{t.buyReturnLabel}</span>
-            <span style={{ fontSize: 13, fontWeight: 800, color: "#22d3ee" }}>{order.returnTon.toFixed(4)} TON</span>
+            <span style={{ fontSize: 13, fontWeight: 800, color: "#22d3ee" }}>{estimatedReturn.toFixed(4)} TON</span>
           </div>
+          {!isFullBuy && (
+            <div style={{ paddingTop: 8, marginTop: 8, borderTop: "1px solid rgba(34,197,94,0.1)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span style={{ fontSize: 10, color: "#475569", fontWeight: 700, letterSpacing: "0.08em" }}>{t.buyRemainingLabel}</span>
+              <span style={{ fontSize: 13, fontWeight: 800, color: "#fbbf24" }}>{remaining.toFixed(4)} TON</span>
+            </div>
+          )}
         </div>
 
         {/* Balance warning */}
         {!hasEnough && (
           <div style={{ background: "rgba(220,38,38,0.08)", border: "1px solid rgba(248,113,113,0.25)", borderRadius: 10, padding: "10px 14px", marginBottom: 12, fontSize: 12, color: "#f87171" }}>
-            {t.buyInsufficient}: {tonBalance.toFixed(4)} TON (нужно {order.totalTon.toFixed(4)})
+            {t.buyInsufficient}: {tonBalance.toFixed(4)} TON (нужно {buyAmount.toFixed(4)})
           </div>
         )}
 
         {/* Confirm button */}
-        <button onClick={confirm} disabled={!hasEnough || loading} style={{ width: "100%", padding: "15px 0", borderRadius: 14, border: "none", fontFamily: "inherit", background: (!hasEnough || loading) ? "rgba(30,45,80,0.3)" : "linear-gradient(135deg,#1d4ed8,#3b82f6)", color: (!hasEnough || loading) ? "#334155" : "#fff", fontSize: 16, fontWeight: 900, cursor: (!hasEnough || loading) ? "not-allowed" : "pointer", boxShadow: hasEnough && !loading ? "0 0 28px rgba(59,130,246,0.4)" : "none" }}>
-          {loading ? t.buyProcessing : t.buyConfirm}
+        <button
+          onClick={confirm}
+          disabled={!canConfirm}
+          style={{ width: "100%", padding: "15px 0", borderRadius: 14, border: "none", fontFamily: "inherit", background: !canConfirm ? "rgba(30,45,80,0.3)" : isFullBuy ? "linear-gradient(135deg,#1d4ed8,#3b82f6)" : "linear-gradient(135deg,#92400e,#d97706)", color: !canConfirm ? "#334155" : "#fff", fontSize: 16, fontWeight: 900, cursor: !canConfirm ? "not-allowed" : "pointer", boxShadow: canConfirm ? (isFullBuy ? "0 0 28px rgba(59,130,246,0.4)" : "0 0 20px rgba(217,119,6,0.4)") : "none" }}
+        >
+          {loading ? t.buyProcessing : (isFullBuy ? t.buyConfirm : t.buyConfirmPartial(buyAmount))}
         </button>
       </div>
     </div>

@@ -7,10 +7,10 @@ const router: IRouter = Router();
 
 /* ─── Category config: START/BASE/PRO/ELITE ─── */
 const CATEGORIES = {
-  start: { min: 3,   max: 10,       bonusPct: 0.5, label: "START" },
-  base:  { min: 10,  max: 50,       bonusPct: 1,   label: "BASE"  },
-  pro:   { min: 50,  max: 100,      bonusPct: 2,   label: "PRO"   },
-  elite: { min: 100, max: Infinity, bonusPct: 3,   label: "ELITE" },
+  start: { min: 3,   max: 10,       bonusPct: 1.4, minPartialBuy: 1,  label: "START" },
+  base:  { min: 10,  max: 50,       bonusPct: 1.7, minPartialBuy: 10, label: "BASE"  },
+  pro:   { min: 50,  max: 100,      bonusPct: 2,   minPartialBuy: 25, label: "PRO"   },
+  elite: { min: 100, max: Infinity, bonusPct: 2.5, minPartialBuy: 50, label: "ELITE" },
 } as const;
 type Category = keyof typeof CATEGORIES;
 const DAILY_LIMIT = 3;
@@ -45,6 +45,7 @@ async function maybeResetDailyCounters(user: typeof usersTable.$inferSelect) {
 function formatOrder(order: typeof miniMarketOrdersTable.$inferSelect) {
   const price    = Number(order.pricePerCoin);
   const totalTon = Number(order.totalTon) || parseFloat((order.amount * price).toFixed(8));
+  const cat      = order.category as Category;
   const bonusPct = order.bonusPct;
   const bonusCoins = Math.floor(order.amount * (1 + bonusPct / 100));
   const returnTon  = parseFloat((bonusCoins * price).toFixed(8));
@@ -55,10 +56,11 @@ function formatOrder(order: typeof miniMarketOrdersTable.$inferSelect) {
     amount: order.amount,
     pricePerCoin: price,
     totalTon,
-    category: order.category as Category,
+    category: cat,
     bonusPct,
     bonusCoins,
     returnTon,
+    minPartialBuy: CATEGORIES[cat]?.minPartialBuy ?? 1,
     status: order.status,
     buyerId: order.buyerId ?? null,
     createdAt: order.createdAt.toISOString(),

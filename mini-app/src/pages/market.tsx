@@ -13,10 +13,10 @@ type MainTab = "market" | "mine";
 type TierFilter = "all" | Tier;
 
 const TIER_CFG = {
-  start: { label: "START", range: "3–10 TON",   min: 3,   max: 10,       bonusPct: 0.5, bonusLabel: "+0.5%", color: "#22d3ee", bg: "rgba(6,182,212,0.12)",  border: "rgba(6,182,212,0.3)"   },
-  base:  { label: "BASE",  range: "10–50 TON",  min: 10,  max: 50,       bonusPct: 1,   bonusLabel: "+1%",   color: "#60a5fa", bg: "rgba(37,99,235,0.12)",  border: "rgba(96,165,250,0.3)"  },
-  pro:   { label: "PRO",   range: "50–100 TON", min: 50,  max: 100,      bonusPct: 2,   bonusLabel: "+2%",   color: "#a78bfa", bg: "rgba(109,40,217,0.12)", border: "rgba(167,139,250,0.3)" },
-  elite: { label: "ELITE", range: "100+ TON",   min: 100, max: Infinity, bonusPct: 3,   bonusLabel: "+3%",   color: "#fbbf24", bg: "rgba(180,83,9,0.15)",   border: "rgba(251,191,36,0.35)" },
+  start: { label: "START", range: "3–10 TON",   min: 3,   max: 10,       bonusPct: 1.4, bonusLabel: "+1.4%", minPartialBuy: 1,  color: "#22d3ee", bg: "rgba(6,182,212,0.12)",  border: "rgba(6,182,212,0.3)"   },
+  base:  { label: "BASE",  range: "10–50 TON",  min: 10,  max: 50,       bonusPct: 1.7, bonusLabel: "+1.7%", minPartialBuy: 10, color: "#60a5fa", bg: "rgba(37,99,235,0.12)",  border: "rgba(96,165,250,0.3)"  },
+  pro:   { label: "PRO",   range: "50–100 TON", min: 50,  max: 100,      bonusPct: 2,   bonusLabel: "+2%",   minPartialBuy: 25, color: "#a78bfa", bg: "rgba(109,40,217,0.12)", border: "rgba(167,139,250,0.3)" },
+  elite: { label: "ELITE", range: "100+ TON",   min: 100, max: Infinity, bonusPct: 2.5, bonusLabel: "+2.5%", minPartialBuy: 50, color: "#fbbf24", bg: "rgba(180,83,9,0.15)",   border: "rgba(251,191,36,0.35)" },
 } as const;
 
 function detectTier(ton: number): Tier | null {
@@ -38,6 +38,7 @@ interface Order {
   bonusPct: number;
   bonusCoins: number;
   returnTon: number;
+  minPartialBuy: number;
   status: string;
   buyerId: string | null;
   createdAt: string;
@@ -146,10 +147,15 @@ function OrderCard({ order, isMine, onBuy, onCancel, buying, cancelling, t }: {
         </div>
       </div>
 
-      {/* Row 2: Green profit block */}
-      <div style={{ background: "linear-gradient(135deg, rgba(22,163,74,0.13), rgba(34,197,94,0.06))", border: "1px solid rgba(34,197,94,0.25)", borderRadius: 14, padding: "10px 14px", marginBottom: 12 }}>
-        <div style={{ fontSize: 9, color: "#16a34a", fontWeight: 800, letterSpacing: "0.12em", marginBottom: 3 }}>{t.cardNetProfit}</div>
-        <div style={{ fontSize: 19, fontWeight: 900, color: "#4ade80", lineHeight: 1 }}>+{profit.toFixed(3)} TON</div>
+      {/* Row 2: Green profit block + partial buy badge */}
+      <div style={{ background: "linear-gradient(135deg, rgba(22,163,74,0.13), rgba(34,197,94,0.06))", border: "1px solid rgba(34,197,94,0.25)", borderRadius: 14, padding: "10px 14px", marginBottom: 12, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div>
+          <div style={{ fontSize: 9, color: "#16a34a", fontWeight: 800, letterSpacing: "0.12em", marginBottom: 3 }}>{t.cardNetProfit}</div>
+          <div style={{ fontSize: 19, fontWeight: 900, color: "#4ade80", lineHeight: 1 }}>+{profit.toFixed(3)} TON</div>
+        </div>
+        <div style={{ background: "rgba(251,191,36,0.1)", border: "1px solid rgba(251,191,36,0.3)", borderRadius: 8, padding: "4px 10px", textAlign: "center", flexShrink: 0 }}>
+          <div style={{ fontSize: 10, fontWeight: 800, color: "#fbbf24", whiteSpace: "nowrap" }}>{t.cardPartialBuy(tier.minPartialBuy)}</div>
+        </div>
       </div>
 
       {/* Row 3: 3 info cells */}

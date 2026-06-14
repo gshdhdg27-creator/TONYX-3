@@ -317,8 +317,8 @@ router.post("/users/:id/delete-data", async (req, res) => {
     await db.execute(sql`DELETE FROM mini_market_orders WHERE seller_id = ${id} OR buyer_id = ${id}`);
     await db.execute(sql`DELETE FROM mini_withdrawals WHERE telegram_id = ${id}`);
     await db.execute(sql`DELETE FROM mini_topup_requests WHERE telegram_id = ${id}`);
-    await db.execute(sql`DELETE FROM user_tasks WHERE user_id = ${id}`);
-    await db.execute(sql`DELETE FROM user_achievements WHERE user_id = ${id}`);
+    await db.execute(sql`DELETE FROM user_tasks WHERE telegram_id = ${id}`);
+    await db.execute(sql`DELETE FROM user_achievements WHERE telegram_id = ${id}`);
     await db.update(usersTable).set({
       coins: 0, ton: "0", tonyxCoins: 0, boostRate: "0",
       totalAdsWatched: 0, totalTonDeposited: "0", totalGamesPlayed: 0,

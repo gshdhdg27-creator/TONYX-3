@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import { usersTable, miniWithdrawalsTable, miniTopupRequestsTable } from "@workspace/db/schema";
+import { notifyUser } from "../../services/botNotify.js";
 import { eq, desc, and } from "drizzle-orm";
 import { mnemonicToWalletKey } from "@ton/crypto";
 import { WalletContractV4, TonClient, internal, toNano } from "@ton/ton";
@@ -156,6 +157,14 @@ router.post("/withdraw", async (req, res) => {
         .where(eq(miniWithdrawalsTable.id, withdrawal.id));
 
       console.log(`[Wallet] Auto-sent ${netAmount} TON → ${cleanAddress}, ref=${txRef}`);
+      void notifyUser(
+        String(telegramId),
+        `💸 <b>Вывод TON выполнен!</b>\n\n` +
+        `Отправлено: <b>${netAmount.toFixed(4)} TON</b>\n` +
+        `На адрес: <code>${cleanAddress}</code>\n` +
+        `Комиссия: ${commission.toFixed(4)} TON (5%)\n\n` +
+        `Транзакция отправлена в сеть TON. ✅`,
+      );
       res.json({
         id: withdrawal.id,
         status: "completed",
@@ -173,6 +182,13 @@ router.post("/withdraw", async (req, res) => {
         .set({ status: "pending" })
         .where(eq(miniWithdrawalsTable.id, withdrawal.id));
 
+      void notifyUser(
+        String(telegramId),
+        `⏳ <b>Заявка на вывод принята</b>\n\n` +
+        `Сумма: <b>${netAmount.toFixed(4)} TON</b> (после комиссии 5%)\n` +
+        `Адрес: <code>${cleanAddress}</code>\n\n` +
+        `Заявка будет обработана в течение 24 часов.`,
+      );
       res.json({
         id: withdrawal.id,
         status: "pending",

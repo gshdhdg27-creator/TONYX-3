@@ -3,6 +3,7 @@ import { db } from "@workspace/db";
 import { usersTable, miniMarketOrdersTable, systemSettingsTable, miniWithdrawalsTable, miniTopupRequestsTable, miniTasksTable, miniTaskCompletionsTable } from "@workspace/db/schema";
 import { eq, sql, or, ilike, desc } from "drizzle-orm";
 import { sendTgMessage, TgMsg } from "../../lib/tg-notify";
+import { notifyUser } from "../../services/botNotify.js";
 
 const router: IRouter = Router();
 
@@ -324,11 +325,17 @@ router.post("/users/:id/ban", async (req, res) => {
   const { reason } = req.body as { reason?: string };
   const user = await db.select().from(usersTable).where(eq(usersTable.telegramId, id)).then(r => r[0] ?? null);
   if (!user) { res.status(404).json({ error: "Пользователь не найден" }); return; }
+  const banReason = reason?.trim() || "Нарушение правил";
   await db.update(usersTable).set({
     userStatus: "banned", isBlocked: true,
-    bannedReason: reason?.trim() || "Нарушение правил",
+    bannedReason: banReason,
     updatedAt: new Date(),
   }).where(eq(usersTable.telegramId, id));
+  void notifyUser(id,
+    `🔴 <b>Ваш аккаунт TONYX заблокирован</b>\n\n` +
+    `Причина: <i>${banReason}</i>\n\n` +
+    `Если вы считаете это ошибкой — обратитесь в поддержку.`
+  );
   res.json({ success: true, message: `🔴 Пользователь ${id} заблокирован` });
 });
 
@@ -340,6 +347,10 @@ router.post("/users/:id/unban", async (req, res) => {
   await db.update(usersTable).set({
     userStatus: "active", isBlocked: false, bannedReason: null, updatedAt: new Date(),
   }).where(eq(usersTable.telegramId, id));
+  void notifyUser(id,
+    `✅ <b>Ваш аккаунт TONYX разблокирован</b>\n\n` +
+    `Добро пожаловать обратно! Вы снова можете пользоваться всеми функциями приложения.`
+  );
   res.json({ success: true, message: `✅ Пользователь ${id} разблокирован` });
 });
 

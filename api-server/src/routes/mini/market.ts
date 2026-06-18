@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import { usersTable, miniMarketOrdersTable, systemSettingsTable } from "@workspace/db/schema";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, asc } from "drizzle-orm";
 
 const router: IRouter = Router();
 
@@ -75,6 +75,22 @@ function formatOrder(order: typeof miniMarketOrdersTable.$inferSelect) {
 router.get("/orders", async (req, res) => {
   const cat = req.query.category as string | undefined;
 
+  // 1. Queue depth from settings
+  const depthRow = await db.select().from(systemSettingsTable)
+    .where(eq(systemSettingsTable.key, "queue_depth")).then(r => r[0] ?? null);
+  const allowedQueueDepth = depthRow ? Math.max(1, parseInt(depthRow.value) || 1) : 1;
+
+  // 2. All open orders sorted by id ASC → position in queue (oldest = #1)
+  const allOpen = await db
+    .select({ id: miniMarketOrdersTable.id })
+    .from(miniMarketOrdersTable)
+    .where(eq(miniMarketOrdersTable.status, "open"))
+    .orderBy(asc(miniMarketOrdersTable.id));
+
+  const positionMap = new Map<number, number>();
+  allOpen.forEach((o, idx) => positionMap.set(o.id, idx + 1));
+
+  // 3. Filtered list for display (newest first)
   let query = db.select().from(miniMarketOrdersTable)
     .where(eq(miniMarketOrdersTable.status, "open"))
     .$dynamic();
@@ -87,7 +103,14 @@ router.get("/orders", async (req, res) => {
   }
 
   const orders = await query.orderBy(desc(miniMarketOrdersTable.createdAt));
-  res.json({ orders: orders.map(formatOrder) });
+  res.json({
+    orders: orders.map(o => ({
+      ...formatOrder(o),
+      queuePosition: positionMap.get(o.id) ?? 0,
+      isAvailable: (positionMap.get(o.id) ?? 9999) <= allowedQueueDepth,
+    })),
+    allowedQueueDepth,
+  });
 });
 
 /* ─── GET /orders/mine — only active (open) orders ─── */

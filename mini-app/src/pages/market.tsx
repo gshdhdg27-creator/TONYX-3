@@ -42,6 +42,8 @@ interface Order {
   status: string;
   buyerId: string | null;
   createdAt: string;
+  queuePosition?: number;
+  isAvailable?: boolean;
 }
 
 interface MarketStats {
@@ -127,6 +129,8 @@ function OrderCard({ order, isMine, onBuy, onCancel, buying, cancelling, t }: {
   const tier = TIER_CFG[order.category] ?? TIER_CFG.start;
   const profit = Math.max(0, order.returnTon - order.totalTon);
   const sellerName = order.sellerUsername ?? `user_${order.sellerId.slice(-5)}`;
+  const qPos = order.queuePosition ?? 0;
+  const isAvail = order.isAvailable !== false;
 
   return (
     <div style={{ background: "linear-gradient(160deg, rgba(10,18,40,0.99) 0%, rgba(15,25,52,0.97) 100%)", border: `1px solid ${tier.border}`, borderRadius: 20, padding: "15px 14px 14px", marginBottom: 12, boxShadow: `0 4px 24px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.04)` }}>
@@ -141,9 +145,24 @@ function OrderCard({ order, isMine, onBuy, onCancel, buying, cancelling, t }: {
             <span style={{ fontSize: 9, color: "#64748b" }}>{tier.range}</span>
           </div>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 4, background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.25)", borderRadius: 8, padding: "3px 8px" }}>
-          <div style={{ width: 5, height: 5, borderRadius: "50%", background: "#22c55e", boxShadow: "0 0 5px #22c55e" }} />
-          <span style={{ fontSize: 9, color: "#22c55e", fontWeight: 800, letterSpacing: "0.08em" }}>LIVE</span>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 4, background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.25)", borderRadius: 8, padding: "3px 8px" }}>
+            <div style={{ width: 5, height: 5, borderRadius: "50%", background: "#22c55e", boxShadow: "0 0 5px #22c55e" }} />
+            <span style={{ fontSize: 9, color: "#22c55e", fontWeight: 800, letterSpacing: "0.08em" }}>LIVE</span>
+          </div>
+          {qPos > 0 && (
+            <div style={{
+              display: "flex", alignItems: "center", gap: 4,
+              background: isAvail ? "rgba(34,197,94,0.12)" : "rgba(100,116,139,0.15)",
+              border: `1px solid ${isAvail ? "rgba(34,197,94,0.35)" : "rgba(100,116,139,0.3)"}`,
+              borderRadius: 8, padding: "3px 8px",
+            }}>
+              <span style={{ fontSize: 10, fontWeight: 900, color: isAvail ? "#4ade80" : "#64748b" }}>#{qPos}</span>
+              <span style={{ fontSize: 8, fontWeight: 700, color: isAvail ? "#22c55e" : "#475569", whiteSpace: "nowrap" }}>
+                {isAvail ? "Доступен" : "В очереди"}
+              </span>
+            </div>
+          )}
         </div>
       </div>
 

@@ -8,6 +8,7 @@
 import { db } from "@workspace/db";
 import { usersTable, miniTopupRequestsTable } from "@workspace/db/schema";
 import { eq, and } from "drizzle-orm";
+import { notifyUser } from "./botNotify.js";
 
 const PROJECT_WALLET =
   process.env.PROJECT_WALLET_ADDRESS ??
@@ -111,6 +112,14 @@ async function creditUser(
 
   console.log(
     `[DepositScanner] ✅ Credited ${receivedTon} TON → ${telegramId} (txKey=${txKey})`,
+  );
+
+  void notifyUser(
+    telegramId,
+    `💎 <b>Пополнение TONYX получено!</b>\n\n` +
+    `Зачислено: <b>+${receivedTon.toFixed(4)} TON</b>\n` +
+    `Комментарий: <code>${memo}</code>\n\n` +
+    `Ваш баланс обновлён. Хорошей игры! 🎮`,
   );
 }
 

@@ -6,6 +6,7 @@ export const miniTopupRequestsTable = pgTable("mini_topup_requests", {
   tonAmount: numeric("ton_amount", { precision: 18, scale: 9 }).notNull(),
   memo: text("memo"),
   txBoc: text("tx_boc"),
+  txHash: text("tx_hash"),
   walletAddress: text("wallet_address"),
   status: text("status").notNull().default("pending"),
   createdAt: timestamp("created_at").notNull().defaultNow(),

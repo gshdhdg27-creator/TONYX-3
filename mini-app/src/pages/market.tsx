@@ -182,29 +182,31 @@ function OrderCard({ order, isMine, onBuy, onCancel, buying, cancelling, t }: {
 }
 
 /* ══════════════════════════════════════════════
-   CREATE ORDER MODAL
+   CREATE ORDER MODAL  (input: TONYX amount to sell)
 ══════════════════════════════════════════════ */
 function CreateOrderModal({ onClose, telegramId, tonyxBalance, onCreated, t }: {
   onClose: () => void; telegramId: string; tonyxBalance: number; onCreated: () => void;
   t: ReturnType<typeof useLang>["t"]["market"];
 }) {
-  const [tonInput, setTonInput] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [toast, setToast] = useState<{ msg: string; type: "success" | "error" | "info" } | null>(null);
+  const [tonyxInput, setTonyxInput] = useState("");
+  const [loading, setLoading]       = useState(false);
+  const [toast, setToast]           = useState<{ msg: string; type: "success" | "error" | "info" } | null>(null);
 
   const flash = (msg: string, type: "success" | "error" | "info") => { setToast({ msg, type }); setTimeout(() => setToast(null), 2500); };
 
-  const tonNum    = parseFloat(tonInput) || 0;
-  const tier      = detectTier(tonNum);
-  const escrow    = Math.floor(tonNum * RATE);    // TONYX locked
+  // User enters TONYX to sell; TON price is derived at fixed rate 1 TON = 1000 TONYX
+  const tonyxNum  = Math.floor(parseFloat(tonyxInput) || 0);   // TONYX to lock & sell
+  const tonNum    = tonyxNum / RATE;                            // TON price buyer pays
+  const tier      = detectTier(tonNum);                         // tier by TON equivalent
   const bonusPct  = tier ? TIER_CFG[tier].bonusPct : 0;
-  const buyerGets = tier ? Math.floor(escrow * (1 + bonusPct / 100)) : 0;
-  const profit    = tier ? parseFloat(((buyerGets / RATE) - tonNum).toFixed(4)) : 0;
+  const buyerGets = tier ? Math.floor(tonyxNum * (1 + bonusPct / 100)) : 0;
+  const profit    = tier ? parseFloat(((buyerGets - tonyxNum) / RATE).toFixed(4)) : 0;
   const tierCfg   = tier ? TIER_CFG[tier] : null;
-  const hasEnough = escrow <= tonyxBalance;
-  const canCreate = !!tier && tonNum >= 3 && hasEnough && !loading;
+  const hasEnough = tonyxNum <= tonyxBalance;
+  const canCreate = !!tier && tonyxNum >= 3000 && hasEnough && !loading;
 
-  const QUICK_AMOUNTS = [3, 10, 50, 100];
+  // Quick-select amounts in TONYX at each tier boundary
+  const QUICK_AMOUNTS = [3000, 10000, 50000, 100000];
 
   const submit = async () => {
     if (!canCreate) return;
@@ -243,45 +245,51 @@ function CreateOrderModal({ onClose, telegramId, tonyxBalance, onCreated, t }: {
         {/* Balance row */}
         <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
           <div style={{ flex: 1, background: "rgba(30,45,80,0.5)", border: "1px solid rgba(30,58,143,0.3)", borderRadius: 10, padding: "8px 12px", textAlign: "center" }}>
-            <div style={{ fontSize: 9, color: "#475569", fontWeight: 700, letterSpacing: "0.1em", marginBottom: 2 }}>TONYX</div>
+            <div style={{ fontSize: 9, color: "#475569", fontWeight: 700, letterSpacing: "0.1em", marginBottom: 2 }}>ВАШ БАЛАНС TONYX</div>
             <div style={{ fontSize: 15, fontWeight: 900, color: "#60a5fa" }}>{tonyxBalance.toLocaleString()}</div>
           </div>
           <div style={{ flex: 1, background: "rgba(30,45,80,0.5)", border: "1px solid rgba(30,58,143,0.3)", borderRadius: 10, padding: "8px 12px", textAlign: "center" }}>
-            <div style={{ fontSize: 9, color: "#475569", fontWeight: 700, letterSpacing: "0.1em", marginBottom: 2 }}>{t.createEscrow}</div>
-            <div style={{ fontSize: 15, fontWeight: 900, color: escrow > tonyxBalance ? "#f87171" : "#e2e8f0" }}>{escrow.toLocaleString()}</div>
+            <div style={{ fontSize: 9, color: "#475569", fontWeight: 700, letterSpacing: "0.1em", marginBottom: 2 }}>ЦЕНА ДЛЯ ПОКУПАТЕЛЯ</div>
+            <div style={{ fontSize: 15, fontWeight: 900, color: tonyxNum > 0 && tier ? "#fbbf24" : "#334155" }}>
+              {tonyxNum > 0 && tier ? `${tonNum.toFixed(2)} TON` : "—"}
+            </div>
           </div>
         </div>
 
-        {/* TON Amount input */}
-        <div style={{ fontSize: 10, color: "#475569", fontWeight: 700, letterSpacing: "0.1em", marginBottom: 6 }}>{t.createTonLabel}</div>
+        {/* TONYX Amount input */}
+        <div style={{ fontSize: 10, color: "#475569", fontWeight: 700, letterSpacing: "0.1em", marginBottom: 6 }}>
+          КОЛИЧЕСТВО TONYX ДЛЯ ПРОДАЖИ
+        </div>
         <div style={{ display: "flex", gap: 5, marginBottom: 8, flexWrap: "wrap" }}>
           {QUICK_AMOUNTS.map(v => {
-            const qtier = detectTier(v);
-            const qcfg = qtier ? TIER_CFG[qtier] : null;
-            const active = tonNum === v;
+            const qtier = detectTier(v / RATE);
+            const qcfg  = qtier ? TIER_CFG[qtier] : null;
+            const active = tonyxNum === v;
             return (
-              <button key={v} onClick={() => setTonInput(String(v))} style={{ flex: "none", padding: "6px 12px", borderRadius: 8, border: active ? `1px solid ${qcfg?.color ?? "#60a5fa"}` : "1px solid rgba(30,58,143,0.35)", background: active ? (qcfg?.bg ?? "rgba(37,99,235,0.2)") : "rgba(15,25,50,0.6)", color: active ? (qcfg?.color ?? "#60a5fa") : "#475569", fontSize: 12, fontWeight: 800, fontFamily: "inherit", cursor: "pointer" }}>
-                {v} TON
+              <button key={v} onClick={() => setTonyxInput(String(v))}
+                style={{ flex: "none", padding: "6px 11px", borderRadius: 8, border: active ? `1px solid ${qcfg?.color ?? "#60a5fa"}` : "1px solid rgba(30,58,143,0.35)", background: active ? (qcfg?.bg ?? "rgba(37,99,235,0.2)") : "rgba(15,25,50,0.6)", color: active ? (qcfg?.color ?? "#60a5fa") : "#475569", fontSize: 11, fontWeight: 800, fontFamily: "inherit", cursor: "pointer" }}>
+                {v.toLocaleString()}
               </button>
             );
           })}
         </div>
         <input
-          value={tonInput}
-          onChange={e => setTonInput(e.target.value)}
+          value={tonyxInput}
+          onChange={e => setTonyxInput(e.target.value)}
           type="number"
-          min="3"
-          placeholder={t.createTonPlaceholder}
+          min="3000"
+          step="1000"
+          placeholder="Мин. 3 000 TONYX (= 3 TON)"
           style={{ width: "100%", background: "rgba(15,25,55,0.7)", border: `1px solid ${tier ? TIER_CFG[tier].border : "rgba(30,58,143,0.4)"}`, borderRadius: 12, padding: "12px 14px", color: "#f1f5f9", fontFamily: "inherit", fontSize: 16, outline: "none", boxSizing: "border-box", marginBottom: 14, transition: "border-color 0.2s" }}
         />
 
         {/* Tier auto-detect */}
-        {tonNum > 0 && (
+        {tonyxNum > 0 && (
           <div style={{ marginBottom: 14 }}>
             {tier ? (
               <div style={{ display: "flex", alignItems: "center", gap: 8, background: TIER_CFG[tier].bg, border: `1px solid ${TIER_CFG[tier].border}`, borderRadius: 12, padding: "10px 14px" }}>
                 <div>
-                  <div style={{ fontSize: 9, color: "#475569", fontWeight: 700, letterSpacing: "0.1em", marginBottom: 2 }}>{t.createTierDetect}</div>
+                  <div style={{ fontSize: 9, color: "#475569", fontWeight: 700, letterSpacing: "0.1em", marginBottom: 2 }}>ОПРЕДЕЛЁН УРОВЕНЬ</div>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     <TierBadge tier={tier} />
                     <span style={{ fontSize: 12, color: TIER_CFG[tier].color, fontWeight: 800 }}>{TIER_CFG[tier].bonusLabel} бонус</span>
@@ -291,20 +299,20 @@ function CreateOrderModal({ onClose, telegramId, tonyxBalance, onCreated, t }: {
               </div>
             ) : (
               <div style={{ background: "rgba(220,38,38,0.08)", border: "1px solid rgba(248,113,113,0.25)", borderRadius: 12, padding: "10px 14px", fontSize: 12, color: "#f87171" }}>
-                ⚠️ {t.createNoTier}
+                ⚠️ Минимум 3 000 TONYX (эквивалент 3 TON · уровень START)
               </div>
             )}
           </div>
         )}
 
         {/* Preview grid */}
-        {tier && tonNum >= 3 && (
+        {tier && tonyxNum >= 3000 && (
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 16 }}>
             {[
-              { label: t.createEscrow,  val: `${escrow.toLocaleString()} TONYX`, color: escrow > tonyxBalance ? "#f87171" : "#e2e8f0" },
-              { label: t.createReceive, val: `${buyerGets.toLocaleString()} TONYX`, color: "#4ade80" },
-              { label: t.createBonus,   val: TIER_CFG[tier].bonusLabel, color: TIER_CFG[tier].color },
-              { label: t.createBuyerProfit, val: `+${profit} TON`, color: "#4ade80" },
+              { label: "Вы блокируете",         val: `${tonyxNum.toLocaleString()} TONYX`, color: !hasEnough ? "#f87171" : "#e2e8f0" },
+              { label: "Покупатель получит",     val: `${buyerGets.toLocaleString()} TONYX`, color: "#4ade80" },
+              { label: "Бонус покупателя",       val: TIER_CFG[tier].bonusLabel, color: TIER_CFG[tier].color },
+              { label: "Прибыль покупателя",     val: `+${profit.toFixed(4)} TON`, color: "#4ade80" },
             ].map(({ label, val, color }) => (
               <div key={label} style={{ background: "rgba(10,20,45,0.8)", border: "1px solid rgba(30,45,80,0.6)", borderRadius: 10, padding: "9px 11px" }}>
                 <div style={{ fontSize: 8, color: "#334155", fontWeight: 700, letterSpacing: "0.1em", marginBottom: 3 }}>{label}</div>
@@ -317,12 +325,13 @@ function CreateOrderModal({ onClose, telegramId, tonyxBalance, onCreated, t }: {
         {/* Insufficient warning */}
         {tier && !hasEnough && (
           <div style={{ background: "rgba(220,38,38,0.08)", border: "1px solid rgba(248,113,113,0.25)", borderRadius: 10, padding: "10px 14px", marginBottom: 12, fontSize: 12, color: "#f87171" }}>
-            {t.createInsufficient}: нужно {escrow.toLocaleString()}, есть {tonyxBalance.toLocaleString()}
+            Недостаточно TONYX: нужно {tonyxNum.toLocaleString()}, у вас {tonyxBalance.toLocaleString()}
           </div>
         )}
 
         {/* Submit */}
-        <button onClick={submit} disabled={!canCreate} style={{ width: "100%", padding: "15px 0", borderRadius: 14, border: "none", fontFamily: "inherit", background: canCreate ? `linear-gradient(135deg, ${tierCfg?.color ?? "#3b82f6"}60, #1d4ed8)` : "rgba(30,45,80,0.3)", color: canCreate ? "#fff" : "#334155", fontSize: 16, fontWeight: 900, cursor: canCreate ? "pointer" : "not-allowed", boxShadow: canCreate ? `0 0 28px ${tierCfg?.color ?? "#3b82f6"}40` : "none", transition: "all 0.2s" }}>
+        <button onClick={submit} disabled={!canCreate}
+          style={{ width: "100%", padding: "15px 0", borderRadius: 14, border: "none", fontFamily: "inherit", background: canCreate ? `linear-gradient(135deg, ${tierCfg?.color ?? "#3b82f6"}60, #1d4ed8)` : "rgba(30,45,80,0.3)", color: canCreate ? "#fff" : "#334155", fontSize: 16, fontWeight: 900, cursor: canCreate ? "pointer" : "not-allowed", boxShadow: canCreate ? `0 0 28px ${tierCfg?.color ?? "#3b82f6"}40` : "none", transition: "all 0.2s" }}>
           {loading ? t.createCreating : t.createConfirm}
         </button>
 
@@ -647,8 +656,10 @@ export default function MarketPage() {
     finally { setCancellingId(null); }
   };
 
+  // My Orders: backend already returns only open orders; filter for safety
+  const activeMyOrders = myOrders.filter(o => o.status === "open");
   const displayOrders = tab === "mine"
-    ? myOrders
+    ? activeMyOrders
     : allOrders.filter(o => o.status === "open");
 
   const TIERS: { key: TierFilter; label: string }[] = [
@@ -689,9 +700,9 @@ export default function MarketPage() {
             return (
               <button key={tabKey} onClick={() => { haptic("light"); setTab(tabKey); }} style={{ flex: 1, padding: "10px 0", borderRadius: 10, border: "none", fontFamily: "inherit", background: active ? "linear-gradient(135deg,#1e3a8a,#2563eb)" : "transparent", color: active ? "#fff" : "#475569", fontSize: 13, fontWeight: 800, cursor: "pointer", transition: "all 0.2s" }}>
                 {label}
-                {tabKey === "mine" && myOrders.filter(o => o.status === "open").length > 0 && (
+                {tabKey === "mine" && activeMyOrders.length > 0 && (
                   <span style={{ marginLeft: 6, background: "#2563eb", borderRadius: 10, padding: "1px 6px", fontSize: 10, color: active ? "#93c5fd" : "#3b82f6" }}>
-                    {myOrders.filter(o => o.status === "open").length}
+                    {activeMyOrders.length}
                   </span>
                 )}
               </button>
@@ -715,22 +726,6 @@ export default function MarketPage() {
               <div style={{ fontSize: 8, color: "#3b4a63", marginTop: 1 }}>{unit}</div>
             </div>
           ))}
-        </div>
-
-        {/* ── LEADERBOARD CARD ── */}
-        <div style={{ background: "linear-gradient(135deg, rgba(180,83,9,0.18) 0%, rgba(251,191,36,0.08) 100%)", border: "1px solid rgba(251,191,36,0.3)", borderRadius: 16, padding: "12px 16px", marginBottom: 14, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div style={{ fontSize: 28 }}>🏆</div>
-            <div>
-              <div style={{ fontSize: 14, fontWeight: 900, color: "#fbbf24" }}>{m.leaderTitle}</div>
-              <div style={{ fontSize: 11, color: "#92400e", marginTop: 2 }}>{m.leaderSub}</div>
-            </div>
-          </div>
-          <div style={{ display: "flex", gap: -8 }}>
-            {["A","M","D"].map((l, i) => (
-              <div key={i} style={{ width: 28, height: 28, borderRadius: "50%", background: ["#1d4ed8","#dc2626","#15803d"][i], border: "2px solid #0a1020", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 800, color: "#fff", marginLeft: i > 0 ? -8 : 0 }}>{l}</div>
-            ))}
-          </div>
         </div>
 
         {/* ── TIER FILTERS (only on market tab) ── */}

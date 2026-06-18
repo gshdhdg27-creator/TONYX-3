@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
-import { usersTable, miniMarketOrdersTable } from "@workspace/db/schema";
+import { usersTable, miniMarketOrdersTable, systemSettingsTable } from "@workspace/db/schema";
 import { eq, and, desc } from "drizzle-orm";
 
 const router: IRouter = Router();
@@ -90,13 +90,16 @@ router.get("/orders", async (req, res) => {
   res.json({ orders: orders.map(formatOrder) });
 });
 
-/* ─── GET /orders/mine ─── */
+/* ─── GET /orders/mine — only active (open) orders ─── */
 router.get("/orders/mine", async (req, res) => {
   const telegramId = req.query.telegramId as string | undefined;
   if (!telegramId) { res.status(400).json({ error: "telegramId required" }); return; }
 
   const orders = await db.select().from(miniMarketOrdersTable)
-    .where(eq(miniMarketOrdersTable.sellerId, telegramId))
+    .where(and(
+      eq(miniMarketOrdersTable.sellerId, telegramId),
+      eq(miniMarketOrdersTable.status, "open"),
+    ))
     .orderBy(desc(miniMarketOrdersTable.createdAt)).limit(50);
 
   res.json({ orders: orders.map(formatOrder) });
@@ -250,6 +253,26 @@ router.post("/orders/:id/buy", async (req, res) => {
 
   if (!order) { res.status(404).json({ error: "Ордер не найден или уже продан" }); return; }
   if (order.sellerId === telegramId) { res.status(400).json({ error: "Нельзя купить свой ордер" }); return; }
+
+  // ── Queue depth enforcement ──
+  const depthRow = await db.select().from(systemSettingsTable)
+    .where(eq(systemSettingsTable.key, "queue_depth")).then(r => r[0] ?? null);
+  const allowedQueueDepth = depthRow ? Math.max(1, parseInt(depthRow.value) || 1) : 1;
+
+  // Load all open orders sorted oldest-first
+  const openOrders = await db.select({ id: miniMarketOrdersTable.id })
+    .from(miniMarketOrdersTable)
+    .where(eq(miniMarketOrdersTable.status, "open"))
+    .orderBy(miniMarketOrdersTable.createdAt); // ASC = oldest first
+
+  const allowedIds = new Set(openOrders.slice(0, allowedQueueDepth).map(o => o.id));
+  if (!allowedIds.has(id)) {
+    res.status(403).json({
+      error: `Покупка заблокирована очередью. Сейчас доступны только первые ${allowedQueueDepth} ордеров в списке.`,
+      queueDepth: allowedQueueDepth,
+    });
+    return;
+  }
 
   const buyerCheck = await db.select().from(usersTable)
     .where(eq(usersTable.telegramId, telegramId)).then(r => r[0] ?? null);

@@ -634,6 +634,67 @@ function TasksAdminSection({ adminId }: { adminId: string }) {
   );
 }
 
+/* ─── Queue Depth Section ─── */
+function QueueDepthSection({ adminId }: { adminId: string }) {
+  const [depth, setDepth]   = useState<number | null>(null);
+  const [input, setInput]   = useState("");
+  const [loading, setLoading] = useState(false);
+  const [toast, setToast]   = useState<{ msg: string; type: "success" | "error" | "info" } | null>(null);
+
+  const flash = (msg: string, type: "success" | "error" | "info") => { setToast({ msg, type }); setTimeout(() => setToast(null), 3000); };
+
+  useEffect(() => {
+    fetch(`/api/mini/admin/settings/queue-depth?adminId=${adminId}`)
+      .then(r => r.json())
+      .then(d => { setDepth(d.depth ?? 1); setInput(String(d.depth ?? 1)); })
+      .catch(() => { setDepth(1); setInput("1"); });
+  }, [adminId]);
+
+  const save = async () => {
+    const d = Math.max(1, parseInt(input) || 1);
+    setLoading(true);
+    try {
+      const r = await fetch("/api/mini/admin/settings/queue-depth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ adminId, depth: d }),
+      });
+      const data = await r.json();
+      if (!r.ok) { flash(data.error || "Ошибка", "error"); }
+      else { setDepth(d); flash(data.message || `✅ Глубина очереди: ${d}`, "success"); }
+    } catch { flash("Ошибка сети", "error"); }
+    finally { setLoading(false); }
+  };
+
+  return (
+    <div style={{ background: "rgba(15,25,55,0.7)", border: "1px solid rgba(30,58,143,0.35)", borderRadius: 16, padding: 16, marginBottom: 14 }}>
+      {toast && <div style={{ position: "fixed", bottom: 80, left: "50%", transform: "translateX(-50%)", background: toast.type === "success" ? "#16a34a" : toast.type === "error" ? "#dc2626" : "#2563eb", color: "#fff", borderRadius: 10, padding: "10px 18px", fontSize: 13, fontWeight: 700, zIndex: 999, whiteSpace: "nowrap" }}>{toast.msg}</div>}
+      <div style={{ fontSize: 12, fontWeight: 900, color: "#60a5fa", letterSpacing: "0.08em", marginBottom: 12 }}>⚙️ ОЧЕРЕДЬ ОРДЕРОВ</div>
+      <div style={{ fontSize: 11, color: "#475569", marginBottom: 10 }}>
+        Глубина очереди = сколько самых старых открытых ордеров можно купить одновременно.
+        {depth !== null && <span style={{ color: "#fbbf24", fontWeight: 700 }}> Сейчас: {depth}</span>}
+      </div>
+      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        <input
+          type="number"
+          min="1"
+          max="100"
+          value={input}
+          onChange={e => setInput(e.target.value)}
+          style={{ width: 80, background: "rgba(15,25,55,0.8)", border: "1px solid rgba(30,58,143,0.5)", borderRadius: 8, padding: "8px 10px", color: "#f1f5f9", fontFamily: "inherit", fontSize: 14, outline: "none" }}
+        />
+        <button
+          onClick={save}
+          disabled={loading}
+          style={{ padding: "8px 18px", borderRadius: 8, border: "none", background: "linear-gradient(135deg,#1d4ed8,#3b82f6)", color: "#fff", fontFamily: "inherit", fontSize: 12, fontWeight: 800, cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.7 : 1 }}
+        >
+          {loading ? "..." : "Сохранить"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /* ─── Team Management ─── */
 function TeamSection({ admins, adminId, onRefresh }: {
   admins: { telegramId: string; username: string | null }[];
@@ -1309,6 +1370,9 @@ export default function AdminPage() {
               )}
             </div>
           </div>
+
+          {/* Queue depth control */}
+          {isSuperAdmin && <QueueDepthSection adminId={adminId} />}
 
           {/* Team management */}
           {isSuperAdmin && (

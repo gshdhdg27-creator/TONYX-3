@@ -402,6 +402,27 @@ router.post("/users/:id/win-rate", async (req, res) => {
 });
 
 /* ═══════════════════════════════════
+   QUEUE DEPTH SETTINGS
+═══════════════════════════════════ */
+
+/* GET /admin/settings/queue-depth */
+router.get("/settings/queue-depth", async (_req, res) => {
+  const row = await db.select().from(systemSettingsTable)
+    .where(eq(systemSettingsTable.key, "queue_depth")).then(r => r[0] ?? null);
+  res.json({ depth: row ? Math.max(1, parseInt(row.value) || 1) : 1 });
+});
+
+/* POST /admin/settings/queue-depth */
+router.post("/settings/queue-depth", async (req, res) => {
+  const { depth } = req.body as { depth?: number };
+  const d = Math.max(1, Math.min(100, parseInt(String(depth ?? 1)) || 1));
+  await db.insert(systemSettingsTable)
+    .values({ key: "queue_depth", value: String(d) })
+    .onConflictDoUpdate({ target: systemSettingsTable.key, set: { value: String(d), updatedAt: new Date() } });
+  res.json({ success: true, depth: d, message: `✅ Глубина очереди: ${d} ордеров` });
+});
+
+/* ═══════════════════════════════════
    TASKS ADMIN CRUD
 ═══════════════════════════════════ */
 

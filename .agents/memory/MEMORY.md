@@ -1,8 +1,9 @@
 - [TONYX tokenomics refactor](tonyx-tokenomics.md) — TON+TONYX only, no pts/coins UI; mining screen with boost modal; market locks until 1M TONYX sold.
 - [Withdrawal system architecture](withdrawal-system.md) — TON-based withdrawals via /api/mini/wallet/withdraw; admin panel approve/reject; TWIN IP fraud detection; @ton/ton auto-send optional.
 - [Header floating design](header-design.md) — Header uses position:fixed top-right, transparent background, toncoin.png circular icon, doesn't take flex layout space.
-- [Admin panel features](admin-panel-features.md) — Online counter, UZT time, IP twin detection, forceWin toggle, delete-data button, ban/soft-delete/restore/reset, winRateModifier, TasksAdminSection all implemented.
+- [Admin panel features](admin-panel-features.md) — Online counter, UZT time, IP twin detection, forceWin toggle, delete-data button, ban/soft-delete/restore/reset, winRateModifier, TasksAdminSection, QueueDepthSection all implemented.
 - [Moderation & win-rate system](moderation-win-rate.md) — users.user_status (active/banned/soft_deleted), banned_reason, win_rate_modifier (0-100%); App.tsx checks /admin/user-status on mount and shows fullscreen block screens.
 - [Production Vercel stabilization](vercel-production-fix.md) — Root cause of HTTP 500s + silent data loss; required env vars; all known backend/frontend bugs fixed as of June 2026.
 - [Igromanya game](igromanya-game.md) — New TON-based Minesweeper 5×5 at /api/mini/games/igro; schema mini_igro_games; board+revealed columns require $type<boolean[][]>() on jsonb for TS to accept direct assignment without cast.
 - [Arena increase during starting](arena-increase.md) — /increase allows "waiting" OR "starting" status; winnerSector computed server-side in formatArena and sent to frontend for reliable ball targeting.
+- [Market corrections](market-corrections.md) — Leaderboard card removed; My Orders = open only (backend+frontend); CreateOrderModal input = TONYX (not TON), tonAmount derived as tonyxNum/RATE; queue system via system_settings key "queue_depth", default 1.

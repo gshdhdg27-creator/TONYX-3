@@ -33,4 +33,10 @@ description: Background blockchain scanner for auto-crediting TON deposits via m
 - Searches for both `TONYX-{id}` and `TOPUP_{id}` comments
 - No `expectedAmount` needed — min 0.05 TON accepted
 
+## Deposit History UI
+- `GET /api/mini/wallet/deposits/:telegramId` — returns last 10 deposits from `mini_topup_requests`
+- profile.tsx: "💎 ИСТОРИЯ ПОПОЛНЕНИЙ" card with 📜 Показать / 🔄 Обновить button
+- Status colors: green=completed, yellow=pending/processing, gray=other
+- `api-server/.env.example` — all 16 env vars documented with descriptions
+
 **Why:** TON Connect flow removed because it required wallet connection + complex payload building; simple memo approach is more universal (works with any wallet app).

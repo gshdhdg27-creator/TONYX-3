@@ -72,6 +72,12 @@ interface WithdrawalHistoryItem {
   address: string; status: string; txHash: string | null; createdAt: string;
 }
 
+interface DepositHistoryItem {
+  id: number; tonAmount: number | null;
+  memo: string | null; txHash: string | null;
+  status: string; createdAt: string;
+}
+
 type ActivePanel = null | "topup" | "withdraw";
 type TopupStep   = "idle" | "verifying" | "credited" | "timeout";
 
@@ -114,6 +120,11 @@ export default function ProfilePage() {
   const [topupStep, setTopupStep]   = useState<TopupStep>("idle");
   const [topupChecking, setTopupChecking] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Deposit history state
+  const [depositHistory, setDepositHistory]         = useState<DepositHistoryItem[]>([]);
+  const [depositHistoryLoaded, setDepositHistoryLoaded] = useState(false);
+  const [depositHistoryLoading, setDepositHistoryLoading] = useState(false);
 
   const { data: profile } = useGetUserProfile(telegramId ?? "", { query: { enabled: !!telegramId, refetchInterval: 10000 } });
   const { data: referrals } = useGetReferrals(telegramId ?? "", { query: { enabled: !!telegramId } });
@@ -204,6 +215,20 @@ export default function ProfilePage() {
       const r = await fetch(`/api/mini/wallet/withdrawals/${telegramId}`);
       if (r.ok) { const d = await r.json(); setWithdrawHistory(d.withdrawals ?? []); }
     } catch { /* ignore */ }
+  };
+
+  const loadDepositHistory = async () => {
+    if (!telegramId || depositHistoryLoading) return;
+    setDepositHistoryLoading(true);
+    try {
+      const r = await fetch(`/api/mini/wallet/deposits/${telegramId}`);
+      if (r.ok) {
+        const d = await r.json();
+        setDepositHistory(d.deposits ?? []);
+        setDepositHistoryLoaded(true);
+      }
+    } catch { /* ignore */ }
+    finally { setDepositHistoryLoading(false); }
   };
 
   const submitWithdraw = async () => {
@@ -598,6 +623,67 @@ export default function ProfilePage() {
           )}
         </div>
       )}
+
+      {/* ─── DEPOSIT HISTORY ─── */}
+      <div style={{ marginBottom: 14 }}>
+        <div style={{ background: "rgba(17,24,39,0.95)", border: "1px solid rgba(34,211,238,0.2)", borderRadius: 18, padding: 16 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: depositHistoryLoaded ? 12 : 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 800, color: "#67e8f9", letterSpacing: "0.06em" }}>💎 ИСТОРИЯ ПОПОЛНЕНИЙ</div>
+            <button
+              onClick={loadDepositHistory}
+              disabled={depositHistoryLoading}
+              style={{ padding: "5px 12px", borderRadius: 8, border: "1px solid rgba(34,211,238,0.3)", background: "rgba(34,211,238,0.08)", color: "#67e8f9", fontSize: 11, fontWeight: 700, fontFamily: "inherit", cursor: depositHistoryLoading ? "not-allowed" : "pointer", opacity: depositHistoryLoading ? 0.6 : 1 }}
+            >
+              {depositHistoryLoading ? "⏳ Загрузка..." : depositHistoryLoaded ? "🔄 Обновить" : "📜 Показать"}
+            </button>
+          </div>
+
+          {depositHistoryLoaded && (
+            depositHistory.length === 0 ? (
+              <div style={{ textAlign: "center", color: "#475569", padding: "18px 0", fontSize: 12 }}>
+                Пополнений ещё не было
+              </div>
+            ) : (
+              <div>
+                {depositHistory.map((d, i) => {
+                  const isOk      = d.status === "completed";
+                  const isPending = d.status === "pending" || d.status === "processing";
+                  const statusColor = isOk ? "#4ade80" : isPending ? "#fbbf24" : "#94a3b8";
+                  const statusLabel = isOk ? "Успешно" : isPending ? "В обработке" : d.status;
+                  const statusBg    = isOk ? "rgba(34,197,94,0.12)" : isPending ? "rgba(251,191,36,0.12)" : "rgba(100,116,139,0.12)";
+                  const statusBorder = isOk ? "rgba(34,197,94,0.3)" : isPending ? "rgba(251,191,36,0.3)" : "rgba(100,116,139,0.2)";
+                  return (
+                    <div key={d.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: i < depositHistory.length - 1 ? "1px solid rgba(34,211,238,0.08)" : "none" }}>
+                      {/* Icon */}
+                      <div style={{ width: 34, height: 34, borderRadius: "50%", background: "rgba(34,211,238,0.1)", border: "1px solid rgba(34,211,238,0.2)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, flexShrink: 0 }}>
+                        💎
+                      </div>
+                      {/* Info */}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 14, fontWeight: 800, color: "#e2e8f0" }}>
+                          +{d.tonAmount != null ? d.tonAmount.toFixed(4) : "—"} TON
+                        </div>
+                        {d.txHash && (
+                          <div style={{ fontSize: 9, color: "#334155", fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 160 }}>
+                            tx: {d.txHash.slice(0, 24)}…
+                          </div>
+                        )}
+                        <div style={{ fontSize: 10, color: "#475569", marginTop: 1 }}>
+                          {new Date(d.createdAt).toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                        </div>
+                      </div>
+                      {/* Status badge */}
+                      <div style={{ background: statusBg, border: `1px solid ${statusBorder}`, borderRadius: 8, padding: "4px 10px", flexShrink: 0 }}>
+                        <div style={{ fontSize: 11, fontWeight: 800, color: statusColor, whiteSpace: "nowrap" }}>{statusLabel}</div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )
+          )}
+        </div>
+      </div>
 
       {/* ─── INVITE CARD (always visible) ─── */}
       <div style={{ background: "rgba(17,24,39,0.9)", border: "1px solid rgba(168,85,247,0.25)", borderRadius: 18, padding: 16, marginBottom: 14 }}>

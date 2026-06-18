@@ -331,6 +331,31 @@ router.post("/topup/verify", async (req, res) => {
   }
 });
 
+/* ─── GET /deposits/:telegramId ─── */
+router.get("/deposits/:telegramId", async (req, res) => {
+  const { telegramId } = req.params;
+  try {
+    const rows = await db.select().from(miniTopupRequestsTable)
+      .where(eq(miniTopupRequestsTable.telegramId, telegramId))
+      .orderBy(desc(miniTopupRequestsTable.createdAt))
+      .limit(10);
+
+    res.json({
+      deposits: rows.map(d => ({
+        id:        d.id,
+        tonAmount: d.tonAmount ? Number(d.tonAmount) : null,
+        memo:      d.memo      ?? null,
+        txHash:    d.txHash    ?? null,
+        status:    d.status,
+        createdAt: d.createdAt.toISOString(),
+      })),
+    });
+  } catch (e) {
+    console.error("[Wallet] GET /deposits error:", e);
+    res.status(500).json({ error: "Ошибка базы данных" });
+  }
+});
+
 /* ─── GET /withdrawals/:telegramId ─── */
 router.get("/withdrawals/:telegramId", async (req, res) => {
   const { telegramId } = req.params;

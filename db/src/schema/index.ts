@@ -13,3 +13,4 @@ export * from "./system_settings";
 export * from "./mini_investments";
 export * from "./mini_boosts";
 export * from "./mini_topup_requests";
+export * from "./mini_igro_games";

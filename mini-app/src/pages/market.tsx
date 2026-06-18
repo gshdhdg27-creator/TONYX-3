@@ -347,6 +347,9 @@ function BuyOrderModal({ order, onClose, telegramId, tonBalance, onBought, t }: 
   // Partial buy is only possible when there is a valid range: minBuy ≤ X ≤ maxPartial
   const canPartial  = maxPartial >= minBuy;
 
+  // Unique key per modal instance — reused on retry, new key on next open (prevents double-spend)
+  const idemKeyRef = useRef<string>(crypto.randomUUID());
+
   const [rawInput, setRawInput] = useState(String(totalTon));
   const [loading, setLoading]   = useState(false);
   const [toast, setToast]       = useState<{ msg: string; type: "success" | "error" | "info" } | null>(null);
@@ -390,7 +393,7 @@ function BuyOrderModal({ order, onClose, telegramId, tonBalance, onBought, t }: 
       const r = await fetch(`/api/mini/market/orders/${order.id}/buy`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ telegramId, tonAmount: buyAmount }),
+        body: JSON.stringify({ telegramId, tonAmount: buyAmount, idempotencyKey: idemKeyRef.current }),
       });
       const d = await r.json();
       if (!r.ok) { flash(d.error || "Ошибка", "error"); }

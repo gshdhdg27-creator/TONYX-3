@@ -18,6 +18,7 @@ interface ArenaState {
   players: ArenaPlayer[];
   winnerId: string | null;
   winnerUsername: string | null;
+  winnerSector: { startDeg: number; endDeg: number } | null;
   startAt: string | null;
   finishedAt: string | null;
   fair?: FairData;
@@ -264,6 +265,28 @@ export default function ArenaGame({
         setPendingResult(result);
         fetchStats();
 
+        // Use server-computed sector angles so target is set reliably
+        if (fresh.winnerSector && !ballTargetRef.current) {
+          const { startDeg, endDeg } = fresh.winnerSector;
+          const [tx, ty] = sectorRandomPoint(startDeg, endDeg);
+          ballTargetRef.current = { x: tx, y: ty };
+          // If ball already stopped (target arrived late), un-stop to re-attract
+          if (ballStoppedRef.current && ballStateRef.current === "RUNNING") {
+            ballStoppedRef.current = false;
+            const pos = ballPosRef.current;
+            ballVelRef.current = { vx: (tx - pos.x) * 0.12, vy: (ty - pos.y) * 0.12 };
+          }
+          if (ballStateRef.current === "IDLE") {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = 3.5 + Math.random() * 1.5;
+            ballStateRef.current   = "RUNNING";
+            ballStoppedRef.current = false;
+            ballPosRef.current     = { x: CX, y: CY };
+            ballVelRef.current     = { vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed };
+            runStartTimeRef.current = performance.now();
+          }
+        }
+
         cancelTimersRef.current?.();
         onBallStopRef.current = () => {
           hapticNotify(result.won ? "success" : "error");
@@ -371,6 +394,23 @@ export default function ArenaGame({
         return;
       }
 
+      // Late target: ball stopped but winner sector arrived after ball settled — re-attract
+      if (ballStoppedRef.current && ballTargetRef.current) {
+        const tgt = ballTargetRef.current;
+        const pos = ballPosRef.current;
+        const dx  = tgt.x - pos.x;
+        const dy  = tgt.y - pos.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist > 2) {
+          ballStoppedRef.current = false;
+          ballVelRef.current = { vx: dx * 0.14, vy: dy * 0.14 };
+        } else {
+          const cb = onBallStopRef.current;
+          if (cb) { onBallStopRef.current = null; cb(); }
+          rafRef.current = requestAnimationFrame(step);
+          return;
+        }
+      }
       if (ballStoppedRef.current) {
         rafRef.current = requestAnimationFrame(step);
         return;
@@ -443,15 +483,23 @@ export default function ArenaGame({
       if (ballStateRef.current === "IDLE") launchBall();
     }
 
-    // Backend confirmed "finished" and we have a winner
+    // Backend confirmed "finished" and we have a winner — use server-provided sector angles
     if (arena?.status === "finished" && arena?.winnerId && !ballTargetRef.current) {
-      const win = sectorsRef.current.find(s => s.player.telegramId === arena.winnerId);
-      if (win) {
-        // Pick a random point inside the winner's sector (not just the centroid)
-        const [tx, ty] = sectorRandomPoint(win.startDeg, win.endDeg);
+      const sector = arena.winnerSector
+        ?? (sectorsRef.current.find(s => s.player.telegramId === arena.winnerId)
+            ? { startDeg: sectorsRef.current.find(s => s.player.telegramId === arena.winnerId)!.startDeg,
+                endDeg:   sectorsRef.current.find(s => s.player.telegramId === arena.winnerId)!.endDeg }
+            : null);
+      if (sector) {
+        const [tx, ty] = sectorRandomPoint(sector.startDeg, sector.endDeg);
         ballTargetRef.current = { x: tx, y: ty };
+        // If ball already stopped (winner arrived late), re-attract immediately
+        if (ballStoppedRef.current && ballStateRef.current === "RUNNING") {
+          ballStoppedRef.current = false;
+          const pos = ballPosRef.current;
+          ballVelRef.current = { vx: (tx - pos.x) * 0.12, vy: (ty - pos.y) * 0.12 };
+        }
       }
-      // If ball wasn't launched yet (finished came before countdown=0), launch now
       if (ballStateRef.current === "IDLE") launchBall();
     }
 
@@ -852,7 +900,7 @@ export default function ArenaGame({
                   {fmtTON(myP.stake)}
                 </span>
               </div>
-              {arena?.status === "waiting" && (
+              {(arena?.status === "waiting" || arena?.status === "starting") && (
                 <button
                   onClick={() => setShowIncreasePanel(v => !v)}
                   style={{
@@ -877,7 +925,7 @@ export default function ArenaGame({
         </div>
 
         {/* ── INCREASE STAKE PANEL ── */}
-        {isIn && showIncreasePanel && arena?.status === "waiting" && (
+        {isIn && showIncreasePanel && (arena?.status === "waiting" || arena?.status === "starting") && (
           <div style={{
             background: "#0d1117", border: "1px solid #1D4ED855",
             borderRadius: 14, padding: "12px", marginBottom: 10,

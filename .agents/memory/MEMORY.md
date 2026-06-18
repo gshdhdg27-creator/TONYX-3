@@ -3,3 +3,5 @@
 - [Header floating design](header-design.md) — Header uses position:fixed top-right, transparent background, toncoin.png circular icon, doesn't take flex layout space.
 - [Admin panel features](admin-panel-features.md) — Online counter, UZT time, IP twin detection, forceWin toggle, delete-data button all implemented; DB tables use telegram_id not user_id.
 - [Production Vercel stabilization](vercel-production-fix.md) — Root cause of HTTP 500s + silent data loss; required env vars; all known backend/frontend bugs fixed as of June 2026.
+- [Igromanya game](igromanya-game.md) — New TON-based Minesweeper 5×5 at /api/mini/games/igro; schema mini_igro_games; board+revealed columns require $type<boolean[][]>() on jsonb for TS to accept direct assignment without cast.
+- [Arena increase during starting](arena-increase.md) — /increase allows "waiting" OR "starting" status; winnerSector computed server-side in formatArena and sent to frontend for reliable ball targeting.

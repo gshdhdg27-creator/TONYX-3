@@ -5,6 +5,15 @@ import { eq, and, desc } from "drizzle-orm";
 
 const router: IRouter = Router();
 
+/* ─── Idempotency cache (30s TTL, prevents double-spend on retries) ─── */
+const idemCache = new Map<string, { status: number; body: Record<string, unknown>; exp: number }>();
+const IDEM_TTL  = 30_000;
+const idemClean = setInterval(() => {
+  const now = Date.now();
+  for (const [k, v] of idemCache) if (v.exp < now) idemCache.delete(k);
+}, 60_000);
+if (idemClean.unref) idemClean.unref();
+
 /* ─── Category config: START/BASE/PRO/ELITE ─── */
 const CATEGORIES = {
   start: { min: 3,   max: 10,       bonusPct: 1.4, minPartialBuy: 1,  label: "START" },
@@ -221,7 +230,18 @@ router.delete("/orders/:id", async (req, res) => {
 /* ─── POST /orders/:id/buy ─── */
 router.post("/orders/:id/buy", async (req, res) => {
   const id = parseInt(req.params.id);
-  const { telegramId, tonAmount: rawTonAmount } = req.body as { telegramId: string; tonAmount?: number };
+  const { telegramId, tonAmount: rawTonAmount, idempotencyKey } = req.body as {
+    telegramId: string; tonAmount?: number; idempotencyKey?: string;
+  };
+
+  // ── Idempotency: return cached response if same key is replayed within TTL ──
+  if (idempotencyKey) {
+    const cached = idemCache.get(idempotencyKey);
+    if (cached && cached.exp > Date.now()) {
+      res.status(cached.status).json(cached.body);
+      return;
+    }
+  }
 
   // ── Pre-flight reads (outside transaction for fast early returns) ──
   const order = await db.select().from(miniMarketOrdersTable)
@@ -319,7 +339,9 @@ router.post("/orders/:id/buy", async (req, res) => {
   }
 
   console.log(`[Market] Order #${id} ${isPartial ? "PARTIAL" : "FULL"} (${cat}): buyer ${telegramId} paid ${purchaseTon} TON → ${bonusCoins} TONYX (+${bonusPct}%)`);
-  res.json({ ...formatOrder(updated), bonusCoins, bonusPct, isPartial });
+  const responseBody = { ...formatOrder(updated), bonusCoins, bonusPct, isPartial };
+  if (idempotencyKey) idemCache.set(idempotencyKey, { status: 200, body: responseBody, exp: Date.now() + IDEM_TTL });
+  res.json(responseBody);
 });
 
 export default router;

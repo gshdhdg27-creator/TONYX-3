@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import ArenaGame from "@/components/ArenaGame";
+import IgromanyaGame from "@/components/IgromanyaGame";
 import FairnessModal, { type FairData } from "@/components/FairnessModal";
 import {
   useGetUserProfile,
@@ -1475,9 +1476,25 @@ const GAME_CARDS = [
     accentA: "#f87171",
     accentB: "#dc2626",
   },
+  {
+    id: "igro",
+    titleRu: "Игромания",
+    titleEn: "Igromania",
+    descRu: "Минёр 5×5 на TON — открывай, выбирай риск",
+    descEn: "Minesweeper 5×5 on TON — open cells, choose your risk",
+    ready: true,
+    baseOnline: 11,
+    primary: "#8B5CF6",
+    gradient: "linear-gradient(180deg,#7C3AED,#4C1D95)",
+    glow: "rgba(139,92,246,0.7)",
+    cardGlow: "rgba(139,92,246,0.12)",
+    border: "#7C3AED",
+    accentA: "#a78bfa",
+    accentB: "#7c3aed",
+  },
 ] as const;
 
-type ActiveGame = null | "arena" | "spin" | "mines";
+type ActiveGame = null | "arena" | "spin" | "mines" | "igro";
 
 function useOnlineCounts() {
   const [counts, setCounts] = useState<Record<string, number>>({});
@@ -1693,6 +1710,21 @@ function GameCard({
         {card.id === "mines" && <MinesIllustration glow={card.glow} />}
         {card.id === "arena" && <ArenaIllustration glow={card.glow} />}
         {card.id === "spin"  && <SpinIllustration glow={card.glow} />}
+        {card.id === "igro"  && (
+          <svg width="80" height="76" viewBox="0 0 80 76" fill="none" style={{ filter: `drop-shadow(0 0 10px ${card.glow})` }}>
+            <rect x="8" y="8" width="64" height="60" rx="8" fill="rgba(109,40,217,0.12)" stroke="#7C3AED" strokeWidth="1.5"/>
+            {[0,1,2].map(r => [0,1,2].map(c => {
+              const x = 14 + c * 20; const y = 14 + r * 17;
+              const isBomb = (r === 0 && c === 1) || (r === 1 && c === 2) || (r === 2 && c === 0);
+              return <rect key={`${r}${c}`} x={x} y={y} width="15" height="13" rx="3"
+                fill={isBomb ? "rgba(239,68,68,0.3)" : "rgba(139,92,246,0.25)"}
+                stroke={isBomb ? "#EF4444" : "#8B5CF6"} strokeWidth="1"/>;
+            }))}
+            <text x="16.5" y="43" fontSize="7" fill="#EF4444">💣</text>
+            <text x="36.5" y="43" fontSize="7" fill="#8B5CF6">💎</text>
+            <text x="56.5" y="43" fontSize="7" fill="#EF4444">💣</text>
+          </svg>
+        )}
       </div>
     </div>
   );
@@ -1791,6 +1823,10 @@ export default function GamesPage() {
         ) : active === "mines" ? (
           <div style={{ padding: "0 16px" }}>
             <MinesGame telegramId={telegramId} balance={tonyxBalance} lang={lang} onBalanceChange={refresh} />
+          </div>
+        ) : active === "igro" ? (
+          <div style={{ padding: "0 16px" }}>
+            <IgromanyaGame telegramId={telegramId} tonBalance={tonBalance} onBalanceChange={refresh} />
           </div>
         ) : active === "spin" ? (
           <SpinGame

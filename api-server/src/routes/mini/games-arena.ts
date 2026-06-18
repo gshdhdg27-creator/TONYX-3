@@ -22,6 +22,23 @@ function formatArena(room: typeof miniArenaRoomsTable.$inferSelect) {
   const players = (room.players as ArenaPlayer[]) ?? [];
   const totalPool = Number(room.totalPool);
   const isFinished = room.status === "finished";
+
+  // Pre-compute winner sector angles so frontend can reliably set ball target
+  let winnerSector: { startDeg: number; endDeg: number } | null = null;
+  if (isFinished && room.winnerId && players.length > 0) {
+    let acc = 0;
+    for (const p of players) {
+      const frac = totalPool > 0 ? p.stake / totalPool : 1 / players.length;
+      const startDeg = acc * 360;
+      const endDeg   = (acc + frac) * 360;
+      if (p.telegramId === room.winnerId) {
+        winnerSector = { startDeg, endDeg };
+        break;
+      }
+      acc += frac;
+    }
+  }
+
   return {
     id: room.id,
     status: room.status,
@@ -35,6 +52,7 @@ function formatArena(room: typeof miniArenaRoomsTable.$inferSelect) {
     })),
     winnerId: room.winnerId ?? null,
     winnerUsername: room.winnerUsername ?? null,
+    winnerSector,
     startAt: room.startAt?.toISOString() ?? null,
     finishedAt: room.finishedAt?.toISOString() ?? null,
     fair: {
@@ -321,8 +339,8 @@ router.post("/increase", async (req, res) => {
     res.status(400).json({ error: "telegramId и additionalStake > 0 обязательны" }); return;
   }
   const arena = await getActiveArena();
-  if (arena.status !== "waiting") {
-    res.status(400).json({ error: "Нельзя изменить ставку — игра уже начата" }); return;
+  if (!["waiting", "starting"].includes(arena.status)) {
+    res.status(400).json({ error: "Нельзя изменить ставку — игра уже завершена" }); return;
   }
   const players = (arena.players as ArenaPlayer[]) ?? [];
   const idx = players.findIndex((p) => p.telegramId === telegramId);

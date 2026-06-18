@@ -508,7 +508,7 @@ function BuyOrderModal({ order, onClose, telegramId, tonBalance, onBought, t }: 
         {/* Balance warning */}
         {!hasEnough && (
           <div style={{ background: "rgba(220,38,38,0.08)", border: "1px solid rgba(248,113,113,0.25)", borderRadius: 10, padding: "10px 14px", marginBottom: 12, fontSize: 12, color: "#f87171" }}>
-            {t.buyInsufficient}: {tonBalance.toFixed(4)} TON (нужно {buyAmount.toFixed(4)})
+            {t.buyInsufficient(tonBalance, buyAmount)}
           </div>
         )}
 

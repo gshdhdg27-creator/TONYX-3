@@ -19,6 +19,7 @@ interface UserInfo {
   forceWin: boolean; lastIp: string | null; twinCount: number; isMainAccount: boolean;
   lastLoginAt: string | null; createdAt: string;
   dailyOrdersStart?: number; dailyOrdersPro?: number; dailyOrdersElite?: number;
+  userStatus?: string; bannedReason?: string | null; winRateModifier?: number | null;
 }
 
 type Currency = "points" | "ton" | "tonyx";
@@ -307,12 +308,14 @@ function UserCard({ user, adminId, isSuperAdmin, onRefresh }: {
               </div>
             )}
 
-            {/* Block / Unblock */}
+            {/* Win Rate Modifier */}
             {!isOwnerUser && (
-              <button onClick={() => callApi(`users/${user.telegramId}/block`, { block: !user.isBlocked })} disabled={loading}
-                style={{ padding: "11px 0", borderRadius: 10, border: "none", fontFamily: "inherit", background: user.isBlocked ? "rgba(22,163,74,0.12)" : "rgba(220,38,38,0.1)", color: user.isBlocked ? "#4ade80" : "#f87171", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
-                {user.isBlocked ? "✅ Разблокировать" : "🚫 Заблокировать"}
-              </button>
+              <WinRateRow telegramId={user.telegramId} adminId={adminId} current={user.winRateModifier ?? null} onDone={onRefresh} />
+            )}
+
+            {/* Moderation: ban/soft-delete/restore/reset */}
+            {!isOwnerUser && (
+              <ModerationRow telegramId={user.telegramId} adminId={adminId} status={user.userStatus ?? "active"} bannedReason={user.bannedReason ?? null} onDone={onRefresh} />
             )}
 
             {/* Admin grant / revoke */}
@@ -344,6 +347,287 @@ function UserCard({ user, adminId, isSuperAdmin, onRefresh }: {
               </button>
             )}
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── Win Rate Row ─── */
+function WinRateRow({ telegramId, adminId, current, onDone }: {
+  telegramId: string; adminId: string; current: number | null; onDone: () => void;
+}) {
+  const [val, setVal] = useState(current !== null ? String(current) : "");
+  const [loading, setLoading] = useState(false);
+  const [toast, setToast] = useState<{ msg: string; type: "success"|"error"|"info" } | null>(null);
+  const flash = (msg: string, type: "success"|"error"|"info") => { setToast({ msg, type }); setTimeout(() => setToast(null), 3000); };
+
+  const save = async () => {
+    setLoading(true);
+    try {
+      const r = await apiCall(`users/${telegramId}/win-rate`, { adminId, method: "POST", body: JSON.stringify({ modifier: val === "" ? null : Number(val) }) });
+      const d = await r.json();
+      if (!r.ok) flash(d.error || "Ошибка", "error");
+      else { flash(d.message || "✅ Сохранено", "success"); onDone(); }
+    } catch { flash("Ошибка сети", "error"); }
+    finally { setLoading(false); }
+  };
+
+  return (
+    <div style={{ background: "rgba(99,102,241,0.06)", border: "1px solid rgba(99,102,241,0.2)", borderRadius: 10, padding: "10px 12px" }}>
+      {toast && <Toast msg={toast.msg} type={toast.type} />}
+      <div style={{ fontSize: 10, color: "#818cf8", fontWeight: 800, letterSpacing: "0.08em", marginBottom: 6 }}>
+        ⚙️ WIN RATE MODIFIER {current !== null ? <span style={{ color: "#c7d2fe" }}>({current}%)</span> : <span style={{ color: "#334155" }}>(честная игра)</span>}
+      </div>
+      <div style={{ display: "flex", gap: 6 }}>
+        <input
+          type="number" min={0} max={100} value={val} onChange={e => setVal(e.target.value)}
+          placeholder="0–100 или пусто"
+          style={{ flex: 1, background: "rgba(30,45,69,0.7)", border: "1px solid rgba(99,102,241,0.3)", borderRadius: 8, padding: "8px 10px", color: "#f1f5f9", fontFamily: "inherit", fontSize: 12, outline: "none" }}
+        />
+        <button onClick={save} disabled={loading}
+          style={{ padding: "8px 14px", borderRadius: 8, border: "none", background: "rgba(99,102,241,0.3)", color: "#c7d2fe", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
+          {loading ? "…" : "Применить"}
+        </button>
+      </div>
+      <div style={{ fontSize: 9, color: "#334155", marginTop: 4 }}>0%=всегда проигрывает · 100%=всегда выигрывает · пусто=честная игра</div>
+    </div>
+  );
+}
+
+/* ─── Moderation Row ─── */
+function ModerationRow({ telegramId, adminId, status, bannedReason, onDone }: {
+  telegramId: string; adminId: string; status: string; bannedReason: string | null; onDone: () => void;
+}) {
+  const [loading, setLoading] = useState(false);
+  const [toast, setToast] = useState<{ msg: string; type: "success"|"error"|"info" } | null>(null);
+  const [banReason, setBanReason] = useState("");
+  const [showBanInput, setShowBanInput] = useState(false);
+  const [confirmReset, setConfirmReset] = useState(false);
+
+  const flash = (msg: string, type: "success"|"error"|"info") => { setToast({ msg, type }); setTimeout(() => setToast(null), 3000); };
+
+  const post = async (action: string, body?: object) => {
+    setLoading(true);
+    try {
+      const r = await apiCall(`users/${telegramId}/${action}`, { adminId, method: "POST", body: body ? JSON.stringify(body) : undefined });
+      const d = await r.json();
+      if (!r.ok) flash(d.error || "Ошибка", "error");
+      else { flash(d.message || "✅ Готово", "success"); onDone(); }
+    } catch { flash("Ошибка сети", "error"); }
+    finally { setLoading(false); }
+  };
+
+  return (
+    <div style={{ background: "rgba(30,45,69,0.4)", border: "1px solid rgba(30,58,143,0.2)", borderRadius: 10, padding: "10px 12px", display: "flex", flexDirection: "column", gap: 8 }}>
+      {toast && <Toast msg={toast.msg} type={toast.type} />}
+      <div style={{ fontSize: 10, color: "#475569", fontWeight: 800, letterSpacing: "0.08em" }}>
+        🛡 МОДЕРАЦИЯ — статус: <span style={{ color: status === "banned" ? "#f87171" : status === "soft_deleted" ? "#fbbf24" : "#4ade80" }}>{status}</span>
+        {bannedReason && <span style={{ color: "#64748b", fontWeight: 500 }}> · {bannedReason}</span>}
+      </div>
+
+      {/* Ban button */}
+      {status !== "banned" && (
+        showBanInput ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <input value={banReason} onChange={e => setBanReason(e.target.value)} placeholder="Причина бана…"
+              style={{ background: "rgba(30,45,69,0.7)", border: "1px solid rgba(220,38,38,0.4)", borderRadius: 8, padding: "8px 10px", color: "#f1f5f9", fontFamily: "inherit", fontSize: 12, outline: "none" }} />
+            <div style={{ display: "flex", gap: 6 }}>
+              <button onClick={() => { post("ban", { reason: banReason }); setShowBanInput(false); }} disabled={loading}
+                style={{ flex: 1, padding: "9px 0", borderRadius: 8, border: "none", background: "rgba(220,38,38,0.2)", color: "#f87171", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
+                🔴 Подтвердить бан
+              </button>
+              <button onClick={() => setShowBanInput(false)}
+                style={{ padding: "9px 12px", borderRadius: 8, border: "none", background: "rgba(30,45,69,0.5)", color: "#94a3b8", fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}>
+                Отмена
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button onClick={() => setShowBanInput(true)} disabled={loading}
+            style={{ padding: "9px 0", borderRadius: 8, border: "none", background: "rgba(220,38,38,0.1)", color: "#f87171", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
+            🔴 Заблокировать (ban)
+          </button>
+        )
+      )}
+
+      {/* Unban */}
+      {status === "banned" && (
+        <button onClick={() => post("unban")} disabled={loading}
+          style={{ padding: "9px 0", borderRadius: 8, border: "none", background: "rgba(22,163,74,0.12)", color: "#4ade80", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
+          ✅ Разблокировать
+        </button>
+      )}
+
+      {/* Soft-delete */}
+      {status !== "soft_deleted" && (
+        <button onClick={() => post("soft-delete")} disabled={loading}
+          style={{ padding: "9px 0", borderRadius: 8, border: "none", background: "rgba(234,179,8,0.08)", color: "#fbbf24", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
+          🗑 Мягкое удаление
+        </button>
+      )}
+
+      {/* Restore */}
+      {(status === "soft_deleted") && (
+        <button onClick={() => post("restore")} disabled={loading}
+          style={{ padding: "9px 0", borderRadius: 8, border: "none", background: "rgba(22,163,74,0.08)", color: "#4ade80", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
+          ♻️ Восстановить
+        </button>
+      )}
+
+      {/* Reset account data */}
+      <button
+        onClick={() => {
+          if (!confirmReset) { setConfirmReset(true); setTimeout(() => setConfirmReset(false), 5000); return; }
+          post("reset"); setConfirmReset(false);
+        }}
+        disabled={loading}
+        style={{ padding: "9px 0", borderRadius: 8, border: `1px solid ${confirmReset ? "rgba(239,68,68,0.5)" : "rgba(30,58,143,0.2)"}`, background: confirmReset ? "rgba(220,38,38,0.15)" : "transparent", color: confirmReset ? "#fca5a5" : "#64748b", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
+        {confirmReset ? "⚠️ ЕЩЁ РАЗ для сброса всех данных" : "🔄 Сбросить данные аккаунта"}
+      </button>
+    </div>
+  );
+}
+
+/* ─── Tasks Admin Section ─── */
+interface AdminTask {
+  id: number; title: string; description: string | null; type: string; link: string | null;
+  reward: number; rewardTon: number | null; maxCompletions: number | null; currentCompletions: number;
+  isActive: boolean; createdAt: string;
+}
+
+function TasksAdminSection({ adminId }: { adminId: string }) {
+  const [tasks, setTasks] = useState<AdminTask[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [toast, setToast] = useState<{ msg: string; type: "success"|"error"|"info" } | null>(null);
+  const [form, setForm] = useState({ title: "", description: "", type: "visit", link: "", reward: "", rewardTon: "", maxCompletions: "" });
+  const [showForm, setShowForm] = useState(false);
+
+  const flash = (msg: string, type: "success"|"error"|"info") => { setToast({ msg, type }); setTimeout(() => setToast(null), 3500); };
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const r = await apiCall("tasks-list", { adminId, method: "GET" });
+      const d = await r.json();
+      setTasks(d.tasks ?? []);
+    } catch { flash("Ошибка загрузки заданий", "error"); }
+    finally { setLoading(false); }
+  }, [adminId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const createTask = async () => {
+    if (!form.title.trim()) { flash("Введите название", "error"); return; }
+    setLoading(true);
+    try {
+      const body: Record<string, unknown> = {
+        title: form.title.trim(), description: form.description.trim() || null,
+        type: form.type, link: form.link.trim() || null,
+        reward: parseInt(form.reward) || 0,
+        rewardTon: parseFloat(form.rewardTon) || null,
+        maxCompletions: parseInt(form.maxCompletions) || null,
+      };
+      const r = await apiCall("tasks-create", { adminId, method: "POST", body: JSON.stringify(body) });
+      const d = await r.json();
+      if (!r.ok) flash(d.error || "Ошибка", "error");
+      else { flash("✅ Задание создано", "success"); setForm({ title: "", description: "", type: "visit", link: "", reward: "", rewardTon: "", maxCompletions: "" }); setShowForm(false); load(); }
+    } catch { flash("Ошибка сети", "error"); }
+    finally { setLoading(false); }
+  };
+
+  const toggle = async (id: number, active: boolean) => {
+    try {
+      const r = await apiCall(`tasks/${id}/toggle`, { adminId, method: "POST", body: JSON.stringify({ active }) });
+      const d = await r.json();
+      if (!r.ok) flash(d.error || "Ошибка", "error");
+      else { flash(d.message || "✅", "success"); load(); }
+    } catch { flash("Ошибка сети", "error"); }
+  };
+
+  const deleteTask = async (id: number) => {
+    try {
+      const r = await apiCall(`tasks/${id}`, { adminId, method: "DELETE" });
+      const d = await r.json();
+      if (!r.ok) flash(d.error || "Ошибка", "error");
+      else { flash("🗑 Задание удалено", "success"); load(); }
+    } catch { flash("Ошибка сети", "error"); }
+  };
+
+  return (
+    <div style={{ background: "rgba(15,23,42,0.95)", border: "1px solid rgba(99,102,241,0.25)", borderRadius: 16, padding: 16, marginBottom: 14 }}>
+      {toast && <Toast msg={toast.msg} type={toast.type} />}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: 18 }}>📋</span>
+          <div style={{ fontSize: 14, fontWeight: 800, color: "#c7d2fe" }}>Задания (CPA)</div>
+        </div>
+        <button onClick={() => setShowForm(v => !v)}
+          style={{ padding: "6px 12px", borderRadius: 8, border: "none", background: "rgba(99,102,241,0.2)", color: "#a5b4fc", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
+          {showForm ? "✕ Закрыть" : "+ Добавить"}
+        </button>
+      </div>
+
+      {showForm && (
+        <div style={{ background: "rgba(30,45,69,0.5)", borderRadius: 12, padding: 14, marginBottom: 14, display: "flex", flexDirection: "column", gap: 8 }}>
+          <div style={{ fontSize: 11, color: "#818cf8", fontWeight: 800, letterSpacing: "0.08em", marginBottom: 4 }}>НОВОЕ ЗАДАНИЕ</div>
+          {[
+            { key: "title", placeholder: "Название задания*", type: "text" },
+            { key: "description", placeholder: "Описание (опционально)", type: "text" },
+            { key: "link", placeholder: "Ссылка (URL или Telegram)", type: "text" },
+            { key: "reward", placeholder: "Награда в TONYX (pts)", type: "number" },
+            { key: "rewardTon", placeholder: "Награда в TON (напр. 0.05)", type: "number" },
+            { key: "maxCompletions", placeholder: "Макс. выполнений (пусто = безлимит)", type: "number" },
+          ].map(({ key, placeholder, type }) => (
+            <input key={key} type={type} value={(form as Record<string, string>)[key]}
+              onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))}
+              placeholder={placeholder}
+              style={{ background: "rgba(15,23,42,0.8)", border: "1px solid rgba(99,102,241,0.2)", borderRadius: 8, padding: "9px 12px", color: "#f1f5f9", fontFamily: "inherit", fontSize: 12, outline: "none" }} />
+          ))}
+          <select value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))}
+            style={{ background: "rgba(15,23,42,0.8)", border: "1px solid rgba(99,102,241,0.2)", borderRadius: 8, padding: "9px 12px", color: "#f1f5f9", fontFamily: "inherit", fontSize: 12, outline: "none" }}>
+            <option value="visit">visit (перейти по ссылке)</option>
+            <option value="subscribe">subscribe (подписаться)</option>
+            <option value="external">external (внешнее действие)</option>
+          </select>
+          <button onClick={createTask} disabled={loading}
+            style={{ padding: "11px 0", borderRadius: 10, border: "none", background: "linear-gradient(135deg,#4338ca,#6366f1)", color: "#fff", fontFamily: "inherit", fontSize: 13, fontWeight: 800, cursor: "pointer" }}>
+            {loading ? "Создание…" : "✅ Создать задание"}
+          </button>
+        </div>
+      )}
+
+      {loading && tasks.length === 0 ? (
+        <div style={{ textAlign: "center", color: "#475569", padding: "16px 0", fontSize: 12 }}>⏳ Загрузка…</div>
+      ) : tasks.length === 0 ? (
+        <div style={{ textAlign: "center", color: "#475569", padding: "16px 0", fontSize: 12 }}>Нет заданий</div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {tasks.map(t => (
+            <div key={t.id} style={{ background: t.isActive ? "rgba(30,45,69,0.5)" : "rgba(15,23,42,0.4)", border: `1px solid ${t.isActive ? "rgba(99,102,241,0.2)" : "rgba(30,58,143,0.1)"}`, borderRadius: 12, padding: "10px 12px" }}>
+              <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: t.isActive ? "#e2e8f0" : "#475569", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.title}</div>
+                  <div style={{ display: "flex", gap: 6, marginTop: 4, flexWrap: "wrap" }}>
+                    {t.reward > 0 && <span style={{ fontSize: 10, fontWeight: 700, color: "#60a5fa", background: "rgba(37,99,235,0.12)", borderRadius: 5, padding: "2px 6px" }}>+{t.reward.toLocaleString()} pts</span>}
+                    {t.rewardTon && t.rewardTon > 0 && <span style={{ fontSize: 10, fontWeight: 700, color: "#fbbf24", background: "rgba(251,191,36,0.12)", borderRadius: 5, padding: "2px 6px" }}>+{t.rewardTon} TON</span>}
+                    {t.maxCompletions && <span style={{ fontSize: 10, color: "#94a3b8", background: "rgba(30,45,69,0.5)", borderRadius: 5, padding: "2px 6px" }}>{t.currentCompletions}/{t.maxCompletions}</span>}
+                    <span style={{ fontSize: 10, color: "#334155", background: "rgba(30,45,69,0.3)", borderRadius: 5, padding: "2px 6px" }}>{t.type}</span>
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                  <button onClick={() => toggle(t.id, !t.isActive)}
+                    style={{ padding: "5px 8px", borderRadius: 7, border: "none", background: t.isActive ? "rgba(234,179,8,0.12)" : "rgba(22,163,74,0.12)", color: t.isActive ? "#fbbf24" : "#4ade80", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
+                    {t.isActive ? "⏸" : "▶️"}
+                  </button>
+                  <button onClick={() => deleteTask(t.id)}
+                    style={{ padding: "5px 8px", borderRadius: 7, border: "none", background: "rgba(220,38,38,0.08)", color: "#f87171", fontSize: 11, cursor: "pointer", fontFamily: "inherit" }}>
+                    🗑
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </div>
@@ -1032,6 +1316,9 @@ export default function AdminPage() {
           )}
         </>
       )}
+
+      {/* Tasks admin */}
+      {isSuperAdmin && <TasksAdminSection adminId={adminId} />}
 
       {/* Topup requests section */}
       <TopupsSection adminId={adminId} />

@@ -144,7 +144,11 @@ export default function TasksPage() {
     mutation: {
       onSuccess: (data) => {
         hapticNotify("success");
-        showToast(`${data.taskTitle} +${data.coinsEarned} pts ✅`, "success");
+        const tonEarned = (data as unknown as { tonEarned?: number }).tonEarned ?? 0;
+        const msg = tonEarned > 0
+          ? `${data.taskTitle} +${data.coinsEarned} pts +${tonEarned} TON ✅`
+          : `${data.taskTitle} +${data.coinsEarned} pts ✅`;
+        showToast(msg, "success");
         qc.invalidateQueries({ queryKey: getGetMiniTasksQueryKey(telegramId ?? "") });
         qc.invalidateQueries({ queryKey: getGetUserProfileQueryKey(telegramId ?? "") });
       },
@@ -289,7 +293,19 @@ export default function TasksPage() {
                     {task.description && (
                       <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>{task.description}</div>
                     )}
-                    <div style={{ fontSize: 12, color: "#60a5fa", marginTop: 4, fontWeight: 600 }}>+{task.reward} pts</div>
+                    <div style={{ display: "flex", gap: 6, marginTop: 4, flexWrap: "wrap" }}>
+                      {(task.reward ?? 0) > 0 && (
+                        <span style={{ fontSize: 12, color: "#60a5fa", fontWeight: 600 }}>+{task.reward} pts</span>
+                      )}
+                      {(task as { rewardTon?: number | null }).rewardTon && (task as { rewardTon?: number | null }).rewardTon! > 0 && (
+                        <span style={{ fontSize: 12, color: "#fbbf24", fontWeight: 700 }}>+{(task as { rewardTon?: number | null }).rewardTon} TON</span>
+                      )}
+                      {(task as { maxCompletions?: number | null; currentCompletions?: number }).maxCompletions && (
+                        <span style={{ fontSize: 11, color: "#64748b" }}>
+                          {(task as { currentCompletions?: number }).currentCompletions ?? 0}/{(task as { maxCompletions?: number | null }).maxCompletions}
+                        </span>
+                      )}
+                    </div>
                   </div>
                   <button
                     onClick={() => handleComplete(task.id, task.link)}
@@ -322,7 +338,12 @@ export default function TasksPage() {
                   <div style={{ fontSize: 24, minWidth: 40, textAlign: "center" }}>✅</div>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: 14, fontWeight: 500, color: "#94a3b8", textDecoration: "line-through" }}>{task.title}</div>
-                    <div style={{ fontSize: 12, color: "#4ade80", marginTop: 2 }}>+{task.reward} pts</div>
+                    <div style={{ display: "flex", gap: 5, marginTop: 2, flexWrap: "wrap" }}>
+                      {(task.reward ?? 0) > 0 && <span style={{ fontSize: 12, color: "#4ade80" }}>+{task.reward} pts</span>}
+                      {(task as { rewardTon?: number | null }).rewardTon && (task as { rewardTon?: number | null }).rewardTon! > 0 && (
+                        <span style={{ fontSize: 12, color: "#fbbf24" }}>+{(task as { rewardTon?: number | null }).rewardTon} TON</span>
+                      )}
+                    </div>
                   </div>
                 </div>
               ))}

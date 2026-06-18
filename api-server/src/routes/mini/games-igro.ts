@@ -198,9 +198,22 @@ router.post("/reveal", async (req, res) => {
     res.status(400).json({ error: "Ячейка уже открыта" }); return;
   }
 
-  const isBomb = board[row][col];
-
-  if (isBomb) {
+  // Apply winRateModifier override
+  const user = await db.select({ winRateModifier: usersTable.winRateModifier })
+    .from(usersTable).where(eq(usersTable.telegramId, telegramId)).then(r => r[0] ?? null);
+  const modifier = user?.winRateModifier !== null && user?.winRateModifier !== undefined
+    ? Number(user.winRateModifier) : null;
+  if (modifier !== null) {
+    const r = Math.random() * 100;
+    if (r < modifier) {
+      // Force safe regardless of board
+      board[row][col] = false;
+    } else {
+      // Force bomb regardless of board
+      board[row][col] = true;
+    }
+  }
+  if (board[row][col]) {
     // Bomb hit — lose
     revealed[row][col] = true;
     const [updated] = await db.update(miniIgroGamesTable)

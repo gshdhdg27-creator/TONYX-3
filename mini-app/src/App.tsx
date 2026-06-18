@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Switch, Route, Router as WouterRouter } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { TonConnectUIProvider } from "@tonconnect/ui-react";
@@ -23,6 +23,40 @@ const MANIFEST_URL = typeof window !== "undefined"
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },
 });
+
+function BannedScreen({ reason }: { reason: string | null }) {
+  return (
+    <div style={{
+      height: "100dvh", display: "flex", flexDirection: "column", alignItems: "center",
+      justifyContent: "center", background: "hsl(240 16% 4%)", color: "#f1f5f9",
+      fontFamily: "'Space Grotesk','Inter',system-ui,sans-serif", padding: "0 32px", textAlign: "center", gap: 0,
+    }}>
+      <div style={{ fontSize: 64, marginBottom: 24 }}>🚫</div>
+      <div style={{ fontSize: 22, fontWeight: 900, color: "#f87171", marginBottom: 12 }}>Аккаунт заблокирован</div>
+      <div style={{ fontSize: 14, color: "#64748b", lineHeight: 1.6, maxWidth: 300 }}>
+        {reason || "Нарушение правил платформы."}<br /><br />
+        Если это ошибка — обратитесь в поддержку.
+      </div>
+    </div>
+  );
+}
+
+function SoftDeletedScreen() {
+  return (
+    <div style={{
+      height: "100dvh", display: "flex", flexDirection: "column", alignItems: "center",
+      justifyContent: "center", background: "hsl(240 16% 4%)", color: "#f1f5f9",
+      fontFamily: "'Space Grotesk','Inter',system-ui,sans-serif", padding: "0 32px", textAlign: "center", gap: 0,
+    }}>
+      <div style={{ fontSize: 64, marginBottom: 24 }}>🗑</div>
+      <div style={{ fontSize: 22, fontWeight: 900, color: "#94a3b8", marginBottom: 12 }}>Аккаунт деактивирован</div>
+      <div style={{ fontSize: 14, color: "#64748b", lineHeight: 1.6, maxWidth: 300 }}>
+        Ваш аккаунт был деактивирован администратором.<br /><br />
+        Обратитесь в поддержку для восстановления.
+      </div>
+    </div>
+  );
+}
 
 function TelegramOnlyScreen() {
   return (
@@ -57,6 +91,8 @@ function TelegramOnlyScreen() {
 function AppShell() {
   const { telegramId, isInTelegram, username, firstName, lastName, photoUrl, startParam } = useTelegram();
   const register = useRegisterUser();
+  const [blockStatus, setBlockStatus] = useState<"loading"|"ok"|"banned"|"soft_deleted">("loading");
+  const [bannedReason, setBannedReason] = useState<string|null>(null);
 
   useEffect(() => {
     initTelegram();
@@ -77,8 +113,32 @@ function AppShell() {
     }
   }, [telegramId]);
 
+  useEffect(() => {
+    if (!telegramId) return;
+    fetch(`/api/mini/admin/user-status?telegramId=${telegramId}`)
+      .then(r => r.json())
+      .then((d: { status: string; bannedReason: string | null }) => {
+        setBannedReason(d.bannedReason);
+        if (d.status === "banned") setBlockStatus("banned");
+        else if (d.status === "soft_deleted") setBlockStatus("soft_deleted");
+        else setBlockStatus("ok");
+      })
+      .catch(() => setBlockStatus("ok"));
+  }, [telegramId]);
+
   if (!isInTelegram || !telegramId) {
     return <TelegramOnlyScreen />;
+  }
+
+  if (blockStatus === "banned") return <BannedScreen reason={bannedReason} />;
+  if (blockStatus === "soft_deleted") return <SoftDeletedScreen />;
+  if (blockStatus === "loading") {
+    return (
+      <div style={{ height: "100dvh", display: "flex", alignItems: "center", justifyContent: "center", background: "hsl(240 16% 4%)" }}>
+        <div style={{ width: 32, height: 32, border: "3px solid rgba(99,102,241,0.3)", borderTopColor: "#6366f1", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+        <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+      </div>
+    );
   }
 
   return (

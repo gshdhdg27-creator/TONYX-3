@@ -1,4 +1,4 @@
-import { pgTable, serial, text, integer, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, integer, timestamp, numeric } from "drizzle-orm/pg-core";
 
 export const miniTasksTable = pgTable("mini_tasks", {
   id: serial("id").primaryKey(),
@@ -7,7 +7,10 @@ export const miniTasksTable = pgTable("mini_tasks", {
   description: text("description"),
   type: text("type").notNull().default("visit"),
   link: text("link"),
-  reward: integer("reward").notNull().default(50),
+  reward: integer("reward").notNull().default(0),
+  rewardTon: numeric("reward_ton", { precision: 12, scale: 6 }),
+  maxCompletions: integer("max_completions"),
+  currentCompletions: integer("current_completions").notNull().default(0),
   isActive: text("is_active").notNull().default("true"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });

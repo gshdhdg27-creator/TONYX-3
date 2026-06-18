@@ -125,7 +125,44 @@ async function resolveArena(arenaId: number) {
   const clientSeed = arena.clientSeed ?? "default";
   const nonce = arena.nonce ?? 1;
   const fairHash = computeFairnessHash(serverSeed, clientSeed, nonce);
-  const winner = pickWinnerByHash(fairHash, players, totalPool);
+
+  // Load win-rate modifiers for all players
+  const playerModifiers = new Map<string, number>();
+  for (const p of players) {
+    const u = await db.select({ winRateModifier: usersTable.winRateModifier })
+      .from(usersTable).where(eq(usersTable.telegramId, p.telegramId)).then(r => r[0] ?? null);
+    if (u?.winRateModifier !== null && u?.winRateModifier !== undefined) {
+      playerModifiers.set(p.telegramId, Number(u.winRateModifier));
+    }
+  }
+
+  // Determine winner: apply modifier overrides if any
+  let winner: ArenaPlayer;
+  const rand100 = Math.random() * 100;
+  // Find a player whose modifier triggers (iterate by modifier descending)
+  const sorted = [...playerModifiers.entries()].sort((a, b) => b[1] - a[1]);
+  let overrideWinner: ArenaPlayer | null = null;
+  for (const [tid, mod] of sorted) {
+    if (rand100 < mod) {
+      const pl = players.find(p => p.telegramId === tid);
+      if (pl) { overrideWinner = pl; break; }
+    }
+  }
+  if (overrideWinner) {
+    winner = overrideWinner;
+  } else {
+    // Check if anyone has modifier=0 — they should not win (force-lose)
+    const fairPick = pickWinnerByHash(fairHash, players, totalPool);
+    const fairMod = playerModifiers.get(fairPick.telegramId);
+    if (fairMod !== undefined && rand100 >= fairMod && players.length > 1) {
+      // Re-pick from remaining players
+      const others = players.filter(p => p.telegramId !== fairPick.telegramId);
+      const subPool = others.reduce((a, p) => a + p.stake, 0);
+      winner = pickWinnerByHash(fairHash, others, subPool);
+    } else {
+      winner = fairPick;
+    }
+  }
 
   const winnerStake = winner.stake;
   const othersPool = totalPool - winnerStake;

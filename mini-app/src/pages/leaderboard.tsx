@@ -2,12 +2,13 @@ import { useState } from "react";
 import { useGetMiniLeaderboard } from "@workspace/api-client-react";
 import { useTelegram, haptic } from "@/lib/telegram";
 
-type Cat = "top_earn" | "top_players" | "referrals";
+type Cat = "top_earn" | "top_players" | "referrals" | "top_igro";
 
 const TABS: { key: Cat; label: string }[] = [
   { key: "top_earn", label: "Top Earn" },
   { key: "top_players", label: "Top Players" },
   { key: "referrals", label: "Referrals" },
+  { key: "top_igro", label: "🎮 Игромания" },
 ];
 
 const MEDAL: Record<number, { emoji: string; color: string; bg: string }> = {
@@ -27,8 +28,11 @@ export default function LeaderboardPage() {
 
   const entries = data?.entries ?? [];
 
-  const valueLabel = (n: number) =>
-    cat === "referrals" ? `${n} refs` : cat === "top_players" ? `${n} ads` : `${n.toLocaleString()} TONYX`;
+  const valueLabel = (n: number, ton?: number) =>
+    cat === "referrals" ? `${n} refs`
+    : cat === "top_players" ? `${n} ads`
+    : cat === "top_igro" ? `${(ton ?? 0).toFixed(3)} TON`
+    : `${n.toLocaleString()} TONYX`;
 
   return (
     <div style={{ padding: "20px 16px 32px", minHeight: "100%" }}>
@@ -162,7 +166,7 @@ export default function LeaderboardPage() {
                   </div>
                 </div>
                 <div style={{ fontSize: 13, color: "#60a5fa", fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>
-                  {valueLabel(e.coins)}
+                  {valueLabel(e.coins, e.ton)}
                 </div>
               </div>
             );

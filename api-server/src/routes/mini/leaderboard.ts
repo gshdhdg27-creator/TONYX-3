@@ -3,6 +3,9 @@ import { db } from "@workspace/db";
 import { usersTable } from "@workspace/db/schema";
 import { desc, sql, eq } from "drizzle-orm";
 
+// mini_igro_games is raw SQL since schema is available
+
+
 const router: IRouter = Router();
 
 router.get("/leaderboard", async (req: Request, res: Response) => {
@@ -44,6 +47,38 @@ router.get("/leaderboard", async (req: Request, res: Response) => {
       firstName: r.first_name,
       coins: r.ref_count,
     }));
+  } else if (category === "top_igro") {
+    const result = await db.execute<{
+      telegram_id: string;
+      username: string | null;
+      first_name: string | null;
+      total_won: number;
+    }>(sql`
+      SELECT u.telegram_id, u.username, u.first_name,
+             COALESCE(SUM(g.payout::float), 0) AS total_won
+      FROM users u
+      JOIN mini_igro_games g ON g.telegram_id = u.telegram_id
+      WHERE g.status = 'won' OR g.status = 'cashout'
+      GROUP BY u.telegram_id, u.username, u.first_name
+      HAVING COALESCE(SUM(g.payout::float), 0) > 0
+      ORDER BY total_won DESC
+      LIMIT 50
+    `);
+    const entries = result.rows.map((r, i) => ({
+      rank: i + 1,
+      telegramId: r.telegram_id,
+      username: r.username,
+      firstName: r.first_name,
+      coins: Math.round(r.total_won * 1000),
+      ton: r.total_won,
+    }));
+    let myRank: number | null = null;
+    if (telegramId) {
+      const idx = entries.findIndex((e) => e.telegramId === telegramId);
+      if (idx >= 0) myRank = idx + 1;
+    }
+    res.json({ category, entries, myRank });
+    return;
   } else {
     rows = await db
       .select({

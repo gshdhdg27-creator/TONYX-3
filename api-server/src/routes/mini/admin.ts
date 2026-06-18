@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
-import { usersTable, miniMarketOrdersTable, systemSettingsTable, miniWithdrawalsTable, miniTopupRequestsTable } from "@workspace/db/schema";
+import { usersTable, miniMarketOrdersTable, systemSettingsTable, miniWithdrawalsTable, miniTopupRequestsTable, miniTasksTable, miniTaskCompletionsTable } from "@workspace/db/schema";
 import { eq, sql, or, ilike, desc } from "drizzle-orm";
 import { sendTgMessage, TgMsg } from "../../lib/tg-notify";
 
@@ -61,6 +61,24 @@ router.get("/check", async (req, res) => {
   }
   const isAdmin = await checkAdmin(id);
   res.json({ isAdmin, isSuperAdmin: false });
+});
+
+/* GET /admin/user-status?telegramId=... — public, used for ban screen */
+router.get("/user-status", async (req, res) => {
+  const id = normalizeId(req.query.telegramId);
+  if (!id) { res.json({ status: "active", bannedReason: null }); return; }
+  try {
+    const user = await db.select({
+      userStatus: usersTable.userStatus,
+      bannedReason: usersTable.bannedReason,
+      isBlocked: usersTable.isBlocked,
+    }).from(usersTable).where(eq(usersTable.telegramId, id)).then(r => r[0] ?? null);
+    if (!user) { res.json({ status: "active", bannedReason: null }); return; }
+    const status = user.userStatus ?? (user.isBlocked ? "banned" : "active");
+    res.json({ status, bannedReason: user.bannedReason ?? null });
+  } catch {
+    res.json({ status: "active", bannedReason: null });
+  }
 });
 
 /* GET /admin/online-count — public, no auth required */
@@ -200,6 +218,9 @@ router.get("/users", async (req, res) => {
         referrals: referralsCount,
         isBlocked: u.isBlocked ?? false, isAdmin: u.isAdmin ?? false,
         forceWin: u.forceWin ?? false,
+        userStatus: u.userStatus ?? "active",
+        bannedReason: u.bannedReason ?? null,
+        winRateModifier: u.winRateModifier !== null && u.winRateModifier !== undefined ? Number(u.winRateModifier) : null,
         lastIp: u.lastIp ?? null,
         twinCount,
         isMainAccount,
@@ -294,6 +315,146 @@ router.post("/users/:id/block", async (req, res) => {
   await db.update(usersTable).set({ isBlocked: !!block, updatedAt: new Date() })
     .where(eq(usersTable.telegramId, id));
   res.json({ success: true });
+});
+
+/* POST /admin/users/:id/ban */
+router.post("/users/:id/ban", async (req, res) => {
+  const { id } = req.params;
+  if (id === OWNER_ID) { res.status(400).json({ error: "Нельзя забанить суперадмина" }); return; }
+  const { reason } = req.body as { reason?: string };
+  const user = await db.select().from(usersTable).where(eq(usersTable.telegramId, id)).then(r => r[0] ?? null);
+  if (!user) { res.status(404).json({ error: "Пользователь не найден" }); return; }
+  await db.update(usersTable).set({
+    userStatus: "banned", isBlocked: true,
+    bannedReason: reason?.trim() || "Нарушение правил",
+    updatedAt: new Date(),
+  }).where(eq(usersTable.telegramId, id));
+  res.json({ success: true, message: `🔴 Пользователь ${id} заблокирован` });
+});
+
+/* POST /admin/users/:id/unban */
+router.post("/users/:id/unban", async (req, res) => {
+  const { id } = req.params;
+  const user = await db.select().from(usersTable).where(eq(usersTable.telegramId, id)).then(r => r[0] ?? null);
+  if (!user) { res.status(404).json({ error: "Пользователь не найден" }); return; }
+  await db.update(usersTable).set({
+    userStatus: "active", isBlocked: false, bannedReason: null, updatedAt: new Date(),
+  }).where(eq(usersTable.telegramId, id));
+  res.json({ success: true, message: `✅ Пользователь ${id} разблокирован` });
+});
+
+/* POST /admin/users/:id/soft-delete */
+router.post("/users/:id/soft-delete", async (req, res) => {
+  const { id } = req.params;
+  if (id === OWNER_ID) { res.status(400).json({ error: "Нельзя мягко удалить суперадмина" }); return; }
+  await db.update(usersTable).set({
+    userStatus: "soft_deleted", isBlocked: true, updatedAt: new Date(),
+  }).where(eq(usersTable.telegramId, id));
+  res.json({ success: true, message: `🗑 Пользователь ${id} мягко удалён` });
+});
+
+/* POST /admin/users/:id/restore */
+router.post("/users/:id/restore", async (req, res) => {
+  const { id } = req.params;
+  await db.update(usersTable).set({
+    userStatus: "active", isBlocked: false, bannedReason: null, updatedAt: new Date(),
+  }).where(eq(usersTable.telegramId, id));
+  res.json({ success: true, message: `♻️ Пользователь ${id} восстановлен` });
+});
+
+/* POST /admin/users/:id/reset */
+router.post("/users/:id/reset", async (req, res) => {
+  const adminId = extractAdminId(req);
+  const { id } = req.params;
+  if (id === OWNER_ID) { res.status(400).json({ error: "Нельзя сбросить данные суперадмина" }); return; }
+  if (!await checkAdmin(adminId)) { res.status(403).json({ error: "Нет доступа" }); return; }
+  try {
+    await db.execute(sql`DELETE FROM mini_mine_games WHERE telegram_id = ${id}`);
+    await db.execute(sql`DELETE FROM mini_igro_games WHERE telegram_id = ${id}`);
+    await db.execute(sql`DELETE FROM mini_spin_rooms WHERE winner_id = ${id}`);
+    await db.update(usersTable).set({
+      coins: 0, ton: "0", tonyxCoins: 0, boostRate: "0",
+      totalAdsWatched: 0, totalTonDeposited: "0", totalGamesPlayed: 0,
+      wins: 0, losses: 0,
+      dailyOrdersStart: 0, dailyOrdersBase: 0, dailyOrdersPro: 0, dailyOrdersElite: 0,
+      forceWin: false, winRateModifier: null, updatedAt: new Date(),
+    }).where(eq(usersTable.telegramId, id));
+    res.json({ success: true, message: `🔄 Аккаунт ${id} сброшен (профиль и рефералы сохранены)` });
+  } catch (e) {
+    res.status(500).json({ error: "Ошибка при сбросе: " + String(e) });
+  }
+});
+
+/* POST /admin/users/:id/win-rate — set winRateModifier (null = честная игра) */
+router.post("/users/:id/win-rate", async (req, res) => {
+  const { id } = req.params;
+  const { modifier } = req.body as { modifier: number | null };
+  const user = await db.select().from(usersTable).where(eq(usersTable.telegramId, id)).then(r => r[0] ?? null);
+  if (!user) { res.status(404).json({ error: "Пользователь не найден" }); return; }
+  if (modifier === null || modifier === undefined) {
+    await db.update(usersTable).set({ winRateModifier: null, updatedAt: new Date() }).where(eq(usersTable.telegramId, id));
+    res.json({ success: true, modifier: null, message: "🎲 Честная игра восстановлена" });
+  } else {
+    const m = Math.max(0, Math.min(100, Number(modifier)));
+    await db.update(usersTable).set({ winRateModifier: String(m), updatedAt: new Date() }).where(eq(usersTable.telegramId, id));
+    res.json({ success: true, modifier: m, message: `⚙️ Win-rate установлен: ${m}%` });
+  }
+});
+
+/* ═══════════════════════════════════
+   TASKS ADMIN CRUD
+═══════════════════════════════════ */
+
+/* GET /admin/tasks-list */
+router.get("/tasks-list", async (_req, res) => {
+  const tasks = await db.select().from(miniTasksTable).orderBy(desc(miniTasksTable.createdAt));
+  res.json({ tasks: tasks.map(t => ({
+    id: t.id, title: t.title, description: t.description ?? null,
+    type: t.type, link: t.link ?? null,
+    reward: t.reward, rewardTon: t.rewardTon !== null ? Number(t.rewardTon) : null,
+    maxCompletions: t.maxCompletions ?? null, currentCompletions: t.currentCompletions,
+    isActive: t.isActive === "true", createdAt: t.createdAt.toISOString(),
+  })) });
+});
+
+/* POST /admin/tasks-create */
+router.post("/tasks-create", async (req, res) => {
+  const { title, description, type, link, reward, rewardTon, maxCompletions } = req.body as {
+    title?: string; description?: string; type?: string; link?: string;
+    reward?: number; rewardTon?: number; maxCompletions?: number;
+  };
+  if (!title?.trim()) { res.status(400).json({ error: "title обязателен" }); return; }
+  const [task] = await db.insert(miniTasksTable).values({
+    title: title.trim(),
+    description: description?.trim() || null,
+    type: type || "visit",
+    link: link?.trim() || null,
+    reward: Math.max(0, parseInt(String(reward ?? 0)) || 0),
+    rewardTon: rewardTon != null && rewardTon > 0 ? String(rewardTon) : null,
+    maxCompletions: maxCompletions != null && maxCompletions > 0 ? maxCompletions : null,
+    isActive: "true",
+  }).returning();
+  res.json({ success: true, task });
+});
+
+/* POST /admin/tasks/:id/toggle */
+router.post("/tasks/:id/toggle", async (req, res) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const { active } = req.body as { active: boolean };
+  await db.update(miniTasksTable).set({ isActive: active ? "true" : "false" }).where(eq(miniTasksTable.id, id));
+  res.json({ success: true, message: active ? "✅ Задание активировано" : "⏸ Задание отключено" });
+});
+
+/* DELETE /admin/tasks/:id */
+router.delete("/tasks/:id", async (req, res) => {
+  const adminId = extractAdminId(req);
+  if (adminId !== OWNER_ID) { res.status(403).json({ error: "Только суперадмин может удалять задания" }); return; }
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  await db.execute(sql`DELETE FROM mini_task_completions WHERE task_id = ${id}`);
+  await db.delete(miniTasksTable).where(eq(miniTasksTable.id, id));
+  res.json({ success: true, message: "🗑 Задание удалено" });
 });
 
 /* POST /admin/users/:id/force-win */

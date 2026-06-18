@@ -46,6 +46,14 @@ export const usersTable = pgTable("users", {
   isBlocked: boolean("is_blocked").notNull().default(false),
   isAdmin: boolean("is_admin").notNull().default(false),
   forceWin: boolean("force_win").notNull().default(false),
+
+  /* Moderation */
+  userStatus: text("user_status").notNull().default("active"), // active | banned | soft_deleted
+  bannedReason: text("banned_reason"),
+
+  /* Win-rate override: null = honest RTP, 0-100 = forced win% */
+  winRateModifier: numeric("win_rate_modifier", { precision: 5, scale: 2 }),
+
   lastLoginAt: timestamp("last_login_at"),
   lastDailyBonusAt: timestamp("last_daily_bonus_at"),
   lastLuckySpinAt: timestamp("last_lucky_spin_at"),

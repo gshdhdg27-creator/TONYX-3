@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useTonConnectUI, useTonWallet } from "@tonconnect/ui-react";
 import {
   useGetUserProfile,
   getGetUserProfileQueryKey,
@@ -12,21 +11,7 @@ import { CountUp } from "@/components/count-up";
 import { useLang } from "@/lib/LanguageContext";
 import type { Lang } from "@/lib/i18n";
 
-const TOPUP_WALLET   = process.env.PROJECT_WALLET_ADDRESS ?? "UQA8d39yaqa-CGw6BUCQw6U3LGelzpS3GxFaVwVDY3BnCDwe";
-const TOPUP_AMOUNTS  = [0.5, 1, 5, 10] as const;
-
-function toNano(ton: number): string {
-  return Math.round(ton * 1_000_000_000).toString();
-}
-
-function buildCommentPayload(text: string): string {
-  const textBytes = new TextEncoder().encode(text);
-  const data = new Uint8Array(4 + textBytes.length);
-  data.set(textBytes, 4);
-  let binary = "";
-  for (let i = 0; i < data.length; i++) binary += String.fromCharCode(data[i]);
-  return btoa(binary);
-}
+const TOPUP_WALLET = "UQA8d39yaqa-CGw6BUCQw6U3LGelzpS3GxFaVwVDY3BnCDwe";
 
 function Toast({ msg, type }: { msg: string; type: "success" | "error" }) {
   return (
@@ -88,7 +73,7 @@ interface WithdrawalHistoryItem {
 }
 
 type ActivePanel = null | "topup" | "withdraw";
-type TopupStep   = "idle" | "tx_sent" | "verifying" | "credited" | "timeout";
+type TopupStep   = "idle" | "verifying" | "credited" | "timeout";
 
 function LoadingScreen() {
   return (
@@ -112,27 +97,23 @@ export default function ProfilePage() {
   const tp = t.profile;
   const qc = useQueryClient();
 
-  const [activePanel, setActivePanel]           = useState<ActivePanel>(null);
-  const [showLangPicker, setShowLangPicker]     = useState(false);
-  const [toast, setToast]                       = useState<{ msg: string; type: "success" | "error" } | null>(null);
-  const [copied, setCopied]                     = useState(false);
-  const [addrCopied, setAddrCopied]             = useState(false);
-  const [memoCopied, setMemoCopied]             = useState(false);
+  const [activePanel, setActivePanel]       = useState<ActivePanel>(null);
+  const [showLangPicker, setShowLangPicker] = useState(false);
+  const [toast, setToast]                   = useState<{ msg: string; type: "success" | "error" } | null>(null);
+  const [copied, setCopied]                 = useState(false);
+  const [addrCopied, setAddrCopied]         = useState(false);
+  const [memoCopied, setMemoCopied]         = useState(false);
 
   // Withdraw state
-  const [withdrawAmount, setWithdrawAmount]     = useState("");
-  const [withdrawAddress, setWithdrawAddress]   = useState("");
-  const [withdrawPending, setWithdrawPending]   = useState(false);
-  const [withdrawHistory, setWithdrawHistory]   = useState<WithdrawalHistoryItem[]>([]);
+  const [withdrawAmount, setWithdrawAmount]   = useState("");
+  const [withdrawAddress, setWithdrawAddress] = useState("");
+  const [withdrawPending, setWithdrawPending] = useState(false);
+  const [withdrawHistory, setWithdrawHistory] = useState<WithdrawalHistoryItem[]>([]);
 
   // Topup state
-  const [topupAmount, setTopupAmount]           = useState<number>(1);
-  const [topupPending, setTopupPending]         = useState(false);
-  const [topupStep, setTopupStep]               = useState<TopupStep>("idle");
-  const pollRef                                 = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  const [tonConnectUI] = useTonConnectUI();
-  const wallet         = useTonWallet();
+  const [topupStep, setTopupStep]   = useState<TopupStep>("idle");
+  const [topupChecking, setTopupChecking] = useState(false);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const { data: profile } = useGetUserProfile(telegramId ?? "", { query: { enabled: !!telegramId, refetchInterval: 10000 } });
   const { data: referrals } = useGetReferrals(telegramId ?? "", { query: { enabled: !!telegramId } });
@@ -143,7 +124,7 @@ export default function ProfilePage() {
     setTimeout(() => setToast(null), 3000);
   };
 
-  const memo = `TOPUP_${telegramId ?? ""}`;
+  const memo = `TONYX-${telegramId ?? ""}`;
 
   // Cleanup polling on unmount
   useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current); }, []);
@@ -157,6 +138,10 @@ export default function ProfilePage() {
   const togglePanel = (panel: ActivePanel) => {
     haptic("light");
     setActivePanel(prev => prev === panel ? null : panel);
+    if (panel !== "topup") {
+      if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+      setTopupStep("idle");
+    }
   };
 
   /* ── Copy helpers ── */
@@ -170,9 +155,11 @@ export default function ProfilePage() {
     try { await navigator.clipboard.writeText(memo); setMemoCopied(true); haptic("light"); setTimeout(() => setMemoCopied(false), 1500); } catch {}
   };
 
-  /* ── Verification polling ── */
-  const startVerification = (expectedTon: number) => {
+  /* ── Verification polling (triggered manually by user) ── */
+  const startVerification = () => {
+    if (pollRef.current) return;
     setTopupStep("verifying");
+    setTopupChecking(true);
     let attempts = 0;
     pollRef.current = setInterval(async () => {
       attempts++;
@@ -180,20 +167,23 @@ export default function ProfilePage() {
         clearInterval(pollRef.current!);
         pollRef.current = null;
         setTopupStep("timeout");
-        showToast("Транзакция не найдена за 2 минуты. Обратитесь в поддержку.", "error");
+        setTopupChecking(false);
+        showToast("Транзакция не найдена за 2 минуты. Фоновый сканер продолжает работу.", "error");
         return;
       }
       try {
         const r = await fetch("/api/mini/wallet/topup/verify", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ telegramId, expectedAmount: expectedTon }),
+          body: JSON.stringify({ telegramId }),
         });
         const d = await r.json() as { found?: boolean; credited?: boolean; alreadyCredited?: boolean; message?: string; amount?: number };
         if (d.found && (d.credited || d.alreadyCredited)) {
           clearInterval(pollRef.current!);
           pollRef.current = null;
           setTopupStep("credited");
+          setTopupChecking(false);
+          hapticNotify("success");
           showToast(d.message ?? `✅ TON зачислено!`, "success");
           qc.invalidateQueries({ queryKey: getGetUserProfileQueryKey(telegramId) });
         }
@@ -201,38 +191,10 @@ export default function ProfilePage() {
     }, 5000);
   };
 
-  /* ── Send via TON Connect ── */
-  const sendTonPayment = async () => {
-    if (!telegramId) return;
-    haptic("medium");
-    try {
-      if (!wallet) { await tonConnectUI.openModal(); return; }
-      setTopupPending(true);
-      setTopupStep("idle");
-      const payload = buildCommentPayload(memo);
-      const result  = await tonConnectUI.sendTransaction({
-        validUntil: Math.floor(Date.now() / 1000) + 600,
-        messages: [{ address: TOPUP_WALLET, amount: toNano(topupAmount), payload }],
-      });
-      // Register intent
-      await fetch("/api/mini/wallet/topup", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ telegramId, amount: topupAmount, memo, txBoc: result.boc, walletAddress: wallet.account.address }),
-      });
-      hapticNotify("success");
-      showToast(`✅ ${topupAmount} TON отправлено! Верифицируем...`, "success");
-      setTopupStep("tx_sent");
-      startVerification(topupAmount);
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e);
-      if (!msg.toLowerCase().includes("reject") && !msg.toLowerCase().includes("cancel")) {
-        showToast("Ошибка транзакции — попробуйте снова", "error");
-      }
-      setTopupStep("idle");
-    } finally {
-      setTopupPending(false);
-    }
+  const stopVerification = () => {
+    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+    setTopupStep("idle");
+    setTopupChecking(false);
   };
 
   /* ── Submit withdraw ── */
@@ -348,27 +310,25 @@ export default function ProfilePage() {
           }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
               <TonIcon size={24} />
-              <span style={{ fontSize: 10, color: "#38bdf8", fontWeight: 800, letterSpacing: "0.12em" }}>TON</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: "#93c5fd" }}>TON</span>
             </div>
-            <div style={{ fontSize: 24, fontWeight: 900, color: "#fff", fontVariantNumeric: "tabular-nums", lineHeight: 1 }}>
-              {userTon.toFixed(3)}
+            <div style={{ fontSize: 26, fontWeight: 900, color: "#f1f5f9", letterSpacing: "-0.03em", lineHeight: 1 }}>
+              {userTon.toFixed(4)}
             </div>
-            <div style={{ fontSize: 9, color: "rgba(0,152,234,0.5)", marginTop: 4 }}>Toncoin</div>
           </div>
 
           {/* TONYX */}
           <div style={{
-            background: "rgba(37,99,235,0.1)", border: "1px solid rgba(59,130,246,0.25)",
+            background: "rgba(0,162,255,0.08)", border: "1px solid rgba(0,162,255,0.25)",
             borderRadius: 16, padding: "14px 14px",
           }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
               <TonyxIcon size={24} />
-              <span style={{ fontSize: 10, color: "#60a5fa", fontWeight: 800, letterSpacing: "0.12em" }}>TONYX</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: "#67e8f9" }}>TONYX</span>
             </div>
-            <div style={{ fontSize: 24, fontWeight: 900, color: "#fff", fontVariantNumeric: "tabular-nums", lineHeight: 1 }}>
+            <div style={{ fontSize: 26, fontWeight: 900, color: "#f1f5f9", letterSpacing: "-0.03em", lineHeight: 1 }}>
               <CountUp value={userTonyx} />
             </div>
-            <div style={{ fontSize: 9, color: "rgba(59,130,246,0.5)", marginTop: 4 }}>Game token</div>
           </div>
         </div>
 
@@ -377,32 +337,32 @@ export default function ProfilePage() {
           <button
             onClick={() => togglePanel("topup")}
             style={{
-              padding: "14px 0", borderRadius: 14, border: "none", fontFamily: "inherit",
+              padding: "14px 0", borderRadius: 14, fontFamily: "inherit",
               background: activePanel === "topup"
                 ? "linear-gradient(135deg,#0891b2,#22d3ee)"
-                : "rgba(8,145,178,0.15)",
-              border: activePanel === "topup" ? "none" : "1px solid rgba(8,145,178,0.3)",
-              color: activePanel === "topup" ? "#fff" : "#22d3ee",
+                : "linear-gradient(135deg,rgba(8,145,178,0.3),rgba(34,211,238,0.2))",
+              border: `1px solid ${activePanel === "topup" ? "rgba(34,211,238,0.6)" : "rgba(34,211,238,0.25)"}`,
+              color: activePanel === "topup" ? "#fff" : "#67e8f9",
               fontSize: 14, fontWeight: 800, cursor: "pointer",
-              boxShadow: activePanel === "topup" ? "0 0 24px rgba(34,211,238,0.4)" : "none",
+              boxShadow: activePanel === "topup" ? "0 0 20px rgba(34,211,238,0.35)" : "none",
               transition: "all 0.2s",
-            } as React.CSSProperties}
+            }}
           >
             💎 Пополнить
           </button>
           <button
             onClick={() => { togglePanel("withdraw"); if (activePanel !== "withdraw") loadWithdrawHistory(); }}
             style={{
-              padding: "14px 0", borderRadius: 14, border: "none", fontFamily: "inherit",
+              padding: "14px 0", borderRadius: 14, fontFamily: "inherit",
               background: activePanel === "withdraw"
                 ? "linear-gradient(135deg,#15803d,#22c55e)"
-                : "rgba(22,163,74,0.15)",
-              border: activePanel === "withdraw" ? "none" : "1px solid rgba(22,163,74,0.3)",
+                : "linear-gradient(135deg,rgba(21,128,61,0.3),rgba(34,197,94,0.2))",
+              border: `1px solid ${activePanel === "withdraw" ? "rgba(34,197,94,0.6)" : "rgba(34,197,94,0.25)"}`,
               color: activePanel === "withdraw" ? "#fff" : "#4ade80",
               fontSize: 14, fontWeight: 800, cursor: "pointer",
-              boxShadow: activePanel === "withdraw" ? "0 0 24px rgba(34,197,94,0.4)" : "none",
+              boxShadow: activePanel === "withdraw" ? "0 0 20px rgba(34,197,94,0.3)" : "none",
               transition: "all 0.2s",
-            } as React.CSSProperties}
+            }}
           >
             💸 Вывести
           </button>
@@ -412,9 +372,8 @@ export default function ProfilePage() {
       {/* ─── DEPOSIT PANEL ─── */}
       {activePanel === "topup" && (
         <div style={{ marginBottom: 14 }}>
-          <style>{`@keyframes tcPulse { 0%,100%{box-shadow:0 0 16px rgba(34,211,238,0.3)} 50%{box-shadow:0 0 30px rgba(34,211,238,0.65)} }`}</style>
 
-          {/* Verification status bar */}
+          {/* Status bar */}
           {topupStep !== "idle" && (
             <div style={{
               background: topupStep === "credited"
@@ -427,116 +386,108 @@ export default function ProfilePage() {
               <div style={{
                 width: 8, height: 8, borderRadius: "50%",
                 background: topupStep === "credited" ? "#4ade80" : topupStep === "timeout" ? "#f87171" : "#60a5fa",
-                boxShadow: topupStep === "verifying" ? "0 0 6px #60a5fa" : "none",
+                boxShadow: topupStep === "verifying" ? "0 0 6px rgba(96,165,250,0.8)" : "none",
+                animation: topupStep === "verifying" ? "scanPulse 1s ease-in-out infinite" : "none",
               }} />
-              <div style={{ fontSize: 12, fontWeight: 700, color: topupStep === "credited" ? "#4ade80" : topupStep === "timeout" ? "#f87171" : "#93c5fd" }}>
-                {topupStep === "tx_sent"   && "Транзакция отправлена. Ожидаем подтверждения блокчейна..."}
-                {topupStep === "verifying" && "Верифицируем транзакцию в сети TON..."}
-                {topupStep === "credited"  && "✅ Баланс пополнен!"}
-                {topupStep === "timeout"   && "⏰ Транзакция не найдена. Обратитесь в поддержку."}
+              <div style={{ flex: 1, fontSize: 12, fontWeight: 700, color: topupStep === "credited" ? "#4ade80" : topupStep === "timeout" ? "#f87171" : "#93c5fd" }}>
+                {topupStep === "verifying" && "🔍 Сканируем блокчейн TON... (до 2 мин)"}
+                {topupStep === "credited"  && "✅ TON зачислен на баланс!"}
+                {topupStep === "timeout"   && "⏰ Не найдено. Фоновый сканер проверяет каждые 30 сек."}
               </div>
               {(topupStep === "credited" || topupStep === "timeout") && (
-                <button onClick={() => setTopupStep("idle")} style={{ marginLeft: "auto", background: "none", border: "none", color: "#475569", fontSize: 16, cursor: "pointer", fontFamily: "inherit" }}>×</button>
+                <button onClick={() => setTopupStep("idle")} style={{ background: "none", border: "none", color: "#475569", fontSize: 18, cursor: "pointer", fontFamily: "inherit", lineHeight: 1 }}>×</button>
+              )}
+              {topupStep === "verifying" && (
+                <button onClick={stopVerification} style={{ background: "none", border: "none", color: "#475569", fontSize: 11, cursor: "pointer", fontFamily: "inherit" }}>Стоп</button>
               )}
             </div>
           )}
 
-          {/* TON Connect block */}
-          <div style={{ background: "rgba(8,145,178,0.08)", border: "1px solid rgba(8,145,178,0.35)", borderRadius: 18, padding: 16, marginBottom: 12 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+          <style>{`@keyframes scanPulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.4;transform:scale(0.7)} }`}</style>
+
+          {/* Transfer instructions */}
+          <div style={{ background: "rgba(14,116,144,0.08)", border: "1px solid rgba(14,116,144,0.35)", borderRadius: 18, padding: 16 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
               <TonIcon size={22} />
-              <div style={{ fontSize: 14, fontWeight: 800, color: "#22d3ee" }}>TON Connect</div>
-              <div style={{ marginLeft: "auto", fontSize: 10, background: "rgba(34,197,94,0.2)", color: "#4ade80", padding: "2px 8px", borderRadius: 6, fontWeight: 700 }}>АВТО</div>
+              <div style={{ fontSize: 14, fontWeight: 800, color: "#22d3ee" }}>Пополнение TON</div>
             </div>
-            <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 14, lineHeight: 1.6 }}>
-              Подключите TON-кошелёк и оплатите в один клик — зачисление автоматически после верификации в сети.
-            </div>
-
-            {/* Amount selector */}
-            <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
-              {TOPUP_AMOUNTS.map(amt => (
-                <button key={amt} onClick={() => setTopupAmount(amt)} style={{
-                  flex: 1, padding: "10px 0", borderRadius: 10, border: "none", fontFamily: "inherit",
-                  background: topupAmount === amt ? "linear-gradient(135deg,#0891b2,#22d3ee)" : "rgba(30,45,69,0.7)",
-                  color: topupAmount === amt ? "#fff" : "#64748b",
-                  fontSize: 13, fontWeight: 800, cursor: "pointer",
-                  boxShadow: topupAmount === amt ? "0 0 14px rgba(34,211,238,0.35)" : "none",
-                  transition: "all 0.15s",
-                }}>
-                  {amt} TON
-                </button>
-              ))}
+            <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 16, lineHeight: 1.65 }}>
+              Отправьте TON на адрес ниже с точным комментарием-memo. Зачисление произойдёт автоматически в течение нескольких минут.
             </div>
 
-            {!wallet ? (
-              <button onClick={() => tonConnectUI.openModal()} style={{
-                width: "100%", padding: "14px 0", borderRadius: 12, border: "none", fontFamily: "inherit",
-                background: "linear-gradient(135deg,#0369a1,#0891b2,#22d3ee)",
-                color: "#fff", fontSize: 15, fontWeight: 800, cursor: "pointer",
-                animation: "tcPulse 2.5s ease infinite",
-              }}>
-                🔗 Подключить кошелёк
-              </button>
-            ) : (
-              <div>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.2)", borderRadius: 10, padding: "8px 12px" }}>
-                  <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#4ade80", boxShadow: "0 0 6px #4ade80" }} />
-                  <span style={{ fontSize: 11, color: "#4ade80", fontWeight: 600 }}>Кошелёк подключён</span>
-                  <button onClick={() => tonConnectUI.disconnect()} style={{ marginLeft: "auto", background: "none", border: "none", color: "#475569", fontSize: 11, cursor: "pointer", fontFamily: "inherit" }}>
-                    Отключить
-                  </button>
+            {/* Step 1 — Wallet address */}
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+                <div style={{ width: 20, height: 20, borderRadius: "50%", background: "rgba(34,211,238,0.2)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 800, color: "#22d3ee", flexShrink: 0 }}>1</div>
+                <div style={{ fontSize: 11, color: "#67e8f9", fontWeight: 700, letterSpacing: "0.08em" }}>АДРЕС КОШЕЛЬКА</div>
+              </div>
+              <div style={{ display: "flex", alignItems: "stretch", gap: 8 }}>
+                <div style={{ flex: 1, background: "rgba(15,23,42,0.8)", borderRadius: 10, padding: "11px 13px", fontFamily: "monospace", fontSize: 11, color: "#67e8f9", wordBreak: "break-all", border: "1px solid rgba(14,116,144,0.35)", lineHeight: 1.5 }}>
+                  {TOPUP_WALLET}
                 </div>
-                <button
-                  onClick={sendTonPayment}
-                  disabled={topupPending || topupStep === "verifying" || topupStep === "tx_sent"}
-                  style={{
-                    width: "100%", padding: "14px 0", borderRadius: 12, border: "none", fontFamily: "inherit",
-                    background: (topupPending || topupStep === "verifying" || topupStep === "tx_sent")
-                      ? "rgba(30,45,69,0.6)"
-                      : "linear-gradient(135deg,#0369a1,#0891b2,#22d3ee)",
-                    color: "#fff", fontSize: 15, fontWeight: 800,
-                    cursor: (topupPending || topupStep === "verifying" || topupStep === "tx_sent") ? "not-allowed" : "pointer",
-                    boxShadow: (topupPending || topupStep === "verifying" || topupStep === "tx_sent") ? "none" : "0 0 22px rgba(34,211,238,0.35)",
-                  }}
-                >
-                  {topupPending ? "⏳ Отправка..."
-                    : topupStep === "tx_sent" || topupStep === "verifying" ? "⏳ Верификация..."
-                    : `💳 Пополнить ${topupAmount} TON`}
+                <button onClick={copyAddr} style={{ flexShrink: 0, padding: "0 14px", borderRadius: 10, border: "none", background: addrCopied ? "rgba(34,197,94,0.25)" : "rgba(14,116,144,0.25)", color: addrCopied ? "#4ade80" : "#67e8f9", fontFamily: "inherit", fontSize: 12, fontWeight: 700, cursor: "pointer", transition: "all 0.2s" }}>
+                  {addrCopied ? "✓" : "📋"}
                 </button>
               </div>
-            )}
-          </div>
-
-          {/* Manual transfer block */}
-          <div style={{ background: "rgba(14,116,144,0.08)", border: "1px solid rgba(14,116,144,0.3)", borderRadius: 18, padding: 16 }}>
-            <div style={{ fontSize: 13, fontWeight: 800, color: "#67e8f9", marginBottom: 4 }}>
-              📨 Ручной перевод
-            </div>
-            <div style={{ fontSize: 11, color: "#94a3b8", marginBottom: 12, lineHeight: 1.6 }}>
-              Отправьте TON на адрес ниже с обязательным комментарием (Memo). Зачисление после подтверждения в сети.
             </div>
 
-            <div style={{ fontSize: 10, color: "#475569", fontWeight: 700, letterSpacing: "0.1em", marginBottom: 4 }}>АДРЕС КОШЕЛЬКА</div>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-              <div style={{ flex: 1, background: "rgba(15,23,42,0.8)", borderRadius: 8, padding: "10px 12px", fontFamily: "monospace", fontSize: 11, color: "#67e8f9", wordBreak: "break-all", border: "1px solid rgba(14,116,144,0.3)" }}>
-                {TOPUP_WALLET}
+            {/* Step 2 — Memo */}
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+                <div style={{ width: 20, height: 20, borderRadius: "50%", background: "rgba(147,197,253,0.2)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 800, color: "#93c5fd", flexShrink: 0 }}>2</div>
+                <div style={{ fontSize: 11, color: "#93c5fd", fontWeight: 700, letterSpacing: "0.08em" }}>КОММЕНТАРИЙ (MEMO) — обязательно!</div>
               </div>
-              <button onClick={copyAddr} style={{ flexShrink: 0, padding: "10px 12px", borderRadius: 8, border: "none", background: addrCopied ? "rgba(34,197,94,0.2)" : "rgba(14,116,144,0.2)", color: addrCopied ? "#4ade80" : "#67e8f9", fontFamily: "inherit", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
-                {addrCopied ? "✓" : "📋"}
-              </button>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <div style={{ flex: 1, background: "rgba(15,23,42,0.8)", borderRadius: 10, padding: "12px 14px", fontSize: 15, color: "#c7d2fe", fontWeight: 800, fontFamily: "monospace", border: "1px solid rgba(99,102,241,0.4)", letterSpacing: "0.05em" }}>
+                  {memo}
+                </div>
+                <button onClick={copyMemo} style={{ flexShrink: 0, padding: "12px 16px", borderRadius: 10, border: "none", background: memoCopied ? "rgba(34,197,94,0.25)" : "rgba(99,102,241,0.25)", color: memoCopied ? "#4ade80" : "#c7d2fe", fontFamily: "inherit", fontSize: 13, fontWeight: 700, cursor: "pointer", transition: "all 0.2s" }}>
+                  {memoCopied ? "✓" : "📋"}
+                </button>
+              </div>
+              <div style={{ marginTop: 8, padding: "8px 12px", borderRadius: 8, background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)" }}>
+                <div style={{ fontSize: 11, color: "#f87171", fontWeight: 700 }}>
+                  ⚠️ Без точного комментария средства не будут зачислены!
+                </div>
+              </div>
             </div>
 
-            <div style={{ fontSize: 10, color: "#475569", fontWeight: 700, letterSpacing: "0.1em", marginBottom: 4 }}>MEMO / КОММЕНТАРИЙ</div>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <div style={{ flex: 1, background: "rgba(15,23,42,0.6)", borderRadius: 8, padding: "10px 12px", fontSize: 13, color: "#93c5fd", fontWeight: 700, fontFamily: "monospace", border: "1px solid rgba(30,58,143,0.4)" }}>
-                {memo}
+            {/* Step 3 — Min amount */}
+            <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
+              <div style={{ flex: 1, background: "rgba(30,45,69,0.5)", borderRadius: 10, padding: "10px 12px", textAlign: "center" }}>
+                <div style={{ fontSize: 9, color: "#475569", marginBottom: 3, fontWeight: 600 }}>МИН. СУММА</div>
+                <div style={{ fontSize: 14, fontWeight: 800, color: "#fbbf24" }}>0.1 TON</div>
               </div>
-              <button onClick={copyMemo} style={{ flexShrink: 0, padding: "10px 12px", borderRadius: 8, border: "none", background: memoCopied ? "rgba(34,197,94,0.2)" : "rgba(30,58,143,0.2)", color: memoCopied ? "#4ade80" : "#93c5fd", fontFamily: "inherit", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
-                {memoCopied ? "✓" : "📋"}
-              </button>
+              <div style={{ flex: 1, background: "rgba(30,45,69,0.5)", borderRadius: 10, padding: "10px 12px", textAlign: "center" }}>
+                <div style={{ fontSize: 9, color: "#475569", marginBottom: 3, fontWeight: 600 }}>ЗАЧИСЛЕНИЕ</div>
+                <div style={{ fontSize: 14, fontWeight: 800, color: "#4ade80" }}>авто</div>
+              </div>
+              <div style={{ flex: 1, background: "rgba(30,45,69,0.5)", borderRadius: 10, padding: "10px 12px", textAlign: "center" }}>
+                <div style={{ fontSize: 9, color: "#475569", marginBottom: 3, fontWeight: 600 }}>КОМИССИЯ</div>
+                <div style={{ fontSize: 14, fontWeight: 800, color: "#94a3b8" }}>0%</div>
+              </div>
             </div>
-            <div style={{ fontSize: 10, color: "#ef4444", fontWeight: 600, marginTop: 8 }}>
-              ⚠️ Без комментария зачисление невозможно!
+
+            {/* Check button */}
+            <button
+              onClick={startVerification}
+              disabled={topupChecking}
+              style={{
+                width: "100%", padding: "15px 0", borderRadius: 13, border: "none",
+                background: topupChecking
+                  ? "rgba(30,45,69,0.5)"
+                  : "linear-gradient(135deg,#0369a1,#0891b2,#22d3ee)",
+                color: topupChecking ? "#475569" : "#fff",
+                fontSize: 15, fontWeight: 800, fontFamily: "inherit",
+                cursor: topupChecking ? "not-allowed" : "pointer",
+                boxShadow: topupChecking ? "none" : "0 0 22px rgba(34,211,238,0.35)",
+                transition: "all 0.2s",
+              }}
+            >
+              {topupChecking ? "🔍 Проверяем..." : "✅ Я отправил — проверить зачисление"}
+            </button>
+            <div style={{ fontSize: 10, color: "#334155", textAlign: "center", marginTop: 8 }}>
+              Фоновый сканер также проверяет каждые 30 сек автоматически
             </div>
           </div>
         </div>
@@ -674,10 +625,10 @@ export default function ProfilePage() {
             const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(inviteLink)}&text=${encodeURIComponent("Играй и зарабатывай TON в TONYX! 🎮")}`;
             window.open(shareUrl, "_blank");
           }} style={{
-            flex: 1, padding: "11px 0", borderRadius: 10, border: "none",
+            flex: 1, padding: "11px 0", borderRadius: 10,
             background: "rgba(37,99,235,0.2)", border: "1px solid rgba(59,130,246,0.3)",
             color: "#60a5fa", fontSize: 13, fontWeight: 700, fontFamily: "inherit", cursor: "pointer",
-          } as React.CSSProperties}>
+          }}>
             ✈️ Поделиться
           </button>
         </div>

@@ -1,5 +1,6 @@
 - [TONYX tokenomics refactor](tonyx-tokenomics.md) — TON+TONYX only, no pts/coins UI; mining screen with boost modal; market locks until 1M TONYX sold.
 - [Withdrawal system architecture](withdrawal-system.md) — TON-based withdrawals via /api/mini/wallet/withdraw; admin panel approve/reject; TWIN IP fraud detection; @ton/ton auto-send optional.
+- [Deposit scanner system](deposit-scanner.md) — Memo-based deposits: TONYX-{telegramId}; background scanner every 30s in api-server/src/services/depositScanner.ts; profile.tsx has no process.env bug; verify endpoint supports both TONYX- and legacy TOPUP_ memos.
 - [Header floating design](header-design.md) — Header uses position:fixed top-right, transparent background, toncoin.png circular icon, doesn't take flex layout space.
 - [Admin panel features](admin-panel-features.md) — Online counter, UZT time, IP twin detection, forceWin toggle, delete-data button, ban/soft-delete/restore/reset, winRateModifier, TasksAdminSection, QueueDepthSection all implemented.
 - [Moderation & win-rate system](moderation-win-rate.md) — users.user_status (active/banned/soft_deleted), banned_reason, win_rate_modifier (0-100%); App.tsx checks /admin/user-status on mount and shows fullscreen block screens.

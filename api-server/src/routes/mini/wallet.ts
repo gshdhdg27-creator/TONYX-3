@@ -243,7 +243,9 @@ router.post("/topup/verify", async (req, res) => {
   const { telegramId, expectedAmount } = req.body ?? {};
   if (!telegramId) { res.status(400).json({ error: "telegramId required" }); return; }
 
-  const memo       = `TOPUP_${telegramId}`;
+  // Support both new TONYX-{id} and legacy TOPUP_{id} memo formats
+  const memoNew    = `TONYX-${telegramId}`;
+  const memoLegacy = `TOPUP_${telegramId}`;
   const minTon     = expectedAmount ? Number(expectedAmount) * 0.99 : 0.05;
 
   try {
@@ -252,8 +254,12 @@ router.post("/topup/verify", async (req, res) => {
     const matchingTx = txs.find(tx => {
       const comment  = tx.in_msg?.decoded_body?.comment ?? "";
       const valueTon = Number(tx.in_msg?.value ?? 0) / 1e9;
-      return comment === memo && valueTon >= minTon;
+      return (comment === memoNew || comment === memoLegacy) && valueTon >= minTon;
     });
+
+    const memo = matchingTx
+      ? (matchingTx.in_msg?.decoded_body?.comment ?? memoNew)
+      : memoNew;
 
     if (!matchingTx) {
       res.json({ found: false, message: "Транзакция ещё не найдена. Ожидайте подтверждения..." });

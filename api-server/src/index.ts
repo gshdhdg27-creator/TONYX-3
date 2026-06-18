@@ -1,8 +1,12 @@
 import app from "./app.js";
 import { startBot } from "./bot.js";
+import { startDepositScanner } from "./services/depositScanner.js";
 
 // Start the Telegram bot
 startBot();
+
+// Start background deposit scanner
+startDepositScanner();
 
 const rawPort = process.env["PORT"];
 

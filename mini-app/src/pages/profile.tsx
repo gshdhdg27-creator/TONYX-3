@@ -121,10 +121,11 @@ export default function ProfilePage() {
   const [topupChecking, setTopupChecking] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Deposit history state
-  const [depositHistory, setDepositHistory]         = useState<DepositHistoryItem[]>([]);
-  const [depositHistoryLoaded, setDepositHistoryLoaded] = useState(false);
-  const [depositHistoryLoading, setDepositHistoryLoading] = useState(false);
+  // Unified transaction history state
+  const [txHistory, setTxHistory] = useState<{ deposits: DepositHistoryItem[]; withdrawals: WithdrawalHistoryItem[] }>({ deposits: [], withdrawals: [] });
+  const [txHistoryLoading, setTxHistoryLoading] = useState(false);
+  const [txHistoryLoaded, setTxHistoryLoaded]   = useState(false);
+  const [txTab, setTxTab] = useState<"deposits" | "withdrawals">("deposits");
 
   const { data: profile } = useGetUserProfile(telegramId ?? "", { query: { enabled: !!telegramId, refetchInterval: 10000 } });
   const { data: referrals } = useGetReferrals(telegramId ?? "", { query: { enabled: !!telegramId } });
@@ -217,19 +218,21 @@ export default function ProfilePage() {
     } catch { /* ignore */ }
   };
 
-  const loadDepositHistory = async () => {
-    if (!telegramId || depositHistoryLoading) return;
-    setDepositHistoryLoading(true);
+  const loadTxHistory = async () => {
+    if (!telegramId || txHistoryLoading) return;
+    setTxHistoryLoading(true);
     try {
-      const r = await fetch(`/api/mini/wallet/deposits/${telegramId}`);
+      const r = await fetch(`/api/mini/wallet/history?telegramId=${telegramId}`);
       if (r.ok) {
-        const d = await r.json();
-        setDepositHistory(d.deposits ?? []);
-        setDepositHistoryLoaded(true);
+        const d = await r.json() as { deposits?: DepositHistoryItem[]; withdrawals?: WithdrawalHistoryItem[] };
+        setTxHistory({ deposits: d.deposits ?? [], withdrawals: d.withdrawals ?? [] });
+        setTxHistoryLoaded(true);
       }
     } catch { /* ignore */ }
-    finally { setDepositHistoryLoading(false); }
+    finally { setTxHistoryLoading(false); }
   };
+
+  useEffect(() => { if (telegramId) void loadTxHistory(); }, [telegramId]);
 
   const submitWithdraw = async () => {
     if (!telegramId) return;
@@ -624,57 +627,129 @@ export default function ProfilePage() {
         </div>
       )}
 
-      {/* ─── DEPOSIT HISTORY ─── */}
+      {/* ─── TRANSACTION HISTORY ─── */}
       <div style={{ marginBottom: 14 }}>
-        <div style={{ background: "rgba(17,24,39,0.95)", border: "1px solid rgba(34,211,238,0.2)", borderRadius: 18, padding: 16 }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: depositHistoryLoaded ? 12 : 0 }}>
-            <div style={{ fontSize: 13, fontWeight: 800, color: "#67e8f9", letterSpacing: "0.06em" }}>💎 ИСТОРИЯ ПОПОЛНЕНИЙ</div>
+        <div style={{ background: "rgba(17,24,39,0.95)", border: "1px solid rgba(59,130,246,0.25)", borderRadius: 18, padding: 16 }}>
+
+          {/* Header */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+            <div style={{ fontSize: 13, fontWeight: 800, color: "#e2e8f0", letterSpacing: "0.06em" }}>📊 ИСТОРИЯ ТРАНЗАКЦИЙ</div>
             <button
-              onClick={loadDepositHistory}
-              disabled={depositHistoryLoading}
-              style={{ padding: "5px 12px", borderRadius: 8, border: "1px solid rgba(34,211,238,0.3)", background: "rgba(34,211,238,0.08)", color: "#67e8f9", fontSize: 11, fontWeight: 700, fontFamily: "inherit", cursor: depositHistoryLoading ? "not-allowed" : "pointer", opacity: depositHistoryLoading ? 0.6 : 1 }}
+              onClick={() => void loadTxHistory()}
+              disabled={txHistoryLoading}
+              style={{ padding: "4px 10px", borderRadius: 7, border: "1px solid rgba(59,130,246,0.3)", background: "rgba(59,130,246,0.08)", color: "#60a5fa", fontSize: 11, fontWeight: 700, fontFamily: "inherit", cursor: txHistoryLoading ? "not-allowed" : "pointer", opacity: txHistoryLoading ? 0.5 : 1 }}
             >
-              {depositHistoryLoading ? "⏳ Загрузка..." : depositHistoryLoaded ? "🔄 Обновить" : "📜 Показать"}
+              {txHistoryLoading ? "⏳" : "🔄"}
             </button>
           </div>
 
-          {depositHistoryLoaded && (
-            depositHistory.length === 0 ? (
-              <div style={{ textAlign: "center", color: "#475569", padding: "18px 0", fontSize: 12 }}>
-                Пополнений ещё не было
-              </div>
+          {/* Tabs */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 14 }}>
+            {(["deposits", "withdrawals"] as const).map(tab => {
+              const isActive = txTab === tab;
+              const label    = tab === "deposits" ? "💎 Депозиты" : "💸 Выводы";
+              const count    = tab === "deposits" ? txHistory.deposits.length : txHistory.withdrawals.length;
+              return (
+                <button
+                  key={tab}
+                  onClick={() => { haptic("light"); setTxTab(tab); }}
+                  style={{
+                    padding: "9px 0", borderRadius: 10, fontFamily: "inherit",
+                    border: `1px solid ${isActive ? (tab === "deposits" ? "rgba(34,211,238,0.5)" : "rgba(34,197,94,0.5)") : "rgba(30,58,143,0.3)"}`,
+                    background: isActive
+                      ? (tab === "deposits" ? "rgba(14,116,144,0.22)" : "rgba(22,163,74,0.18)")
+                      : "rgba(17,24,39,0.6)",
+                    color: isActive ? (tab === "deposits" ? "#22d3ee" : "#4ade80") : "#475569",
+                    fontSize: 13, fontWeight: 700, cursor: "pointer",
+                    transition: "all 0.15s",
+                  }}
+                >
+                  {label}
+                  {txHistoryLoaded && count > 0 && (
+                    <span style={{ marginLeft: 5, background: isActive ? "rgba(255,255,255,0.15)" : "rgba(71,85,105,0.4)", borderRadius: 5, padding: "1px 5px", fontSize: 10 }}>
+                      {count}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Content */}
+          {!txHistoryLoaded && txHistoryLoading && (
+            <div style={{ textAlign: "center", padding: "22px 0", color: "#475569", fontSize: 12 }}>⏳ Загрузка...</div>
+          )}
+
+          {txHistoryLoaded && txTab === "deposits" && (
+            txHistory.deposits.length === 0 ? (
+              <div style={{ textAlign: "center", color: "#475569", padding: "18px 0", fontSize: 12 }}>Пополнений ещё не было</div>
             ) : (
               <div>
-                {depositHistory.map((d, i) => {
+                {txHistory.deposits.map((d, i) => {
                   const isOk      = d.status === "completed";
                   const isPending = d.status === "pending" || d.status === "processing";
-                  const statusColor = isOk ? "#4ade80" : isPending ? "#fbbf24" : "#94a3b8";
-                  const statusLabel = isOk ? "Успешно" : isPending ? "В обработке" : d.status;
-                  const statusBg    = isOk ? "rgba(34,197,94,0.12)" : isPending ? "rgba(251,191,36,0.12)" : "rgba(100,116,139,0.12)";
-                  const statusBorder = isOk ? "rgba(34,197,94,0.3)" : isPending ? "rgba(251,191,36,0.3)" : "rgba(100,116,139,0.2)";
+                  const isRejected = !isOk && !isPending;
+                  const statusColor  = isOk ? "#4ade80" : isPending ? "#fbbf24" : "#f87171";
+                  const statusLabel  = isOk ? "✅ Успешно" : isPending ? "⏳ В обработке" : "❌ Отклонено";
+                  const statusBg     = isOk ? "rgba(34,197,94,0.12)" : isPending ? "rgba(251,191,36,0.12)" : "rgba(248,113,113,0.12)";
+                  const statusBorder = isOk ? "rgba(34,197,94,0.3)"  : isPending ? "rgba(251,191,36,0.3)"  : "rgba(248,113,113,0.3)";
+                  void isRejected;
                   return (
-                    <div key={d.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: i < depositHistory.length - 1 ? "1px solid rgba(34,211,238,0.08)" : "none" }}>
-                      {/* Icon */}
-                      <div style={{ width: 34, height: 34, borderRadius: "50%", background: "rgba(34,211,238,0.1)", border: "1px solid rgba(34,211,238,0.2)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, flexShrink: 0 }}>
-                        💎
-                      </div>
-                      {/* Info */}
+                    <div key={d.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: i < txHistory.deposits.length - 1 ? "1px solid rgba(34,211,238,0.07)" : "none" }}>
+                      <div style={{ width: 34, height: 34, borderRadius: "50%", background: "rgba(34,211,238,0.1)", border: "1px solid rgba(34,211,238,0.2)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, flexShrink: 0 }}>💎</div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 14, fontWeight: 800, color: "#e2e8f0" }}>
-                          +{d.tonAmount != null ? d.tonAmount.toFixed(4) : "—"} TON
+                          +{d.tonAmount != null ? Number(d.tonAmount).toFixed(4) : "—"} TON
                         </div>
                         {d.txHash && (
-                          <div style={{ fontSize: 9, color: "#334155", fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 160 }}>
-                            tx: {d.txHash.slice(0, 24)}…
+                          <div style={{ fontSize: 9, color: "#334155", fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 150 }}>
+                            tx: {d.txHash.slice(0, 22)}…
                           </div>
                         )}
                         <div style={{ fontSize: 10, color: "#475569", marginTop: 1 }}>
-                          {new Date(d.createdAt).toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                          {new Date(d.createdAt).toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" })}
                         </div>
                       </div>
-                      {/* Status badge */}
-                      <div style={{ background: statusBg, border: `1px solid ${statusBorder}`, borderRadius: 8, padding: "4px 10px", flexShrink: 0 }}>
-                        <div style={{ fontSize: 11, fontWeight: 800, color: statusColor, whiteSpace: "nowrap" }}>{statusLabel}</div>
+                      <div style={{ background: statusBg, border: `1px solid ${statusBorder}`, borderRadius: 8, padding: "3px 9px", flexShrink: 0 }}>
+                        <div style={{ fontSize: 10, fontWeight: 800, color: statusColor, whiteSpace: "nowrap" }}>{statusLabel}</div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )
+          )}
+
+          {txHistoryLoaded && txTab === "withdrawals" && (
+            txHistory.withdrawals.length === 0 ? (
+              <div style={{ textAlign: "center", color: "#475569", padding: "18px 0", fontSize: 12 }}>Выводов ещё не было</div>
+            ) : (
+              <div>
+                {txHistory.withdrawals.map((w, i) => {
+                  const isOk      = w.status === "completed" || w.status === "approved";
+                  const isPending = w.status === "pending" || w.status === "processing";
+                  const statusColor  = isOk ? "#4ade80" : isPending ? "#fbbf24" : "#f87171";
+                  const statusLabel  = isOk ? "✅ Успешно" : isPending ? "⏳ В обработке" : "❌ Отклонено";
+                  const statusBg     = isOk ? "rgba(34,197,94,0.12)" : isPending ? "rgba(251,191,36,0.12)" : "rgba(248,113,113,0.12)";
+                  const statusBorder = isOk ? "rgba(34,197,94,0.3)"  : isPending ? "rgba(251,191,36,0.3)"  : "rgba(248,113,113,0.3)";
+                  return (
+                    <div key={w.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: i < txHistory.withdrawals.length - 1 ? "1px solid rgba(22,163,74,0.07)" : "none" }}>
+                      <div style={{ width: 34, height: 34, borderRadius: "50%", background: "rgba(22,163,74,0.1)", border: "1px solid rgba(22,163,74,0.2)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, flexShrink: 0 }}>💸</div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 14, fontWeight: 800, color: "#e2e8f0" }}>
+                          −{w.tonAmount != null ? Number(w.tonAmount).toFixed(4) : "—"} TON
+                        </div>
+                        {w.address && (
+                          <div style={{ fontSize: 9, color: "#334155", fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 150 }}>
+                            → {w.address.slice(0, 10)}…{w.address.slice(-6)}
+                          </div>
+                        )}
+                        <div style={{ fontSize: 10, color: "#475569", marginTop: 1 }}>
+                          {new Date(w.createdAt).toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                        </div>
+                      </div>
+                      <div style={{ background: statusBg, border: `1px solid ${statusBorder}`, borderRadius: 8, padding: "3px 9px", flexShrink: 0 }}>
+                        <div style={{ fontSize: 10, fontWeight: 800, color: statusColor, whiteSpace: "nowrap" }}>{statusLabel}</div>
                       </div>
                     </div>
                   );

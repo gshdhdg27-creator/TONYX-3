@@ -13,7 +13,7 @@
   },
   "crons": [
     {
-      "path": "/api/mini/wallet/scan",
+      "path": "/api/cron/scan-deposits",
       "schedule": "* * * * *"
     }
   ]

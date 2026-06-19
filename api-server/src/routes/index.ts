@@ -12,9 +12,12 @@ import adminRouter from "./admin.js";
 import pricesRouter from "./prices.js";
 import miniRouter from "./mini/index.js";
 import webhooksRouter from "./webhooks.js";
+import cronRouter from "./cron.js";
 
 const router: IRouter = Router();
 
+// Cron routes have no auth middleware — protected by CRON_SECRET instead.
+router.use("/cron", cronRouter);
 router.use("/webhooks", webhooksRouter);
 router.use(healthRouter);
 router.use("/users", usersRouter);

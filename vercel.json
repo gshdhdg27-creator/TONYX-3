@@ -10,5 +10,11 @@
     "api/server.ts": {
       "maxDuration": 30
     }
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/mini/wallet/scan",
+      "schedule": "* * * * *"
+    }
+  ]
 }

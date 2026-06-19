@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import { usersTable, miniWithdrawalsTable, miniTopupRequestsTable } from "@workspace/db/schema";
 import { notifyUser } from "../../services/botNotify.js";
+import { scanOnce } from "../../services/depositScanner.js";
 import { eq, desc, and } from "drizzle-orm";
 import { mnemonicToWalletKey } from "@ton/crypto";
 import { WalletContractV4, TonClient, internal, toNano } from "@ton/ton";
@@ -396,6 +397,41 @@ router.get("/deposits/:telegramId", async (req, res) => {
   } catch (e) {
     console.error("[Wallet] GET /deposits error:", e);
     res.status(500).json({ error: "Ошибка базы данных" });
+  }
+});
+
+/* ─────────────────────────────────────────────────────────
+   POST /scan — Vercel Cron trigger for deposit scanning.
+   Vercel calls this endpoint on a schedule defined in vercel.json.
+   Protected by Bearer token: Authorization: Bearer <CRON_SECRET>
+───────────────────────────────────────────────────────── */
+router.post("/scan", async (req, res) => {
+  const cronSecret = process.env.CRON_SECRET;
+
+  if (!cronSecret) {
+    console.warn("[Wallet] /scan called but CRON_SECRET is not set — denying");
+    res.status(503).json({ error: "Cron not configured on this server" });
+    return;
+  }
+
+  const authHeader = req.headers["authorization"] ?? "";
+  if (authHeader !== `Bearer ${cronSecret}`) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  const startedAt = Date.now();
+  console.log("[Wallet] /scan triggered by cron");
+
+  try {
+    await scanOnce();
+    const ms = Date.now() - startedAt;
+    console.log(`[Wallet] /scan completed in ${ms}ms`);
+    res.json({ ok: true, durationMs: ms });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error("[Wallet] /scan error:", msg);
+    res.status(500).json({ error: msg });
   }
 });
 

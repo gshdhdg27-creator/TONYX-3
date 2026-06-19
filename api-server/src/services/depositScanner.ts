@@ -123,8 +123,8 @@ async function creditUser(
   );
 }
 
-/** Single scan pass */
-async function scanOnce(): Promise<void> {
+/** Single scan pass — exported so the cron endpoint can trigger it directly */
+export async function scanOnce(): Promise<void> {
   try {
     const txs = await fetchRecentTxs();
     if (!txs.length) return;

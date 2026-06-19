@@ -1,0 +1,66 @@
+Ты работаешь над TONYX — Telegram Mini App на TON блокчейне. 
+Проект уже полностью рабочий. Вот всё что тебе нужно знать:
+
+## СТЕК
+- Frontend: React 19 + Vite (mini-app/, порт 5000)
+- Backend: Express 5 + Node.js (api-server/, порт 3001)
+- БД: Drizzle ORM + Neon PostgreSQL
+- Деплой: Vercel (serverless) + GitHub
+- Монорепо: pnpm workspaces
+
+## СТРУКТУРА
+mini-app/src/         — React фронтенд
+api-server/src/       — Express бэкенд
+db/src/index.ts       — подключение к БД (Neon)
+db/src/schema/        — Drizzle схемы таблиц
+api/server.mjs        — Vercel serverless бандл (генерируется при build)
+vercel.json           — деплой конфиг
+scripts/bundle-api.mjs — скрипт сборки Vercel бандла
+
+## БАЗА ДАННЫХ
+- Продакшен: Neon PostgreSQL (NEON_DATABASE_URL в Replit Secrets и Vercel env vars)
+- Локально: тот же Neon (NEON_DATABASE_URL приоритетнее DATABASE_URL)
+- 16 таблиц: users, mini_market_orders, mini_withdrawals, mini_topup_requests, и др.
+- Реальные пользователи: 4 записи, включая admin (telegramId: 7257793582, Hginvest)
+
+## VERCEL ДЕПЛОЙ
+- buildCommand: pnpm install && node scripts/bundle-api.mjs && pnpm build mini-app
+- Бандл собирается в api/server.mjs (esbuild, ~4.4MB)
+- Реврайт: /api/:path* → /api/server
+- maxDuration: 30 секунд для функции
+- ОБЯЗАТЕЛЬНО в Vercel env vars: NEON_DATABASE_URL
+
+## ТОКЕНОМИКА
+- Только TON + TONYX (не coins/pts)
+- Mining screen с boost modal
+- P2P рынок блокирован до продажи 1M TONYX (уже продано 1M — рынок активен)
+- Вывод: минимум 1 TON, комиссия 5%
+
+## ADMIN ПАНЕЛЬ
+- URL: /admin
+- Доступ: telegramId === "7257793582" (OWNER_ID)
+- Авторизация через X-Admin-Id заголовок (НЕ через Telegram WebApp initData)
+- Endpoint: /api/mini/admin/* (bypass telegramAuthMiddleware)
+- Функции: статистика, пользователи, топапы, выводы, форс-вин, блокировка юзеров
+
+## ВАЖНЫЕ РЕШЕНИЯ
+- telegramAuthMiddleware НЕ применяется к /admin/* маршрутам (своя авторизация)
+- Приложение ТОЛЬКО в Telegram — вне Telegram показывает экран "Откройте в Telegram"
+- Нет тестовых аккаунтов (dev_user/99999999 удалён)
+- DB подключение ленивое (no eager connection test при старте — важно для cold start)
+- Header: position:fixed top-right, toncoin.png круглая иконка
+
+## ЧТО СДЕЛАНО В ПОСЛЕДНЕЙ СЕССИИ
+1. Удалён dev_user (id: 99999999) — нет тестовых аккаунтов
+2. Подключён Neon DB через NEON_DATABASE_URL
+3. Исправлены 500 ошибки в admin панели (bypass telegramAuthMiddleware для /admin)
+4. Vercel: бандл идёт напрямую в api/server.mjs (не через api/server.ts → _bundled.mjs)
+5. Убран eager connection test (быстрый cold start)
+6. maxDuration: 30 в vercel.json
+
+## КАК ЗАПУСТИТЬ ЛОКАЛЬНО
+Workflows уже настроены:
+- "Backend API" — запускает api-server на :3001
+- "Start application" — запускает mini-app на :5000
+
+Для деплоя: git push origin main → Vercel автодеплой

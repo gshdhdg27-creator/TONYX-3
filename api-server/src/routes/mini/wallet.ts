@@ -12,6 +12,11 @@ const MIN_WITHDRAWAL_TON = 0.1;
 const COMMISSION_PCT = 0.05;
 const PROJECT_WALLET = process.env.PROJECT_WALLET_ADDRESS ?? "UQA8d39yaqa-CGw6BUCQw6U3LGelzpS3GxFaVwVDY3BnCDwe";
 
+// Per-user withdrawal lock — prevents concurrent /withdraw requests for the
+// same telegramId from both passing the balance check before either commits.
+// Node.js is single-threaded, so a Set is safe as a process-level mutex.
+const _withdrawalInProgress = new Set<string>();
+
 function isValidTonAddress(addr: string): boolean {
   const cleaned = addr.trim();
   return /^[EUk][Qq][\w\-+/]{46,48}$/.test(cleaned) || /^0:[0-9a-fA-F]{64}$/.test(cleaned);
@@ -97,7 +102,12 @@ router.post("/withdraw", async (req, res) => {
   }
 
   const amount = Number(tonAmount);
-  if (isNaN(amount) || amount < MIN_WITHDRAWAL_TON) {
+  // Explicit guard: amount must be strictly positive and at least MIN
+  if (!isFinite(amount) || amount <= 0) {
+    res.status(400).json({ error: "Некорректная сумма вывода" });
+    return;
+  }
+  if (amount < MIN_WITHDRAWAL_TON) {
     res.status(400).json({ error: `Минимальная сумма вывода: ${MIN_WITHDRAWAL_TON} TON` });
     return;
   }
@@ -105,6 +115,14 @@ router.post("/withdraw", async (req, res) => {
     res.status(400).json({ error: "Максимум за один вывод: 10 000 TON" });
     return;
   }
+
+  // Anti-spam / race-condition guard: one withdrawal at a time per user.
+  const userKey = String(telegramId);
+  if (_withdrawalInProgress.has(userKey)) {
+    res.status(429).json({ error: "Предыдущий запрос на вывод ещё обрабатывается. Подождите." });
+    return;
+  }
+  _withdrawalInProgress.add(userKey);
 
   const cleanAddress = String(address).trim();
   if (!isValidTonAddress(cleanAddress)) {
@@ -216,6 +234,9 @@ router.post("/withdraw", async (req, res) => {
   } catch (e) {
     console.error("[Wallet] POST /withdraw error:", e);
     res.status(500).json({ error: "Ошибка базы данных" });
+  } finally {
+    // Always release the lock so the user can retry after an error.
+    _withdrawalInProgress.delete(userKey);
   }
 });
 

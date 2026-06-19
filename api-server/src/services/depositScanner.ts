@@ -17,6 +17,10 @@ const PROJECT_WALLET =
 const SCAN_INTERVAL_MS = 30_000; // 30 seconds
 const MIN_TON = 0.05;            // ignore dust
 
+// Concurrency guard — prevents two scanOnce() calls from running at the same
+// time within the same process (background timer + cron endpoint overlap).
+let _scanLock = false;
+
 interface TonApiTx {
   hash: string;
   lt: string | number;
@@ -75,7 +79,11 @@ async function isAlreadyProcessed(txKey: string): Promise<boolean> {
   return rows.length > 0;
 }
 
-/** Credit user and record the transaction */
+/** Credit user and record the transaction.
+ *  Second-guard: re-checks txKey inside a try/catch so that if a
+ *  concurrent process (cross-Vercel-instance) already inserted the same
+ *  txHash, the DB unique-violation error is caught and we bail out safely.
+ */
 async function creditUser(
   telegramId: string,
   receivedTon: number,
@@ -93,22 +101,43 @@ async function creditUser(
     return;
   }
 
+  // Second guard — re-verify txKey hasn't been inserted between our first
+  // check and now (covers cross-process races on Vercel serverless).
+  const doubleCheck = await isAlreadyProcessed(txKey);
+  if (doubleCheck) {
+    console.warn(`[DepositScanner] txKey already processed (double-check): ${txKey}`);
+    return;
+  }
+
   const newTon = parseFloat((Number(user.ton ?? 0) + receivedTon).toFixed(8));
 
+  try {
+    // Insert the record FIRST — if this throws a unique-constraint error from
+    // a concurrent insert, we catch it and skip the balance update.
+    await db.insert(miniTopupRequestsTable).values({
+      telegramId,
+      tonAmount: String(receivedTon),
+      memo,
+      txBoc: null,
+      txHash: txKey,
+      walletAddress: null,
+      status: "completed",
+    });
+  } catch (insertErr: unknown) {
+    // Unique-constraint violation (another concurrent process beat us to it).
+    const msg = insertErr instanceof Error ? insertErr.message : String(insertErr);
+    if (msg.includes("unique") || msg.includes("duplicate") || msg.includes("23505")) {
+      console.warn(`[DepositScanner] Concurrent insert detected for txKey=${txKey}, skipping.`);
+      return;
+    }
+    throw insertErr; // Re-throw unrelated errors
+  }
+
+  // Balance update only after the record is safely committed.
   await db
     .update(usersTable)
     .set({ ton: String(newTon), updatedAt: new Date() })
     .where(eq(usersTable.telegramId, telegramId));
-
-  await db.insert(miniTopupRequestsTable).values({
-    telegramId,
-    tonAmount: String(receivedTon),
-    memo,
-    txBoc: null,
-    txHash: txKey,
-    walletAddress: null,
-    status: "completed",
-  });
 
   console.log(
     `[DepositScanner] ✅ Credited ${receivedTon} TON → ${telegramId} (txKey=${txKey})`,
@@ -123,8 +152,16 @@ async function creditUser(
   );
 }
 
-/** Single scan pass — exported so the cron endpoint can trigger it directly */
+/** Single scan pass — exported so the cron endpoint can trigger it directly.
+ *  Protected by _scanLock to prevent concurrent runs within the same process
+ *  (e.g. background timer fires while cron endpoint is still running).
+ */
 export async function scanOnce(): Promise<void> {
+  if (_scanLock) {
+    console.warn("[DepositScanner] scanOnce skipped — previous scan still running");
+    return;
+  }
+  _scanLock = true;
   try {
     const txs = await fetchRecentTxs();
     if (!txs.length) return;
@@ -148,6 +185,8 @@ export async function scanOnce(): Promise<void> {
     }
   } catch (e) {
     console.error("[DepositScanner] scanOnce error:", e);
+  } finally {
+    _scanLock = false;
   }
 }
 

@@ -222,7 +222,7 @@ export default function ProfilePage() {
     if (!telegramId || txHistoryLoading) return;
     setTxHistoryLoading(true);
     try {
-      const r = await fetch(`/api/mini/wallet/history?telegramId=${telegramId}`);
+      const r = await fetch(`/api/mini/wallet/history/${telegramId}`);
       if (r.ok) {
         const d = await r.json() as { deposits?: DepositHistoryItem[]; withdrawals?: WithdrawalHistoryItem[] };
         setTxHistory({ deposits: d.deposits ?? [], withdrawals: d.withdrawals ?? [] });
@@ -231,8 +231,6 @@ export default function ProfilePage() {
     } catch { /* ignore */ }
     finally { setTxHistoryLoading(false); }
   };
-
-  useEffect(() => { if (telegramId) void loadTxHistory(); }, [telegramId]);
 
   const submitWithdraw = async () => {
     if (!telegramId) return;
@@ -632,50 +630,65 @@ export default function ProfilePage() {
         <div style={{ background: "rgba(17,24,39,0.95)", border: "1px solid rgba(59,130,246,0.25)", borderRadius: 18, padding: 16 }}>
 
           {/* Header */}
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-            <div style={{ fontSize: 13, fontWeight: 800, color: "#e2e8f0", letterSpacing: "0.06em" }}>📊 ИСТОРИЯ ТРАНЗАКЦИЙ</div>
-            <button
-              onClick={() => void loadTxHistory()}
-              disabled={txHistoryLoading}
-              style={{ padding: "4px 10px", borderRadius: 7, border: "1px solid rgba(59,130,246,0.3)", background: "rgba(59,130,246,0.08)", color: "#60a5fa", fontSize: 11, fontWeight: 700, fontFamily: "inherit", cursor: txHistoryLoading ? "not-allowed" : "pointer", opacity: txHistoryLoading ? 0.5 : 1 }}
-            >
-              {txHistoryLoading ? "⏳" : "🔄"}
-            </button>
-          </div>
-
-          {/* Tabs */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 14 }}>
-            {(["deposits", "withdrawals"] as const).map(tab => {
-              const isActive = txTab === tab;
-              const label    = tab === "deposits" ? "💎 Депозиты" : "💸 Выводы";
-              const count    = tab === "deposits" ? txHistory.deposits.length : txHistory.withdrawals.length;
-              return (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: txHistoryLoaded ? 14 : 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 800, color: "#e2e8f0", letterSpacing: "0.06em" }}>📊 ИСТОРИЯ ОПЕРАЦИЙ</div>
+            <div style={{ display: "flex", gap: 6 }}>
+              {!txHistoryLoaded && (
                 <button
-                  key={tab}
-                  onClick={() => { haptic("light"); setTxTab(tab); }}
-                  style={{
-                    padding: "9px 0", borderRadius: 10, fontFamily: "inherit",
-                    border: `1px solid ${isActive ? (tab === "deposits" ? "rgba(34,211,238,0.5)" : "rgba(34,197,94,0.5)") : "rgba(30,58,143,0.3)"}`,
-                    background: isActive
-                      ? (tab === "deposits" ? "rgba(14,116,144,0.22)" : "rgba(22,163,74,0.18)")
-                      : "rgba(17,24,39,0.6)",
-                    color: isActive ? (tab === "deposits" ? "#22d3ee" : "#4ade80") : "#475569",
-                    fontSize: 13, fontWeight: 700, cursor: "pointer",
-                    transition: "all 0.15s",
-                  }}
+                  onClick={() => { haptic("light"); void loadTxHistory(); }}
+                  disabled={txHistoryLoading}
+                  style={{ padding: "5px 13px", borderRadius: 8, border: "1px solid rgba(59,130,246,0.4)", background: "rgba(59,130,246,0.12)", color: "#60a5fa", fontSize: 12, fontWeight: 700, fontFamily: "inherit", cursor: txHistoryLoading ? "not-allowed" : "pointer", opacity: txHistoryLoading ? 0.6 : 1 }}
                 >
-                  {label}
-                  {txHistoryLoaded && count > 0 && (
-                    <span style={{ marginLeft: 5, background: isActive ? "rgba(255,255,255,0.15)" : "rgba(71,85,105,0.4)", borderRadius: 5, padding: "1px 5px", fontSize: 10 }}>
-                      {count}
-                    </span>
-                  )}
+                  {txHistoryLoading ? "⏳ Загрузка..." : "📜 Показать"}
                 </button>
-              );
-            })}
+              )}
+              {txHistoryLoaded && (
+                <button
+                  onClick={() => { haptic("light"); void loadTxHistory(); }}
+                  disabled={txHistoryLoading}
+                  style={{ padding: "4px 10px", borderRadius: 7, border: "1px solid rgba(59,130,246,0.3)", background: "rgba(59,130,246,0.08)", color: "#60a5fa", fontSize: 11, fontWeight: 700, fontFamily: "inherit", cursor: txHistoryLoading ? "not-allowed" : "pointer", opacity: txHistoryLoading ? 0.5 : 1 }}
+                >
+                  {txHistoryLoading ? "⏳" : "🔄 Обновить"}
+                </button>
+              )}
+            </div>
           </div>
 
-          {/* Content */}
+          {/* Tabs — shown only after first load */}
+          {txHistoryLoaded && (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 14, marginTop: 14 }}>
+              {(["deposits", "withdrawals"] as const).map(tab => {
+                const isActive = txTab === tab;
+                const label    = tab === "deposits" ? "📥 Депозиты" : "📤 Выводы";
+                const count    = tab === "deposits" ? txHistory.deposits.length : txHistory.withdrawals.length;
+                return (
+                  <button
+                    key={tab}
+                    onClick={() => { haptic("light"); setTxTab(tab); }}
+                    style={{
+                      padding: "9px 0", borderRadius: 10, fontFamily: "inherit",
+                      border: `1px solid ${isActive ? (tab === "deposits" ? "rgba(34,211,238,0.5)" : "rgba(34,197,94,0.5)") : "rgba(30,58,143,0.3)"}`,
+                      background: isActive
+                        ? (tab === "deposits" ? "rgba(14,116,144,0.22)" : "rgba(22,163,74,0.18)")
+                        : "rgba(17,24,39,0.6)",
+                      color: isActive ? (tab === "deposits" ? "#22d3ee" : "#4ade80") : "#475569",
+                      fontSize: 13, fontWeight: 700, cursor: "pointer",
+                      transition: "all 0.15s",
+                    }}
+                  >
+                    {label}
+                    {count > 0 && (
+                      <span style={{ marginLeft: 5, background: isActive ? "rgba(255,255,255,0.15)" : "rgba(71,85,105,0.4)", borderRadius: 5, padding: "1px 5px", fontSize: 10 }}>
+                        {count}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Loading spinner */}
           {!txHistoryLoaded && txHistoryLoading && (
             <div style={{ textAlign: "center", padding: "22px 0", color: "#475569", fontSize: 12 }}>⏳ Загрузка...</div>
           )}

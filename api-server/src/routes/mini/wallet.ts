@@ -374,6 +374,48 @@ router.get("/history", async (req, res) => {
   }
 });
 
+/* ─── GET /history/:telegramId — route-param version (used by frontend) ─── */
+router.get("/history/:telegramId", async (req, res) => {
+  const { telegramId } = req.params;
+
+  try {
+    const [deps, wds] = await Promise.all([
+      db.select().from(miniTopupRequestsTable)
+        .where(eq(miniTopupRequestsTable.telegramId, telegramId))
+        .orderBy(desc(miniTopupRequestsTable.createdAt))
+        .limit(10),
+      db.select().from(miniWithdrawalsTable)
+        .where(eq(miniWithdrawalsTable.telegramId, telegramId))
+        .orderBy(desc(miniWithdrawalsTable.createdAt))
+        .limit(10),
+    ]);
+
+    res.json({
+      deposits: deps.map(d => ({
+        id:        d.id,
+        type:      "deposit" as const,
+        tonAmount: d.tonAmount ? Number(d.tonAmount) : null,
+        memo:      d.memo   ?? null,
+        txHash:    d.txHash ?? null,
+        status:    d.status,
+        createdAt: d.createdAt.toISOString(),
+      })),
+      withdrawals: wds.map(w => ({
+        id:        w.id,
+        type:      "withdrawal" as const,
+        tonAmount: w.tonAmount ? Number(w.tonAmount) : null,
+        address:   w.address   ?? null,
+        txHash:    w.txHash    ?? null,
+        status:    w.status,
+        createdAt: w.createdAt.toISOString(),
+      })),
+    });
+  } catch (e) {
+    console.error("[Wallet] GET /history/:telegramId error:", e);
+    res.status(500).json({ error: "Ошибка базы данных" });
+  }
+});
+
 /* ─── GET /deposits/:telegramId ─── */
 router.get("/deposits/:telegramId", async (req, res) => {
   const { telegramId } = req.params;

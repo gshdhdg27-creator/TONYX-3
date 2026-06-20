@@ -429,7 +429,7 @@ export default function HomePage() {
         </div>
 
         {/* ─── Rate bar + BOOST ─── */}
-        <div style={{
+        <div data-tour="home-mining" style={{
           display: "flex", alignItems: "center", justifyContent: "space-between",
           background: "rgba(15,23,42,0.7)", border: "1px solid rgba(0,162,255,0.12)",
           borderRadius: 14, padding: "10px 14px", marginBottom: 20,

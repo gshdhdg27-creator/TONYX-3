@@ -1859,7 +1859,7 @@ export default function GamesPage() {
         </div>
       </div>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      <div data-tour="games-section" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
         {GAME_CARDS.map((card, i) => (
           <GameCard
             key={card.id}

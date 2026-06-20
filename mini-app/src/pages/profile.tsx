@@ -774,7 +774,7 @@ export default function ProfilePage() {
       </div>
 
       {/* ─── INVITE CARD (always visible) ─── */}
-      <div style={{ background: "rgba(17,24,39,0.9)", border: "1px solid rgba(168,85,247,0.25)", borderRadius: 18, padding: 16, marginBottom: 14 }}>
+      <div data-tour="profile-referral" style={{ background: "rgba(17,24,39,0.9)", border: "1px solid rgba(168,85,247,0.25)", borderRadius: 18, padding: 16, marginBottom: 14 }}>
         <div style={{ fontSize: 13, fontWeight: 800, color: "#c084fc", marginBottom: 4 }}>👥 Пригласить друзей</div>
         <div style={{ fontSize: 11, color: "#94a3b8", marginBottom: 12, lineHeight: 1.6 }}>
           Получай <b style={{ color: "#c084fc" }}>10%</b> от TON-наград каждого приглашённого навсегда.

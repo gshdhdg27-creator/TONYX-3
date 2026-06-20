@@ -52,12 +52,11 @@ const CSS = `
     50%{transform:translateY(-4px) rotateZ(.4deg)}
   }
 
-  .rk-emoji{
-    font-size:100px;line-height:1;
+  .rk-img{
+    width:140px;height:auto;display:block;
     filter:drop-shadow(0 0 20px rgba(94,200,255,.7));
-    display:block;
   }
-  .rk-launch .rk-emoji{animation:rkGlow 3.3s cubic-bezier(.45,0,.4,1) forwards;}
+  .rk-launch .rk-img{animation:rkGlow 3.3s cubic-bezier(.45,0,.4,1) forwards;}
   @keyframes rkGlow{
     0%{filter:drop-shadow(0 0 20px rgba(94,200,255,.7))}
     78%{filter:drop-shadow(0 0 38px rgba(160,215,255,1))}
@@ -136,7 +135,7 @@ export function RocketScene({ onDone }: { onDone: () => void }) {
     const t2 = setTimeout(() => setPhase("acc"), 1400);
     const t3 = setTimeout(() => { setPhase("boost"); setSceneGlow(true); }, 2400);
     const t4 = setTimeout(() => setWhiteout(true), 3400);
-    const t5 = setTimeout(() => onDone(), 4200);
+    const t5 = setTimeout(() => onDone(), 4400);
     return () => [t1, t2, t3, t4, t5].forEach(clearTimeout);
   }, [onDone]);
 
@@ -162,7 +161,7 @@ export function RocketScene({ onDone }: { onDone: () => void }) {
 
         <div className={`rk-rocket rk-${rocketPhase}`}>
           <div className="rk-rocket-inner">
-            <span className="rk-emoji">🚀</span>
+            <img src="/rocket.png" className="rk-img" alt="rocket" />
             <div className="rk-flame" />
           </div>
         </div>

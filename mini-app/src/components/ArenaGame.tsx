@@ -195,7 +195,7 @@ export default function ArenaGame({
   const [joinInput, setJoinInput] = useState("0.5");
   const [increaseAmt, setIncreaseAmt] = useState(0.5);
   const [increaseInput, setIncreaseInput] = useState("0.5");
-  const [showIncreasePanel, setShowIncreasePanel] = useState(false);
+  const [showIncreasePanel, setShowIncreasePanel] = useState(true);
 
   const [busy, setBusy] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
@@ -429,7 +429,7 @@ export default function ArenaGame({
         const dy  = tgt.y - pos.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
 
-        if (dist < 2) {
+        if (dist < 1.2) {
           ballStoppedRef.current = true;
           ballVelRef.current = { vx: 0, vy: 0 };
           place(tgt.x, tgt.y);
@@ -440,8 +440,14 @@ export default function ArenaGame({
           return;
         }
 
-        vx = dx * 0.10;
-        vy = dy * 0.10;
+        // Smooth physical deceleration: scales with distance so ball
+        // rushes in from far, then creeps to a precise stop on sector.
+        const attractElapsed = elapsed - ATTRACT_MS;
+        const rampIn = Math.min(1, attractElapsed / 500);   // 0→1 over 500ms
+        const distFactor = Math.min(0.14, dist / 260);       // far=fast, close=slow
+        const pullFactor = Math.max(0.014, distFactor * rampIn);
+        vx = dx * pullFactor;
+        vy = dy * pullFactor;
         ballVelRef.current = { vx, vy };
         place(pos.x + vx, pos.y + vy);
         rafRef.current = requestAnimationFrame(step);
@@ -560,7 +566,6 @@ export default function ArenaGame({
       handleUpdate(d);
       onBalanceChange();
       flash(`+${increaseAmt} TON к ставке`, "success");
-      setShowIncreasePanel(false);
     } catch { flash("Ошибка сети", "error"); }
     finally { setBusy(false); }
   };
@@ -798,14 +803,17 @@ export default function ArenaGame({
               <svg width={SQ} height={SQ} style={{ position: "absolute", inset: 0, display: "block" }}>
                 <rect x={0} y={0} width={SQ} height={SQ} fill="#111827" />
 
-                {players.length > 0 && sectors.map(s => (
+                {players.length === 1 ? (
+                  /* Bug 3 fix: single player gets a solid fill rect — no seam/gap */
+                  <rect x={0} y={0} width={SQ} height={SQ} fill={col(0)} opacity={0.92} />
+                ) : players.length > 1 ? sectors.map(s => (
                   <polygon
                     key={s.player.telegramId}
                     points={s.points}
                     fill={s.color}
                     opacity={0.92}
                   />
-                ))}
+                )) : null}
 
                 {sectors.length >= 2 && sectors.map(s => {
                   const [ex, ey] = squarePoint(s.startDeg);
@@ -883,34 +891,21 @@ export default function ArenaGame({
           </div>
         </div>
 
-        {/* ── ACTION ROW ── */}
+        {/* ── ACTION ROW — stake badge ── */}
         <div style={{
           display: "flex", alignItems: "center", justifyContent: "flex-end",
           marginBottom: 10,
         }}>
           {isIn && myP ? (
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <div style={{
-                background: "#111827", border: "1px solid #1F2937",
-                borderRadius: 20, padding: "6px 14px",
-                display: "flex", alignItems: "center", gap: 5,
-              }}>
-                <span style={{ fontSize: 13 }}>▽</span>
-                <span style={{ fontSize: 14, fontWeight: 700, color: "#E5E7EB" }}>
-                  {fmtTON(myP.stake)}
-                </span>
-              </div>
-              {(arena?.status === "waiting" || arena?.status === "starting") && (
-                <button
-                  onClick={() => setShowIncreasePanel(v => !v)}
-                  style={{
-                    background: "#1D4ED8", border: "none", borderRadius: 10,
-                    width: 34, height: 34, cursor: "pointer",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    fontSize: 20, color: "#fff",
-                  }}
-                >+</button>
-              )}
+            <div style={{
+              background: "#111827", border: "1px solid #1F2937",
+              borderRadius: 20, padding: "6px 14px",
+              display: "flex", alignItems: "center", gap: 5,
+            }}>
+              <span style={{ fontSize: 13 }}>▽</span>
+              <span style={{ fontSize: 14, fontWeight: 700, color: "#E5E7EB" }}>
+                {fmtTON(myP.stake)} TON
+              </span>
             </div>
           ) : (
             <div style={{
@@ -924,57 +919,78 @@ export default function ArenaGame({
           )}
         </div>
 
-        {/* ── INCREASE STAKE PANEL ── */}
-        {isIn && showIncreasePanel && (arena?.status === "waiting" || arena?.status === "starting") && (
+        {/* ── INCREASE STAKE PANEL — always visible when in active round (Rule 1) ── */}
+        {isIn && (arena?.status === "waiting" || arena?.status === "starting") && (
           <div style={{
             background: "#0d1117", border: "1px solid #1D4ED855",
             borderRadius: 14, padding: "12px", marginBottom: 10,
             animation: "slideUp 0.2s ease",
           }}>
-            <div style={{ fontSize: 11, color: "#4B5563", fontWeight: 600, marginBottom: 8 }}>Добавить к ставке</div>
-            <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
-              {[0.1, 0.5, 1, 2, 5].map(v => (
-                <button
-                  key={v}
-                  onClick={() => setIncrease(v)}
-                  style={{
-                    flex: 1, padding: "8px 0", borderRadius: 8, border: "none",
-                    background: increaseAmt === v ? "#1D4ED8" : "#161B22",
-                    color: increaseAmt === v ? "#fff" : "#6B7280",
-                    fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
-                  }}
-                >+{v}</button>
-              ))}
-            </div>
-            <div style={{ position: "relative", marginBottom: 8 }}>
-              <input
-                value={increaseInput}
-                onChange={e => {
-                  setIncreaseInput(e.target.value);
-                  const v = parseFloat(e.target.value);
-                  if (!isNaN(v) && v > 0) setIncreaseAmt(Math.round(v * 1000) / 1000);
-                }}
-                placeholder="Своя сумма..."
-                type="number" step="0.1" min="0.1"
+            <div style={{
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              marginBottom: 8,
+            }}>
+              <div style={{ fontSize: 11, color: "#4B5563", fontWeight: 600 }}>💰 Добавить к ставке</div>
+              <button
+                onClick={() => setShowIncreasePanel(v => !v)}
                 style={{
-                  width: "100%", background: "#161B22",
-                  border: "1px solid #21262D", borderRadius: 8,
-                  padding: "9px 46px 9px 12px", color: "#E5E7EB",
-                  fontSize: 13, outline: "none", boxSizing: "border-box",
-                  fontFamily: "inherit",
+                  background: "none", border: "none", color: "#4B5563",
+                  fontSize: 12, cursor: "pointer", fontFamily: "inherit",
+                  padding: "2px 6px",
                 }}
-              />
-              <span style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", fontSize: 11, color: "#4B5563", fontWeight: 700 }}>TON</span>
+              >{showIncreasePanel ? "▲ скрыть" : "▼ показать"}</button>
             </div>
-            <button
-              onClick={increaseStake}
-              disabled={busy || increaseAmt <= 0 || increaseAmt > tonBalance}
-              style={{
-                width: "100%", padding: "11px", borderRadius: 10, border: "none",
-                background: busy || increaseAmt <= 0 || increaseAmt > tonBalance ? "#1F2937" : "linear-gradient(135deg,#1D4ED8,#3B82F6)",
-                color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
-              }}
-            >{busy ? "..." : `Добавить +${increaseAmt} TON`}</button>
+            {showIncreasePanel && (
+              <>
+                <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+                  {[0.1, 0.5, 1, 2, 5].map(v => (
+                    <button
+                      key={v}
+                      onClick={() => setIncrease(v)}
+                      style={{
+                        flex: 1, padding: "8px 0", borderRadius: 8, border: "none",
+                        background: increaseAmt === v ? "#1D4ED8" : "#161B22",
+                        color: increaseAmt === v ? "#fff" : "#6B7280",
+                        fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
+                      }}
+                    >+{v}</button>
+                  ))}
+                </div>
+                <div style={{ position: "relative", marginBottom: 8 }}>
+                  <input
+                    value={increaseInput}
+                    onChange={e => {
+                      setIncreaseInput(e.target.value);
+                      const v = parseFloat(e.target.value);
+                      if (!isNaN(v) && v > 0) setIncreaseAmt(Math.round(v * 1000) / 1000);
+                    }}
+                    placeholder="Своя сумма..."
+                    type="number" step="0.1" min="0.1"
+                    style={{
+                      width: "100%", background: "#161B22",
+                      border: "1px solid #21262D", borderRadius: 8,
+                      padding: "9px 46px 9px 12px", color: "#E5E7EB",
+                      fontSize: 13, outline: "none", boxSizing: "border-box",
+                      fontFamily: "inherit",
+                    }}
+                  />
+                  <span style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", fontSize: 11, color: "#4B5563", fontWeight: 700 }}>TON</span>
+                </div>
+                <button
+                  onClick={increaseStake}
+                  disabled={busy || increaseAmt <= 0 || increaseAmt > tonBalance}
+                  style={{
+                    width: "100%", padding: "12px", borderRadius: 10, border: "none",
+                    background: busy || increaseAmt <= 0 || increaseAmt > tonBalance
+                      ? "#1F2937"
+                      : "linear-gradient(135deg,#1D4ED8,#3B82F6)",
+                    color: "#fff", fontSize: 14, fontWeight: 700,
+                    cursor: busy || increaseAmt > tonBalance ? "not-allowed" : "pointer",
+                    fontFamily: "inherit",
+                  }}
+                >{busy ? "..." : `➕ Добавить ${increaseAmt} TON к ставке`}</button>
+              </>
+            )}
           </div>
         )}
 

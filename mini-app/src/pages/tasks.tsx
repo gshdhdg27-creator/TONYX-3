@@ -199,7 +199,7 @@ export default function TasksPage() {
       </div>
 
       {/* ── WATCH AD SECTION ── */}
-      <div style={{
+      <div data-tour="tasks-watchad" style={{
         background: "linear-gradient(135deg, rgba(30,58,143,0.35), rgba(37,99,235,0.15))",
         border: "1px solid rgba(96,165,250,0.3)",
         borderRadius: 18, padding: "16px 16px", marginBottom: 20,

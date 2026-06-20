@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Switch, Route, Router as WouterRouter } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { TonConnectUIProvider } from "@tonconnect/ui-react";
@@ -15,6 +15,9 @@ import AdminPage from "@/pages/admin";
 import { initTelegram, useTelegram } from "@/lib/telegram";
 import { LanguageProvider } from "@/lib/LanguageContext";
 import { useRegisterUser } from "@workspace/api-client-react";
+import { SplashScreen } from "@/components/SplashScreen";
+import { RocketScene } from "@/components/RocketScene";
+import { OnboardingTour } from "@/components/OnboardingTour";
 
 const MANIFEST_URL = typeof window !== "undefined"
   ? `${window.location.origin}/tonconnect-manifest.json`
@@ -172,13 +175,36 @@ function AppShell() {
   );
 }
 
+type AppStage = "splash" | "rocket" | "onboarding" | "app";
+
+const ONBOARD_KEY = "tonyx_onboarded_v1";
+
 function App() {
+  const [stage, setStage] = useState<AppStage>("splash");
+
+  const handleSplashDone = useCallback(() => {
+    const done = localStorage.getItem(ONBOARD_KEY);
+    setStage(done ? "app" : "rocket");
+  }, []);
+
+  const handleRocketDone = useCallback(() => {
+    setStage("onboarding");
+  }, []);
+
+  const handleOnboardDone = useCallback(() => {
+    localStorage.setItem(ONBOARD_KEY, "1");
+    setStage("app");
+  }, []);
+
   return (
     <TonConnectUIProvider manifestUrl={MANIFEST_URL}>
       <QueryClientProvider client={queryClient}>
         <LanguageProvider>
           <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-            <AppShell />
+            {stage === "splash" && <SplashScreen onDone={handleSplashDone} />}
+            {stage === "rocket" && <RocketScene onDone={handleRocketDone} />}
+            {stage === "onboarding" && <OnboardingTour onDone={handleOnboardDone} />}
+            {stage === "app" && <AppShell />}
           </WouterRouter>
         </LanguageProvider>
       </QueryClientProvider>

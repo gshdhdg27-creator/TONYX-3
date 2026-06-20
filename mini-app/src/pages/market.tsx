@@ -765,7 +765,7 @@ export default function MarketPage() {
       </div>
 
       {/* ── ORDERS LIST ── */}
-      <div style={{ padding: "0 16px" }}>
+      <div data-tour="market-orders" style={{ padding: "0 16px" }}>
         {ordersLoading && tab === "market" ? (
           <div style={{ textAlign: "center", color: "#334155", padding: "40px 0", fontSize: 13 }}>{m.loading}</div>
         ) : displayOrders.length === 0 ? (

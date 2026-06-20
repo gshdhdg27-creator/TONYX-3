@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { Switch, Route, Router as WouterRouter } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { TonConnectUIProvider } from "@tonconnect/ui-react";
@@ -175,25 +175,37 @@ function AppShell() {
   );
 }
 
-type AppStage = "splash" | "rocket" | "onboarding" | "app";
+type AppStage = "splash" | "rocket" | "app";
 
 const ONBOARD_KEY = "tonyx_onboarded_v1";
 
 function App() {
   const [stage, setStage] = useState<AppStage>("splash");
+  const [whiteOpacity, setWhiteOpacity] = useState<number | null>(null);
+  const [showTour, setShowTour] = useState(false);
+  const needsOnboarding = useRef<boolean>(!localStorage.getItem(ONBOARD_KEY));
 
   const handleSplashDone = useCallback(() => {
-    const done = localStorage.getItem(ONBOARD_KEY);
-    setStage(done ? "app" : "rocket");
+    setStage(needsOnboarding.current ? "rocket" : "app");
   }, []);
 
   const handleRocketDone = useCallback(() => {
-    setStage("onboarding");
+    setStage("app");
+    setWhiteOpacity(1);
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => setWhiteOpacity(0))
+    );
+  }, []);
+
+  const handleOverlayEnd = useCallback(() => {
+    setWhiteOpacity(null);
+    if (needsOnboarding.current) setShowTour(true);
   }, []);
 
   const handleOnboardDone = useCallback(() => {
     localStorage.setItem(ONBOARD_KEY, "1");
-    setStage("app");
+    needsOnboarding.current = false;
+    setShowTour(false);
   }, []);
 
   return (
@@ -203,8 +215,26 @@ function App() {
           <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
             {stage === "splash" && <SplashScreen onDone={handleSplashDone} />}
             {stage === "rocket" && <RocketScene onDone={handleRocketDone} />}
-            {stage === "onboarding" && <OnboardingTour onDone={handleOnboardDone} />}
-            {stage === "app" && <AppShell />}
+            {stage === "app" && (
+              <>
+                <AppShell />
+                {showTour && <OnboardingTour onDone={handleOnboardDone} />}
+                {whiteOpacity !== null && (
+                  <div
+                    style={{
+                      position: "fixed",
+                      inset: 0,
+                      zIndex: 9999,
+                      pointerEvents: "none",
+                      background: "radial-gradient(circle at 50% 55%, #fff 0%, #eaf6ff 45%, #bfe2ff 100%)",
+                      opacity: whiteOpacity,
+                      transition: "opacity 0.85s ease",
+                    }}
+                    onTransitionEnd={handleOverlayEnd}
+                  />
+                )}
+              </>
+            )}
           </WouterRouter>
         </LanguageProvider>
       </QueryClientProvider>

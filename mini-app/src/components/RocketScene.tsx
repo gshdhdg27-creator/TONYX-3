@@ -37,7 +37,12 @@ const CSS = `
     display:flex;flex-direction:column;align-items:center;
     user-select:none;
   }
-  .rk-rocket-inner{position:relative;display:inline-block;}
+  .rk-rocket-inner{
+    position:relative;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+  }
 
   .rk-idle .rk-rocket-inner{animation:rkJitter .16s ease-in-out infinite;}
   @keyframes rkJitter{
@@ -63,28 +68,39 @@ const CSS = `
     100%{filter:drop-shadow(0 0 50px rgba(220,238,255,1))}
   }
 
+  /* ⚠️ ИСПРАВЛЕНО: пламя теперь позиционируется абсолютно
+     относительно .rk-rocket-inner и "приклеено" точно к низу
+     картинки ракеты (bottom: 0), а не зависит от прозрачных
+     полей внутри самого PNG-файла. Если у вашей картинки
+     ракеты сопло расположено не вплотную к низу файла —
+     подвиньте flameOffset ниже под свою картинку. */
   .rk-flame{
-    width:28px;height:50px;margin-top:-12px;
+    position:absolute;
+    bottom:-2px;
+    left:50%;
+    transform:translateX(-50%);
+    width:28px;height:50px;
     background:radial-gradient(ellipse at 50% 0%,#fff 0%,#9fd9ff 22%,#2f8fe8 50%,rgba(47,143,232,0) 100%);
     border-radius:0 0 50% 50%;filter:blur(.5px);
     transform-origin:50% 0%;
+    z-index:-1;
   }
   .rk-idle .rk-flame{opacity:.7;animation:rkSputter .16s ease-in-out infinite;}
   @keyframes rkSputter{
-    0%{transform:scaleY(.55);opacity:.5}
-    50%{transform:scaleY(.85);opacity:.85}
-    100%{transform:scaleY(.5);opacity:.55}
+    0%{transform:translateX(-50%) scaleY(.55);opacity:.5}
+    50%{transform:translateX(-50%) scaleY(.85);opacity:.85}
+    100%{transform:translateX(-50%) scaleY(.5);opacity:.55}
   }
   .rk-launch .rk-flame{
     opacity:1;
     animation:rkFlicker .1s ease-in-out infinite alternate,rkFlameBoost 3.3s cubic-bezier(.45,0,.4,1) forwards;
   }
-  @keyframes rkFlicker{0%{transform:scaleY(1)}100%{transform:scaleY(1.18)}}
+  @keyframes rkFlicker{0%{transform:translateX(-50%) scaleY(1)}100%{transform:translateX(-50%) scaleY(1.18)}}
   @keyframes rkFlameBoost{
-    0%{transform:scaleY(1);opacity:1}
-    55%{transform:scaleY(1.5);opacity:1}
-    78%{transform:scaleY(2.8);opacity:1}
-    100%{transform:scaleY(3.6);opacity:.9}
+    0%{transform:translateX(-50%) scaleY(1);opacity:1}
+    55%{transform:translateX(-50%) scaleY(1.5);opacity:1}
+    78%{transform:translateX(-50%) scaleY(2.8);opacity:1}
+    100%{transform:translateX(-50%) scaleY(3.6);opacity:.9}
   }
 
   .rk-whiteout{

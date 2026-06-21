@@ -117,7 +117,13 @@ function AppShell() {
   }, [telegramId]);
 
   useEffect(() => {
-    if (!telegramId) return;
+    // ⚠️ ВРЕМЕННО ДЛЯ РАЗРАБОТКИ: если telegramId нет (открыто не в Telegram),
+    // не делаем запрос и сразу считаем blockStatus = "ok", чтобы не зависать на загрузке.
+    // Вернуть оригинальную строку "if (!telegramId) return;" перед публикацией.
+    if (!telegramId) {
+      setBlockStatus("ok");
+      return;
+    }
     fetch(`/api/mini/admin/user-status?telegramId=${telegramId}`)
       .then(r => r.json())
       .then((d: { status: string; bannedReason: string | null }) => {

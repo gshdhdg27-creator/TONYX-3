@@ -129,9 +129,11 @@ function AppShell() {
       .catch(() => setBlockStatus("ok"));
   }, [telegramId]);
 
-  if (!isInTelegram || !telegramId) {
-    return <TelegramOnlyScreen />;
-  }
+  // ⚠️ ВРЕМЕННО ОТКЛЮЧЕНО ДЛЯ РАЗРАБОТКИ — ОБЯЗАТЕЛЬНО ВЕРНУТЬ ПЕРЕД ЗАПУСКОМ В ПРОДАКШН!
+  // Эта проверка блокирует доступ вне Telegram. Раскомментировать перед публикацией.
+  // if (!isInTelegram || !telegramId) {
+  //   return <TelegramOnlyScreen />;
+  // }
 
   if (blockStatus === "banned") return <BannedScreen reason={bannedReason} />;
   if (blockStatus === "soft_deleted") return <SoftDeletedScreen />;

@@ -6,6 +6,7 @@ import FairnessModal, { type FairData } from "./FairnessModal";
 interface ArenaPlayer {
   telegramId: string;
   username: string | null;
+  photoUrl?: string | null;
   stake: number;
   chance: number;
 }
@@ -33,13 +34,11 @@ interface StatEntry {
 
 /* ── Constants ── */
 const ARENA_COLORS = [
-  "#5BE12C", "#FF4136", "#FF9F00", "#00C0FF",
-  "#B044FF", "#FFEB3B", "#FF69B4", "#00FFB2",
-  "#FF6E40", "#39CCCC",
+  "#FF6B6B", "#4ECDC4", "#FFE66D", "#A8E6CF",
+  "#B388FF", "#FF80AB", "#82B1FF", "#CCFF90",
+  "#FF9E80", "#80D8FF",
 ];
 const col = (i: number) => ARENA_COLORS[i % ARENA_COLORS.length];
-
-const QUICK_STAKES = [0.1, 0.5, 1, 2, 5, 10];
 
 /* ── Helpers ── */
 function pName(p: ArenaPlayer) {
@@ -55,12 +54,12 @@ function fmtTON(v: number) {
 }
 
 /* ── Square Arena helpers ── */
-const SQ = 290;
+const SQ = 300;
 const CX = SQ / 2;
 const CY = SQ / 2;
 const HW = SQ / 2;
 const HH = SQ / 2;
-const BALL_R  = 9;
+const BALL_R = 10;
 
 function squarePoint(deg: number): [number, number] {
   const rad = (deg * Math.PI) / 180;
@@ -72,7 +71,7 @@ function squarePoint(deg: number): [number, number] {
   return [CX + t * dx, CY + t * dy];
 }
 
-function squareSectorPoints(startDeg: number, endDeg: number, steps = 48): string {
+function squareSectorPoints(startDeg: number, endDeg: number, steps = 64): string {
   const pts: [number, number][] = [[CX, CY]];
   for (let i = 0; i <= steps; i++) {
     const a = startDeg + ((endDeg - startDeg) * i) / steps;
@@ -87,27 +86,20 @@ function sectorAvatarPos(startDeg: number, endDeg: number, fraction = 0.58): [nu
   return [CX + (px - CX) * fraction, CY + (py - CY) * fraction];
 }
 
-function sectorCentroid(startDeg: number, endDeg: number): [number, number] {
-  const N = 32;
-  let sx = CX, sy = CY;
-  let count = 1;
-  for (let i = 0; i <= N; i++) {
-    const a = startDeg + (endDeg - startDeg) * i / N;
-    const [px, py] = squarePoint(a);
-    sx += px; sy += py; count++;
-  }
-  return [sx / count, sy / count];
-}
-
 function sectorRandomPoint(startDeg: number, endDeg: number): [number, number] {
-  // Random angle within sector (10% margin from edges to stay away from boundaries)
   const span = endDeg - startDeg;
   const margin = Math.min(span * 0.12, 8);
   const randDeg = startDeg + margin + Math.random() * (span - margin * 2);
   const [px, py] = squarePoint(randDeg);
-  // Random radial fraction between 30% and 70% of the distance from centre to edge
-  const frac = 0.30 + Math.random() * 0.40;
+  const frac = 0.30 + Math.random() * 0.35;
   return [CX + (px - CX) * frac, CY + (py - CY) * frac];
+}
+
+// Compute avatar size based on sector size (stake fraction)
+function sectorAvatarSize(fraction: number): number {
+  const MIN_SIZE = 22;
+  const MAX_SIZE = 54;
+  return Math.round(MIN_SIZE + (MAX_SIZE - MIN_SIZE) * Math.min(1, fraction * 3));
 }
 
 interface Sector {
@@ -119,6 +111,7 @@ interface Sector {
   avatarY: number;
   player: ArenaPlayer;
   idx: number;
+  fraction: number;
 }
 
 /* ── Toast ── */
@@ -136,40 +129,130 @@ function Toast({ msg, type }: { msg: string; type: "success" | "error" | "info" 
   );
 }
 
+/* ── Avatar component ── */
+function PlayerAvatar({
+  player, color, size, isWinner, isMe,
+}: {
+  player: ArenaPlayer;
+  color: string;
+  size: number;
+  isWinner: boolean;
+  isMe: boolean;
+}) {
+  const initials = (player.username ?? player.telegramId).slice(0, 2).toUpperCase();
+  return (
+    <div style={{
+      width: size, height: size, borderRadius: "50%",
+      border: `${isWinner ? 3 : 2}px solid ${isWinner ? "#fff" : color}`,
+      background: player.photoUrl ? "transparent" : (color + "40"),
+      display: "flex", alignItems: "center", justifyContent: "center",
+      overflow: "hidden",
+      boxShadow: isWinner
+        ? `0 0 0 3px ${color}, 0 0 20px ${color}cc`
+        : isMe ? `0 0 12px ${color}99` : "none",
+      transition: "all 0.4s ease",
+      flexShrink: 0,
+    }}>
+      {player.photoUrl ? (
+        <img src={player.photoUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+      ) : (
+        <span style={{ fontSize: size * 0.35, fontWeight: 800, color }}>{initials}</span>
+      )}
+    </div>
+  );
+}
+
 /* ── Stat Card ── */
 function StatCard({
   label, username, amount, badge, onClick,
 }: { label: string; username: string | null; amount: number; badge?: string; onClick?: () => void }) {
   return (
-    <div
-      onClick={onClick}
-      style={{
-        flex: 1, background: "#111827", border: "1px solid #1F2937",
-        borderRadius: 12, padding: "9px 12px", minWidth: 0,
-        cursor: onClick ? "pointer" : "default",
-      }}
-    >
-      <div style={{ fontSize: 10, color: "#4B5563", fontWeight: 600, letterSpacing: "0.07em", marginBottom: 4 }}>
+    <div onClick={onClick} style={{
+      flex: 1, background: "#0F1923", border: "1px solid #1A2535",
+      borderRadius: 14, padding: "10px 14px", minWidth: 0,
+      cursor: onClick ? "pointer" : "default",
+    }}>
+      <div style={{ fontSize: 9, color: "#4B5563", fontWeight: 700, letterSpacing: "0.08em", marginBottom: 5 }}>
         {label}
       </div>
-      <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
         {badge && (
           <div style={{
-            width: 22, height: 22, borderRadius: "50%",
+            width: 24, height: 24, borderRadius: "50%",
             background: "linear-gradient(135deg,#6366F1,#8B5CF6)",
             display: "flex", alignItems: "center", justifyContent: "center",
             fontSize: 9, fontWeight: 800, color: "#fff", flexShrink: 0,
           }}>{badge}</div>
         )}
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 12, color: "#D1D5DB", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          <div style={{ fontSize: 12, color: "#9CA3AF", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {username ? `@${username}` : "—"}
           </div>
         </div>
         <div style={{ fontSize: 13, fontWeight: 800, color: "#F59E0B", whiteSpace: "nowrap", flexShrink: 0 }}>
-          +{fmtTON(amount)} ▽
+          {amount > 0 ? `+${fmtTON(amount)} ▽` : "—"}
         </div>
       </div>
+    </div>
+  );
+}
+
+/* ── EditableStakeButton ── */
+function EditableStakeButton({
+  value, onChange, selected, onSelect,
+}: { value: number; onChange: (v: number) => void; selected: boolean; onSelect: () => void }) {
+  const [editing, setEditing] = useState(false);
+  const [input, setInput] = useState(String(value));
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => { setInput(String(value)); }, [value]);
+
+  const commit = () => {
+    const v = parseFloat(input);
+    if (!isNaN(v) && v > 0) onChange(Math.round(v * 1000) / 1000);
+    else setInput(String(value));
+    setEditing(false);
+  };
+
+  return (
+    <div style={{ flex: 1, position: "relative" }}>
+      {editing ? (
+        <input
+          ref={inputRef}
+          value={input}
+          onChange={e => setInput(e.target.value)}
+          onBlur={commit}
+          onKeyDown={e => { if (e.key === "Enter") commit(); if (e.key === "Escape") { setInput(String(value)); setEditing(false); } }}
+          autoFocus
+          type="number"
+          style={{
+            width: "100%", padding: "10px 6px", borderRadius: 10, border: `1.5px solid #F59E0B`,
+            background: "#1A2535", color: "#fff", fontSize: 13, fontWeight: 700,
+            textAlign: "center", outline: "none", boxSizing: "border-box", fontFamily: "inherit",
+          }}
+        />
+      ) : (
+        <div style={{ display: "flex", borderRadius: 10, overflow: "hidden", border: `1.5px solid ${selected ? "#F59E0B" : "#1A2535"}` }}>
+          <button
+            onClick={onSelect}
+            style={{
+              flex: 1, padding: "10px 4px", border: "none",
+              background: selected ? "linear-gradient(135deg,#D97706,#F59E0B)" : "#0F1923",
+              color: selected ? "#fff" : "#6B7280",
+              fontSize: 13, fontWeight: 800, cursor: "pointer", fontFamily: "inherit",
+              boxShadow: selected ? "0 0 14px rgba(245,158,11,0.4)" : "none",
+            }}
+          >▽ {value}</button>
+          <button
+            onClick={(e) => { e.stopPropagation(); setEditing(true); onSelect(); }}
+            style={{
+              width: 28, padding: "0 4px", border: "none", borderLeft: "1px solid #1A2535",
+              background: selected ? "#c77f00" : "#0d141f",
+              color: selected ? "#fff" : "#374151", fontSize: 11, cursor: "pointer", fontFamily: "inherit",
+            }}
+          >✏️</button>
+        </div>
+      )}
     </div>
   );
 }
@@ -190,9 +273,12 @@ export default function ArenaGame({
   const [topGame, setTopGame] = useState<StatEntry | null>(null);
   const [lastGame, setLastGame] = useState<StatEntry | null>(null);
 
-  /* ── Unified stake state ── */
-  const [joinStake, setJoinStake] = useState(0.5);
-  const [joinInput, setJoinInput] = useState("0.5");
+  // Editable quick stake buttons (3 editable + 1 all-in)
+  const [quickStakes, setQuickStakes] = useState([1, 3, 5]);
+  const [selectedQuick, setSelectedQuick] = useState<number | "allin" | null>(null);
+  const [joinStake, setJoinStake] = useState(1);
+  const [joinInput, setJoinInput] = useState("1");
+
   const [increaseAmt, setIncreaseAmt] = useState(0.5);
   const [increaseInput, setIncreaseInput] = useState("0.5");
   const [showIncreasePanel, setShowIncreasePanel] = useState(true);
@@ -202,46 +288,48 @@ export default function ArenaGame({
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" | "info" } | null>(null);
   const [animPhase, setAnimPhase] = useState<"idle" | "revealed" | "payout">("idle");
   const [pendingResult, setPendingResult] = useState<{ won: boolean; payout: number; name: string } | null>(null);
-  const [onlineCount, setOnlineCount] = useState(15 + Math.floor(Math.random() * 12));
+  const [onlineCount] = useState(15 + Math.floor(Math.random() * 12));
   const [showFairness, setShowFairness] = useState(false);
 
   const prevStatusRef = useRef<string | null>(null);
   const prevArenaIdRef = useRef<number | null>(null);
 
-  const ballStateRef      = useRef<"IDLE" | "RUNNING">("IDLE");
-  const ballCircleRef     = useRef<SVGCircleElement | null>(null);
-  const ballGlowRef       = useRef<SVGCircleElement | null>(null);
-  const ballPosRef        = useRef({ x: CX, y: CY });
-  const ballVelRef        = useRef({ vx: 0, vy: 0 });
-  const ballTargetRef     = useRef<{ x: number; y: number } | null>(null);
-  const ballStoppedRef    = useRef(false);
-  const runStartTimeRef   = useRef<number | null>(null);
-  const rafRef            = useRef<number | null>(null);
-  const prevCountdownRef  = useRef<number | null>(null);
-  const sectorsRef        = useRef<Sector[]>([]);
-  const onBallStopRef     = useRef<(() => void) | null>(null);
-  const cancelTimersRef   = useRef<(() => void) | null>(null);
+  const ballStateRef = useRef<"IDLE" | "RUNNING">("IDLE");
+  const ballCircleRef = useRef<SVGCircleElement | null>(null);
+  const ballGlowRef = useRef<SVGCircleElement | null>(null);
+  const arrowRef = useRef<SVGGElement | null>(null);
+  const ballPosRef = useRef({ x: CX, y: CY });
+  const ballVelRef = useRef({ vx: 0, vy: 0 });
+  const ballTargetRef = useRef<{ x: number; y: number } | null>(null);
+  const ballStoppedRef = useRef(false);
+  const runStartTimeRef = useRef<number | null>(null);
+  const rafRef = useRef<number | null>(null);
+  const prevCountdownRef = useRef<number | null>(null);
+  const sectorsRef = useRef<Sector[]>([]);
+  const onBallStopRef = useRef<(() => void) | null>(null);
+  const cancelTimersRef = useRef<(() => void) | null>(null);
 
   const flash = (msg: string, type: "success" | "error" | "info" = "info") => {
     setToast({ msg, type }); setTimeout(() => setToast(null), 3200);
   };
 
-  /* ── Helpers for stake input sync ── */
+  /* ── Stake helpers ── */
   const setJoin = (v: number) => {
     const rounded = Math.round(v * 1000) / 1000;
     setJoinStake(rounded);
     setJoinInput(String(rounded));
   };
-  const setIncrease = (v: number) => {
-    const rounded = Math.round(v * 1000) / 1000;
-    setIncreaseAmt(rounded);
-    setIncreaseInput(String(rounded));
+
+  const handleQuickSelect = (v: number, idx: number | "allin") => {
+    setSelectedQuick(idx);
+    setJoin(v);
   };
 
   /* ── Online count flicker ── */
+  const [onlineDisp, setOnlineDisp] = useState(onlineCount);
   useEffect(() => {
     const t = setInterval(() => {
-      setOnlineCount(prev => Math.max(8, prev + Math.floor(Math.random() * 5) - 2));
+      setOnlineDisp(prev => Math.max(8, prev + Math.floor(Math.random() * 5) - 2));
     }, 7000);
     return () => clearInterval(t);
   }, []);
@@ -265,12 +353,10 @@ export default function ArenaGame({
         setPendingResult(result);
         fetchStats();
 
-        // Use server-computed sector angles so target is set reliably
         if (fresh.winnerSector && !ballTargetRef.current) {
           const { startDeg, endDeg } = fresh.winnerSector;
           const [tx, ty] = sectorRandomPoint(startDeg, endDeg);
           ballTargetRef.current = { x: tx, y: ty };
-          // If ball already stopped (target arrived late), un-stop to re-attract
           if (ballStoppedRef.current && ballStateRef.current === "RUNNING") {
             ballStoppedRef.current = false;
             const pos = ballPosRef.current;
@@ -278,11 +364,11 @@ export default function ArenaGame({
           }
           if (ballStateRef.current === "IDLE") {
             const angle = Math.random() * Math.PI * 2;
-            const speed = 3.5 + Math.random() * 1.5;
-            ballStateRef.current   = "RUNNING";
+            const speed = 4 + Math.random() * 2;
+            ballStateRef.current = "RUNNING";
             ballStoppedRef.current = false;
-            ballPosRef.current     = { x: CX, y: CY };
-            ballVelRef.current     = { vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed };
+            ballPosRef.current = { x: CX, y: CY };
+            ballVelRef.current = { vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed };
             runStartTimeRef.current = performance.now();
           }
         }
@@ -302,8 +388,8 @@ export default function ArenaGame({
               setPendingResult(null);
               onBallStopRef.current = null;
               cancelTimersRef.current = null;
-            }, 4000);
-          }, 1500);
+            }, 4500);
+          }, 1800);
         };
       }
     }
@@ -349,7 +435,6 @@ export default function ArenaGame({
   useEffect(() => {
     if (countdown === null || countdown <= 0) {
       if (countdown === 0) {
-        // Countdown just hit zero — poll aggressively to catch "finished" ASAP
         fetchArena();
         const t1 = setTimeout(fetchArena, 500);
         const t2 = setTimeout(fetchArena, 1000);
@@ -366,22 +451,33 @@ export default function ArenaGame({
   useEffect(() => {
     let active = true;
     const EDGE = 2;
-    const FREE_MS    = 3500;
-    const ATTRACT_MS = 4500;
+    const ATTRACT_MS = 4000;
 
-    const place = (nx: number, ny: number) => {
+    const place = (nx: number, ny: number, vx?: number, vy?: number) => {
       ballPosRef.current = { x: nx, y: ny };
       ballCircleRef.current?.setAttribute("cx", nx.toFixed(2));
       ballCircleRef.current?.setAttribute("cy", ny.toFixed(2));
-      ballGlowRef.current?.setAttribute("cx",   nx.toFixed(2));
-      ballGlowRef.current?.setAttribute("cy",   ny.toFixed(2));
+      ballGlowRef.current?.setAttribute("cx", nx.toFixed(2));
+      ballGlowRef.current?.setAttribute("cy", ny.toFixed(2));
+
+      // Update arrow direction
+      if (arrowRef.current && vx !== undefined && vy !== undefined) {
+        const speed = Math.sqrt(vx * vx + vy * vy);
+        if (speed > 0.5) {
+          const angle = Math.atan2(vy, vx) * (180 / Math.PI);
+          arrowRef.current.setAttribute("transform", `translate(${nx.toFixed(2)}, ${ny.toFixed(2)}) rotate(${angle.toFixed(1)})`);
+          arrowRef.current.setAttribute("opacity", "0.9");
+        }
+      }
     };
 
     const wallBounce = (nx: number, ny: number, vx: number, vy: number) => {
-      if (nx - BALL_R <= EDGE)      { nx = BALL_R + EDGE;      vx =  Math.abs(vx); }
-      if (nx + BALL_R >= SQ - EDGE) { nx = SQ - BALL_R - EDGE; vx = -Math.abs(vx); }
-      if (ny - BALL_R <= EDGE)      { ny = BALL_R + EDGE;      vy =  Math.abs(vy); }
-      if (ny + BALL_R >= SQ - EDGE) { ny = SQ - BALL_R - EDGE; vy = -Math.abs(vy); }
+      // Natural corner-like bounces: use slight angle variation on bounce
+      const jitter = () => (Math.random() - 0.5) * 0.3;
+      if (nx - BALL_R <= EDGE) { nx = BALL_R + EDGE; vx = Math.abs(vx) + jitter(); }
+      if (nx + BALL_R >= SQ - EDGE) { nx = SQ - BALL_R - EDGE; vx = -(Math.abs(vx) + jitter()); }
+      if (ny - BALL_R <= EDGE) { ny = BALL_R + EDGE; vy = Math.abs(vy) + jitter(); }
+      if (ny + BALL_R >= SQ - EDGE) { ny = SQ - BALL_R - EDGE; vy = -(Math.abs(vy) + jitter()); }
       return { nx, ny, vx, vy };
     };
 
@@ -389,17 +485,17 @@ export default function ArenaGame({
       if (!active) return;
 
       if (ballStateRef.current === "IDLE") {
-        place(CX, CY);
+        place(CX, CY, 0, 0);
+        if (arrowRef.current) arrowRef.current.setAttribute("opacity", "0");
         rafRef.current = requestAnimationFrame(step);
         return;
       }
 
-      // Late target: ball stopped but winner sector arrived after ball settled — re-attract
       if (ballStoppedRef.current && ballTargetRef.current) {
         const tgt = ballTargetRef.current;
         const pos = ballPosRef.current;
-        const dx  = tgt.x - pos.x;
-        const dy  = tgt.y - pos.y;
+        const dx = tgt.x - pos.x;
+        const dy = tgt.y - pos.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
         if (dist > 2) {
           ballStoppedRef.current = false;
@@ -407,6 +503,7 @@ export default function ArenaGame({
         } else {
           const cb = onBallStopRef.current;
           if (cb) { onBallStopRef.current = null; cb(); }
+          if (arrowRef.current) arrowRef.current.setAttribute("opacity", "0");
           rafRef.current = requestAnimationFrame(step);
           return;
         }
@@ -417,22 +514,22 @@ export default function ArenaGame({
       }
 
       const elapsed = runStartTimeRef.current !== null
-        ? performance.now() - runStartTimeRef.current
-        : 0;
+        ? performance.now() - runStartTimeRef.current : 0;
 
       const pos = ballPosRef.current;
       let { vx, vy } = ballVelRef.current;
 
       if (elapsed >= ATTRACT_MS && ballTargetRef.current) {
         const tgt = ballTargetRef.current;
-        const dx  = tgt.x - pos.x;
-        const dy  = tgt.y - pos.y;
+        const dx = tgt.x - pos.x;
+        const dy = tgt.y - pos.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
 
         if (dist < 1.2) {
           ballStoppedRef.current = true;
           ballVelRef.current = { vx: 0, vy: 0 };
-          place(tgt.x, tgt.y);
+          place(tgt.x, tgt.y, 0, 0);
+          if (arrowRef.current) arrowRef.current.setAttribute("opacity", "0");
           const cb = onBallStopRef.current;
           onBallStopRef.current = null;
           cb?.();
@@ -440,28 +537,24 @@ export default function ArenaGame({
           return;
         }
 
-        // Smooth physical deceleration: scales with distance so ball
-        // rushes in from far, then creeps to a precise stop on sector.
         const attractElapsed = elapsed - ATTRACT_MS;
-        const rampIn = Math.min(1, attractElapsed / 500);   // 0→1 over 500ms
-        const distFactor = Math.min(0.14, dist / 260);       // far=fast, close=slow
-        const pullFactor = Math.max(0.014, distFactor * rampIn);
+        const rampIn = Math.min(1, attractElapsed / 600);
+        const distFactor = Math.min(0.13, dist / 280);
+        const pullFactor = Math.max(0.012, distFactor * rampIn);
         vx = dx * pullFactor;
         vy = dy * pullFactor;
         ballVelRef.current = { vx, vy };
-        place(pos.x + vx, pos.y + vy);
+        place(pos.x + vx, pos.y + vy, vx, vy);
         rafRef.current = requestAnimationFrame(step);
         return;
       }
 
-      // suppress unused warning
-      void FREE_MS;
-
-      vx *= 0.995;
-      vy *= 0.995;
+      // Free bounce phase — natural wall bounces
+      vx *= 0.994;
+      vy *= 0.994;
       const b = wallBounce(pos.x + vx, pos.y + vy, vx, vy);
       ballVelRef.current = { vx: b.vx, vy: b.vy };
-      place(b.nx, b.ny);
+      place(b.nx, b.ny, b.vx, b.vy);
       rafRef.current = requestAnimationFrame(step);
     };
 
@@ -476,30 +569,26 @@ export default function ArenaGame({
   useEffect(() => {
     const launchBall = () => {
       const angle = Math.random() * Math.PI * 2;
-      const speed = 3.5 + Math.random() * 1.5;
-      ballStateRef.current    = "RUNNING";
-      ballStoppedRef.current  = false;
-      ballPosRef.current      = { x: CX, y: CY };
-      ballVelRef.current      = { vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed };
+      const speed = 4 + Math.random() * 2;
+      ballStateRef.current = "RUNNING";
+      ballStoppedRef.current = false;
+      ballPosRef.current = { x: CX, y: CY };
+      ballVelRef.current = { vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed };
       runStartTimeRef.current = performance.now();
     };
 
-    // Countdown just hit zero — launch ball only if it hasn't been launched already
     if (prevCountdownRef.current !== null && prevCountdownRef.current > 0 && countdown === 0) {
       if (ballStateRef.current === "IDLE") launchBall();
     }
 
-    // Backend confirmed "finished" and we have a winner — use server-provided sector angles
     if (arena?.status === "finished" && arena?.winnerId && !ballTargetRef.current) {
       const sector = arena.winnerSector
         ?? (sectorsRef.current.find(s => s.player.telegramId === arena.winnerId)
-            ? { startDeg: sectorsRef.current.find(s => s.player.telegramId === arena.winnerId)!.startDeg,
-                endDeg:   sectorsRef.current.find(s => s.player.telegramId === arena.winnerId)!.endDeg }
-            : null);
+          ? { startDeg: sectorsRef.current.find(s => s.player.telegramId === arena.winnerId)!.startDeg, endDeg: sectorsRef.current.find(s => s.player.telegramId === arena.winnerId)!.endDeg }
+          : null);
       if (sector) {
         const [tx, ty] = sectorRandomPoint(sector.startDeg, sector.endDeg);
         ballTargetRef.current = { x: tx, y: ty };
-        // If ball already stopped (winner arrived late), re-attract immediately
         if (ballStoppedRef.current && ballStateRef.current === "RUNNING") {
           ballStoppedRef.current = false;
           const pos = ballPosRef.current;
@@ -509,20 +598,18 @@ export default function ArenaGame({
       if (ballStateRef.current === "IDLE") launchBall();
     }
 
-    // New round started — only reset physics if the previous animation has fully completed
-    // (ball stopped + result overlay dismissed). This prevents cutting off a running animation.
     if (arena?.status === "waiting") {
       const animationDone = ballStoppedRef.current || ballStateRef.current === "IDLE";
       if (animationDone) {
         cancelTimersRef.current?.();
-        cancelTimersRef.current  = null;
-        onBallStopRef.current    = null;
-        ballStateRef.current     = "IDLE";
-        ballPosRef.current       = { x: CX, y: CY };
-        ballVelRef.current       = { vx: 0, vy: 0 };
-        ballTargetRef.current    = null;
-        ballStoppedRef.current   = false;
-        runStartTimeRef.current  = null;
+        cancelTimersRef.current = null;
+        onBallStopRef.current = null;
+        ballStateRef.current = "IDLE";
+        ballPosRef.current = { x: CX, y: CY };
+        ballVelRef.current = { vx: 0, vy: 0 };
+        ballTargetRef.current = null;
+        ballStoppedRef.current = false;
+        runStartTimeRef.current = null;
         setAnimPhase("idle");
         setPendingResult(null);
       }
@@ -551,7 +638,6 @@ export default function ArenaGame({
     finally { setBusy(false); }
   };
 
-  /* ── Increase ── */
   const increaseStake = async () => {
     if (increaseAmt <= 0) { flash("Укажи сумму", "error"); return; }
     if (increaseAmt > tonBalance) { flash("Недостаточно TON", "error"); return; }
@@ -595,6 +681,7 @@ export default function ArenaGame({
         avatarY: ay,
         player: p,
         idx: i,
+        fraction: frac,
       });
       acc += frac;
     });
@@ -604,7 +691,7 @@ export default function ArenaGame({
   return (
     <div style={{
       position: "fixed", inset: 0,
-      background: "#0B0F14",
+      background: "#060B12",
       display: "flex", flexDirection: "column",
       zIndex: 100,
       fontFamily: "'Inter', system-ui, sans-serif",
@@ -612,345 +699,413 @@ export default function ArenaGame({
     }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
-        @keyframes fadeScaleIn { from{opacity:0;transform:scale(0.85)} to{opacity:1;transform:scale(1)} }
+        @keyframes fadeScaleIn { from{opacity:0;transform:scale(0.75)} to{opacity:1;transform:scale(1)} }
         @keyframes slideUp { from{opacity:0;transform:translateY(14px)} to{opacity:1;transform:translateY(0)} }
-        @keyframes pulseGlow { 0%,100%{opacity:1} 50%{opacity:0.5} }
-        @keyframes timerPulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.06)} }
-        @keyframes winnerSectorPulse { 0%,100%{opacity:0.20} 50%{opacity:0.55} }
+        @keyframes pulseGlow { 0%,100%{opacity:1} 50%{opacity:0.4} }
+        @keyframes timerPulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.08)} }
+        @keyframes winnerPulse { 0%,100%{opacity:0.25} 50%{opacity:0.7} }
+        @keyframes winnerBorderGlow { 0%,100%{box-shadow:0 0 20px var(--wc)} 50%{box-shadow:0 0 50px var(--wc)} }
+        @keyframes confettiDrop { 0%{transform:translateY(-20px) rotate(0deg);opacity:1} 100%{transform:translateY(80px) rotate(360deg);opacity:0} }
+        @keyframes floatUp { from{opacity:1;transform:translateY(0)} to{opacity:0;transform:translateY(-40px)} }
+        @keyframes arenaAppear { from{opacity:0;transform:scale(0.9)} to{opacity:1;transform:scale(1)} }
       `}</style>
 
       {toast && <Toast msg={toast.msg} type={toast.type} />}
 
-      {/* ── Result Overlay ── */}
+      {/* ── WINNER OVERLAY ── */}
       {pendingResult && animPhase !== "idle" && (
         <div style={{
-          position: "fixed", inset: 0, zIndex: 300, background: "rgba(0,0,0,0.75)",
+          position: "fixed", inset: 0, zIndex: 300, background: "rgba(0,0,0,0.85)",
           display: "flex", alignItems: "center", justifyContent: "center",
+          backdropFilter: "blur(8px)",
         }}>
           <div style={{
-            background: "#111827", borderRadius: 24, padding: "36px 44px", textAlign: "center",
+            background: "linear-gradient(145deg,#0F1923,#141E2A)",
+            borderRadius: 28, padding: "44px 52px", textAlign: "center",
             border: `2px solid ${pendingResult.won ? "#4ADE80" : "#F43F5E"}`,
-            boxShadow: `0 0 60px ${pendingResult.won ? "rgba(74,222,128,0.4)" : "rgba(244,63,94,0.35)"}`,
-            animation: "fadeScaleIn 0.35s ease",
+            boxShadow: `0 0 80px ${pendingResult.won ? "rgba(74,222,128,0.45)" : "rgba(244,63,94,0.4)"}`,
+            animation: "fadeScaleIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)",
+            maxWidth: "84vw",
           }}>
-            <div style={{ fontSize: 54, marginBottom: 10 }}>
+            <div style={{ fontSize: 64, marginBottom: 12, lineHeight: 1 }}>
               {pendingResult.won ? "🏆" : "😔"}
             </div>
-            <div style={{ fontSize: 24, fontWeight: 900, color: pendingResult.won ? "#4ADE80" : "#F43F5E", marginBottom: 6 }}>
-              {pendingResult.won ? "ПОБЕДА!" : "Не повезло"}
+            <div style={{ fontSize: 26, fontWeight: 900, color: pendingResult.won ? "#4ADE80" : "#F43F5E", marginBottom: 8 }}>
+              {pendingResult.won ? "ВЫ ПОБЕДИЛИ!" : "Вам не повезло"}
             </div>
             {animPhase === "payout" && pendingResult.won && (
-              <div style={{ fontSize: 30, fontWeight: 900, color: "#FBBF24", marginBottom: 4, animation: "fadeScaleIn 0.4s ease" }}>
-                +{pendingResult.payout} TON
+              <div style={{ fontSize: 36, fontWeight: 900, color: "#FBBF24", marginBottom: 6, animation: "fadeScaleIn 0.5s ease" }}>
+                +{pendingResult.payout} ▽
               </div>
             )}
-            <div style={{ fontSize: 13, color: "#6B7280", marginTop: 4 }}>
+            <div style={{ fontSize: 14, color: "#6B7280", marginTop: 6 }}>
               {pendingResult.won
-                ? animPhase === "payout" ? "Выигрыш зачислен на баланс" : "Шарик в вашем секторе!"
+                ? animPhase === "payout" ? "Выигрыш зачислен на баланс 🎉" : "Шарик остановился в вашем секторе!"
                 : `Победил ${pendingResult.name}`}
             </div>
           </div>
         </div>
       )}
 
-      {/* ── HEADER ROW 1 ── */}
+      {/* ── HEADER ── */}
       <div style={{
         display: "flex", alignItems: "center", justifyContent: "space-between",
-        padding: "14px 16px 8px",
-        background: "#0d1117",
-        borderBottom: "1px solid #161B22",
+        padding: "14px 16px 10px",
+        background: "#0A1018",
+        borderBottom: "1px solid #141E2A",
         flexShrink: 0,
       }}>
-        <button
-          onClick={() => { haptic("light"); onClose(); }}
-          style={{
-            background: "none", border: "none", cursor: "pointer",
-            display: "flex", alignItems: "center", gap: 6,
-            color: "#9CA3AF", fontSize: 14, fontWeight: 600, fontFamily: "inherit",
-            padding: "4px 0",
-          }}
-        >
-          <span style={{ fontSize: 16 }}>✕</span> Закрыть
+        <button onClick={() => { haptic("light"); onClose(); }} style={{
+          background: "none", border: "none", cursor: "pointer",
+          display: "flex", alignItems: "center", gap: 6,
+          color: "#6B7280", fontSize: 14, fontWeight: 600, fontFamily: "inherit", padding: "4px 0",
+        }}>
+          <span style={{ fontSize: 18 }}>←</span>
         </button>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <div style={{
-            width: 8, height: 8, borderRadius: "50%", background: "#22C55E",
-            boxShadow: "0 0 8px rgba(34,197,94,0.8)",
-            animation: "pulseGlow 2s ease-in-out infinite",
-          }} />
-          <span style={{ fontSize: 13, color: "#9CA3AF", fontWeight: 500 }}>{onlineCount} онлайн</span>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: 18 }}>⚔️</span>
+          <span style={{ fontSize: 17, fontWeight: 900, color: "#fff" }}>ПВП Арена</span>
+          <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#22C55E", boxShadow: "0 0 8px #22C55E", animation: "pulseGlow 2s ease-in-out infinite" }} />
         </div>
 
         <div style={{ display: "flex", gap: 6 }}>
-          <button
-            onClick={() => setShowFairness(true)}
-            style={{
-              background: "#161B22", border: "1px solid #21262D", borderRadius: 8,
-              width: 34, height: 34, cursor: "pointer",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              color: "#9CA3AF", fontSize: 16,
-            }}
-          >🔐</button>
-          <button
-            onClick={() => onOpenHistory?.()}
-            style={{
-              background: "#161B22", border: "1px solid #21262D", borderRadius: 8,
-              width: 34, height: 34, cursor: "pointer",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              color: "#9CA3AF", fontSize: 16,
-            }}
-          >📋</button>
+          <button onClick={() => setShowFairness(true)} style={{
+            background: "#0F1923", border: "1px solid #1A2535", borderRadius: 8,
+            width: 34, height: 34, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#6B7280", fontSize: 15,
+          }}>🔐</button>
+          <button onClick={() => onOpenHistory?.()} style={{
+            background: "#0F1923", border: "1px solid #1A2535", borderRadius: 8,
+            width: 34, height: 34, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#6B7280", fontSize: 15,
+          }}>📋</button>
         </div>
       </div>
 
-      {/* ── HEADER ROW 2 — Balance ── */}
-      <div style={{
-        display: "flex", alignItems: "center", justifyContent: "flex-end",
-        padding: "8px 16px",
-        background: "#0d1117",
-        flexShrink: 0,
-      }}>
+      {/* ── BALANCE ROW ── */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 16px", background: "#0A1018", flexShrink: 0 }}>
+        <span style={{ fontSize: 12, color: "#374151" }}>{onlineDisp} онлайн</span>
         <div style={{
-          background: "#161B22", border: "1px solid #21262D",
+          background: "#0F1923", border: "1px solid #1A2535",
           borderRadius: 20, padding: "6px 14px",
           display: "flex", alignItems: "center", gap: 6,
         }}>
-          <span style={{ fontSize: 13 }}>▽</span>
-          <span style={{ fontSize: 14, fontWeight: 700, color: "#E5E7EB" }}>
-            {tonBalance.toFixed(2)} TON
-          </span>
+          <span style={{ fontSize: 13, color: "#F59E0B" }}>▽</span>
+          <span style={{ fontSize: 14, fontWeight: 700, color: "#E5E7EB" }}>{tonBalance.toFixed(2)} TON</span>
         </div>
       </div>
 
-      {/* Scrollable content */}
-      <div style={{ flex: 1, overflowY: "auto", padding: "12px 14px 24px" }}>
+      {/* ── SCROLLABLE CONTENT ── */}
+      <div style={{ flex: 1, overflowY: "auto", padding: "12px 14px 32px" }}>
 
-        {/* ── STAT CARDS (clickable → history) ── */}
-        <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
-          <StatCard
-            label="ТОП ИГРА"
-            username={topGame?.username ?? null}
-            amount={topGame?.payout ?? 0}
-            badge={topGame ? (topGame.username ?? "?").slice(0, 2).toUpperCase() : undefined}
-            onClick={onOpenHistory}
-          />
-          <StatCard
-            label="ПОСЛЕДНЯЯ ИГРА"
-            username={lastGame?.username ?? null}
-            amount={lastGame?.payout ?? 0}
-            badge={lastGame ? (lastGame.username ?? "?").slice(0, 2).toUpperCase() : undefined}
-            onClick={onOpenHistory}
-          />
+        {/* STAT CARDS */}
+        <div style={{ display: "flex", gap: 10, marginBottom: 14 }}>
+          <StatCard label="ТОП ИГРА" username={topGame?.username ?? null} amount={topGame?.payout ?? 0}
+            badge={topGame ? (topGame.username ?? "?").slice(0, 2).toUpperCase() : undefined} onClick={onOpenHistory} />
+          <StatCard label="ПОСЛЕДНЯЯ" username={lastGame?.username ?? null} amount={lastGame?.payout ?? 0}
+            badge={lastGame ? (lastGame.username ?? "?").slice(0, 2).toUpperCase() : undefined} onClick={onOpenHistory} />
         </div>
 
         {/* ── ARENA BLOCK ── */}
         <div style={{
-          background: "#0d1117", border: "1px solid #161B22",
-          borderRadius: 18, overflow: "hidden", marginBottom: 12,
+          background: "#0A1018", border: "1px solid #141E2A",
+          borderRadius: 20, overflow: "hidden", marginBottom: 14,
+          animation: "arenaAppear 0.4s ease",
         }}>
-          {/* Arena header */}
+          {/* Arena header: total + status */}
           <div style={{
             display: "flex", alignItems: "center", justifyContent: "space-between",
-            padding: "10px 14px",
-            borderBottom: "1px solid #161B22",
+            padding: "12px 16px", borderBottom: "1px solid #141E2A",
           }}>
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <span style={{ fontSize: 13 }}>▽</span>
-              <span style={{ fontSize: 16, fontWeight: 800, color: "#F59E0B" }}>
-                Тотал {fmtTON(totalPool)} TON
+              <span style={{ fontSize: 14, color: "#F59E0B" }}>▽</span>
+              <span style={{ fontSize: 18, fontWeight: 900, color: "#F59E0B" }}>
+                {fmtTON(totalPool)} TON
               </span>
+              <span style={{ fontSize: 11, color: "#4B5563", fontWeight: 600 }}>в банке</span>
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
               {isStarting ? (
                 <>
-                  <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#22C55E", boxShadow: "0 0 8px rgba(34,197,94,0.8)", animation: "pulseGlow 1.2s ease-in-out infinite" }} />
-                  <span style={{ fontSize: 13, fontWeight: 600, color: "#22C55E" }}>В эфире</span>
+                  <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#22C55E", animation: "pulseGlow 1s ease-in-out infinite" }} />
+                  <span style={{ fontSize: 13, fontWeight: 700, color: "#22C55E" }}>В эфире</span>
                   {countdown !== null && countdown > 0 && (
                     <span style={{
-                      marginLeft: 8, fontSize: 14, fontWeight: 900,
+                      marginLeft: 6, fontSize: 15, fontWeight: 900,
                       color: countdown <= 5 ? "#F87171" : "#fff",
-                      fontVariantNumeric: "tabular-nums",
                       animation: countdown <= 5 ? "timerPulse 0.8s ease-in-out infinite" : "none",
                     }}>{fmtTimer(countdown)}</span>
                   )}
                 </>
               ) : isFinished ? (
-                <span style={{ fontSize: 13, fontWeight: 600, color: "#6B7280" }}>Завершено</span>
+                <span style={{ fontSize: 13, color: "#4B5563" }}>Завершено</span>
               ) : (
                 <>
                   <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#F59E0B", animation: "pulseGlow 2s ease-in-out infinite" }} />
-                  <span style={{ fontSize: 13, fontWeight: 600, color: "#F59E0B" }}>Ожидание игроков</span>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: "#F59E0B" }}>Ожидание</span>
                 </>
               )}
             </div>
           </div>
 
-          {/* ── ARENA SQUARE ── */}
-          <div style={{
-            display: "flex", justifyContent: "center", alignItems: "center",
-            padding: "14px 14px 12px",
-            background: "#0d1117",
-          }}>
+          {/* ── ARENA VISUAL ── */}
+          <div style={{ display: "flex", justifyContent: "center", padding: "16px", background: "#060B12" }}>
             <div style={{
               position: "relative",
               width: SQ, height: SQ,
-              flexShrink: 0,
-              borderRadius: 16,
+              borderRadius: 18,
               overflow: "hidden",
-              boxShadow: "0 0 0 1px #1F2937, 0 8px 32px rgba(0,0,0,0.5)",
+              boxShadow: "0 0 0 1px #1A2535, 0 12px 40px rgba(0,0,0,0.7)",
             }}>
               <svg width={SQ} height={SQ} style={{ position: "absolute", inset: 0, display: "block" }}>
-                <rect x={0} y={0} width={SQ} height={SQ} fill="#111827" />
+                <defs>
+                  <radialGradient id="bgGrad" cx="50%" cy="50%" r="70%">
+                    <stop offset="0%" stopColor="#1A2535" />
+                    <stop offset="100%" stopColor="#060B12" />
+                  </radialGradient>
+                  <filter id="ballGlow">
+                    <feGaussianBlur stdDeviation="4" result="blur" />
+                    <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+                  </filter>
+                </defs>
+                <rect x={0} y={0} width={SQ} height={SQ} fill="url(#bgGrad)" />
 
+                {/* Sectors */}
                 {players.length === 1 ? (
-                  /* Bug 3 fix: single player gets a solid fill rect — no seam/gap */
-                  <rect x={0} y={0} width={SQ} height={SQ} fill={col(0)} opacity={0.92} />
+                  <rect x={0} y={0} width={SQ} height={SQ} fill={col(0)} opacity={0.88} />
                 ) : players.length > 1 ? sectors.map(s => (
                   <polygon
                     key={s.player.telegramId}
                     points={s.points}
                     fill={s.color}
-                    opacity={0.92}
+                    opacity={0.85}
                   />
                 )) : null}
 
+                {/* Dividers */}
                 {sectors.length >= 2 && sectors.map(s => {
                   const [ex, ey] = squarePoint(s.startDeg);
                   return (
-                    <line
-                      key={`div-${s.player.telegramId}`}
-                      x1={CX} y1={CY}
-                      x2={ex} y2={ey}
-                      stroke="#0d1117" strokeWidth={3}
-                    />
+                    <line key={`div-${s.player.telegramId}`}
+                      x1={CX} y1={CY} x2={ex} y2={ey}
+                      stroke="#060B12" strokeWidth={2.5} />
                   );
                 })}
 
+                {/* Winner sector pulse */}
                 {animPhase !== "idle" && sectors.map(s => {
                   if (arena?.winnerId !== s.player.telegramId) return null;
                   return (
-                    <polygon
-                      key={`win-${s.player.telegramId}`}
+                    <polygon key={`win-${s.player.telegramId}`}
                       points={s.points}
                       fill={s.color}
-                      opacity={0.35}
-                      style={{ animation: "winnerSectorPulse 0.7s ease-in-out infinite" }}
-                    />
+                      opacity={0.4}
+                      style={{ animation: "winnerPulse 0.6s ease-in-out infinite" }} />
                   );
                 })}
 
+                {/* Center circle */}
+                <circle cx={CX} cy={CY} r={18} fill="#060B12" stroke="#1A2535" strokeWidth={2} />
+
+                {/* Arrow indicator (rotates with velocity) */}
+                {players.length >= 1 && ballStateRef.current === "RUNNING" && (
+                  <g ref={arrowRef} opacity={0} style={{ pointerEvents: "none" }}>
+                    <polygon points="12,0 -5,-5 -5,5" fill="white" opacity={0.7} />
+                  </g>
+                )}
+
+                {/* Ball */}
                 {players.length >= 1 && (
                   <>
-                    <circle
-                      ref={ballGlowRef}
-                      cx={CX} cy={CY}
-                      r={BALL_R + 6}
-                      fill="white"
-                      opacity={0.15}
-                    />
-                    <circle
-                      ref={ballCircleRef}
-                      cx={CX} cy={CY}
-                      r={BALL_R}
-                      fill="white"
-                      stroke="rgba(0,0,0,0.3)"
-                      strokeWidth={1.5}
-                      style={{ filter: "drop-shadow(0 2px 10px rgba(255,255,255,0.8))" }}
+                    <circle ref={ballGlowRef} cx={CX} cy={CY} r={BALL_R + 8} fill="white" opacity={0.12} />
+                    <circle ref={ballCircleRef} cx={CX} cy={CY} r={BALL_R}
+                      fill="white" stroke="rgba(0,0,0,0.2)" strokeWidth={1.5}
+                      style={{ filter: "url(#ballGlow)" }}
                     />
                   </>
                 )}
               </svg>
 
+              {/* Avatar overlays — size scales with sector % */}
               {sectors.map(s => {
                 const isWinner = animPhase !== "idle" && arena?.winnerId === s.player.telegramId;
                 const isMe = s.player.telegramId === telegramId;
-                const AV = isWinner ? 44 : 36;
+                const AV = sectorAvatarSize(isWinner ? Math.min(1, s.fraction + 0.15) : s.fraction);
                 return (
                   <div key={s.player.telegramId} style={{
                     position: "absolute",
                     left: s.avatarX - AV / 2,
                     top: s.avatarY - AV / 2,
-                    width: AV, height: AV,
-                    borderRadius: "50%",
-                    background: isWinner ? s.color : s.color + "30",
-                    border: `${isWinner ? 3 : 2}px solid ${isWinner ? "#fff" : s.color}`,
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    flexDirection: "column",
-                    boxShadow: isWinner
-                      ? `0 0 0 3px ${s.color}, 0 0 24px ${s.color}`
-                      : isMe
-                      ? `0 0 14px ${s.color}99`
-                      : "none",
+                    transition: "all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275)",
                     zIndex: isWinner ? 20 : 10,
-                    transition: "all 0.4s ease",
-                  }} />
+                  }}>
+                    <PlayerAvatar
+                      player={s.player}
+                      color={s.color}
+                      size={AV}
+                      isWinner={isWinner}
+                      isMe={isMe}
+                    />
+                  </div>
                 );
               })}
+
+              {/* Empty state */}
+              {players.length === 0 && (
+                <div style={{
+                  position: "absolute", inset: 0, display: "flex", flexDirection: "column",
+                  alignItems: "center", justifyContent: "center", color: "#374151",
+                }}>
+                  <div style={{ fontSize: 36, marginBottom: 8 }}>⚔️</div>
+                  <div style={{ fontSize: 13, fontWeight: 600 }}>Ждём игроков...</div>
+                </div>
+              )}
             </div>
           </div>
         </div>
 
-        {/* ── ACTION ROW — stake badge ── */}
-        <div style={{
-          display: "flex", alignItems: "center", justifyContent: "flex-end",
-          marginBottom: 10,
-        }}>
-          {isIn && myP ? (
-            <div style={{
-              background: "#111827", border: "1px solid #1F2937",
-              borderRadius: 20, padding: "6px 14px",
-              display: "flex", alignItems: "center", gap: 5,
-            }}>
-              <span style={{ fontSize: 13 }}>▽</span>
-              <span style={{ fontSize: 14, fontWeight: 700, color: "#E5E7EB" }}>
-                {fmtTON(myP.stake)} TON
-              </span>
+        {/* ── BETTING PANEL ── */}
+        {!isIn && !isFinished && (
+          <div style={{
+            background: "#0A1018", border: "1px solid #141E2A",
+            borderRadius: 18, padding: "16px", marginBottom: 14,
+            animation: "slideUp 0.3s ease",
+          }}>
+            <div style={{ fontSize: 11, color: "#4B5563", fontWeight: 700, letterSpacing: "0.08em", marginBottom: 12 }}>
+              💰 СТАВКА
             </div>
-          ) : (
-            <div style={{
-              background: "#111827", border: "1px solid #1F2937",
-              borderRadius: 20, padding: "6px 14px",
-              display: "flex", alignItems: "center", gap: 5,
-            }}>
-              <span style={{ fontSize: 13 }}>▽</span>
-              <span style={{ fontSize: 14, fontWeight: 700, color: "#4B5563" }}>0</span>
-            </div>
-          )}
-        </div>
 
-        {/* ── INCREASE STAKE PANEL — always visible when in active round (Rule 1) ── */}
+            {/* 3 editable + 1 all-in */}
+            <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+              {quickStakes.map((v, i) => (
+                <EditableStakeButton
+                  key={i}
+                  value={v}
+                  selected={selectedQuick === i}
+                  onSelect={() => handleQuickSelect(v, i)}
+                  onChange={(newV) => {
+                    const updated = [...quickStakes];
+                    updated[i] = newV;
+                    setQuickStakes(updated);
+                    if (selectedQuick === i) setJoin(newV);
+                  }}
+                />
+              ))}
+              {/* All-in button */}
+              <button
+                onClick={() => { handleQuickSelect(tonBalance, "allin"); }}
+                style={{
+                  flex: 1, padding: "10px 4px", borderRadius: 10, border: "none",
+                  background: selectedQuick === "allin"
+                    ? "linear-gradient(135deg,#7C3AED,#A855F7)"
+                    : "#0F1923",
+                  border: `1.5px solid ${selectedQuick === "allin" ? "#A855F7" : "#1A2535"}`,
+                  color: selectedQuick === "allin" ? "#fff" : "#6B7280",
+                  fontSize: 11, fontWeight: 800, cursor: "pointer", fontFamily: "inherit",
+                  boxShadow: selectedQuick === "allin" ? "0 0 14px rgba(168,85,247,0.5)" : "none",
+                } as React.CSSProperties}
+              >🚀<br />ВА-БАНК</button>
+            </div>
+
+            {/* Manual input */}
+            <div style={{ position: "relative", marginBottom: 12 }}>
+              <input
+                value={joinInput}
+                onChange={e => {
+                  setJoinInput(e.target.value);
+                  const v = parseFloat(e.target.value);
+                  if (!isNaN(v) && v > 0) { setJoinStake(Math.round(v * 1000) / 1000); setSelectedQuick(null); }
+                }}
+                placeholder="Своя сумма..."
+                type="number" step="0.1" min="0.1"
+                style={{
+                  width: "100%", background: "#060B12",
+                  border: "1px solid #1A2535", borderRadius: 10,
+                  padding: "11px 52px 11px 14px", color: "#E5E7EB",
+                  fontSize: 14, outline: "none", boxSizing: "border-box", fontFamily: "inherit",
+                }}
+              />
+              <span style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", fontSize: 12, color: "#4B5563", fontWeight: 700 }}>TON</span>
+            </div>
+
+            <button
+              onClick={join}
+              disabled={busy || joinStake < 0.1 || joinStake > tonBalance}
+              style={{
+                width: "100%", padding: "15px 0", borderRadius: 14, border: "none",
+                background: busy || joinStake < 0.1 || joinStake > tonBalance
+                  ? "#1A2535"
+                  : "linear-gradient(135deg,#D97706,#F59E0B)",
+                color: joinStake > tonBalance ? "#4B5563" : "#000",
+                fontSize: 15, fontWeight: 900,
+                cursor: busy || joinStake < 0.1 || joinStake > tonBalance ? "not-allowed" : "pointer",
+                fontFamily: "inherit",
+                boxShadow: joinStake <= tonBalance && joinStake >= 0.1 ? "0 0 28px rgba(245,158,11,0.4)" : "none",
+              }}
+            >
+              {busy ? "..." : joinStake > tonBalance ? "Недостаточно TON" : `⚔️ Войти · ${fmtTON(joinStake)} TON`}
+            </button>
+          </div>
+        )}
+
+        {/* ── ALREADY IN ── */}
+        {isIn && myP && (
+          <div style={{
+            background: "rgba(29,78,216,0.08)", border: "1px solid rgba(29,78,216,0.25)",
+            borderRadius: 16, padding: "14px 16px", marginBottom: 12,
+            display: "flex", justifyContent: "space-between", alignItems: "center",
+          }}>
+            <div>
+              <div style={{ fontSize: 11, color: "#3B82F6", fontWeight: 600, marginBottom: 4 }}>Ваша ставка</div>
+              <div style={{ fontSize: 22, fontWeight: 900, color: "#fff" }}>
+                {fmtTON(myP.stake)} <span style={{ fontSize: 13, color: "#4B5563" }}>TON</span>
+              </div>
+            </div>
+            <div style={{ textAlign: "right" }}>
+              <div style={{ fontSize: 11, color: "#4B5563", marginBottom: 4 }}>Шанс</div>
+              <div style={{ fontSize: 22, fontWeight: 900, color: "#4ADE80" }}>{myP.chance.toFixed(1)}%</div>
+            </div>
+          </div>
+        )}
+
+        {/* If-win preview */}
+        {isIn && myP && totalPool > myP.stake && (
+          <div style={{
+            background: "#060B12", border: "1px solid #141E2A",
+            borderRadius: 12, padding: "10px 14px", marginBottom: 12,
+            display: "flex", justifyContent: "space-between", alignItems: "center",
+          }}>
+            <div style={{ fontSize: 12, color: "#4B5563" }}>💡 Если победишь</div>
+            <div style={{ fontSize: 17, fontWeight: 900, color: "#4ADE80" }}>
+              +{(myP.stake + (totalPool - myP.stake) * 0.80).toFixed(3)} TON
+            </div>
+          </div>
+        )}
+
+        {/* Increase stake */}
         {isIn && (arena?.status === "waiting" || arena?.status === "starting") && (
           <div style={{
-            background: "#0d1117", border: "1px solid #1D4ED855",
-            borderRadius: 14, padding: "12px", marginBottom: 10,
-            animation: "slideUp 0.2s ease",
+            background: "#0A1018", border: "1px solid #1A3050",
+            borderRadius: 14, padding: "12px", marginBottom: 14,
           }}>
             <div style={{
-              display: "flex", alignItems: "center", justifyContent: "space-between",
-              marginBottom: 8,
+              display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8,
             }}>
-              <div style={{ fontSize: 11, color: "#4B5563", fontWeight: 600 }}>💰 Добавить к ставке</div>
+              <div style={{ fontSize: 11, color: "#3B82F6", fontWeight: 600 }}>💰 Добавить к ставке</div>
               <button
                 onClick={() => setShowIncreasePanel(v => !v)}
-                style={{
-                  background: "none", border: "none", color: "#4B5563",
-                  fontSize: 12, cursor: "pointer", fontFamily: "inherit",
-                  padding: "2px 6px",
-                }}
-              >{showIncreasePanel ? "▲ скрыть" : "▼ показать"}</button>
+                style={{ background: "none", border: "none", color: "#4B5563", fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}
+              >{showIncreasePanel ? "▲" : "▼"}</button>
             </div>
             {showIncreasePanel && (
               <>
                 <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
                   {[0.1, 0.5, 1, 2, 5].map(v => (
-                    <button
-                      key={v}
-                      onClick={() => setIncrease(v)}
+                    <button key={v}
+                      onClick={() => { setIncreaseAmt(v); setIncreaseInput(String(v)); }}
                       style={{
                         flex: 1, padding: "8px 0", borderRadius: 8, border: "none",
-                        background: increaseAmt === v ? "#1D4ED8" : "#161B22",
-                        color: increaseAmt === v ? "#fff" : "#6B7280",
+                        background: increaseAmt === v ? "#1D4ED8" : "#0F1923",
+                        color: increaseAmt === v ? "#fff" : "#4B5563",
                         fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
                       }}
                     >+{v}</button>
@@ -959,19 +1114,13 @@ export default function ArenaGame({
                 <div style={{ position: "relative", marginBottom: 8 }}>
                   <input
                     value={increaseInput}
-                    onChange={e => {
-                      setIncreaseInput(e.target.value);
-                      const v = parseFloat(e.target.value);
-                      if (!isNaN(v) && v > 0) setIncreaseAmt(Math.round(v * 1000) / 1000);
-                    }}
+                    onChange={e => { setIncreaseInput(e.target.value); const v = parseFloat(e.target.value); if (!isNaN(v) && v > 0) setIncreaseAmt(Math.round(v * 1000) / 1000); }}
                     placeholder="Своя сумма..."
                     type="number" step="0.1" min="0.1"
                     style={{
-                      width: "100%", background: "#161B22",
-                      border: "1px solid #21262D", borderRadius: 8,
-                      padding: "9px 46px 9px 12px", color: "#E5E7EB",
-                      fontSize: 13, outline: "none", boxSizing: "border-box",
-                      fontFamily: "inherit",
+                      width: "100%", background: "#060B12", border: "1px solid #1A2535", borderRadius: 8,
+                      padding: "9px 46px 9px 12px", color: "#E5E7EB", fontSize: 13, outline: "none",
+                      boxSizing: "border-box", fontFamily: "inherit",
                     }}
                   />
                   <span style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", fontSize: 11, color: "#4B5563", fontWeight: 700 }}>TON</span>
@@ -981,190 +1130,92 @@ export default function ArenaGame({
                   disabled={busy || increaseAmt <= 0 || increaseAmt > tonBalance}
                   style={{
                     width: "100%", padding: "12px", borderRadius: 10, border: "none",
-                    background: busy || increaseAmt <= 0 || increaseAmt > tonBalance
-                      ? "#1F2937"
-                      : "linear-gradient(135deg,#1D4ED8,#3B82F6)",
+                    background: busy || increaseAmt <= 0 || increaseAmt > tonBalance ? "#1A2535" : "linear-gradient(135deg,#1D4ED8,#3B82F6)",
                     color: "#fff", fontSize: 14, fontWeight: 700,
-                    cursor: busy || increaseAmt > tonBalance ? "not-allowed" : "pointer",
-                    fontFamily: "inherit",
+                    cursor: busy || increaseAmt > tonBalance ? "not-allowed" : "pointer", fontFamily: "inherit",
                   }}
-                >{busy ? "..." : `➕ Добавить ${increaseAmt} TON к ставке`}</button>
+                >{busy ? "..." : `➕ Добавить ${increaseAmt} TON`}</button>
               </>
             )}
           </div>
         )}
 
-        {/* ── JOIN FORM (not in game) ── */}
-        {!isIn && !isFinished && (
-          <div style={{ marginBottom: 12 }}>
-            {/* Quick stake buttons */}
-            <div style={{ display: "flex", gap: 6, marginBottom: 8, flexWrap: "wrap" }}>
-              {QUICK_STAKES.map(v => (
-                <button
-                  key={v}
-                  onClick={() => setJoin(v)}
-                  style={{
-                    flex: "1 1 auto", minWidth: 44, padding: "9px 4px", borderRadius: 10, border: "none",
-                    background: joinStake === v
-                      ? "linear-gradient(135deg,#D97706,#F59E0B)"
-                      : "#111827",
-                    color: joinStake === v ? "#fff" : "#4B5563",
-                    fontSize: 12, fontWeight: 800, cursor: "pointer", fontFamily: "inherit",
-                    boxShadow: joinStake === v ? "0 0 12px rgba(245,158,11,0.4)" : "none",
-                    transition: "all 0.15s",
-                  }}
-                >{v}</button>
-              ))}
-            </div>
-
-            {/* Manual input */}
-            <div style={{ position: "relative", marginBottom: 10 }}>
-              <input
-                value={joinInput}
-                onChange={e => {
-                  setJoinInput(e.target.value);
-                  const v = parseFloat(e.target.value);
-                  if (!isNaN(v) && v > 0) setJoinStake(Math.round(v * 1000) / 1000);
-                }}
-                onFocus={() => {
-                  /* deselect quick button when typing */
-                }}
-                placeholder="Своя сумма..."
-                type="number" step="0.1" min="0.1"
-                style={{
-                  width: "100%", background: "#0d1117",
-                  border: "1px solid #21262D", borderRadius: 10,
-                  padding: "10px 52px 10px 14px", color: "#E5E7EB",
-                  fontSize: 14, outline: "none", boxSizing: "border-box",
-                  fontFamily: "inherit",
-                }}
-              />
-              <span style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", fontSize: 12, color: "#4B5563", fontWeight: 700 }}>TON</span>
-            </div>
-
-            <div style={{ display: "flex", gap: 10 }}>
-              <button
-                onClick={join}
-                disabled={busy || joinStake < 0.1 || joinStake > tonBalance}
-                style={{
-                  flex: 1, padding: "14px 0", borderRadius: 12, border: "none",
-                  background: busy || joinStake < 0.1 || joinStake > tonBalance
-                    ? "#1F2937"
-                    : "linear-gradient(135deg,#D97706,#F59E0B)",
-                  color: joinStake > tonBalance ? "#6B7280" : "#fff",
-                  fontSize: 15, fontWeight: 800,
-                  cursor: busy || joinStake < 0.1 || joinStake > tonBalance ? "not-allowed" : "pointer",
-                  fontFamily: "inherit",
-                }}
-              >
-                {busy ? "..." : joinStake > tonBalance ? "Недостаточно TON" : `➕ Войти · ${fmtTON(joinStake)} TON`}
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* ── Already in the arena ── */}
-        {isIn && myP && (
-          <div style={{
-            background: "rgba(29,78,216,0.1)", border: "1px solid rgba(29,78,216,0.3)",
-            borderRadius: 14, padding: "12px 16px", marginBottom: 12,
-            display: "flex", justifyContent: "space-between", alignItems: "center",
-          }}>
-            <div>
-              <div style={{ fontSize: 11, color: "#1D4ED8", fontWeight: 600 }}>Ваша ставка</div>
-              <div style={{ fontSize: 20, fontWeight: 900, color: "#fff" }}>
-                {fmtTON(myP.stake)} <span style={{ fontSize: 13, color: "#6B7280" }}>TON</span>
-              </div>
-            </div>
-            <div style={{ textAlign: "right" }}>
-              <div style={{ fontSize: 11, color: "#6B7280" }}>Шанс победы</div>
-              <div style={{ fontSize: 20, fontWeight: 900, color: "#4ADE80" }}>{myP.chance.toFixed(1)}%</div>
-            </div>
-          </div>
-        )}
-
-        {/* If-win preview */}
-        {isIn && myP && totalPool > myP.stake && (
-          <div style={{
-            background: "#0d1117", border: "1px solid #161B22",
-            borderRadius: 12, padding: "10px 14px", marginBottom: 12,
-            display: "flex", justifyContent: "space-between", alignItems: "center",
-          }}>
-            <div style={{ fontSize: 12, color: "#4B5563" }}>💡 Если победишь</div>
-            <div style={{ fontSize: 16, fontWeight: 900, color: "#4ADE80" }}>
-              +{(myP.stake + (totalPool - myP.stake) * 0.80).toFixed(3)} TON
-            </div>
-          </div>
-        )}
-
-        {/* Finished — new game incoming */}
         {isFinished && (
-          <div style={{
-            textAlign: "center", padding: "14px 0", marginBottom: 12,
-            color: "#4B5563", fontSize: 13,
-          }}>
+          <div style={{ textAlign: "center", padding: "14px 0", marginBottom: 14, color: "#374151", fontSize: 13 }}>
             ⏳ Новая игра начинается…
           </div>
         )}
 
-        {/* ── PLAYER LIST ── */}
-        <div style={{
-          display: "flex", justifyContent: "space-between", alignItems: "center",
-          marginBottom: 10,
-        }}>
-          <div style={{ fontSize: 15, fontWeight: 700, color: "#E5E7EB" }}>
-            Игроки <span style={{ color: "#4B5563" }}>· {players.length}</span>
+        {/* ── PLAYERS TABLE ── */}
+        <div style={{ marginBottom: 6 }}>
+          <div style={{
+            display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10,
+          }}>
+            <div style={{ fontSize: 14, fontWeight: 800, color: "#D1D5DB" }}>
+              Участники <span style={{ color: "#374151", fontWeight: 600 }}>· {players.length}</span>
+            </div>
+            {arena && (
+              <div style={{ fontSize: 11, color: "#1F2937", fontWeight: 600, letterSpacing: "0.05em" }}>
+                #{arena.id.toString().padStart(6, "0")}
+              </div>
+            )}
           </div>
-          {arena && (
-            <div style={{ fontSize: 11, color: "#374151", fontWeight: 600, letterSpacing: "0.04em" }}>
-              ИГРА #{arena.id.toString().padStart(6, "0")}
+
+          {players.length === 0 && (
+            <div style={{ textAlign: "center", padding: "28px 0", color: "#1F2937", fontSize: 13 }}>
+              Нет игроков. Будь первым!
             </div>
           )}
-        </div>
 
-        {players.length === 0 && (
-          <div style={{ textAlign: "center", padding: "24px 0", color: "#374151", fontSize: 13 }}>
-            Нет игроков. Будь первым!
-          </div>
-        )}
-
-        {players.map((p, i) => {
-          const isMe = p.telegramId === telegramId;
-          const isWin = isFinished && arena?.winnerId === p.telegramId;
-          const c = col(i);
-          return (
-            <div key={p.telegramId} style={{
-              display: "flex", alignItems: "center", gap: 10,
-              background: "#0d1117",
-              border: `1px solid ${isWin ? c + "88" : isMe ? "#21262D" : "#161B22"}`,
-              borderRadius: 14, padding: "11px 14px", marginBottom: 8,
-              animation: "slideUp 0.25s ease",
-            }}>
-              <div style={{
-                width: 36, height: 36, borderRadius: "50%", flexShrink: 0,
-                background: c + "30", border: `2px solid ${c}`,
-                display: "flex", alignItems: "center", justifyContent: "center",
-                fontSize: 13, fontWeight: 800, color: c,
-              }}>
-                {(p.username ?? p.telegramId).slice(0, 2).toUpperCase()}
-              </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: isWin ? c : "#D1D5DB" }}>
-                  {p.username ? `@${p.username}` : `#${p.telegramId.slice(-5)}`}
-                  {isMe && <span style={{ color: "#60A5FA", fontSize: 11 }}> · ты</span>}
-                  {isWin && " 🏆"}
-                </div>
-                <div style={{ display: "flex", gap: 3, marginTop: 4, height: 3, borderRadius: 2, overflow: "hidden", background: "#1F2937" }}>
-                  <div style={{ width: `${p.chance}%`, background: c, borderRadius: 2 }} />
-                </div>
-              </div>
-              <div style={{ textAlign: "right" }}>
-                <div style={{ fontSize: 14, fontWeight: 800, color: "#F59E0B" }}>{fmtTON(p.stake)} TON</div>
-                <div style={{ fontSize: 11, color: "#4B5563" }}>{p.chance.toFixed(1)}%</div>
-              </div>
+          {/* Table header */}
+          {players.length > 0 && (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr auto auto", gap: 8, padding: "6px 14px", marginBottom: 6 }}>
+              <div style={{ fontSize: 10, color: "#374151", fontWeight: 700, letterSpacing: "0.07em" }}>ИГРОК</div>
+              <div style={{ fontSize: 10, color: "#374151", fontWeight: 700, letterSpacing: "0.07em", textAlign: "right" }}>СТАВКА</div>
+              <div style={{ fontSize: 10, color: "#374151", fontWeight: 700, letterSpacing: "0.07em", textAlign: "right", minWidth: 48 }}>ШАНС</div>
             </div>
-          );
-        })}
+          )}
+
+          {players.map((p, i) => {
+            const isMe = p.telegramId === telegramId;
+            const isWin = isFinished && arena?.winnerId === p.telegramId;
+            const c = col(i);
+            return (
+              <div key={p.telegramId} style={{
+                display: "grid", gridTemplateColumns: "1fr auto auto", gap: 8, alignItems: "center",
+                background: isWin ? (c + "18") : isMe ? "#0F1923" : "#080E16",
+                border: `1px solid ${isWin ? c + "55" : isMe ? "#1A3050" : "#0F1923"}`,
+                borderRadius: 14, padding: "10px 14px", marginBottom: 7,
+                animation: "slideUp 0.25s ease",
+                transition: "all 0.3s ease",
+              }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+                  <PlayerAvatar player={p} color={c} size={34} isWinner={isWin} isMe={isMe} />
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: isWin ? c : isMe ? "#60A5FA" : "#9CA3AF", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {p.username ? `@${p.username}` : `#${p.telegramId.slice(-5)}`}
+                      {isWin && " 🏆"}{isMe && !isWin && <span style={{ color: "#374151", fontSize: 11 }}> · ты</span>}
+                    </div>
+                    {/* Chance bar */}
+                    <div style={{ height: 3, borderRadius: 2, background: "#141E2A", marginTop: 5, overflow: "hidden" }}>
+                      <div style={{ width: `${p.chance}%`, height: "100%", background: c, borderRadius: 2, transition: "width 0.6s ease" }} />
+                    </div>
+                  </div>
+                </div>
+                <div style={{ fontSize: 13, fontWeight: 800, color: "#F59E0B", textAlign: "right", whiteSpace: "nowrap" }}>
+                  {fmtTON(p.stake)} ▽
+                </div>
+                <div style={{ textAlign: "right", minWidth: 48 }}>
+                  <div style={{
+                    display: "inline-block", padding: "3px 8px", borderRadius: 8,
+                    background: c + "20", border: `1px solid ${c}44`,
+                    fontSize: 12, fontWeight: 700, color: c,
+                  }}>{p.chance.toFixed(1)}%</div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       {showFairness && arena?.fair && (

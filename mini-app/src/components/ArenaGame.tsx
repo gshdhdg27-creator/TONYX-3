@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { haptic, hapticNotify } from "@/lib/telegram";
 import FairnessModal, { type FairData } from "./FairnessModal";
 
@@ -10,7 +10,6 @@ interface ArenaPlayer {
   stake: number;
   chance: number;
 }
-
 interface ArenaState {
   id: number;
   status: "waiting" | "starting" | "finished";
@@ -24,7 +23,6 @@ interface ArenaState {
   finishedAt: string | null;
   fair?: FairData;
 }
-
 interface StatEntry {
   username: string | null;
   payout: number;
@@ -33,233 +31,320 @@ interface StatEntry {
 }
 
 /* ── Constants ── */
+const SQ = 320; // arena square size px
+const BALL_R = 10;
+const CX = SQ / 2;
+const CY = SQ / 2;
+
+// Colors matching screenshots: teal, salmon/red, yellow, purple...
 const ARENA_COLORS = [
-  "#FF6B6B", "#4ECDC4", "#FFE66D", "#A8E6CF",
-  "#B388FF", "#FF80AB", "#82B1FF", "#CCFF90",
-  "#FF9E80", "#80D8FF",
+  "#4ECDC4", // teal
+  "#E8756A", // salmon/red
+  "#F5C842", // yellow
+  "#9B59B6", // purple
+  "#3498DB", // blue
+  "#2ECC71", // green
+  "#E67E22", // orange
+  "#E91E63", // pink
+  "#00BCD4", // cyan
+  "#8BC34A", // lime
 ];
 const col = (i: number) => ARENA_COLORS[i % ARENA_COLORS.length];
 
-/* ── Helpers ── */
-function pName(p: ArenaPlayer) {
-  return p.username ? `@${p.username}` : `#${p.telegramId.slice(-5)}`;
-}
 function fmtTimer(sec: number) {
   const m = Math.floor(sec / 60).toString().padStart(2, "0");
   const s = (sec % 60).toString().padStart(2, "0");
   return `${m}:${s}`;
 }
 function fmtTON(v: number) {
-  return v % 1 === 0 ? v.toFixed(0) : v.toFixed(2).replace(/\.?0+$/, "");
+  if (v === 0) return "0";
+  if (v >= 1000) return v.toFixed(0);
+  return v % 1 === 0 ? v.toFixed(0) : parseFloat(v.toFixed(3)).toString();
+}
+function pName(p: ArenaPlayer) {
+  return p.username ? `@${p.username}` : `#${p.telegramId.slice(-5)}`;
 }
 
-/* ── Square Arena helpers ── */
-const SQ = 300;
-const CX = SQ / 2;
-const CY = SQ / 2;
-const HW = SQ / 2;
-const HH = SQ / 2;
-const BALL_R = 10;
+/* ══════════════════════════════════════════════════════
+   TERRITORY CALCULATION
+   Key insight from screenshots: NOT pie chart from center.
+   Instead: the square is divided by straight cutting lines.
+   Each player gets a convex polygon proportional to stake.
+   For 2 players: one diagonal line.
+   For 3+ players: Voronoi-like cuts from random seed points.
+   
+   We implement a simpler but visually matching approach:
+   Sort players by stake desc, then cut the rectangle into
+   strips/polygons using a sweeping line from top-left to bottom-right.
+══════════════════════════════════════════════════════ */
 
-function squarePoint(deg: number): [number, number] {
-  const rad = (deg * Math.PI) / 180;
-  const dx = Math.sin(rad);
-  const dy = -Math.cos(rad);
-  const ax = Math.abs(dx);
-  const ay = Math.abs(dy);
-  const t = ax < 1e-9 ? HH / ay : ay < 1e-9 ? HW / ax : Math.min(HW / ax, HH / ay);
-  return [CX + t * dx, CY + t * dy];
-}
-
-function squareSectorPoints(startDeg: number, endDeg: number, steps = 64): string {
-  const pts: [number, number][] = [[CX, CY]];
-  for (let i = 0; i <= steps; i++) {
-    const a = startDeg + ((endDeg - startDeg) * i) / steps;
-    pts.push(squarePoint(a));
-  }
-  return pts.map(([x, y]) => `${x.toFixed(2)},${y.toFixed(2)}`).join(" ");
-}
-
-function sectorAvatarPos(startDeg: number, endDeg: number, fraction = 0.58): [number, number] {
-  const mid = (startDeg + endDeg) / 2;
-  const [px, py] = squarePoint(mid);
-  return [CX + (px - CX) * fraction, CY + (py - CY) * fraction];
-}
-
-function sectorRandomPoint(startDeg: number, endDeg: number): [number, number] {
-  const span = endDeg - startDeg;
-  const margin = Math.min(span * 0.12, 8);
-  const randDeg = startDeg + margin + Math.random() * (span - margin * 2);
-  const [px, py] = squarePoint(randDeg);
-  const frac = 0.30 + Math.random() * 0.35;
-  return [CX + (px - CX) * frac, CY + (py - CY) * frac];
-}
-
-// Compute avatar size based on sector size (stake fraction)
-function sectorAvatarSize(fraction: number): number {
-  const MIN_SIZE = 22;
-  const MAX_SIZE = 54;
-  return Math.round(MIN_SIZE + (MAX_SIZE - MIN_SIZE) * Math.min(1, fraction * 3));
-}
-
-interface Sector {
-  points: string;
+interface Territory {
+  points: [number, number][];   // polygon vertices
   color: string;
-  startDeg: number;
-  endDeg: number;
-  avatarX: number;
-  avatarY: number;
   player: ArenaPlayer;
   idx: number;
   fraction: number;
+  centerX: number;
+  centerY: number;
+}
+
+/**
+ * Divide the SQ×SQ square into polygons proportional to fractions[].
+ * Uses a diagonal sweep: imagine a line going from top-left corner
+ * sweeping clockwise around the perimeter. Each player gets a
+ * "pie slice" of the perimeter, creating diagonal-cut territories
+ * exactly like in the screenshots.
+ */
+function buildTerritories(players: ArenaPlayer[], totalPool: number): Territory[] {
+  if (players.length === 0) return [];
+
+  // Perimeter of square: top(0→SQ), right(0→SQ), bottom(SQ→0), left(SQ→0)
+  // Total perimeter = 4*SQ
+  // Map fraction → perimeter length → point on perimeter
+
+  const perimeterPoint = (t: number): [number, number] => {
+    // t in [0, 4*SQ)
+    const side = SQ;
+    if (t < side)       return [t, 0];               // top: left→right
+    if (t < 2 * side)   return [side, t - side];      // right: top→bottom
+    if (t < 3 * side)   return [side - (t - 2*side), side]; // bottom: right→left
+    return [0, side - (t - 3*side)];                  // left: bottom→top
+  };
+
+  const totalPerim = 4 * SQ;
+  const fractions = players.map(p => totalPool > 0 ? p.stake / totalPool : 1 / players.length);
+
+  // Build cut points on perimeter
+  // Start at top-left corner (t=0 corresponds to top-left, sweeping clockwise)
+  // But offset start to top edge midpoint for nice look
+  const startOffset = 0; // start from top-left corner
+
+  const cuts: number[] = [startOffset]; // cumulative perimeter positions
+  let acc = startOffset;
+  for (const frac of fractions) {
+    acc += frac * totalPerim;
+    cuts.push(acc % totalPerim);
+  }
+
+  const territories: Territory[] = [];
+
+  for (let i = 0; i < players.length; i++) {
+    const p = players[i];
+    const frac = fractions[i];
+
+    const tStart = cuts[i];
+    const tEnd = cuts[i + 1] <= cuts[i] ? cuts[i + 1] + totalPerim : cuts[i + 1];
+
+    // Sample perimeter arc from tStart to tEnd
+    const arcPoints: [number, number][] = [];
+    const steps = Math.max(4, Math.round(frac * 60));
+    for (let s = 0; s <= steps; s++) {
+      const t = tStart + (tEnd - tStart) * s / steps;
+      arcPoints.push(perimeterPoint(t % totalPerim));
+    }
+
+    // Polygon: center + arc
+    const pts: [number, number][] = [[CX, CY], ...arcPoints];
+
+    // Compute centroid for avatar placement
+    let cx = 0, cy = 0;
+    for (const [x, y] of pts) { cx += x; cy += y; }
+    cx /= pts.length; cy /= pts.length;
+
+    territories.push({
+      points: pts,
+      color: col(i),
+      player: p,
+      idx: i,
+      fraction: frac,
+      centerX: cx,
+      centerY: cy,
+    });
+  }
+
+  return territories;
+}
+
+// Avatar size based on fraction
+function avatarSize(fraction: number): number {
+  return Math.max(32, Math.min(100, Math.round(32 + fraction * 130)));
 }
 
 /* ── Toast ── */
 function Toast({ msg, type }: { msg: string; type: "success" | "error" | "info" }) {
-  const bg = type === "success" ? "rgba(22,163,74,0.97)"
-    : type === "error" ? "rgba(220,38,38,0.97)"
-    : "rgba(30,64,175,0.97)";
+  const bg = type === "success" ? "#22C55E" : type === "error" ? "#EF4444" : "#3B82F6";
   return (
     <div style={{
-      position: "fixed", top: 16, left: "50%", transform: "translateX(-50%)",
-      background: bg, color: "#fff", padding: "12px 22px", borderRadius: 12,
+      position: "fixed", top: 20, left: "50%", transform: "translateX(-50%)",
+      background: bg, color: "#fff", padding: "12px 24px", borderRadius: 14,
       fontSize: 14, fontWeight: 600, zIndex: 9999, maxWidth: "88vw",
-      boxShadow: "0 8px 28px rgba(0,0,0,0.55)", whiteSpace: "pre-line", textAlign: "center",
+      boxShadow: "0 8px 30px rgba(0,0,0,0.5)", textAlign: "center",
     }}>{msg}</div>
   );
 }
 
-/* ── Avatar component ── */
-function PlayerAvatar({
-  player, color, size, isWinner, isMe,
-}: {
-  player: ArenaPlayer;
-  color: string;
-  size: number;
-  isWinner: boolean;
-  isMe: boolean;
-}) {
-  const initials = (player.username ?? player.telegramId).slice(0, 2).toUpperCase();
-  return (
-    <div style={{
-      width: size, height: size, borderRadius: "50%",
-      border: `${isWinner ? 3 : 2}px solid ${isWinner ? "#fff" : color}`,
-      background: player.photoUrl ? "transparent" : (color + "40"),
-      display: "flex", alignItems: "center", justifyContent: "center",
-      overflow: "hidden",
-      boxShadow: isWinner
-        ? `0 0 0 3px ${color}, 0 0 20px ${color}cc`
-        : isMe ? `0 0 12px ${color}99` : "none",
-      transition: "all 0.4s ease",
-      flexShrink: 0,
-    }}>
-      {player.photoUrl ? (
-        <img src={player.photoUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-      ) : (
-        <span style={{ fontSize: size * 0.35, fontWeight: 800, color }}>{initials}</span>
-      )}
-    </div>
-  );
-}
+/* ── Stake Config Modal (matches screenshot exactly) ── */
+function StakeConfigModal({
+  values, onSave, onClose,
+}: { values: number[]; onSave: (v: number[]) => void; onClose: () => void }) {
+  const [local, setLocal] = useState([...values]);
+  const [selected, setSelected] = useState(0);
+  const [inputVal, setInputVal] = useState(String(values[0]));
 
-/* ── Stat Card ── */
-function StatCard({
-  label, username, amount, badge, onClick,
-}: { label: string; username: string | null; amount: number; badge?: string; onClick?: () => void }) {
-  return (
-    <div onClick={onClick} style={{
-      flex: 1, background: "#0F1923", border: "1px solid #1A2535",
-      borderRadius: 14, padding: "10px 14px", minWidth: 0,
-      cursor: onClick ? "pointer" : "default",
-    }}>
-      <div style={{ fontSize: 9, color: "#4B5563", fontWeight: 700, letterSpacing: "0.08em", marginBottom: 5 }}>
-        {label}
-      </div>
-      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-        {badge && (
-          <div style={{
-            width: 24, height: 24, borderRadius: "50%",
-            background: "linear-gradient(135deg,#6366F1,#8B5CF6)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            fontSize: 9, fontWeight: 800, color: "#fff", flexShrink: 0,
-          }}>{badge}</div>
-        )}
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 12, color: "#9CA3AF", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {username ? `@${username}` : "—"}
-          </div>
-        </div>
-        <div style={{ fontSize: 13, fontWeight: 800, color: "#F59E0B", whiteSpace: "nowrap", flexShrink: 0 }}>
-          {amount > 0 ? `+${fmtTON(amount)} ▽` : "—"}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ── EditableStakeButton ── */
-function EditableStakeButton({
-  value, onChange, selected, onSelect,
-}: { value: number; onChange: (v: number) => void; selected: boolean; onSelect: () => void }) {
-  const [editing, setEditing] = useState(false);
-  const [input, setInput] = useState(String(value));
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => { setInput(String(value)); }, [value]);
-
-  const commit = () => {
-    const v = parseFloat(input);
-    if (!isNaN(v) && v > 0) onChange(Math.round(v * 1000) / 1000);
-    else setInput(String(value));
-    setEditing(false);
+  const select = (i: number) => {
+    setSelected(i);
+    setInputVal(String(local[i]));
+  };
+  const handleInput = (raw: string) => {
+    setInputVal(raw);
+    const n = parseFloat(raw);
+    if (!isNaN(n) && n > 0) {
+      const upd = [...local];
+      upd[selected] = Math.round(n * 100) / 100;
+      setLocal(upd);
+    }
   };
 
   return (
-    <div style={{ flex: 1, position: "relative" }}>
-      {editing ? (
-        <input
-          ref={inputRef}
-          value={input}
-          onChange={e => setInput(e.target.value)}
-          onBlur={commit}
-          onKeyDown={e => { if (e.key === "Enter") commit(); if (e.key === "Escape") { setInput(String(value)); setEditing(false); } }}
-          autoFocus
-          type="number"
-          style={{
-            width: "100%", padding: "10px 6px", borderRadius: 10, border: `1.5px solid #F59E0B`,
-            background: "#1A2535", color: "#fff", fontSize: 13, fontWeight: 700,
-            textAlign: "center", outline: "none", boxSizing: "border-box", fontFamily: "inherit",
-          }}
-        />
-      ) : (
-        <div style={{ display: "flex", borderRadius: 10, overflow: "hidden", border: `1.5px solid ${selected ? "#F59E0B" : "#1A2535"}` }}>
-          <button
-            onClick={onSelect}
-            style={{
-              flex: 1, padding: "10px 4px", border: "none",
-              background: selected ? "linear-gradient(135deg,#D97706,#F59E0B)" : "#0F1923",
-              color: selected ? "#fff" : "#6B7280",
-              fontSize: 13, fontWeight: 800, cursor: "pointer", fontFamily: "inherit",
-              boxShadow: selected ? "0 0 14px rgba(245,158,11,0.4)" : "none",
-            }}
-          >▽ {value}</button>
-          <button
-            onClick={(e) => { e.stopPropagation(); setEditing(true); onSelect(); }}
-            style={{
-              width: 28, padding: "0 4px", border: "none", borderLeft: "1px solid #1A2535",
-              background: selected ? "#c77f00" : "#0d141f",
-              color: selected ? "#fff" : "#374151", fontSize: 11, cursor: "pointer", fontFamily: "inherit",
-            }}
-          >✏️</button>
+    <div style={{
+      position: "fixed", inset: 0, zIndex: 500,
+      background: "rgba(0,0,0,0.75)", backdropFilter: "blur(4px)",
+      display: "flex", alignItems: "flex-end", justifyContent: "center",
+    }} onClick={onClose}>
+      <div style={{
+        background: "#1C1C1E", borderRadius: "24px 24px 0 0",
+        padding: "8px 20px 40px", width: "100%", maxWidth: 480,
+      }} onClick={e => e.stopPropagation()}>
+        {/* Handle */}
+        <div style={{ width: 36, height: 4, background: "#3A3A3C", borderRadius: 2, margin: "12px auto 20px" }} />
+        <div style={{ fontSize: 18, fontWeight: 700, color: "#fff", marginBottom: 20 }}>
+          Настроить кнопки
         </div>
-      )}
+        {/* Pill selector */}
+        <div style={{
+          display: "flex", background: "#2C2C2E", borderRadius: 14,
+          padding: 3, marginBottom: 24, gap: 2,
+        }}>
+          {local.map((v, i) => (
+            <button key={i} onClick={() => select(i)} style={{
+              flex: 1, padding: "10px 0", borderRadius: 11, border: "none",
+              background: selected === i ? "#fff" : "transparent",
+              color: selected === i ? "#000" : "#8E8E93",
+              fontSize: 15, fontWeight: 600, cursor: "pointer", fontFamily: "inherit",
+              display: "flex", alignItems: "center", justifyContent: "center", gap: 4,
+              transition: "all 0.15s",
+            }}>
+              <span style={{ color: selected === i ? "#007AFF" : "#555", fontSize: 13 }}>♦</span>{v}
+            </button>
+          ))}
+        </div>
+        {/* Big input */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10, marginBottom: 28 }}>
+          <input
+            value={inputVal}
+            onChange={e => handleInput(e.target.value)}
+            type="number" min="0.1" step="0.1"
+            style={{
+              fontSize: 52, fontWeight: 700, color: "#fff",
+              background: "transparent", border: "none", outline: "none",
+              width: 150, textAlign: "right", fontFamily: "inherit",
+            }}
+          />
+          <span style={{ fontSize: 24, fontWeight: 600, color: "#636366" }}>GRAM</span>
+          <button onClick={() => { setInputVal(""); }} style={{
+            width: 32, height: 32, borderRadius: 8, border: "none",
+            background: "#3A3A3C", color: "#9CA3AF", fontSize: 16,
+            cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+          }}>✕</button>
+        </div>
+        <div style={{ display: "flex", gap: 12 }}>
+          <button onClick={() => { onSave([1, 5, 10]); onClose(); }} style={{
+            flex: 1, padding: "16px", borderRadius: 16, border: "none",
+            background: "#2C2C2E", color: "#fff", fontSize: 16, fontWeight: 600,
+            cursor: "pointer", fontFamily: "inherit",
+          }}>Сбросить всё</button>
+          <button onClick={() => { onSave(local); onClose(); }} style={{
+            flex: 1, padding: "16px", borderRadius: 16, border: "none",
+            background: "#007AFF", color: "#fff", fontSize: 16, fontWeight: 700,
+            cursor: "pointer", fontFamily: "inherit",
+          }}>Сохранить</button>
+        </div>
+      </div>
     </div>
   );
 }
 
-/* ══════════════════════════════════════════
-   MAIN COMPONENT
-══════════════════════════════════════════ */
+/* ── Winner Popup ── */
+function WinnerPopup({ result, onClose }: {
+  result: { won: boolean; payout: number; name: string; multiplier: number; photoUrl?: string | null };
+  onClose: () => void;
+}) {
+  return (
+    <div style={{
+      position: "fixed", inset: 0, zIndex: 400,
+      background: "rgba(0,0,0,0.88)", backdropFilter: "blur(8px)",
+      display: "flex", alignItems: "center", justifyContent: "center",
+    }}>
+      <style>{`
+        @keyframes winPop{0%{opacity:0;transform:scale(0.6) translateY(30px)}70%{transform:scale(1.05) translateY(-4px)}100%{opacity:1;transform:scale(1) translateY(0)}}
+        @keyframes confetti{0%{transform:translateY(0) rotate(0deg);opacity:1}100%{transform:translateY(-150px) rotate(720deg);opacity:0}}
+      `}</style>
+      {Array.from({ length: 24 }).map((_, i) => (
+        <div key={i} style={{
+          position: "fixed",
+          left: `${5 + Math.random() * 90}%`,
+          top: `${30 + Math.random() * 40}%`,
+          width: i % 3 === 0 ? 10 : 7, height: i % 3 === 0 ? 10 : 7,
+          borderRadius: i % 2 === 0 ? "50%" : 2,
+          background: ARENA_COLORS[i % ARENA_COLORS.length],
+          animation: `confetti ${0.7 + Math.random() * 1.2}s ease-out ${Math.random() * 0.4}s forwards`,
+          pointerEvents: "none", zIndex: 401,
+        }} />
+      ))}
+      <div style={{
+        background: "linear-gradient(160deg,#1A2A1A,#0D1F0D)",
+        borderRadius: 24, padding: "32px 28px 28px",
+        textAlign: "center", maxWidth: 340, width: "88%",
+        border: "1px solid rgba(34,197,94,0.3)",
+        boxShadow: "0 0 60px rgba(34,197,94,0.2)",
+        animation: "winPop 0.5s cubic-bezier(0.175,0.885,0.32,1.275) forwards",
+        position: "relative",
+      }}>
+        <button onClick={onClose} style={{
+          position: "absolute", top: 14, right: 14,
+          background: "rgba(255,255,255,0.1)", border: "none", borderRadius: "50%",
+          width: 28, height: 28, cursor: "pointer", color: "#fff", fontSize: 14,
+        }}>✕</button>
+        <div style={{ fontSize: 16, fontWeight: 700, color: "#fff", marginBottom: 16 }}>
+          ✈️ {result.name} выиграл
+        </div>
+        <div style={{
+          width: 96, height: 96, borderRadius: "50%", margin: "0 auto 16px",
+          background: "linear-gradient(135deg,#22C55E,#16A34A)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          overflow: "hidden",
+          boxShadow: "0 0 32px rgba(34,197,94,0.5)",
+        }}>
+          {result.photoUrl
+            ? <img src={result.photoUrl} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+            : <span style={{ fontSize: 48 }}>{result.won ? "🏆" : "😔"}</span>}
+        </div>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10, marginBottom: 8 }}>
+          <span style={{ fontSize: 26, fontWeight: 900, color: "#fff" }}>♦ {fmtTON(result.payout)}</span>
+          <span style={{
+            background: "#007AFF", borderRadius: 8, padding: "4px 10px",
+            fontSize: 14, fontWeight: 700, color: "#fff",
+          }}>{result.multiplier.toFixed(2)}x</span>
+        </div>
+        <div style={{ fontSize: 13, color: result.won ? "#22C55E" : "#6B7280", fontWeight: 600 }}>
+          {result.won ? "Выигрыш зачислен на баланс! 🎉" : "Вам не повезло в этот раз"}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════ MAIN ══════════════════════════ */
 export default function ArenaGame({
   telegramId, tonBalance, onBalanceChange, onClose, onOpenHistory,
 }: {
@@ -273,69 +358,147 @@ export default function ArenaGame({
   const [topGame, setTopGame] = useState<StatEntry | null>(null);
   const [lastGame, setLastGame] = useState<StatEntry | null>(null);
 
-  // Editable quick stake buttons (3 editable + 1 all-in)
-  const [quickStakes, setQuickStakes] = useState([1, 3, 5]);
-  const [selectedQuick, setSelectedQuick] = useState<number | "allin" | null>(null);
-  const [joinStake, setJoinStake] = useState(1);
-  const [joinInput, setJoinInput] = useState("1");
+  // Bottom stake buttons (3 editable)
+  const [quickStakes, setQuickStakes] = useState([1, 5, 10]);
+  const [showConfig, setShowConfig] = useState(false);
+  const [selectedStake, setSelectedStake] = useState<number | null>(null);
 
+  // Increase stake panel
   const [increaseAmt, setIncreaseAmt] = useState(0.5);
   const [increaseInput, setIncreaseInput] = useState("0.5");
-  const [showIncreasePanel, setShowIncreasePanel] = useState(true);
+  const INCREASE_PRESETS = [0.1, 0.5, 1, 2, 5];
 
   const [busy, setBusy] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" | "info" } | null>(null);
-  const [animPhase, setAnimPhase] = useState<"idle" | "revealed" | "payout">("idle");
-  const [pendingResult, setPendingResult] = useState<{ won: boolean; payout: number; name: string } | null>(null);
-  const [onlineCount] = useState(15 + Math.floor(Math.random() * 12));
+  const [winnerPopup, setWinnerPopup] = useState<{
+    won: boolean; payout: number; name: string; multiplier: number; photoUrl?: string | null;
+  } | null>(null);
   const [showFairness, setShowFairness] = useState(false);
+  const [onlineCount, setOnlineCount] = useState(20);
 
-  const prevStatusRef = useRef<string | null>(null);
-  const prevArenaIdRef = useRef<number | null>(null);
-
-  const ballStateRef = useRef<"IDLE" | "RUNNING">("IDLE");
-  const ballCircleRef = useRef<SVGCircleElement | null>(null);
+  // Ball animation refs
+  const ballRef = useRef<SVGCircleElement | null>(null);
   const ballGlowRef = useRef<SVGCircleElement | null>(null);
-  const arrowRef = useRef<SVGGElement | null>(null);
+  const ballRingRef = useRef<SVGCircleElement | null>(null);
+  const ballStateRef = useRef<"IDLE" | "RUNNING">("IDLE");
   const ballPosRef = useRef({ x: CX, y: CY });
   const ballVelRef = useRef({ vx: 0, vy: 0 });
   const ballTargetRef = useRef<{ x: number; y: number } | null>(null);
   const ballStoppedRef = useRef(false);
-  const runStartTimeRef = useRef<number | null>(null);
+  const runStartRef = useRef<number | null>(null);
   const rafRef = useRef<number | null>(null);
-  const prevCountdownRef = useRef<number | null>(null);
-  const sectorsRef = useRef<Sector[]>([]);
   const onBallStopRef = useRef<(() => void) | null>(null);
   const cancelTimersRef = useRef<(() => void) | null>(null);
 
+  const prevStatusRef = useRef<string | null>(null);
+  const prevArenaIdRef = useRef<number | null>(null);
+  const prevCountdownRef = useRef<number | null>(null);
+  const territoriesRef = useRef<Territory[]>([]);
+
   const flash = (msg: string, type: "success" | "error" | "info" = "info") => {
-    setToast({ msg, type }); setTimeout(() => setToast(null), 3200);
-  };
-
-  /* ── Stake helpers ── */
-  const setJoin = (v: number) => {
-    const rounded = Math.round(v * 1000) / 1000;
-    setJoinStake(rounded);
-    setJoinInput(String(rounded));
-  };
-
-  const handleQuickSelect = (v: number, idx: number | "allin") => {
-    setSelectedQuick(idx);
-    setJoin(v);
+    setToast({ msg, type }); setTimeout(() => setToast(null), 3000);
   };
 
   /* ── Online count flicker ── */
-  const [onlineDisp, setOnlineDisp] = useState(onlineCount);
   useEffect(() => {
-    const t = setInterval(() => {
-      setOnlineDisp(prev => Math.max(8, prev + Math.floor(Math.random() * 5) - 2));
-    }, 7000);
+    const t = setInterval(() => setOnlineCount(n => Math.max(10, n + Math.floor(Math.random() * 5) - 2)), 7000);
     return () => clearInterval(t);
   }, []);
 
-  /* ── Detect finish ── */
-  const handleUpdate = (fresh: ArenaState) => {
+  /* ── Ball animation RAF ── */
+  useEffect(() => {
+    let active = true;
+    const EDGE = 1;
+    const FREE_MS = 3800;
+
+    const place = (nx: number, ny: number) => {
+      ballPosRef.current = { x: nx, y: ny };
+      const xs = nx.toFixed(1), ys = ny.toFixed(1);
+      ballRef.current?.setAttribute("cx", xs);
+      ballRef.current?.setAttribute("cy", ys);
+      ballGlowRef.current?.setAttribute("cx", xs);
+      ballGlowRef.current?.setAttribute("cy", ys);
+      ballRingRef.current?.setAttribute("cx", xs);
+      ballRingRef.current?.setAttribute("cy", ys);
+    };
+
+    const bounce = (nx: number, ny: number, vx: number, vy: number) => {
+      const j = () => (Math.random() - 0.5) * 0.5; // tiny jitter for natural feel
+      if (nx - BALL_R <= EDGE)        { nx = BALL_R + EDGE;       vx =  Math.abs(vx) + j(); }
+      if (nx + BALL_R >= SQ - EDGE)   { nx = SQ - BALL_R - EDGE;  vx = -(Math.abs(vx) + j()); }
+      if (ny - BALL_R <= EDGE)        { ny = BALL_R + EDGE;       vy =  Math.abs(vy) + j(); }
+      if (ny + BALL_R >= SQ - EDGE)   { ny = SQ - BALL_R - EDGE;  vy = -(Math.abs(vy) + j()); }
+      return { nx, ny, vx, vy };
+    };
+
+    const step = () => {
+      if (!active) return;
+
+      if (ballStateRef.current === "IDLE") {
+        place(CX, CY);
+        rafRef.current = requestAnimationFrame(step);
+        return;
+      }
+
+      if (ballStoppedRef.current) {
+        if (ballTargetRef.current) {
+          const { x: tx, y: ty } = ballTargetRef.current;
+          const dx = tx - ballPosRef.current.x, dy = ty - ballPosRef.current.y;
+          if (Math.sqrt(dx * dx + dy * dy) > 3) {
+            ballStoppedRef.current = false;
+            ballVelRef.current = { vx: dx * 0.12, vy: dy * 0.12 };
+          } else {
+            const cb = onBallStopRef.current;
+            if (cb) { onBallStopRef.current = null; cb(); }
+          }
+        }
+        rafRef.current = requestAnimationFrame(step);
+        return;
+      }
+
+      const elapsed = runStartRef.current ? performance.now() - runStartRef.current : 0;
+      let { vx, vy } = ballVelRef.current;
+      const pos = ballPosRef.current;
+
+      if (elapsed >= FREE_MS && ballTargetRef.current) {
+        const { x: tx, y: ty } = ballTargetRef.current;
+        const dx = tx - pos.x, dy = ty - pos.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        if (dist < 1.5) {
+          ballStoppedRef.current = true;
+          ballVelRef.current = { vx: 0, vy: 0 };
+          place(tx, ty);
+          const cb = onBallStopRef.current;
+          onBallStopRef.current = null;
+          cb?.();
+          rafRef.current = requestAnimationFrame(step);
+          return;
+        }
+        const age = elapsed - FREE_MS;
+        const ramp = Math.min(1, age / 700);
+        const pull = Math.max(0.012, Math.min(0.14, dist / 260) * ramp);
+        vx = dx * pull; vy = dy * pull;
+        ballVelRef.current = { vx, vy };
+        place(pos.x + vx, pos.y + vy);
+        rafRef.current = requestAnimationFrame(step);
+        return;
+      }
+
+      vx *= 0.994; vy *= 0.994;
+      const b = bounce(pos.x + vx, pos.y + vy, vx, vy);
+      ballVelRef.current = { vx: b.vx, vy: b.vy };
+      place(b.nx, b.ny);
+      rafRef.current = requestAnimationFrame(step);
+    };
+
+    rafRef.current = requestAnimationFrame(step);
+    return () => { active = false; if (rafRef.current) cancelAnimationFrame(rafRef.current); };
+  }, []);
+
+  /* ── Fetch & update ── */
+  const handleUpdate = useCallback((fresh: ArenaState) => {
     const prev = prevStatusRef.current;
     const prevId = prevArenaIdRef.current;
 
@@ -349,47 +512,41 @@ export default function ArenaGame({
       if (wp) {
         const others = fresh.totalPool - wp.stake;
         const payout = Math.round((wp.stake + others * 0.80) * 1000) / 1000;
-        const result = { won: fresh.winnerId === telegramId, payout, name: pName(wp) };
-        setPendingResult(result);
-        fetchStats();
+        const mult = payout / wp.stake;
 
-        if (fresh.winnerSector && !ballTargetRef.current) {
-          const { startDeg, endDeg } = fresh.winnerSector;
-          const [tx, ty] = sectorRandomPoint(startDeg, endDeg);
-          ballTargetRef.current = { x: tx, y: ty };
-          if (ballStoppedRef.current && ballStateRef.current === "RUNNING") {
-            ballStoppedRef.current = false;
-            const pos = ballPosRef.current;
-            ballVelRef.current = { vx: (tx - pos.x) * 0.12, vy: (ty - pos.y) * 0.12 };
-          }
-          if (ballStateRef.current === "IDLE") {
-            const angle = Math.random() * Math.PI * 2;
-            const speed = 4 + Math.random() * 2;
-            ballStateRef.current = "RUNNING";
-            ballStoppedRef.current = false;
-            ballPosRef.current = { x: CX, y: CY };
-            ballVelRef.current = { vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed };
-            runStartTimeRef.current = performance.now();
-          }
+        // Find target point inside winner territory
+        const winTerr = territoriesRef.current.find(t => t.player.telegramId === fresh.winnerId);
+        if (winTerr) {
+          // Pick random point inside territory polygon (use centroid ± random offset)
+          const tx = winTerr.centerX + (Math.random() - 0.5) * 40;
+          const ty = winTerr.centerY + (Math.random() - 0.5) * 40;
+          ballTargetRef.current = {
+            x: Math.max(BALL_R + 4, Math.min(SQ - BALL_R - 4, tx)),
+            y: Math.max(BALL_R + 4, Math.min(SQ - BALL_R - 4, ty)),
+          };
+        }
+
+        // Launch ball if not already running
+        if (ballStateRef.current === "IDLE") {
+          const angle = Math.random() * Math.PI * 2;
+          const speed = 4 + Math.random() * 2;
+          ballStateRef.current = "RUNNING";
+          ballStoppedRef.current = false;
+          ballPosRef.current = { x: CX, y: CY };
+          ballVelRef.current = { vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed };
+          runStartRef.current = performance.now();
         }
 
         cancelTimersRef.current?.();
         onBallStopRef.current = () => {
-          hapticNotify(result.won ? "success" : "error");
-          setAnimPhase("revealed");
-          let t1: ReturnType<typeof setTimeout>;
-          let t2: ReturnType<typeof setTimeout>;
+          hapticNotify(fresh.winnerId === telegramId ? "success" : "error");
+          let t1: ReturnType<typeof setTimeout>, t2: ReturnType<typeof setTimeout>;
           cancelTimersRef.current = () => { clearTimeout(t1); clearTimeout(t2); };
           t1 = setTimeout(() => {
-            setAnimPhase("payout");
+            setWinnerPopup({ won: fresh.winnerId === telegramId, payout, name: pName(wp), multiplier: mult, photoUrl: wp.photoUrl });
             onBalanceChange();
-            t2 = setTimeout(() => {
-              setAnimPhase("idle");
-              setPendingResult(null);
-              onBallStopRef.current = null;
-              cancelTimersRef.current = null;
-            }, 4500);
-          }, 1800);
+            t2 = setTimeout(() => setWinnerPopup(null), 6000);
+          }, 600);
         };
       }
     }
@@ -398,209 +555,14 @@ export default function ArenaGame({
     if (fresh.status !== "finished") prevArenaIdRef.current = fresh.id;
     setArena(fresh);
 
+    // ── TIMER FIX: Always recalculate countdown from startAt ──
     if (fresh.status === "starting" && fresh.startAt) {
       const secs = Math.max(0, Math.ceil((new Date(fresh.startAt).getTime() - Date.now()) / 1000));
       setCountdown(secs);
     } else if (fresh.status === "waiting") {
       setCountdown(null);
-    }
-  };
-
-  const fetchArena = async () => {
-    try {
-      const r = await fetch("/api/mini/games/arena/state");
-      if (r.ok) handleUpdate(await r.json());
-    } catch { /* offline */ }
-  };
-
-  const fetchStats = async () => {
-    try {
-      const [bigR, lastR] = await Promise.all([
-        fetch("/api/mini/games/arena/biggest-winner"),
-        fetch("/api/mini/games/arena/last-winner"),
-      ]);
-      if (bigR.ok) { const d = await bigR.json(); if (d.winner) setTopGame(d.winner); }
-      if (lastR.ok) { const d = await lastR.json(); if (d.winner) setLastGame(d.winner); }
-    } catch { /* offline */ }
-  };
-
-  useEffect(() => {
-    fetchArena();
-    fetchStats();
-    const id = setInterval(fetchArena, 2500);
-    return () => clearInterval(id);
-  }, []);
-
-  /* ── Countdown tick ── */
-  useEffect(() => {
-    if (countdown === null || countdown <= 0) {
-      if (countdown === 0) {
-        fetchArena();
-        const t1 = setTimeout(fetchArena, 500);
-        const t2 = setTimeout(fetchArena, 1000);
-        const t3 = setTimeout(fetchArena, 1600);
-        return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
-      }
-      return;
-    }
-    const t = setTimeout(() => setCountdown(c => (c !== null && c > 0 ? c - 1 : 0)), 1000);
-    return () => clearTimeout(t);
-  }, [countdown]);
-
-  /* ── Ball animation RAF loop ── */
-  useEffect(() => {
-    let active = true;
-    const EDGE = 2;
-    const ATTRACT_MS = 4000;
-
-    const place = (nx: number, ny: number, vx?: number, vy?: number) => {
-      ballPosRef.current = { x: nx, y: ny };
-      ballCircleRef.current?.setAttribute("cx", nx.toFixed(2));
-      ballCircleRef.current?.setAttribute("cy", ny.toFixed(2));
-      ballGlowRef.current?.setAttribute("cx", nx.toFixed(2));
-      ballGlowRef.current?.setAttribute("cy", ny.toFixed(2));
-
-      // Update arrow direction
-      if (arrowRef.current && vx !== undefined && vy !== undefined) {
-        const speed = Math.sqrt(vx * vx + vy * vy);
-        if (speed > 0.5) {
-          const angle = Math.atan2(vy, vx) * (180 / Math.PI);
-          arrowRef.current.setAttribute("transform", `translate(${nx.toFixed(2)}, ${ny.toFixed(2)}) rotate(${angle.toFixed(1)})`);
-          arrowRef.current.setAttribute("opacity", "0.9");
-        }
-      }
-    };
-
-    const wallBounce = (nx: number, ny: number, vx: number, vy: number) => {
-      // Natural corner-like bounces: use slight angle variation on bounce
-      const jitter = () => (Math.random() - 0.5) * 0.3;
-      if (nx - BALL_R <= EDGE) { nx = BALL_R + EDGE; vx = Math.abs(vx) + jitter(); }
-      if (nx + BALL_R >= SQ - EDGE) { nx = SQ - BALL_R - EDGE; vx = -(Math.abs(vx) + jitter()); }
-      if (ny - BALL_R <= EDGE) { ny = BALL_R + EDGE; vy = Math.abs(vy) + jitter(); }
-      if (ny + BALL_R >= SQ - EDGE) { ny = SQ - BALL_R - EDGE; vy = -(Math.abs(vy) + jitter()); }
-      return { nx, ny, vx, vy };
-    };
-
-    const step = () => {
-      if (!active) return;
-
-      if (ballStateRef.current === "IDLE") {
-        place(CX, CY, 0, 0);
-        if (arrowRef.current) arrowRef.current.setAttribute("opacity", "0");
-        rafRef.current = requestAnimationFrame(step);
-        return;
-      }
-
-      if (ballStoppedRef.current && ballTargetRef.current) {
-        const tgt = ballTargetRef.current;
-        const pos = ballPosRef.current;
-        const dx = tgt.x - pos.x;
-        const dy = tgt.y - pos.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        if (dist > 2) {
-          ballStoppedRef.current = false;
-          ballVelRef.current = { vx: dx * 0.14, vy: dy * 0.14 };
-        } else {
-          const cb = onBallStopRef.current;
-          if (cb) { onBallStopRef.current = null; cb(); }
-          if (arrowRef.current) arrowRef.current.setAttribute("opacity", "0");
-          rafRef.current = requestAnimationFrame(step);
-          return;
-        }
-      }
-      if (ballStoppedRef.current) {
-        rafRef.current = requestAnimationFrame(step);
-        return;
-      }
-
-      const elapsed = runStartTimeRef.current !== null
-        ? performance.now() - runStartTimeRef.current : 0;
-
-      const pos = ballPosRef.current;
-      let { vx, vy } = ballVelRef.current;
-
-      if (elapsed >= ATTRACT_MS && ballTargetRef.current) {
-        const tgt = ballTargetRef.current;
-        const dx = tgt.x - pos.x;
-        const dy = tgt.y - pos.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-
-        if (dist < 1.2) {
-          ballStoppedRef.current = true;
-          ballVelRef.current = { vx: 0, vy: 0 };
-          place(tgt.x, tgt.y, 0, 0);
-          if (arrowRef.current) arrowRef.current.setAttribute("opacity", "0");
-          const cb = onBallStopRef.current;
-          onBallStopRef.current = null;
-          cb?.();
-          rafRef.current = requestAnimationFrame(step);
-          return;
-        }
-
-        const attractElapsed = elapsed - ATTRACT_MS;
-        const rampIn = Math.min(1, attractElapsed / 600);
-        const distFactor = Math.min(0.13, dist / 280);
-        const pullFactor = Math.max(0.012, distFactor * rampIn);
-        vx = dx * pullFactor;
-        vy = dy * pullFactor;
-        ballVelRef.current = { vx, vy };
-        place(pos.x + vx, pos.y + vy, vx, vy);
-        rafRef.current = requestAnimationFrame(step);
-        return;
-      }
-
-      // Free bounce phase — natural wall bounces
-      vx *= 0.994;
-      vy *= 0.994;
-      const b = wallBounce(pos.x + vx, pos.y + vy, vx, vy);
-      ballVelRef.current = { vx: b.vx, vy: b.vy };
-      place(b.nx, b.ny, b.vx, b.vy);
-      rafRef.current = requestAnimationFrame(step);
-    };
-
-    rafRef.current = requestAnimationFrame(step);
-    return () => {
-      active = false;
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    };
-  }, []);
-
-  /* ── Ball state transitions ── */
-  useEffect(() => {
-    const launchBall = () => {
-      const angle = Math.random() * Math.PI * 2;
-      const speed = 4 + Math.random() * 2;
-      ballStateRef.current = "RUNNING";
-      ballStoppedRef.current = false;
-      ballPosRef.current = { x: CX, y: CY };
-      ballVelRef.current = { vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed };
-      runStartTimeRef.current = performance.now();
-    };
-
-    if (prevCountdownRef.current !== null && prevCountdownRef.current > 0 && countdown === 0) {
-      if (ballStateRef.current === "IDLE") launchBall();
-    }
-
-    if (arena?.status === "finished" && arena?.winnerId && !ballTargetRef.current) {
-      const sector = arena.winnerSector
-        ?? (sectorsRef.current.find(s => s.player.telegramId === arena.winnerId)
-          ? { startDeg: sectorsRef.current.find(s => s.player.telegramId === arena.winnerId)!.startDeg, endDeg: sectorsRef.current.find(s => s.player.telegramId === arena.winnerId)!.endDeg }
-          : null);
-      if (sector) {
-        const [tx, ty] = sectorRandomPoint(sector.startDeg, sector.endDeg);
-        ballTargetRef.current = { x: tx, y: ty };
-        if (ballStoppedRef.current && ballStateRef.current === "RUNNING") {
-          ballStoppedRef.current = false;
-          const pos = ballPosRef.current;
-          ballVelRef.current = { vx: (tx - pos.x) * 0.12, vy: (ty - pos.y) * 0.12 };
-        }
-      }
-      if (ballStateRef.current === "IDLE") launchBall();
-    }
-
-    if (arena?.status === "waiting") {
-      const animationDone = ballStoppedRef.current || ballStateRef.current === "IDLE";
-      if (animationDone) {
+      // Reset ball for new round
+      if (ballStoppedRef.current || ballStateRef.current === "IDLE") {
         cancelTimersRef.current?.();
         cancelTimersRef.current = null;
         onBallStopRef.current = null;
@@ -609,38 +571,90 @@ export default function ArenaGame({
         ballVelRef.current = { vx: 0, vy: 0 };
         ballTargetRef.current = null;
         ballStoppedRef.current = false;
-        runStartTimeRef.current = null;
-        setAnimPhase("idle");
-        setPendingResult(null);
+        runStartRef.current = null;
+      }
+    } else if (fresh.status === "finished") {
+      setCountdown(null);
+    }
+  }, [telegramId, onBalanceChange]);
+
+  const fetchArena = useCallback(async () => {
+    try {
+      const r = await fetch("/api/mini/games/arena/state");
+      if (r.ok) handleUpdate(await r.json());
+    } catch { }
+  }, [handleUpdate]);
+
+  const fetchStats = useCallback(async () => {
+    try {
+      const [a, b] = await Promise.all([
+        fetch("/api/mini/games/arena/biggest-winner"),
+        fetch("/api/mini/games/arena/last-winner"),
+      ]);
+      if (a.ok) { const d = await a.json(); if (d.winner) setTopGame(d.winner); }
+      if (b.ok) { const d = await b.json(); if (d.winner) setLastGame(d.winner); }
+    } catch { }
+  }, []);
+
+  useEffect(() => {
+    fetchArena(); fetchStats();
+    const id = setInterval(fetchArena, 2500);
+    return () => clearInterval(id);
+  }, [fetchArena, fetchStats]);
+
+  /* ── Countdown tick — runs every second independently ── */
+  useEffect(() => {
+    if (countdown === null || countdown <= 0) {
+      if (countdown === 0) {
+        // Hit zero — poll server aggressively
+        const t1 = setTimeout(fetchArena, 400);
+        const t2 = setTimeout(fetchArena, 900);
+        const t3 = setTimeout(fetchArena, 1600);
+        const t4 = setTimeout(fetchArena, 2500);
+        return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); clearTimeout(t4); };
+      }
+      return;
+    }
+    const t = setTimeout(() => setCountdown(c => c !== null && c > 0 ? c - 1 : 0), 1000);
+    return () => clearTimeout(t);
+  }, [countdown, fetchArena]);
+
+  /* ── Launch ball when countdown hits 0 ── */
+  useEffect(() => {
+    if (prevCountdownRef.current !== null && prevCountdownRef.current > 0 && countdown === 0) {
+      if (ballStateRef.current === "IDLE") {
+        const angle = Math.random() * Math.PI * 2;
+        const speed = 4 + Math.random() * 2;
+        ballStateRef.current = "RUNNING";
+        ballStoppedRef.current = false;
+        ballPosRef.current = { x: CX, y: CY };
+        ballVelRef.current = { vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed };
+        runStartRef.current = performance.now();
       }
     }
-
     prevCountdownRef.current = countdown;
-  }, [countdown, arena?.status, arena?.winnerId]);
+  }, [countdown]);
 
   /* ── Join ── */
-  const join = async () => {
-    if (!joinStake || joinStake < 0.1) { flash("Минимальная ставка 0.1 TON", "error"); return; }
-    if (joinStake > tonBalance) { flash("Недостаточно TON", "error"); return; }
+  const join = async (stake: number) => {
+    if (stake < 0.1) { flash("Минимум 0.1", "error"); return; }
+    if (stake > tonBalance) { flash("Недостаточно TON", "error"); return; }
     setBusy(true); haptic("heavy");
     try {
       const r = await fetch("/api/mini/games/arena/join", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ telegramId, stake: joinStake }),
+        body: JSON.stringify({ telegramId, stake }),
       });
       const d = await r.json();
       if (!r.ok) { flash(d.error ?? "Ошибка", "error"); return; }
-      handleUpdate(d);
-      onBalanceChange();
-      hapticNotify("success");
-      flash("✅ Вы в арене!", "success");
+      handleUpdate(d); onBalanceChange();
+      hapticNotify("success"); flash("✅ Вы в арене!", "success");
     } catch { flash("Ошибка сети", "error"); }
     finally { setBusy(false); }
   };
 
   const increaseStake = async () => {
-    if (increaseAmt <= 0) { flash("Укажи сумму", "error"); return; }
-    if (increaseAmt > tonBalance) { flash("Недостаточно TON", "error"); return; }
+    if (increaseAmt <= 0 || increaseAmt > tonBalance) { flash("Недостаточно TON", "error"); return; }
     setBusy(true);
     try {
       const r = await fetch("/api/mini/games/arena/increase", {
@@ -649,13 +663,13 @@ export default function ArenaGame({
       });
       const d = await r.json();
       if (!r.ok) { flash(d.error ?? "Ошибка", "error"); return; }
-      handleUpdate(d);
-      onBalanceChange();
-      flash(`+${increaseAmt} TON к ставке`, "success");
+      handleUpdate(d); onBalanceChange();
+      flash(`+${increaseAmt} TON добавлено`, "success");
     } catch { flash("Ошибка сети", "error"); }
     finally { setBusy(false); }
   };
 
+  /* ── Derived ── */
   const players = arena?.players ?? [];
   const totalPool = arena?.totalPool ?? 0;
   const isIn = players.some(p => p.telegramId === telegramId);
@@ -663,518 +677,382 @@ export default function ArenaGame({
   const isStarting = arena?.status === "starting";
   const isFinished = arena?.status === "finished";
 
-  /* ── Build square sectors ── */
-  const sectors: Sector[] = [];
-  if (players.length > 0) {
-    let acc = 0;
-    players.forEach((p, i) => {
-      const frac = totalPool > 0 ? p.stake / totalPool : 1 / players.length;
-      const startDeg = acc * 360;
-      const endDeg = (acc + frac) * 360;
-      const [ax, ay] = sectorAvatarPos(startDeg, endDeg);
-      sectors.push({
-        points: squareSectorPoints(startDeg, endDeg),
-        color: col(i),
-        startDeg,
-        endDeg,
-        avatarX: ax,
-        avatarY: ay,
-        player: p,
-        idx: i,
-        fraction: frac,
-      });
-      acc += frac;
-    });
-  }
-  sectorsRef.current = sectors;
+  // Build territories
+  const territories = buildTerritories(players, totalPool);
+  territoriesRef.current = territories;
 
   return (
     <div style={{
-      position: "fixed", inset: 0,
-      background: "#060B12",
+      position: "fixed", inset: 0, background: "#0B0F14",
       display: "flex", flexDirection: "column",
-      zIndex: 100,
-      fontFamily: "'Inter', system-ui, sans-serif",
+      fontFamily: "'Inter', system-ui, sans-serif", zIndex: 100,
       overflowY: "auto",
     }}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
-        @keyframes fadeScaleIn { from{opacity:0;transform:scale(0.75)} to{opacity:1;transform:scale(1)} }
-        @keyframes slideUp { from{opacity:0;transform:translateY(14px)} to{opacity:1;transform:translateY(0)} }
-        @keyframes pulseGlow { 0%,100%{opacity:1} 50%{opacity:0.4} }
-        @keyframes timerPulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.08)} }
-        @keyframes winnerPulse { 0%,100%{opacity:0.25} 50%{opacity:0.7} }
-        @keyframes winnerBorderGlow { 0%,100%{box-shadow:0 0 20px var(--wc)} 50%{box-shadow:0 0 50px var(--wc)} }
-        @keyframes confettiDrop { 0%{transform:translateY(-20px) rotate(0deg);opacity:1} 100%{transform:translateY(80px) rotate(360deg);opacity:0} }
-        @keyframes floatUp { from{opacity:1;transform:translateY(0)} to{opacity:0;transform:translateY(-40px)} }
-        @keyframes arenaAppear { from{opacity:0;transform:scale(0.9)} to{opacity:1;transform:scale(1)} }
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap');
+        @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
+        @keyframes timerPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}
+        @keyframes slideUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+        @keyframes winGlow{0%,100%{opacity:0.15}50%{opacity:0.4}}
       `}</style>
 
       {toast && <Toast msg={toast.msg} type={toast.type} />}
+      {winnerPopup && <WinnerPopup result={winnerPopup} onClose={() => setWinnerPopup(null)} />}
+      {showConfig && <StakeConfigModal values={quickStakes} onSave={v => setQuickStakes(v)} onClose={() => setShowConfig(false)} />}
+      {showFairness && arena?.fair && (
+        <FairnessModal fair={arena.fair} status={arena.status} gameType="arena" gameId={arena.id}
+          onClose={() => setShowFairness(false)}
+          onClientSeedChanged={seed => setArena(a => a ? { ...a, fair: { ...a.fair!, clientSeed: seed } } : a)} />
+      )}
 
-      {/* ── WINNER OVERLAY ── */}
-      {pendingResult && animPhase !== "idle" && (
+      {/* ══ HEADER ══ */}
+      <div style={{
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        padding: "12px 16px 8px", background: "#0d1117", borderBottom: "1px solid #161B22",
+        flexShrink: 0,
+      }}>
+        <button onClick={() => { haptic("light"); onClose(); }} style={{
+          background: "none", border: "none", color: "#9CA3AF", fontSize: 24,
+          cursor: "pointer", padding: "0 4px", lineHeight: 1,
+        }}>←</button>
+
+        {/* Center: title + timer */}
+        <div style={{ textAlign: "center" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, justifyContent: "center" }}>
+            <span style={{ fontSize: 16 }}>⚔️</span>
+            <span style={{ fontSize: 16, fontWeight: 800, color: "#fff" }}>ПВП Арена</span>
+          </div>
+          {isStarting && countdown !== null && countdown > 0 && (
+            <div style={{ fontSize: 12, color: "#9CA3AF", marginTop: 1 }}>
+              Начало через{" "}
+              <span style={{
+                fontWeight: 800, color: countdown <= 5 ? "#F87171" : "#fff",
+                animation: countdown <= 5 ? "timerPulse 0.8s ease-in-out infinite" : "none",
+                fontVariantNumeric: "tabular-nums",
+              }}>{fmtTimer(countdown)}</span>
+            </div>
+          )}
+          {isStarting && (countdown === 0 || countdown === null) && (
+            <div style={{ display: "flex", alignItems: "center", gap: 5, justifyContent: "center", marginTop: 2 }}>
+              <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#22C55E", animation: "pulse 1s ease-in-out infinite" }} />
+              <span style={{ fontSize: 12, fontWeight: 700, color: "#22C55E" }}>В эфире</span>
+            </div>
+          )}
+          {!isStarting && !isFinished && (
+            <div style={{ fontSize: 11, color: "#6B7280", marginTop: 1 }}>Ожидание игроков</div>
+          )}
+        </div>
+
+        {/* Right: balance */}
         <div style={{
-          position: "fixed", inset: 0, zIndex: 300, background: "rgba(0,0,0,0.85)",
-          display: "flex", alignItems: "center", justifyContent: "center",
-          backdropFilter: "blur(8px)",
+          background: "#161B22", border: "1px solid #21262D",
+          borderRadius: 20, padding: "5px 12px",
+          display: "flex", alignItems: "center", gap: 5,
         }}>
+          <span style={{ color: "#007AFF", fontSize: 13 }}>▽</span>
+          <span style={{ fontSize: 13, fontWeight: 700, color: "#fff" }}>{fmtTON(tonBalance)}</span>
+        </div>
+      </div>
+
+      {/* ══ ONLINE + STATS ROW ══ */}
+      <div style={{ padding: "8px 14px", background: "#0d1117", flexShrink: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+          <span style={{ fontSize: 12, color: "#4B5563" }}>{onlineCount} онлайн</span>
           <div style={{
-            background: "linear-gradient(145deg,#0F1923,#141E2A)",
-            borderRadius: 28, padding: "44px 52px", textAlign: "center",
-            border: `2px solid ${pendingResult.won ? "#4ADE80" : "#F43F5E"}`,
-            boxShadow: `0 0 80px ${pendingResult.won ? "rgba(74,222,128,0.45)" : "rgba(244,63,94,0.4)"}`,
-            animation: "fadeScaleIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)",
-            maxWidth: "84vw",
+            background: "#161B22", border: "1px solid #21262D",
+            borderRadius: 20, padding: "4px 12px",
+            display: "flex", alignItems: "center", gap: 5,
           }}>
-            <div style={{ fontSize: 64, marginBottom: 12, lineHeight: 1 }}>
-              {pendingResult.won ? "🏆" : "😔"}
-            </div>
-            <div style={{ fontSize: 26, fontWeight: 900, color: pendingResult.won ? "#4ADE80" : "#F43F5E", marginBottom: 8 }}>
-              {pendingResult.won ? "ВЫ ПОБЕДИЛИ!" : "Вам не повезло"}
-            </div>
-            {animPhase === "payout" && pendingResult.won && (
-              <div style={{ fontSize: 36, fontWeight: 900, color: "#FBBF24", marginBottom: 6, animation: "fadeScaleIn 0.5s ease" }}>
-                +{pendingResult.payout} ▽
+            <span style={{ color: "#6B7280", fontSize: 12 }}>▽</span>
+            <span style={{ fontSize: 13, fontWeight: 700, color: "#9CA3AF" }}>
+              {fmtTON(tonBalance)} TON
+            </span>
+          </div>
+        </div>
+
+        {/* Stat cards */}
+        <div style={{ display: "flex", gap: 10 }}>
+          {[
+            { label: "ТОП ИГРА", g: topGame },
+            { label: "ПОСЛЕДНЯЯ", g: lastGame },
+          ].map(({ label, g }) => (
+            <div key={label} onClick={onOpenHistory} style={{
+              flex: 1, background: "#111827", border: "1px solid #1F2937",
+              borderRadius: 12, padding: "9px 12px", cursor: "pointer",
+            }}>
+              <div style={{ fontSize: 9, color: "#4B5563", fontWeight: 700, letterSpacing: "0.07em", marginBottom: 5 }}>
+                {label}
               </div>
-            )}
-            <div style={{ fontSize: 14, color: "#6B7280", marginTop: 6 }}>
-              {pendingResult.won
-                ? animPhase === "payout" ? "Выигрыш зачислен на баланс 🎉" : "Шарик остановился в вашем секторе!"
-                : `Победил ${pendingResult.name}`}
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <div style={{
+                  width: 22, height: 22, borderRadius: "50%",
+                  background: "linear-gradient(135deg,#6366F1,#8B5CF6)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: 8, fontWeight: 800, color: "#fff", flexShrink: 0,
+                }}>{g ? (g.username ?? "?").slice(0, 2).toUpperCase() : "—"}</div>
+                <span style={{ flex: 1, fontSize: 11, color: "#9CA3AF", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {g ? (g.username ? `@..` : "—") : "—"}
+                </span>
+                <span style={{ fontSize: 12, fontWeight: 800, color: "#F59E0B", whiteSpace: "nowrap" }}>
+                  {g ? `+${fmtTON(g.payout)} ▽` : "—"}
+                </span>
+              </div>
             </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ══ ARENA BLOCK ══ */}
+      <div style={{
+        margin: "10px 14px", background: "#0d1117", border: "1px solid #161B22",
+        borderRadius: 18, overflow: "hidden", flexShrink: 0,
+      }}>
+        {/* Arena header */}
+        <div style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          padding: "10px 14px", borderBottom: "1px solid #161B22",
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{ color: "#F59E0B", fontSize: 14 }}>▽</span>
+            <span style={{ fontSize: 17, fontWeight: 900, color: "#F59E0B" }}>{fmtTON(totalPool)} TON</span>
+            <span style={{ fontSize: 11, color: "#4B5563" }}>в банке</span>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            {isStarting && (countdown === 0 || countdown === null) ? (
+              <>
+                <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#22C55E", animation: "pulse 1s ease-in-out infinite" }} />
+                <span style={{ fontSize: 13, fontWeight: 700, color: "#22C55E" }}>В эфире</span>
+              </>
+            ) : isStarting ? (
+              <>
+                <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#22C55E", animation: "pulse 1.5s ease-in-out infinite" }} />
+                <span style={{ fontSize: 13, fontWeight: 600, color: "#22C55E" }}>В эфире</span>
+              </>
+            ) : isFinished ? (
+              <span style={{ fontSize: 12, color: "#4B5563" }}>Завершено</span>
+            ) : (
+              <>
+                <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#F59E0B", animation: "pulse 2s ease-in-out infinite" }} />
+                <span style={{ fontSize: 13, fontWeight: 600, color: "#F59E0B" }}>Ожидание</span>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* ── ARENA CANVAS ── */}
+        <div style={{ position: "relative", width: "100%", paddingTop: "100%", background: "#111" }}>
+          <div style={{ position: "absolute", inset: 0 }}>
+            <svg width="100%" height="100%" viewBox={`0 0 ${SQ} ${SQ}`}
+              style={{ display: "block" }}>
+
+              {/* Base */}
+              <rect x={0} y={0} width={SQ} height={SQ} fill="#111" />
+
+              {/* Grid (empty state) */}
+              {players.length === 0 && (() => {
+                const els = [];
+                for (let x = 0; x <= SQ; x += 32) els.push(<line key={`v${x}`} x1={x} y1={0} x2={x} y2={SQ} stroke="#1A1A1A" strokeWidth={1} />);
+                for (let y = 0; y <= SQ; y += 32) els.push(<line key={`h${y}`} x1={0} y1={y} x2={SQ} y2={y} stroke="#1A1A1A" strokeWidth={1} />);
+                return els;
+              })()}
+
+              {/* 1 player: full fill */}
+              {players.length === 1 && (
+                <rect x={0} y={0} width={SQ} height={SQ} fill={col(0)} />
+              )}
+
+              {/* Multiple players: polygon territories */}
+              {players.length > 1 && territories.map(t => (
+                <polygon
+                  key={t.player.telegramId}
+                  points={t.points.map(([x, y]) => `${x},${y}`).join(" ")}
+                  fill={t.color}
+                />
+              ))}
+
+              {/* Divider lines (black, ~2px) */}
+              {territories.length >= 2 && territories.map((t, i) => {
+                // Draw the first edge of each territory polygon (center → first perimeter pt)
+                const first = t.points[1];
+                return first ? (
+                  <line key={`div${i}`}
+                    x1={CX} y1={CY} x2={first[0]} y2={first[1]}
+                    stroke="#000" strokeWidth={2.5} />
+                ) : null;
+              })}
+
+              {/* Winner sector bright overlay */}
+              {isFinished && territories.map(t => {
+                if (arena?.winnerId !== t.player.telegramId) return null;
+                return (
+                  <polygon key={`win${t.player.telegramId}`}
+                    points={t.points.map(([x, y]) => `${x},${y}`).join(" ")}
+                    fill="white" opacity={0.2}
+                    style={{ animation: "winGlow 0.6s ease-in-out infinite" }} />
+                );
+              })}
+
+              {/* Ball glow */}
+              {players.length >= 1 && (
+                <>
+                  <circle ref={ballGlowRef} cx={CX} cy={CY} r={BALL_R + 9} fill="rgba(255,255,255,0.12)" />
+                  {/* Main white ball */}
+                  <circle ref={ballRef} cx={CX} cy={CY} r={BALL_R}
+                    fill="white"
+                    style={{ filter: "drop-shadow(0 0 6px rgba(255,255,255,0.9))" }}
+                  />
+                  {/* Yellow ring around ball (like screenshot) */}
+                  <circle ref={ballRingRef} cx={CX} cy={CY} r={BALL_R + 3}
+                    fill="none" stroke="#F5C842" strokeWidth={2} opacity={0.85}
+                  />
+                </>
+              )}
+
+              {/* Empty state text */}
+              {players.length === 0 && (
+                <text x={CX} y={CY} textAnchor="middle" dominantBaseline="middle"
+                  fill="#374151" fontSize={15} fontWeight={600} fontFamily="Inter, sans-serif">
+                  Waiting for players...
+                </text>
+              )}
+            </svg>
+
+            {/* Avatar overlays */}
+            {territories.map(t => {
+              const isWinner = isFinished && arena?.winnerId === t.player.telegramId;
+              const isMe = t.player.telegramId === telegramId;
+              const AV = avatarSize(t.fraction);
+              return (
+                <div key={t.player.telegramId} style={{
+                  position: "absolute",
+                  left: `${(t.centerX / SQ) * 100}%`,
+                  top: `${(t.centerY / SQ) * 100}%`,
+                  transform: "translate(-50%,-50%)",
+                  width: AV, height: AV, borderRadius: "50%",
+                  overflow: "hidden",
+                  border: `${isWinner ? 3 : 2}px solid ${isWinner ? "#fff" : "rgba(0,0,0,0.4)"}`,
+                  background: t.color,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  boxShadow: isWinner
+                    ? `0 0 0 3px ${t.color}, 0 0 24px ${t.color}cc`
+                    : isMe ? `0 0 0 2px #007AFF` : "none",
+                  transition: "all 0.5s cubic-bezier(0.175,0.885,0.32,1.275)",
+                  zIndex: isWinner ? 20 : 10,
+                  pointerEvents: "none",
+                }}>
+                  {t.player.photoUrl
+                    ? <img src={t.player.photoUrl} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    : <span style={{ fontSize: AV * 0.36, fontWeight: 900, color: "rgba(0,0,0,0.6)" }}>
+                        {(t.player.username ?? t.player.telegramId).slice(0, 2).toUpperCase()}
+                      </span>
+                  }
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* ══ MY STAKE CARD (if in game) ══ */}
+      {isIn && myP && (
+        <div style={{ margin: "0 14px 10px", animation: "slideUp 0.3s ease" }}>
+          <div style={{
+            background: "#111827", border: "1px solid #1D4ED855",
+            borderRadius: 16, padding: "14px 18px",
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+              <div>
+                <div style={{ fontSize: 12, color: "#3B82F6", fontWeight: 600, marginBottom: 4 }}>Ваша ставка</div>
+                <div style={{ fontSize: 28, fontWeight: 900, color: "#fff" }}>
+                  {fmtTON(myP.stake)} <span style={{ fontSize: 14, color: "#6B7280", fontWeight: 600 }}>TON</span>
+                </div>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 4 }}>Шанс</div>
+                <div style={{ fontSize: 28, fontWeight: 900, color: "#4ADE80" }}>{myP.chance.toFixed(1)}%</div>
+              </div>
+            </div>
+          </div>
+          {/* If-win preview */}
+          {totalPool > myP.stake && (
+            <div style={{
+              background: "#0d1117", border: "1px solid #1F2937",
+              borderRadius: 12, padding: "10px 16px", marginTop: 8,
+              display: "flex", justifyContent: "space-between", alignItems: "center",
+            }}>
+              <span style={{ fontSize: 12, color: "#4B5563" }}>💡 Если победишь</span>
+              <span style={{ fontSize: 17, fontWeight: 900, color: "#4ADE80" }}>
+                +{fmtTON((myP.stake + (totalPool - myP.stake) * 0.80))} TON
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Increase stake */}
+      {isIn && myP && (arena?.status === "waiting" || arena?.status === "starting") && (
+        <div style={{ margin: "0 14px 10px", animation: "slideUp 0.3s ease" }}>
+          <div style={{
+            background: "#0d1117", border: "1px solid #1F2937",
+            borderRadius: 14, padding: "12px 14px",
+          }}>
+            <div style={{ fontSize: 12, color: "#F59E0B", fontWeight: 700, marginBottom: 10 }}>
+              💰 Добавить к ставке
+            </div>
+            <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+              {INCREASE_PRESETS.map(v => (
+                <button key={v} onClick={() => { setIncreaseAmt(v); setIncreaseInput(String(v)); }} style={{
+                  flex: 1, padding: "8px 0", borderRadius: 8, border: "none",
+                  background: increaseAmt === v ? "#1D4ED8" : "#161B22",
+                  color: increaseAmt === v ? "#fff" : "#6B7280",
+                  fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
+                }}>+{v}</button>
+              ))}
+            </div>
+            <div style={{ position: "relative", marginBottom: 10 }}>
+              <input
+                value={increaseInput}
+                onChange={e => { setIncreaseInput(e.target.value); const v = parseFloat(e.target.value); if (!isNaN(v) && v > 0) setIncreaseAmt(v); }}
+                type="number" step="0.1" min="0.1"
+                style={{
+                  width: "100%", background: "#161B22", border: "1px solid #21262D",
+                  borderRadius: 8, padding: "10px 44px 10px 12px", color: "#fff",
+                  fontSize: 14, outline: "none", boxSizing: "border-box", fontFamily: "inherit",
+                }}
+              />
+              <span style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", fontSize: 11, color: "#4B5563", fontWeight: 700 }}>TON</span>
+            </div>
+            <button onClick={increaseStake} disabled={busy || increaseAmt > tonBalance} style={{
+              width: "100%", padding: "12px", borderRadius: 10, border: "none",
+              background: busy || increaseAmt > tonBalance ? "#1F2937" : "linear-gradient(135deg,#1D4ED8,#3B82F6)",
+              color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
+            }}>
+              {busy ? "..." : `✈️ Добавить ${increaseAmt} TON`}
+            </button>
           </div>
         </div>
       )}
 
-      {/* ── HEADER ── */}
-      <div style={{
-        display: "flex", alignItems: "center", justifyContent: "space-between",
-        padding: "14px 16px 10px",
-        background: "#0A1018",
-        borderBottom: "1px solid #141E2A",
-        flexShrink: 0,
-      }}>
-        <button onClick={() => { haptic("light"); onClose(); }} style={{
-          background: "none", border: "none", cursor: "pointer",
-          display: "flex", alignItems: "center", gap: 6,
-          color: "#6B7280", fontSize: 14, fontWeight: 600, fontFamily: "inherit", padding: "4px 0",
-        }}>
-          <span style={{ fontSize: 18 }}>←</span>
-        </button>
-
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ fontSize: 18 }}>⚔️</span>
-          <span style={{ fontSize: 17, fontWeight: 900, color: "#fff" }}>ПВП Арена</span>
-          <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#22C55E", boxShadow: "0 0 8px #22C55E", animation: "pulseGlow 2s ease-in-out infinite" }} />
-        </div>
-
-        <div style={{ display: "flex", gap: 6 }}>
-          <button onClick={() => setShowFairness(true)} style={{
-            background: "#0F1923", border: "1px solid #1A2535", borderRadius: 8,
-            width: 34, height: 34, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#6B7280", fontSize: 15,
-          }}>🔐</button>
-          <button onClick={() => onOpenHistory?.()} style={{
-            background: "#0F1923", border: "1px solid #1A2535", borderRadius: 8,
-            width: 34, height: 34, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#6B7280", fontSize: 15,
-          }}>📋</button>
-        </div>
-      </div>
-
-      {/* ── BALANCE ROW ── */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 16px", background: "#0A1018", flexShrink: 0 }}>
-        <span style={{ fontSize: 12, color: "#374151" }}>{onlineDisp} онлайн</span>
-        <div style={{
-          background: "#0F1923", border: "1px solid #1A2535",
-          borderRadius: 20, padding: "6px 14px",
-          display: "flex", alignItems: "center", gap: 6,
-        }}>
-          <span style={{ fontSize: 13, color: "#F59E0B" }}>▽</span>
-          <span style={{ fontSize: 14, fontWeight: 700, color: "#E5E7EB" }}>{tonBalance.toFixed(2)} TON</span>
-        </div>
-      </div>
-
-      {/* ── SCROLLABLE CONTENT ── */}
-      <div style={{ flex: 1, overflowY: "auto", padding: "12px 14px 32px" }}>
-
-        {/* STAT CARDS */}
-        <div style={{ display: "flex", gap: 10, marginBottom: 14 }}>
-          <StatCard label="ТОП ИГРА" username={topGame?.username ?? null} amount={topGame?.payout ?? 0}
-            badge={topGame ? (topGame.username ?? "?").slice(0, 2).toUpperCase() : undefined} onClick={onOpenHistory} />
-          <StatCard label="ПОСЛЕДНЯЯ" username={lastGame?.username ?? null} amount={lastGame?.payout ?? 0}
-            badge={lastGame ? (lastGame.username ?? "?").slice(0, 2).toUpperCase() : undefined} onClick={onOpenHistory} />
-        </div>
-
-        {/* ── ARENA BLOCK ── */}
-        <div style={{
-          background: "#0A1018", border: "1px solid #141E2A",
-          borderRadius: 20, overflow: "hidden", marginBottom: 14,
-          animation: "arenaAppear 0.4s ease",
-        }}>
-          {/* Arena header: total + status */}
-          <div style={{
-            display: "flex", alignItems: "center", justifyContent: "space-between",
-            padding: "12px 16px", borderBottom: "1px solid #141E2A",
-          }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <span style={{ fontSize: 14, color: "#F59E0B" }}>▽</span>
-              <span style={{ fontSize: 18, fontWeight: 900, color: "#F59E0B" }}>
-                {fmtTON(totalPool)} TON
-              </span>
-              <span style={{ fontSize: 11, color: "#4B5563", fontWeight: 600 }}>в банке</span>
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              {isStarting ? (
-                <>
-                  <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#22C55E", animation: "pulseGlow 1s ease-in-out infinite" }} />
-                  <span style={{ fontSize: 13, fontWeight: 700, color: "#22C55E" }}>В эфире</span>
-                  {countdown !== null && countdown > 0 && (
-                    <span style={{
-                      marginLeft: 6, fontSize: 15, fontWeight: 900,
-                      color: countdown <= 5 ? "#F87171" : "#fff",
-                      animation: countdown <= 5 ? "timerPulse 0.8s ease-in-out infinite" : "none",
-                    }}>{fmtTimer(countdown)}</span>
-                  )}
-                </>
-              ) : isFinished ? (
-                <span style={{ fontSize: 13, color: "#4B5563" }}>Завершено</span>
-              ) : (
-                <>
-                  <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#F59E0B", animation: "pulseGlow 2s ease-in-out infinite" }} />
-                  <span style={{ fontSize: 13, fontWeight: 600, color: "#F59E0B" }}>Ожидание</span>
-                </>
-              )}
-            </div>
-          </div>
-
-          {/* ── ARENA VISUAL ── */}
-          <div style={{ display: "flex", justifyContent: "center", padding: "16px", background: "#060B12" }}>
-            <div style={{
-              position: "relative",
-              width: SQ, height: SQ,
-              borderRadius: 18,
-              overflow: "hidden",
-              boxShadow: "0 0 0 1px #1A2535, 0 12px 40px rgba(0,0,0,0.7)",
-            }}>
-              <svg width={SQ} height={SQ} style={{ position: "absolute", inset: 0, display: "block" }}>
-                <defs>
-                  <radialGradient id="bgGrad" cx="50%" cy="50%" r="70%">
-                    <stop offset="0%" stopColor="#1A2535" />
-                    <stop offset="100%" stopColor="#060B12" />
-                  </radialGradient>
-                  <filter id="ballGlow">
-                    <feGaussianBlur stdDeviation="4" result="blur" />
-                    <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
-                  </filter>
-                </defs>
-                <rect x={0} y={0} width={SQ} height={SQ} fill="url(#bgGrad)" />
-
-                {/* Sectors */}
-                {players.length === 1 ? (
-                  <rect x={0} y={0} width={SQ} height={SQ} fill={col(0)} opacity={0.88} />
-                ) : players.length > 1 ? sectors.map(s => (
-                  <polygon
-                    key={s.player.telegramId}
-                    points={s.points}
-                    fill={s.color}
-                    opacity={0.85}
-                  />
-                )) : null}
-
-                {/* Dividers */}
-                {sectors.length >= 2 && sectors.map(s => {
-                  const [ex, ey] = squarePoint(s.startDeg);
-                  return (
-                    <line key={`div-${s.player.telegramId}`}
-                      x1={CX} y1={CY} x2={ex} y2={ey}
-                      stroke="#060B12" strokeWidth={2.5} />
-                  );
-                })}
-
-                {/* Winner sector pulse */}
-                {animPhase !== "idle" && sectors.map(s => {
-                  if (arena?.winnerId !== s.player.telegramId) return null;
-                  return (
-                    <polygon key={`win-${s.player.telegramId}`}
-                      points={s.points}
-                      fill={s.color}
-                      opacity={0.4}
-                      style={{ animation: "winnerPulse 0.6s ease-in-out infinite" }} />
-                  );
-                })}
-
-                {/* Center circle */}
-                <circle cx={CX} cy={CY} r={18} fill="#060B12" stroke="#1A2535" strokeWidth={2} />
-
-                {/* Arrow indicator (rotates with velocity) */}
-                {players.length >= 1 && ballStateRef.current === "RUNNING" && (
-                  <g ref={arrowRef} opacity={0} style={{ pointerEvents: "none" }}>
-                    <polygon points="12,0 -5,-5 -5,5" fill="white" opacity={0.7} />
-                  </g>
-                )}
-
-                {/* Ball */}
-                {players.length >= 1 && (
-                  <>
-                    <circle ref={ballGlowRef} cx={CX} cy={CY} r={BALL_R + 8} fill="white" opacity={0.12} />
-                    <circle ref={ballCircleRef} cx={CX} cy={CY} r={BALL_R}
-                      fill="white" stroke="rgba(0,0,0,0.2)" strokeWidth={1.5}
-                      style={{ filter: "url(#ballGlow)" }}
-                    />
-                  </>
-                )}
-              </svg>
-
-              {/* Avatar overlays — size scales with sector % */}
-              {sectors.map(s => {
-                const isWinner = animPhase !== "idle" && arena?.winnerId === s.player.telegramId;
-                const isMe = s.player.telegramId === telegramId;
-                const AV = sectorAvatarSize(isWinner ? Math.min(1, s.fraction + 0.15) : s.fraction);
-                return (
-                  <div key={s.player.telegramId} style={{
-                    position: "absolute",
-                    left: s.avatarX - AV / 2,
-                    top: s.avatarY - AV / 2,
-                    transition: "all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275)",
-                    zIndex: isWinner ? 20 : 10,
-                  }}>
-                    <PlayerAvatar
-                      player={s.player}
-                      color={s.color}
-                      size={AV}
-                      isWinner={isWinner}
-                      isMe={isMe}
-                    />
-                  </div>
-                );
-              })}
-
-              {/* Empty state */}
-              {players.length === 0 && (
-                <div style={{
-                  position: "absolute", inset: 0, display: "flex", flexDirection: "column",
-                  alignItems: "center", justifyContent: "center", color: "#374151",
-                }}>
-                  <div style={{ fontSize: 36, marginBottom: 8 }}>⚔️</div>
-                  <div style={{ fontSize: 13, fontWeight: 600 }}>Ждём игроков...</div>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* ── BETTING PANEL ── */}
-        {!isIn && !isFinished && (
-          <div style={{
-            background: "#0A1018", border: "1px solid #141E2A",
-            borderRadius: 18, padding: "16px", marginBottom: 14,
-            animation: "slideUp 0.3s ease",
-          }}>
-            <div style={{ fontSize: 11, color: "#4B5563", fontWeight: 700, letterSpacing: "0.08em", marginBottom: 12 }}>
-              💰 СТАВКА
-            </div>
-
-            {/* 3 editable + 1 all-in */}
-            <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-              {quickStakes.map((v, i) => (
-                <EditableStakeButton
-                  key={i}
-                  value={v}
-                  selected={selectedQuick === i}
-                  onSelect={() => handleQuickSelect(v, i)}
-                  onChange={(newV) => {
-                    const updated = [...quickStakes];
-                    updated[i] = newV;
-                    setQuickStakes(updated);
-                    if (selectedQuick === i) setJoin(newV);
-                  }}
-                />
-              ))}
-              {/* All-in button */}
-              <button
-                onClick={() => { handleQuickSelect(tonBalance, "allin"); }}
-                style={{
-                  flex: 1, padding: "10px 4px", borderRadius: 10, border: "none",
-                  background: selectedQuick === "allin"
-                    ? "linear-gradient(135deg,#7C3AED,#A855F7)"
-                    : "#0F1923",
-                  border: `1.5px solid ${selectedQuick === "allin" ? "#A855F7" : "#1A2535"}`,
-                  color: selectedQuick === "allin" ? "#fff" : "#6B7280",
-                  fontSize: 11, fontWeight: 800, cursor: "pointer", fontFamily: "inherit",
-                  boxShadow: selectedQuick === "allin" ? "0 0 14px rgba(168,85,247,0.5)" : "none",
-                } as React.CSSProperties}
-              >🚀<br />ВА-БАНК</button>
-            </div>
-
-            {/* Manual input */}
-            <div style={{ position: "relative", marginBottom: 12 }}>
-              <input
-                value={joinInput}
-                onChange={e => {
-                  setJoinInput(e.target.value);
-                  const v = parseFloat(e.target.value);
-                  if (!isNaN(v) && v > 0) { setJoinStake(Math.round(v * 1000) / 1000); setSelectedQuick(null); }
-                }}
-                placeholder="Своя сумма..."
-                type="number" step="0.1" min="0.1"
-                style={{
-                  width: "100%", background: "#060B12",
-                  border: "1px solid #1A2535", borderRadius: 10,
-                  padding: "11px 52px 11px 14px", color: "#E5E7EB",
-                  fontSize: 14, outline: "none", boxSizing: "border-box", fontFamily: "inherit",
-                }}
-              />
-              <span style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", fontSize: 12, color: "#4B5563", fontWeight: 700 }}>TON</span>
-            </div>
-
-            <button
-              onClick={join}
-              disabled={busy || joinStake < 0.1 || joinStake > tonBalance}
-              style={{
-                width: "100%", padding: "15px 0", borderRadius: 14, border: "none",
-                background: busy || joinStake < 0.1 || joinStake > tonBalance
-                  ? "#1A2535"
-                  : "linear-gradient(135deg,#D97706,#F59E0B)",
-                color: joinStake > tonBalance ? "#4B5563" : "#000",
-                fontSize: 15, fontWeight: 900,
-                cursor: busy || joinStake < 0.1 || joinStake > tonBalance ? "not-allowed" : "pointer",
-                fontFamily: "inherit",
-                boxShadow: joinStake <= tonBalance && joinStake >= 0.1 ? "0 0 28px rgba(245,158,11,0.4)" : "none",
-              }}
-            >
-              {busy ? "..." : joinStake > tonBalance ? "Недостаточно TON" : `⚔️ Войти · ${fmtTON(joinStake)} TON`}
-            </button>
-          </div>
-        )}
-
-        {/* ── ALREADY IN ── */}
-        {isIn && myP && (
-          <div style={{
-            background: "rgba(29,78,216,0.08)", border: "1px solid rgba(29,78,216,0.25)",
-            borderRadius: 16, padding: "14px 16px", marginBottom: 12,
-            display: "flex", justifyContent: "space-between", alignItems: "center",
-          }}>
-            <div>
-              <div style={{ fontSize: 11, color: "#3B82F6", fontWeight: 600, marginBottom: 4 }}>Ваша ставка</div>
-              <div style={{ fontSize: 22, fontWeight: 900, color: "#fff" }}>
-                {fmtTON(myP.stake)} <span style={{ fontSize: 13, color: "#4B5563" }}>TON</span>
-              </div>
-            </div>
-            <div style={{ textAlign: "right" }}>
-              <div style={{ fontSize: 11, color: "#4B5563", marginBottom: 4 }}>Шанс</div>
-              <div style={{ fontSize: 22, fontWeight: 900, color: "#4ADE80" }}>{myP.chance.toFixed(1)}%</div>
-            </div>
-          </div>
-        )}
-
-        {/* If-win preview */}
-        {isIn && myP && totalPool > myP.stake && (
-          <div style={{
-            background: "#060B12", border: "1px solid #141E2A",
-            borderRadius: 12, padding: "10px 14px", marginBottom: 12,
-            display: "flex", justifyContent: "space-between", alignItems: "center",
-          }}>
-            <div style={{ fontSize: 12, color: "#4B5563" }}>💡 Если победишь</div>
-            <div style={{ fontSize: 17, fontWeight: 900, color: "#4ADE80" }}>
-              +{(myP.stake + (totalPool - myP.stake) * 0.80).toFixed(3)} TON
-            </div>
-          </div>
-        )}
-
-        {/* Increase stake */}
-        {isIn && (arena?.status === "waiting" || arena?.status === "starting") && (
-          <div style={{
-            background: "#0A1018", border: "1px solid #1A3050",
-            borderRadius: 14, padding: "12px", marginBottom: 14,
-          }}>
-            <div style={{
-              display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8,
-            }}>
-              <div style={{ fontSize: 11, color: "#3B82F6", fontWeight: 600 }}>💰 Добавить к ставке</div>
-              <button
-                onClick={() => setShowIncreasePanel(v => !v)}
-                style={{ background: "none", border: "none", color: "#4B5563", fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}
-              >{showIncreasePanel ? "▲" : "▼"}</button>
-            </div>
-            {showIncreasePanel && (
-              <>
-                <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
-                  {[0.1, 0.5, 1, 2, 5].map(v => (
-                    <button key={v}
-                      onClick={() => { setIncreaseAmt(v); setIncreaseInput(String(v)); }}
-                      style={{
-                        flex: 1, padding: "8px 0", borderRadius: 8, border: "none",
-                        background: increaseAmt === v ? "#1D4ED8" : "#0F1923",
-                        color: increaseAmt === v ? "#fff" : "#4B5563",
-                        fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
-                      }}
-                    >+{v}</button>
-                  ))}
-                </div>
-                <div style={{ position: "relative", marginBottom: 8 }}>
-                  <input
-                    value={increaseInput}
-                    onChange={e => { setIncreaseInput(e.target.value); const v = parseFloat(e.target.value); if (!isNaN(v) && v > 0) setIncreaseAmt(Math.round(v * 1000) / 1000); }}
-                    placeholder="Своя сумма..."
-                    type="number" step="0.1" min="0.1"
-                    style={{
-                      width: "100%", background: "#060B12", border: "1px solid #1A2535", borderRadius: 8,
-                      padding: "9px 46px 9px 12px", color: "#E5E7EB", fontSize: 13, outline: "none",
-                      boxSizing: "border-box", fontFamily: "inherit",
-                    }}
-                  />
-                  <span style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", fontSize: 11, color: "#4B5563", fontWeight: 700 }}>TON</span>
-                </div>
-                <button
-                  onClick={increaseStake}
-                  disabled={busy || increaseAmt <= 0 || increaseAmt > tonBalance}
-                  style={{
-                    width: "100%", padding: "12px", borderRadius: 10, border: "none",
-                    background: busy || increaseAmt <= 0 || increaseAmt > tonBalance ? "#1A2535" : "linear-gradient(135deg,#1D4ED8,#3B82F6)",
-                    color: "#fff", fontSize: 14, fontWeight: 700,
-                    cursor: busy || increaseAmt > tonBalance ? "not-allowed" : "pointer", fontFamily: "inherit",
-                  }}
-                >{busy ? "..." : `➕ Добавить ${increaseAmt} TON`}</button>
-              </>
-            )}
-          </div>
-        )}
-
-        {isFinished && (
-          <div style={{ textAlign: "center", padding: "14px 0", marginBottom: 14, color: "#374151", fontSize: 13 }}>
-            ⏳ Новая игра начинается…
-          </div>
-        )}
-
-        {/* ── PLAYERS TABLE ── */}
-        <div style={{ marginBottom: 6 }}>
-          <div style={{
-            display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10,
-          }}>
-            <div style={{ fontSize: 14, fontWeight: 800, color: "#D1D5DB" }}>
-              Участники <span style={{ color: "#374151", fontWeight: 600 }}>· {players.length}</span>
-            </div>
+      {/* ══ PARTICIPANTS TABLE ══ */}
+      {players.length > 0 && (
+        <div style={{ margin: "0 14px 10px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+            <span style={{ fontSize: 15, fontWeight: 700, color: "#E5E7EB" }}>
+              Участники · {players.length}
+            </span>
             {arena && (
-              <div style={{ fontSize: 11, color: "#1F2937", fontWeight: 600, letterSpacing: "0.05em" }}>
+              <span style={{ fontSize: 11, color: "#374151", fontWeight: 600 }}>
                 #{arena.id.toString().padStart(6, "0")}
-              </div>
+              </span>
             )}
           </div>
-
-          {players.length === 0 && (
-            <div style={{ textAlign: "center", padding: "28px 0", color: "#1F2937", fontSize: 13 }}>
-              Нет игроков. Будь первым!
-            </div>
-          )}
 
           {/* Table header */}
-          {players.length > 0 && (
-            <div style={{ display: "grid", gridTemplateColumns: "1fr auto auto", gap: 8, padding: "6px 14px", marginBottom: 6 }}>
-              <div style={{ fontSize: 10, color: "#374151", fontWeight: 700, letterSpacing: "0.07em" }}>ИГРОК</div>
-              <div style={{ fontSize: 10, color: "#374151", fontWeight: 700, letterSpacing: "0.07em", textAlign: "right" }}>СТАВКА</div>
-              <div style={{ fontSize: 10, color: "#374151", fontWeight: 700, letterSpacing: "0.07em", textAlign: "right", minWidth: 48 }}>ШАНС</div>
-            </div>
-          )}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr auto auto", gap: 8, padding: "4px 14px 8px", borderBottom: "1px solid #161B22" }}>
+            <span style={{ fontSize: 10, color: "#4B5563", fontWeight: 700, letterSpacing: "0.07em" }}>ИГРОК</span>
+            <span style={{ fontSize: 10, color: "#4B5563", fontWeight: 700, letterSpacing: "0.07em", textAlign: "right" }}>СТАВКА</span>
+            <span style={{ fontSize: 10, color: "#4B5563", fontWeight: 700, letterSpacing: "0.07em", textAlign: "right", minWidth: 52 }}>ШАНС</span>
+          </div>
 
           {players.map((p, i) => {
             const isMe = p.telegramId === telegramId;
@@ -1183,51 +1061,134 @@ export default function ArenaGame({
             return (
               <div key={p.telegramId} style={{
                 display: "grid", gridTemplateColumns: "1fr auto auto", gap: 8, alignItems: "center",
-                background: isWin ? (c + "18") : isMe ? "#0F1923" : "#080E16",
-                border: `1px solid ${isWin ? c + "55" : isMe ? "#1A3050" : "#0F1923"}`,
-                borderRadius: 14, padding: "10px 14px", marginBottom: 7,
-                animation: "slideUp 0.25s ease",
-                transition: "all 0.3s ease",
+                padding: "10px 14px",
+                background: isWin ? (c + "18") : isMe ? "#111827" : "transparent",
+                borderBottom: "1px solid #0d1117",
+                borderRadius: isWin || isMe ? 12 : 0,
+                marginBottom: 2,
               }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-                  <PlayerAvatar player={p} color={c} size={34} isWinner={isWin} isMe={isMe} />
+                  {/* Avatar */}
+                  <div style={{
+                    width: 36, height: 36, borderRadius: "50%", flexShrink: 0,
+                    background: c, border: `2px solid ${c}88`, overflow: "hidden",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                  }}>
+                    {p.photoUrl
+                      ? <img src={p.photoUrl} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                      : <span style={{ fontSize: 13, fontWeight: 800, color: "rgba(0,0,0,0.6)" }}>
+                          {(p.username ?? p.telegramId).slice(0, 2).toUpperCase()}
+                        </span>
+                    }
+                  </div>
                   <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: isWin ? c : isMe ? "#60A5FA" : "#9CA3AF", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: isWin ? c : isMe ? "#60A5FA" : "#D1D5DB", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                       {p.username ? `@${p.username}` : `#${p.telegramId.slice(-5)}`}
-                      {isWin && " 🏆"}{isMe && !isWin && <span style={{ color: "#374151", fontSize: 11 }}> · ты</span>}
+                      {isMe && <span style={{ fontSize: 10, color: "#4B5563", fontWeight: 500 }}> · ты</span>}
+                      {isWin && " 🏆"}
                     </div>
                     {/* Chance bar */}
-                    <div style={{ height: 3, borderRadius: 2, background: "#141E2A", marginTop: 5, overflow: "hidden" }}>
-                      <div style={{ width: `${p.chance}%`, height: "100%", background: c, borderRadius: 2, transition: "width 0.6s ease" }} />
+                    <div style={{ height: 3, background: "#1F2937", borderRadius: 2, marginTop: 4, overflow: "hidden" }}>
+                      <div style={{ width: `${p.chance}%`, height: "100%", background: c, borderRadius: 2 }} />
                     </div>
                   </div>
                 </div>
-                <div style={{ fontSize: 13, fontWeight: 800, color: "#F59E0B", textAlign: "right", whiteSpace: "nowrap" }}>
+                <div style={{ fontSize: 14, fontWeight: 800, color: "#F59E0B", textAlign: "right", whiteSpace: "nowrap" }}>
                   {fmtTON(p.stake)} ▽
                 </div>
-                <div style={{ textAlign: "right", minWidth: 48 }}>
-                  <div style={{
+                <div style={{ textAlign: "right", minWidth: 52 }}>
+                  <span style={{
                     display: "inline-block", padding: "3px 8px", borderRadius: 8,
-                    background: c + "20", border: `1px solid ${c}44`,
+                    background: c + "25", border: `1px solid ${c}44`,
                     fontSize: 12, fontWeight: 700, color: c,
-                  }}>{p.chance.toFixed(1)}%</div>
+                  }}>{p.chance.toFixed(1)}%</span>
                 </div>
               </div>
             );
           })}
+
+          {/* Hash */}
+          {arena?.fair?.serverSeedHash && (
+            <div style={{ textAlign: "center", fontSize: 10, color: "#1F2937", marginTop: 8 }}>
+              Хеш: {arena.fair.serverSeedHash.slice(0, 8)}...{arena.fair.serverSeedHash.slice(-4)} 📋
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* spacer */}
+      <div style={{ flex: 1 }} />
+
+      {/* ══ BOTTOM STAKE PANEL (fixed look, like video) ══ */}
+      <div style={{
+        background: "#0d1117", borderTop: "1px solid #161B22",
+        padding: "10px 14px 20px", flexShrink: 0,
+      }}>
+        {!isIn && !isFinished && (
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            {/* Pencil/edit */}
+            <button onClick={() => setShowConfig(true)} style={{
+              width: 44, height: 44, borderRadius: 12, border: "1px solid #21262D",
+              background: "#161B22", color: "#9CA3AF", fontSize: 19,
+              cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+              flexShrink: 0,
+            }}>✏️</button>
+
+            {/* 3 quick stake buttons */}
+            {quickStakes.map((v, i) => (
+              <button key={i}
+                onClick={() => { haptic("medium"); setSelectedStake(v); join(v); }}
+                disabled={busy || v > tonBalance}
+                style={{
+                  flex: 1, height: 44, borderRadius: 12, border: "none",
+                  background: selectedStake === v ? "#007AFF" : "#161B22",
+                  color: v > tonBalance ? "#374151" : "#fff",
+                  fontSize: 14, fontWeight: 700, cursor: busy || v > tonBalance ? "not-allowed" : "pointer",
+                  fontFamily: "inherit",
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: 4,
+                  boxShadow: selectedStake === v ? "0 0 14px rgba(0,122,255,0.4)" : "none",
+                }}>
+                <span style={{ color: selectedStake === v ? "#fff" : "#007AFF", fontSize: 12 }}>♦</span>
+                {v}
+              </button>
+            ))}
+
+            {/* Va-bank */}
+            <button onClick={() => { haptic("heavy"); setSelectedStake(tonBalance); join(tonBalance); }}
+              disabled={busy || tonBalance < 0.1}
+              style={{
+                flex: 1, height: 44, borderRadius: 12, border: "none",
+                background: "#1a0a3a",
+                color: "#A78BFA", fontSize: 12, fontWeight: 800,
+                cursor: "pointer", fontFamily: "inherit",
+              }}>Ва-банк</button>
+
+            {/* Refresh */}
+            <button onClick={() => { fetchArena(); haptic("light"); }} style={{
+              width: 44, height: 44, borderRadius: 12, border: "1px solid #21262D",
+              background: "#161B22", color: "#6B7280", fontSize: 18,
+              cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+              flexShrink: 0,
+            }}>↻</button>
+          </div>
+        )}
+
+        {/* Room badge */}
+        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
+          <div style={{
+            background: "#007AFF", borderRadius: 20, padding: "5px 14px",
+            fontSize: 13, fontWeight: 700, color: "#fff",
+            display: "flex", alignItems: "center", gap: 6,
+          }}>
+            Комната 1
+            <span style={{
+              background: "rgba(255,255,255,0.25)", borderRadius: "50%",
+              width: 20, height: 20, display: "inline-flex", alignItems: "center",
+              justifyContent: "center", fontSize: 12, fontWeight: 900,
+            }}>{players.length}</span>
+          </div>
         </div>
       </div>
-
-      {showFairness && arena?.fair && (
-        <FairnessModal
-          fair={arena.fair}
-          status={arena.status}
-          gameType="arena"
-          gameId={arena.id}
-          onClose={() => setShowFairness(false)}
-          onClientSeedChanged={(seed) => setArena(a => a ? { ...a, fair: { ...a.fair!, clientSeed: seed } } : a)}
-        />
-      )}
     </div>
   );
 }

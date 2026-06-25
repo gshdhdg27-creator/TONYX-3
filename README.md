@@ -20,3 +20,4 @@ View your app in AI Studio: https://ai.studio/apps/96861362-8abe-4ea8-a7c5-7b854
    `npm run dev`
 
 ## AdsGram Integration - June 2026.
+Test commit для Vercel — 25 июня 2026

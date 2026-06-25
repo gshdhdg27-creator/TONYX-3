@@ -1,177 +1,99 @@
-export type BossTier =
-  | 1
-  | 2
-  | 3
-  | 4
-  | 5;
+// ─── VIEW ──────────────────────────────────────────────
+export type ViewName = "loading" | "home" | "battle" | "chest" | "collection";
 
-export type HeroElement =
-  | "arcane"
-  | "ice"
-  | "fire"
-  | "lightning"
-  | "wind"
-  | "shadow"
-  | "crystal"
-  | "void"
-  | "ancient"
-  | "royal";
+// ─── BOSS ──────────────────────────────────────────────
+export type BossLevel = 1 | 2 | 3 | 4 | 5;
 
-export type HeroAttackType =
-  | "energy_ball"
-  | "ice_arrow"
-  | "fireball"
-  | "thunder_strike"
-  | "tornado"
-  | "shadow_beam"
-  | "crystal_shards"
-  | "void_portal"
-  | "ancient_beam"
-  | "royal_magic";
-
-export type BossAnimationType =
+export type BossAnimState =
   | "idle"
-  | "ground_stomp"
-  | "hand_swing"
-  | "fire_breath"
-  | "rage";
+  | "rage"
+  | "roar"
+  | "stomp"
+  | "fire_breath";
 
-export interface Boss {
-  id: number;
-  tier: BossTier;
+export interface BossConfig {
+  level: BossLevel;
   name: string;
   maxHp: number;
-  chestType: string;
-  rewardMultiplier: number;
+  baseAttack: number;
+  attackInterval: [number, number];
+  rewardTon: number;
+  rewardTonyx: number;
+  color: string;
 }
 
-export interface Hero {
-  id: number;
+// ─── MAGE ──────────────────────────────────────────────
+export type MageType = "fire" | "ice" | "lightning" | "wind";
+
+export interface MageConfig {
+  id: string;
   name: string;
-  element: HeroElement;
-  attackType: HeroAttackType;
-
-  dps: number;
-
-  attackSpeed: number;
-
-  unlocked: boolean;
-
-  requiredTonyx?: number;
-
-  requiredTon?: number;
-
-  requiredStars?: number;
-
-  isKingMage?: boolean;
+  type: MageType;
+  baseDps: number;
+  upgradeCost: number;
+  level: number;
+  emoji: string;
+  attackColor: string;
 }
 
-export interface BattleHeroSlot {
-  slotId: number;
-
-  unlocked: boolean;
-
-  heroId: number | null;
+export interface OwnedMage extends MageConfig {
+  level: number;
 }
 
+// ─── NFT ───────────────────────────────────────────────
+export type NftId = "shadow_dogg" | "flame_dogg" | "ice_dogg";
+
+export interface NftConfig {
+  id: NftId;
+  name: string;
+  description: string;
+  emoji: string;
+  totalFragments: 9;
+}
+
+export interface NFTInventory {
+  fragments: Record<NftId, number>;
+  assembled: NftId[];
+}
+
+// ─── CHEST ─────────────────────────────────────────────
+export type ChestRewardType = "ton" | "tonyx" | "nft_fragment" | "nft_full";
+
+export interface ChestReward {
+  type: ChestRewardType;
+  amount?: number;
+  nftId?: NftId;
+  fragmentNftId?: NftId;
+}
+
+// ─── BATTLE ────────────────────────────────────────────
 export interface BattleState {
   active: boolean;
-
-  bossId: number;
-
-  bossCurrentHp: number;
-
-  bossMaxHp: number;
-
+  bossHpPercent: number;
+  heroHp: number;
   totalDps: number;
-
-  startedAt: number;
-
-  estimatedEndAt: number;
-
-  boost20Active: boolean;
-
-  boost20ExpiresAt: number | null;
-
-  x2BoostActive: boolean;
-
-  x2BoostExpiresAt: number | null;
+  lastRewards: ChestReward[] | null;
 }
 
-export interface BossRespawnState {
-  available: boolean;
-
-  respawnAt: number | null;
-
-  adsWatched: number;
+// ─── BOOST ─────────────────────────────────────────────
+export interface BoostState {
+  dpsMultiplier: number;
+  adWatchedCount: number;
+  boostExpiresAt: number | null;
+  speedMultiplier: number;
 }
 
-export interface DamageNumber {
-  id: string;
-
-  value: number;
-
-  critical: boolean;
-
-  createdAt: number;
-}
-
-export interface BossAction {
-  type: BossAnimationType;
-
-  startedAt: number;
-}
-
-export interface PlayerStats {
-  totalBossKills: number;
-
-  currentKillStreak: number;
-
-  highestKillStreak: number;
-
-  totalDamageDealt: number;
-}
-
-export interface HeroCollection {
-  ownedHeroIds: number[];
-
-  equippedHeroIds: number[];
-}
-
-export interface SlotUnlockData {
-  slotId: number;
-
-  tonyxCost?: number;
-
-  tonCost?: number;
-
-  unlocked: boolean;
-}
-
-export interface RewardPreview {
-  chestType: string;
-
-  tonyxMin: number;
-
-  tonyxMax: number;
-
-  nftChance: number;
-
-  tonChance: number;
-}
-
-export interface GameSave {
-  battle: BattleState | null;
-
-  respawn: BossRespawnState;
-
-  heroes: HeroCollection;
-
-  slots: BattleHeroSlot[];
-
-  stats: PlayerStats;
-
-  selectedBossTier: BossTier;
-
-  lastOnlineAt: number;
+// ─── ROOT GAME STATE ───────────────────────────────────
+export interface GameState {
+  view: ViewName;
+  balances: {
+    ton: number;
+    tonyx: number;
+  };
+  selectedBossLevel: BossLevel;
+  battle: BattleState;
+  ownedMages: OwnedMage[];
+  activeMageIds: string[];
+  nftInventory: NFTInventory;
+  boost: BoostState;
 }

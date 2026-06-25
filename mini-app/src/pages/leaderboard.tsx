@@ -22,8 +22,8 @@ export default function LeaderboardPage() {
   const [cat, setCat] = useState<Cat>("top_earn");
 
   const { data, isLoading } = useGetMiniLeaderboard(
-    { category: cat, telegramId: telegramId ?? undefined },
-    { query: { refetchInterval: 15000 } },
+    { category: cat as any, telegramId: telegramId ?? undefined },
+    { query: { refetchInterval: 15000 } as any },
   );
 
   const entries = data?.entries ?? [];

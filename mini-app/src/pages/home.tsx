@@ -274,7 +274,7 @@ export default function HomePage() {
   }, []);
 
   const { data: profile, refetch: refetchProfile } = useGetUserProfile(telegramId ?? "", {
-    query: { enabled: !!telegramId, refetchInterval: 8000 },
+    query: { enabled: !!telegramId, refetchInterval: 8000 } as any,
   });
 
   const fetchInv = useCallback(async () => {

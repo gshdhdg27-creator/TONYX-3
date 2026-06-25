@@ -40,7 +40,7 @@ function TonyxIcon() {
 export default function Header() {
   const { telegramId } = useTelegram();
   const { data: profile } = useGetUserProfile(telegramId ?? "", {
-    query: { enabled: !!telegramId, refetchInterval: 6000 },
+    query: { enabled: !!telegramId, refetchInterval: 6000 } as any,
   });
 
   const ton   = Number((profile as { ton?: string | number } | undefined)?.ton ?? 0);

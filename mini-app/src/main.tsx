@@ -7,7 +7,7 @@ window.fetch = (input, init) => {
   const url = typeof input === "string" ? input : input instanceof URL ? input.href : (input as Request).url;
   const isApi = url.startsWith("/api/") || url.startsWith("/mini/");
   if (isApi) {
-    const initData = window.Telegram?.WebApp?.initData ?? "";
+    const initData = (window as any).Telegram?.WebApp?.initData ?? "";
     if (initData) {
       const headers = new Headers((init as RequestInit | undefined)?.headers ?? {});
       headers.set("x-telegram-init-data", initData);

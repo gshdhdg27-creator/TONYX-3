@@ -18,7 +18,13 @@ interface Territory {
   size: number;
 }
 
-const ArenaGame: React.FC = () => {
+const ArenaGame: React.FC<{
+  telegramId?: string;
+  tonBalance?: number;
+  onBalanceChange?: () => Promise<void>;
+  onClose?: () => void;
+  onOpenHistory?: () => void;
+}> = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   
   const [players, setPlayers] = useState<Player[]>([
@@ -33,7 +39,7 @@ const ArenaGame: React.FC = () => {
   const [winner, setWinner] = useState<Player | null>(null);
   const [showWinPopup, setShowWinPopup] = useState(false);
 
-  const animationRef = useRef<number>();
+  const animationRef = useRef<number | undefined>(undefined);
   const ballPos = useRef({ x: 250, y: 250 });
   const velocity = useRef({ x: 0, y: 0 });
   const territories = useRef<Territory[]>([]);

@@ -61,13 +61,13 @@ export default function TasksPage() {
   }, []);
 
   const { data: tasksData, isLoading } = useGetMiniTasks(telegramId ?? "", {
-    query: { enabled: !!telegramId, refetchInterval: 15000 },
+    query: { enabled: !!telegramId, refetchInterval: 15000 } as any,
   });
   const { data: profile } = useGetUserProfile(telegramId ?? "", {
-    query: { enabled: !!telegramId, refetchInterval: 10000 },
+    query: { enabled: !!telegramId, refetchInterval: 10000 } as any,
   });
   const { data: earnStatus } = useGetMiniEarnStatus(telegramId ?? "", {
-    query: { enabled: !!telegramId, refetchInterval: 10000 },
+    query: { enabled: !!telegramId, refetchInterval: 10000 } as any,
   });
 
   // Sync server cooldown → local countdown whenever earnStatus updates

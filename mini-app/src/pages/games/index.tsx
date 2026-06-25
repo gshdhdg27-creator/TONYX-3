@@ -177,7 +177,7 @@ function MinesGame({ telegramId, balance, lang, onBalanceChange }: {
           <input value={bet} onChange={e => setBet(Math.max(MIN_BET, parseFloat(e.target.value) || 0))}
             type="number" step="0.1" min={MIN_BET} placeholder={`мин. ${MIN_BET} TON`}
             style={{ width: "100%", background: "rgba(30,45,69,0.6)", border: "1px solid rgba(30,58,143,0.4)", borderRadius: 10, padding: "10px 14px", color: "#f1f5f9", fontFamily: "inherit", fontSize: 14, outline: "none", boxSizing: "border-box" }} />
-          <div style={{ fontSize: 12, color: "#334155", marginTop: 6 }}>{t.balance(formatTon(balance))}</div>
+          <div style={{ fontSize: 12, color: "#334155", marginTop: 6 }}>{t.balance(balance)}</div>
         </div>
 
         <div style={{ background: "rgba(15,23,42,0.95)", border: "1px solid rgba(30,58,143,0.35)", borderRadius: 18, padding: 16, marginBottom: 16 }}>
@@ -1315,7 +1315,7 @@ function UnifiedHistoryModal({ telegramId, initialTab, onClose }: {
           ["mine", "👤 Мои"],
         ] as const).map(([f, label]) => (
           <button key={f} onClick={() => setFilter(f)} style={{
-            flexShrink: 0, padding: "7px 14px", borderRadius: 20, border: "none", fontFamily: "inherit",
+            flexShrink: 0, padding: "7px 14px", borderRadius: 20, fontFamily: "inherit",
             background: filter === f ? "rgba(37,99,235,0.3)" : "rgba(30,45,69,0.7)",
             color: filter === f ? "#60a5fa" : "#64748b",
             fontSize: 12, fontWeight: 700, cursor: "pointer",

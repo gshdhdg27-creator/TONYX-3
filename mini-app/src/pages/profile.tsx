@@ -127,9 +127,9 @@ export default function ProfilePage() {
   const [txHistoryLoaded, setTxHistoryLoaded]   = useState(false);
   const [txTab, setTxTab] = useState<"deposits" | "withdrawals">("deposits");
 
-  const { data: profile } = useGetUserProfile(telegramId ?? "", { query: { enabled: !!telegramId, refetchInterval: 10000 } });
-  const { data: referrals } = useGetReferrals(telegramId ?? "", { query: { enabled: !!telegramId } });
-  const { data: history } = useGetMiniHistory(telegramId ?? "", { query: { enabled: !!telegramId, refetchInterval: 30000 } });
+  const { data: profile } = useGetUserProfile(telegramId ?? "", { query: { enabled: !!telegramId, refetchInterval: 10000 } as any });
+  const { data: referrals } = useGetReferrals(telegramId ?? "", { query: { enabled: !!telegramId } as any });
+  const { data: history } = useGetMiniHistory(telegramId ?? "", { query: { enabled: !!telegramId, refetchInterval: 30000 } as any });
 
   const showToast = (msg: string, type: "success" | "error") => {
     setToast({ msg, type });

@@ -1,0 +1,171 @@
+import { Boss, RewardPreview } from "../types/game";
+
+export const BOSSES: Boss[] = [
+  {
+    id: 1,
+    tier: 1,
+    name: "Boss Dogg I",
+    maxHp: 25000,
+    chestType: "COMMON",
+    rewardMultiplier: 1
+  },
+
+  {
+    id: 2,
+    tier: 2,
+    name: "Boss Dogg II",
+    maxHp: 50000,
+    chestType: "SILVER",
+    rewardMultiplier: 2
+  },
+
+  {
+    id: 3,
+    tier: 3,
+    name: "Boss Dogg III",
+    maxHp: 100000,
+    chestType: "GOLD",
+    rewardMultiplier: 4
+  },
+
+  {
+    id: 4,
+    tier: 4,
+    name: "Boss Dogg IV",
+    maxHp: 250000,
+    chestType: "PLATINUM",
+    rewardMultiplier: 8
+  },
+
+  {
+    id: 5,
+    tier: 5,
+    name: "Boss Dogg V",
+    maxHp: 500000,
+    chestType: "LEGENDARY",
+    rewardMultiplier: 16
+  }
+];
+
+export const BOSS_REWARD_PREVIEW: Record<number, RewardPreview> = {
+  1: {
+    chestType: "COMMON",
+    tonyxMin: 25,
+    tonyxMax: 75,
+    nftChance: 0.5,
+    tonChance: 1
+  },
+
+  2: {
+    chestType: "SILVER",
+    tonyxMin: 75,
+    tonyxMax: 200,
+    nftChance: 1.5,
+    tonChance: 2
+  },
+
+  3: {
+    chestType: "GOLD",
+    tonyxMin: 200,
+    tonyxMax: 500,
+    nftChance: 3,
+    tonChance: 4
+  },
+
+  4: {
+    chestType: "PLATINUM",
+    tonyxMin: 500,
+    tonyxMax: 1200,
+    nftChance: 6,
+    tonChance: 8
+  },
+
+  5: {
+    chestType: "LEGENDARY",
+    tonyxMin: 1200,
+    tonyxMax: 3000,
+    nftChance: 12,
+    tonChance: 15
+  }
+};
+
+export const BOSS_ACTION_INTERVAL_MIN = 10000;
+export const BOSS_ACTION_INTERVAL_MAX = 15000;
+
+export const BOSS_RESPAWN_TIME = 24 * 60 * 60 * 1000;
+
+export const BOSS_RESPAWN_ADS_REQUIRED = 10;
+
+export const FINISH_WITH_ADS_UNLOCK_PERCENT = 25;
+
+export const DAMAGE_PER_FINISH_AD = 1;
+
+export const DPS_BOOST_PERCENT = 20;
+
+export const DPS_BOOST_DURATION = 24 * 60 * 60 * 1000;
+
+export const DPS_BOOST_ADS_REQUIRED = 10;
+
+export const X2_BOOST_MULTIPLIER = 2;
+
+export const BOSS_ACTIONS = [
+  {
+    type: "ground_stomp",
+    duration: 2500
+  },
+
+  {
+    type: "hand_swing",
+    duration: 2200
+  },
+
+  {
+    type: "fire_breath",
+    duration: 3500
+  },
+
+  {
+    type: "rage",
+    duration: 3000
+  }
+] as const;
+
+export function getBossByTier(tier: number): Boss {
+  const boss = BOSSES.find(b => b.tier === tier);
+
+  if (!boss) {
+    return BOSSES[0];
+  }
+
+  return boss;
+}
+
+export function getRewardPreview(
+  tier: number
+): RewardPreview {
+  return BOSS_REWARD_PREVIEW[tier];
+}
+
+export function calculateBossProgress(
+  currentHp: number,
+  maxHp: number
+): number {
+  if (maxHp <= 0) return 0;
+
+  return Math.max(
+    0,
+    Math.min(
+      100,
+      (currentHp / maxHp) * 100
+    )
+  );
+}
+
+export function canUseFinishAds(
+  currentHp: number,
+  maxHp: number
+): boolean {
+  const percent = (currentHp / maxHp) * 100;
+
+  return percent <= FINISH_WITH_ADS_UNLOCK_PERCENT;
+}

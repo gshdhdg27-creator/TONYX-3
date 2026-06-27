@@ -181,13 +181,17 @@
   inset: 0;
   pointer-events: none;
 }
-.boss-emoji {
-  font-size: 96px;
-  line-height: 1;
+.boss-img {
+  width: min(220px, 55vw);
+  height: min(220px, 55vw);
+  object-fit: cover;
+  object-position: center 20%;
+  border-radius: 16px;
   position: relative;
   z-index: 1;
-  transition: transform 0.3s;
-  filter: drop-shadow(0 0 20px rgba(124,58,237,0.5));
+  transition: filter 0.4s;
+  user-select: none;
+  -webkit-user-drag: none;
 }
 .boss-name {
   font-size: 13px;
@@ -195,15 +199,15 @@
   color: var(--game-text2);
   letter-spacing: 1px;
   text-transform: uppercase;
-  margin-top: 6px;
+  margin-top: 8px;
   z-index: 1;
 }
 
-.boss-emoji[data-state="idle"]        { animation: boss-idle 3s ease-in-out infinite; }
-.boss-emoji[data-state="rage"]        { animation: boss-rage 0.5s ease-in-out infinite; filter: drop-shadow(0 0 24px #ef4444); }
-.boss-emoji[data-state="roar"]        { animation: boss-roar 0.3s ease-in-out infinite; }
-.boss-emoji[data-state="stomp"]       { animation: boss-stomp 0.4s ease-in-out infinite; }
-.boss-emoji[data-state="fire_breath"] { animation: boss-fire 0.6s ease-in-out infinite; filter: drop-shadow(0 0 30px #f97316); }
+.boss-img[data-state="idle"]        { animation: boss-idle 3s ease-in-out infinite; }
+.boss-img[data-state="rage"]        { animation: boss-rage 0.5s ease-in-out infinite; }
+.boss-img[data-state="roar"]        { animation: boss-roar 0.3s ease-in-out infinite; }
+.boss-img[data-state="stomp"]       { animation: boss-stomp 0.4s ease-in-out infinite; }
+.boss-img[data-state="fire_breath"] { animation: boss-fire 0.6s ease-in-out infinite; }
 
 @keyframes boss-idle        { 0%,100% { transform: translateY(0) scale(1); } 50% { transform: translateY(-6px) scale(1.02); } }
 @keyframes boss-rage        { 0%,100% { transform: scale(1); } 50% { transform: scale(1.08) rotate(-2deg); } }

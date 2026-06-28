@@ -14,7 +14,7 @@ export default function MageSlot({ mage, isEmpty }: MageSlotProps) {
 
   if (isEmpty || !mage) {
     return (
-      <div className="mage-slot empty" onClick={() => setView("collection")}>
+      <div className="mage-slot empty" onClick={() => setView("hero-shop")}>
         <span className="ms-plus">＋</span>
       </div>
     );

@@ -1,10 +1,10 @@
 import { useEffect } from "react";
 import { useGameStore } from "@/store/gameStore";
 import HomeScreen from "@/components/HomeScreen";
-import SectionBar from "@/components/ui/SectionBar";
 import BattleScreen from "@/components/battle/BattleScreen";
 import ChestScreen from "@/components/chest/ChestScreen";
 import CollectionScreen from "@/components/collection/CollectionScreen";
+import HeroShopScreen from "@/components/hero-shop/HeroShopScreen";
 import LoadingScreen from "@/components/ui/LoadingScreen";
 import "@/styles/game.css";
 
@@ -19,12 +19,12 @@ export default function HomePage() {
 
   return (
     <>
-      <SectionBar gradient="#0a0a12" />
       {view === "loading" && <LoadingScreen />}
       {view === "home" && <HomeScreen />}
       {view === "battle" && <BattleScreen />}
       {view === "chest" && <ChestScreen />}
       {view === "collection" && <CollectionScreen />}
+      {view === "hero-shop" && <HeroShopScreen />}
     </>
   );
 }

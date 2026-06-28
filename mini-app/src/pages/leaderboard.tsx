@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useGetMiniLeaderboard } from "@workspace/api-client-react";
 import { useTelegram, haptic } from "@/lib/telegram";
-import SectionBar from "@/components/ui/SectionBar";
 
 type Cat = "top_earn" | "top_players" | "referrals" | "top_igro";
 
@@ -37,7 +36,6 @@ export default function LeaderboardPage() {
 
   return (
     <div style={{ padding: "20px 16px 32px", minHeight: "100%" }}>
-      <SectionBar gradient="#111827" />
       <div style={{ marginBottom: 18 }}>
         <div style={{ fontSize: 24, fontWeight: 800, color: "#f1f5f9", letterSpacing: "-0.01em" }}>🏆 Leaderboard</div>
         <div style={{ fontSize: 13, color: "#64748b" }}>Compete with players worldwide</div>

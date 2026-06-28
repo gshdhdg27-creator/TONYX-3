@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from "react";
-import SectionBar from "@/components/ui/SectionBar";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useGetUserProfile,
@@ -263,7 +262,6 @@ export default function ProfilePage() {
 
   return (
     <div style={{ padding: "16px 16px 100px" }}>
-      <SectionBar gradient="hsl(240 16% 4%)" />
       {toast && <Toast msg={toast.msg} type={toast.type} />}
 
       {/* Language picker */}

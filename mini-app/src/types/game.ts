@@ -1,5 +1,5 @@
 // ─── VIEW ──────────────────────────────────────────────
-export type ViewName = "loading" | "home" | "battle" | "chest" | "collection";
+export type ViewName = "loading" | "home" | "battle" | "chest" | "collection" | "hero-shop";
 
 // ─── BOSS ──────────────────────────────────────────────
 export type BossLevel = 1 | 2 | 3 | 4 | 5;

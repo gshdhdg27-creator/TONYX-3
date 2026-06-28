@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import SectionBar from "@/components/ui/SectionBar";
 import ArenaGame from "@/components/ArenaGame";
 import SpinGame from "@/components/SpinGame";
 import FairnessModal, { type FairData } from "@/components/FairnessModal";
@@ -1698,7 +1697,6 @@ export default function GamesPage() {
 
   return (
     <div style={{ padding: "16px 16px 32px", background: "#0B0F14", minHeight: "100vh" }}>
-      <SectionBar gradient="#0B0F14" />
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
         * { font-family: 'Inter', system-ui, -apple-system, sans-serif; }

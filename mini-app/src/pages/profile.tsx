@@ -261,7 +261,7 @@ export default function ProfilePage() {
   const chooseLang = (l: Lang) => { haptic("medium"); setLang(l); setShowLangPicker(false); };
 
   return (
-    <div style={{ padding: "16px 16px 100px" }}>
+    <div style={{ padding: "72px 16px 100px" }}>
       {toast && <Toast msg={toast.msg} type={toast.type} />}
 
       {/* Language picker */}

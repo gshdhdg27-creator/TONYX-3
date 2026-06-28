@@ -35,7 +35,7 @@ export default function LeaderboardPage() {
     : `${n.toLocaleString()} TONYX`;
 
   return (
-    <div style={{ padding: "20px 16px 32px", minHeight: "100%" }}>
+    <div style={{ padding: "76px 16px 32px", minHeight: "100%" }}>
       <div style={{ marginBottom: 18 }}>
         <div style={{ fontSize: 24, fontWeight: 800, color: "#f1f5f9", letterSpacing: "-0.01em" }}>🏆 Leaderboard</div>
         <div style={{ fontSize: 13, color: "#64748b" }}>Compete with players worldwide</div>

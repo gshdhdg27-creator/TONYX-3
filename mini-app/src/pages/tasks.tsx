@@ -189,7 +189,7 @@ export default function TasksPage() {
   const btnActive = canWatch && !!telegramId && !recordWatch.isPending;
 
   return (
-    <div style={{ padding: 16 }}>
+    <div style={{ padding: "72px 16px 16px" }}>
       {toast && <Toast msg={toast.msg} type={toast.type} />}
 
       {/* Page header */}

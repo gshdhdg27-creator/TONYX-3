@@ -690,7 +690,7 @@ export default function MarketPage() {
   ];
 
   return (
-    <div style={{ padding: "0 0 90px", minHeight: "100%" }}>
+    <div style={{ padding: "56px 0 90px", minHeight: "100%" }}>
       {toast && <Toast msg={toast.msg} type={toast.type} />}
 
       {/* Modals */}

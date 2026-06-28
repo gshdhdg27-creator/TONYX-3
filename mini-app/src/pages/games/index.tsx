@@ -1696,7 +1696,7 @@ export default function GamesPage() {
   }
 
   return (
-    <div style={{ padding: "16px 16px 32px", background: "#0B0F14", minHeight: "100vh" }}>
+    <div style={{ padding: "72px 16px 32px", background: "#0B0F14", minHeight: "100vh" }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
         * { font-family: 'Inter', system-ui, -apple-system, sans-serif; }

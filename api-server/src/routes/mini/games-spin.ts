@@ -303,8 +303,8 @@ router.post("/increase", async (req, res) => {
     res.status(400).json({ error: "telegramId и additionalStake > 0 обязательны" }); return;
   }
   const round = await getActiveRound();
-  if (round.status !== "starting") {
-    res.status(400).json({ error: "Увеличить ставку можно только во время отсчёта" }); return;
+  if (round.status !== "starting" && round.status !== "waiting") {
+    res.status(400).json({ error: "Увеличить ставку можно только пока раунд активен" }); return;
   }
   const players = (round.players as SpinPlayer[]) ?? [];
   const idx = players.findIndex((p) => p.telegramId === telegramId);

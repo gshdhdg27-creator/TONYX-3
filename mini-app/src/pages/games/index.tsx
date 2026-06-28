@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import ArenaGame from "@/components/ArenaGame";
+import SpinGame from "@/components/SpinGame";
 import FairnessModal, { type FairData } from "@/components/FairnessModal";
 import {
   useGetUserProfile,
@@ -380,124 +381,10 @@ function fmtTimer(sec: number): string {
   return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
-function buildPiePath(cx: number, cy: number, r: number, startDeg: number, endDeg: number) {
-  const toRad = (d: number) => ((d - 90) * Math.PI) / 180;
-  const x1 = cx + r * Math.cos(toRad(startDeg));
-  const y1 = cy + r * Math.sin(toRad(startDeg));
-  const x2 = cx + r * Math.cos(toRad(endDeg));
-  const y2 = cy + r * Math.sin(toRad(endDeg));
-  const large = (endDeg - startDeg) > 180 ? 1 : 0;
-  return `M${cx},${cy} L${x1},${y1} A${r},${r} 0 ${large},1 ${x2},${y2} Z`;
-}
+/* JackpotWheel and SpinGame moved to @/components/SpinGame */
 
-function JackpotWheel({ players, spinning, winnerId }: {
-  players: SpinPlayer[]; spinning: boolean; winnerId?: string | null;
-}) {
-  const [rotation, setRotation] = useState(0);
-  const prevSpinning = useRef(false);
-  const playersRef = useRef(players);
-  const winnerIdRef = useRef(winnerId);
-  playersRef.current = players;
-  winnerIdRef.current = winnerId;
-
-  useEffect(() => {
-    if (spinning && !prevSpinning.current) {
-      const curPlayers = playersRef.current;
-      const curWinnerId = winnerIdRef.current;
-      let targetAngle = Math.random() * 360;
-
-      if (curWinnerId && curPlayers.length > 0) {
-        const total = curPlayers.reduce((s, p) => s + p.stake, 0);
-        let angle = 0;
-        for (const p of curPlayers) {
-          const frac = p.stake / total;
-          const start = angle;
-          const end = angle + frac * 360;
-          if (p.telegramId === curWinnerId) {
-            // Stop at a random position inside the winner's sector, not just the midpoint.
-            // Keep a small margin (8% from each edge) so the pointer clearly sits inside.
-            const span = end - start;
-            const margin = Math.min(span * 0.08, 6);
-            const randAngle = start + margin + Math.random() * (span - margin * 2);
-            targetAngle = ((360 - (randAngle % 360)) + 360) % 360;
-            break;
-          }
-          angle = end;
-        }
-      }
-
-      setRotation(prev => {
-        const prevEff = ((prev % 360) + 360) % 360;
-        const delta = ((targetAngle - prevEff) + 360) % 360;
-        return prev + 5 * 360 + (delta < 5 ? delta + 360 : delta);
-      });
-    }
-    prevSpinning.current = spinning;
-  }, [spinning]);
-
-  const CX = 130; const CY = 130; const R = 118; const INNER_R = 42;
-
-  if (players.length === 0) {
-    return (
-      <div style={{ width: 260, height: 260, margin: "0 auto", position: "relative" }}>
-        <svg width="260" height="260">
-          <circle cx={CX} cy={CY} r={R} fill="rgba(30,45,69,0.6)" stroke="rgba(30,58,143,0.4)" strokeWidth="2" />
-          <circle cx={CX} cy={CY} r={INNER_R} fill="#0f172a" />
-          <text x={CX} y={CY + 4} textAnchor="middle" fill="#334155" fontSize="12" fontFamily="inherit">Ждём игроков...</text>
-        </svg>
-        <div style={{ position: "absolute", top: -10, left: "50%", transform: "translateX(-50%)" }}>
-          <svg width="22" height="18"><polygon points="11,18 1,1 21,1" fill="white" opacity="0.85" /></svg>
-        </div>
-      </div>
-    );
-  }
-
-  const total = players.reduce((s, p) => s + p.stake, 0);
-  let angle = 0;
-  const sectors = players.map((p, i) => {
-    const frac = p.stake / total;
-    const start = angle;
-    const end = angle + frac * 360;
-    angle = end;
-    const mid = ((start + end) / 2 - 90) * Math.PI / 180;
-    const lx = CX + (R * 0.6) * Math.cos(mid);
-    const ly = CY + (R * 0.6) * Math.sin(mid);
-    return { path: buildPiePath(CX, CY, R, start, end), color: SECTOR_COLORS[i % SECTOR_COLORS.length], lx, ly, frac, p };
-  });
-
-  return (
-    <div style={{ width: 260, height: 260, margin: "0 auto", position: "relative" }}>
-      <div style={{ position: "absolute", top: -10, left: "50%", transform: "translateX(-50%)", zIndex: 2 }}>
-        <svg width="22" height="18"><polygon points="11,18 1,1 21,1" fill="white" opacity="0.9" /></svg>
-      </div>
-      <svg width="260" height="260" style={{
-        display: "block",
-        transform: `rotate(${rotation}deg)`,
-        transition: spinning ? "transform 3.8s cubic-bezier(0.17,0.67,0.12,1.0)" : "none",
-      }}>
-        {sectors.map((s, i) => (
-          <g key={i}>
-            <path d={s.path} fill={s.color} stroke="rgba(0,0,0,0.25)" strokeWidth="1.5" />
-            {s.frac > 0.07 && (
-              <text x={s.lx} y={s.ly} textAnchor="middle" dominantBaseline="middle"
-                fill="rgba(255,255,255,0.9)" fontSize="10" fontWeight="700" fontFamily="inherit">
-                {s.p.chance.toFixed(0)}%
-              </text>
-            )}
-          </g>
-        ))}
-        <circle cx={CX} cy={CY} r={INNER_R + 3} fill="rgba(0,0,0,0.4)" />
-        <circle cx={CX} cy={CY} r={INNER_R} fill="#0a0f1e" stroke="rgba(30,58,143,0.5)" strokeWidth="1.5" />
-        <text x={CX} y={CY + 1} textAnchor="middle" dominantBaseline="middle"
-          fill="#22d3ee" fontSize="11" fontWeight="900" fontFamily="inherit">
-          {players.length} / ∞
-        </text>
-      </svg>
-    </div>
-  );
-}
-
-function SpinGame({ telegramId, tonBalance, onBalanceChange, onOpenHistory }: {
+/* ── SpinGame is now @/components/SpinGame ── */
+function _SpinGameInline_REMOVED({ telegramId, tonBalance, onBalanceChange, onOpenHistory }: {
   telegramId: string; tonBalance: number; onBalanceChange: () => void; onOpenHistory?: () => void;
 }) {
   const [round, setRound]               = useState<SpinRound | null>(null);

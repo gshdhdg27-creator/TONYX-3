@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useGetUserProfile } from "@workspace/api-client-react";
 import { useTelegram, haptic, hapticNotify } from "@/lib/telegram";
 import { useLang } from "@/lib/LanguageContext";
+import SectionBar from "@/components/ui/SectionBar";
 
 /* ══════════════════════════════════════════════
    CONSTANTS & TYPES
@@ -691,6 +692,7 @@ export default function MarketPage() {
 
   return (
     <div style={{ padding: "0 0 90px", minHeight: "100%" }}>
+      <SectionBar gradient="linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%)" />
       {toast && <Toast msg={toast.msg} type={toast.type} />}
 
       {/* Modals */}

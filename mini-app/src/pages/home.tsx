@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useGameStore } from "@/store/gameStore";
 import HomeScreen from "@/components/HomeScreen";
+import SectionBar from "@/components/ui/SectionBar";
 import BattleScreen from "@/components/battle/BattleScreen";
 import ChestScreen from "@/components/chest/ChestScreen";
 import CollectionScreen from "@/components/collection/CollectionScreen";
@@ -18,6 +19,7 @@ export default function HomePage() {
 
   return (
     <>
+      <SectionBar gradient="linear-gradient(135deg, #4c1d95 0%, #7c3aed 100%)" />
       {view === "loading" && <LoadingScreen />}
       {view === "home" && <HomeScreen />}
       {view === "battle" && <BattleScreen />}

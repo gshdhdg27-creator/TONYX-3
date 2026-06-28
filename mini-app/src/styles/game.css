@@ -207,11 +207,8 @@
   flex-shrink: 0;
 }
 
-.boss-img[data-state="idle"]        { animation: boss-idle 3s ease-in-out infinite; }
-.boss-img[data-state="rage"]        { animation: boss-rage 0.5s ease-in-out infinite; }
-.boss-img[data-state="roar"]        { animation: boss-roar 0.3s ease-in-out infinite; }
-.boss-img[data-state="stomp"]       { animation: boss-stomp 0.4s ease-in-out infinite; }
-.boss-img[data-state="fire_breath"] { animation: boss-fire 0.6s ease-in-out infinite; }
+/* Boss animations disabled — boss stays still */
+.boss-img[data-state] { animation: none; }
 
 @keyframes boss-idle        { 0%,100% { transform: translateY(0) scale(1); } 50% { transform: translateY(-6px) scale(1.02); } }
 @keyframes boss-rage        { 0%,100% { transform: scale(1); } 50% { transform: scale(1.08) rotate(-2deg); } }
@@ -244,7 +241,13 @@
   justify-content: center;
 }
 .mage-slot.active { border-color: var(--game-accent); background: rgba(124,58,237,0.12); }
-.mage-slot.empty  { border-style: dashed; background: transparent; cursor: pointer; }
+.mage-slot.empty  {
+  border: none;
+  background-image: url('/hero-frame.jpg');
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+  cursor: pointer;
+}
 .mage-slot:active { transform: scale(0.94); }
 .mage-slot .ms-emoji { font-size: 22px; line-height: 1; }
 .mage-slot .ms-name  { font-size: 9px; color: var(--game-text3); margin-top: 2px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: 100%; }

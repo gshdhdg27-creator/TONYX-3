@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from "react";
+import SectionBar from "@/components/ui/SectionBar";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useGetMiniTasks,
@@ -190,6 +191,7 @@ export default function TasksPage() {
 
   return (
     <div style={{ padding: 16 }}>
+      <SectionBar gradient="linear-gradient(135deg, #7c2d12 0%, #ea580c 100%)" />
       {toast && <Toast msg={toast.msg} type={toast.type} />}
 
       {/* Page header */}

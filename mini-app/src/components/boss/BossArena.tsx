@@ -26,6 +26,7 @@ export default function BossArena() {
         className="boss-glow"
         style={{ background: `radial-gradient(ellipse at 50% 60%, ${boss.color}33 0%, transparent 70%)` }}
       />
+      <div className="boss-name">{boss.name}</div>
       <img
         className="boss-img"
         src={BOSS_IMAGES[bossLevel]}
@@ -33,7 +34,6 @@ export default function BossArena() {
         data-state={bossAnimState}
         style={{ filter: `drop-shadow(0 0 28px ${boss.color}aa)` }}
       />
-      <div className="boss-name">{boss.name}</div>
     </div>
   );
 }

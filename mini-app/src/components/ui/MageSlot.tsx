@@ -10,9 +10,14 @@ interface MageSlotProps {
 export default function MageSlot({ mage, isEmpty }: MageSlotProps) {
   const activeMageIds = useGameStore((s) => s.activeMageIds);
   const toggleMage = useGameStore((s) => s.toggleMage);
+  const setView = useGameStore((s) => s.setView);
 
   if (isEmpty || !mage) {
-    return <div className="mage-slot empty"><span className="ms-emoji">＋</span></div>;
+    return (
+      <div className="mage-slot empty" onClick={() => setView("collection")}>
+        <span className="ms-plus">＋</span>
+      </div>
+    );
   }
 
   const isActive = activeMageIds.includes(mage.id);

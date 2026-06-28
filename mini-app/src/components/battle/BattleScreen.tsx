@@ -2,7 +2,6 @@ import { useBattleLoop } from "../../hooks/useBattleLoop";
 import { useBossAnimation } from "../../hooks/useBossAnimation";
 import { useGameStore } from "../../store/gameStore";
 import { BOSSES } from "../../constants/bosses";
-import BalanceBar from "../ui/BalanceBar";
 import HpBar from "../ui/HpBar";
 import BossArena from "../boss/BossArena";
 import MageAttackFX from "./MageAttackFX";
@@ -20,9 +19,11 @@ export default function BattleScreen() {
 
   return (
     <div className="battle-screen">
-      <BalanceBar />
-      <div style={{ padding: "10px 16px 6px" }}>
-        <HpBar hp={hp} bossName={boss.name} />
+      {/* Spacer so fixed Header doesn't overlap content */}
+      <div style={{ height: 56, flexShrink: 0 }} />
+
+      <div style={{ padding: "6px 16px 6px" }}>
+        <HpBar hp={hp} maxHp={boss.maxHp} bossName={boss.name} />
       </div>
       <div className="dps-display">
         ⚔️ <span>{dps.toLocaleString()}</span> DPS

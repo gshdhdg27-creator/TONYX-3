@@ -170,8 +170,7 @@
   flex: 1;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
+  align-items: stretch;
   position: relative;
   min-height: 0;
   overflow: hidden;
@@ -182,16 +181,18 @@
   pointer-events: none;
 }
 .boss-img {
-  width: min(220px, 55vw);
-  height: min(220px, 55vw);
+  flex: 1;
+  width: 100%;
+  min-height: 0;
   object-fit: cover;
   object-position: center 20%;
-  border-radius: 16px;
+  border-radius: 0;
   position: relative;
   z-index: 1;
   transition: filter 0.4s;
   user-select: none;
   -webkit-user-drag: none;
+  display: block;
 }
 .boss-name {
   font-size: 13px;
@@ -199,8 +200,11 @@
   color: var(--game-text2);
   letter-spacing: 1px;
   text-transform: uppercase;
-  margin-top: 8px;
-  z-index: 1;
+  z-index: 2;
+  text-align: center;
+  padding: 6px 12px;
+  background: rgba(0,0,0,0.45);
+  flex-shrink: 0;
 }
 
 .boss-img[data-state="idle"]        { animation: boss-idle 3s ease-in-out infinite; }
@@ -236,14 +240,17 @@
   position: relative;
   -webkit-tap-highlight-color: transparent;
   min-width: 0;
+  min-height: 60px;
+  justify-content: center;
 }
 .mage-slot.active { border-color: var(--game-accent); background: rgba(124,58,237,0.12); }
-.mage-slot.empty  { border-style: dashed; opacity: 0.4; pointer-events: none; }
+.mage-slot.empty  { border-style: dashed; background: transparent; cursor: pointer; }
 .mage-slot:active { transform: scale(0.94); }
 .mage-slot .ms-emoji { font-size: 22px; line-height: 1; }
 .mage-slot .ms-name  { font-size: 9px; color: var(--game-text3); margin-top: 2px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: 100%; }
 .mage-slot .ms-dps   { font-size: 10px; font-weight: 700; color: var(--game-gold); }
 .mage-slot .ms-lvl   { position: absolute; top: 3px; right: 3px; font-size: 8px; font-weight: 700; color: var(--game-accent2); background: rgba(124,58,237,0.2); border-radius: 3px; padding: 1px 3px; }
+.mage-slot .ms-plus  { font-size: 22px; color: var(--game-text3); line-height: 1; }
 
 /* ─── ACTION PANEL ─────────────────────────────────── */
 .action-panel {
@@ -345,7 +352,7 @@
   font-family: 'Inter', system-ui, sans-serif;
 }
 .collection-header {
-  padding: 14px 16px 8px;
+  padding: 60px 16px 8px;
   display: flex;
   align-items: center;
   justify-content: space-between;

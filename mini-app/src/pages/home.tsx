@@ -19,7 +19,7 @@ export default function HomePage() {
 
   return (
     <>
-      <SectionBar gradient="linear-gradient(135deg, #4c1d95 0%, #7c3aed 100%)" />
+      <SectionBar gradient="#0a0a12" />
       {view === "loading" && <LoadingScreen />}
       {view === "home" && <HomeScreen />}
       {view === "battle" && <BattleScreen />}

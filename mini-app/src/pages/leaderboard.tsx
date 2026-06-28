@@ -37,7 +37,7 @@ export default function LeaderboardPage() {
 
   return (
     <div style={{ padding: "20px 16px 32px", minHeight: "100%" }}>
-      <SectionBar gradient="linear-gradient(135deg, #78350f 0%, #d97706 100%)" />
+      <SectionBar gradient="#111827" />
       <div style={{ marginBottom: 18 }}>
         <div style={{ fontSize: 24, fontWeight: 800, color: "#f1f5f9", letterSpacing: "-0.01em" }}>🏆 Leaderboard</div>
         <div style={{ fontSize: 13, color: "#64748b" }}>Compete with players worldwide</div>

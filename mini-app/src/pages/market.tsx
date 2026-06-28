@@ -692,7 +692,7 @@ export default function MarketPage() {
 
   return (
     <div style={{ padding: "0 0 90px", minHeight: "100%" }}>
-      <SectionBar gradient="linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%)" />
+      <SectionBar gradient="#0a1020" />
       {toast && <Toast msg={toast.msg} type={toast.type} />}
 
       {/* Modals */}

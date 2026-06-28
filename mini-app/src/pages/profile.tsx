@@ -263,7 +263,7 @@ export default function ProfilePage() {
 
   return (
     <div style={{ padding: "16px 16px 100px" }}>
-      <SectionBar gradient="linear-gradient(135deg, #312e81 0%, #4f46e5 100%)" />
+      <SectionBar gradient="hsl(240 16% 4%)" />
       {toast && <Toast msg={toast.msg} type={toast.type} />}
 
       {/* Language picker */}

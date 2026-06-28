@@ -8,7 +8,6 @@ import MageSlot from "./ui/MageSlot";
 export default function HomeScreen() {
   const bossLevel = useGameStore((s) => s.selectedBossLevel);
   const ownedMages = useGameStore((s) => s.ownedMages);
-  const activeMageIds = useGameStore((s) => s.activeMageIds);
   const totalDps = useGameStore((s) => s.battle.totalDps);
   const boost = useGameStore((s) => s.boost);
   const startBattle = useGameStore((s) => s.startBattle);
@@ -16,7 +15,7 @@ export default function HomeScreen() {
   const watchAd = useGameStore((s) => s.watchAd);
 
   const boss = BOSSES[bossLevel];
-  const canStart = activeMageIds.length > 0;
+  const canStart = ownedMages.length > 0;
   const slots = Array.from({ length: 5 }, (_, i) => ownedMages[i] ?? null);
   const boostActive = boost.boostExpiresAt !== null && Date.now() < boost.boostExpiresAt;
 
@@ -30,7 +29,7 @@ export default function HomeScreen() {
       </div>
 
       <div className="dps-display">
-        ⚔️ <span>{totalDps.toLocaleString()}</span> DPS
+        ⚔️ <span>{totalDps.toLocaleString()}</span> АТК
         {boostActive && (
           <span className="tag tag-boost" style={{ marginLeft: 8 }}>+20% BOOST</span>
         )}
@@ -48,7 +47,7 @@ export default function HomeScreen() {
 
       {!boostActive && (
         <div style={{ padding: "0 16px 2px", fontSize: 11, color: "var(--game-text3)", textAlign: "center" }}>
-          📺 {boost.adWatchedCount}/10 реклам → +20% DPS на 24ч
+          📺 {boost.adWatchedCount}/10 реклам → +20% АТК на 24ч
         </div>
       )}
 

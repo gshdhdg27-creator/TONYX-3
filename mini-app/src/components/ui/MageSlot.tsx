@@ -8,8 +8,6 @@ interface MageSlotProps {
 }
 
 export default function MageSlot({ mage, isEmpty }: MageSlotProps) {
-  const activeMageIds = useGameStore((s) => s.activeMageIds);
-  const toggleMage = useGameStore((s) => s.toggleMage);
   const setView = useGameStore((s) => s.setView);
 
   if (isEmpty || !mage) {
@@ -20,11 +18,10 @@ export default function MageSlot({ mage, isEmpty }: MageSlotProps) {
     );
   }
 
-  const isActive = activeMageIds.includes(mage.id);
   const dps = getMageDps(mage);
 
   return (
-    <div className={`mage-slot${isActive ? " active" : ""}`} onClick={() => toggleMage(mage.id)}>
+    <div className="mage-slot" onClick={() => setView("hero-shop")}>
       <span className="ms-lvl">L{mage.level}</span>
       <span className="ms-emoji">{mage.emoji}</span>
       <span className="ms-name">{mage.name.slice(0, 4)}</span>

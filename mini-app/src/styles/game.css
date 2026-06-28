@@ -239,10 +239,10 @@
   border-radius: var(--game-radius);
   border: none;
   background-image: url('/hero-frame.jpg');
-  background-size: 115% 115%;
+  background-size: 100% 100%;
   background-position: center center;
   background-repeat: no-repeat;
-  background-color: var(--game-surface);
+  background-color: transparent;
   cursor: pointer;
   transition: all .15s;
   position: relative;
@@ -254,7 +254,7 @@
 }
 .mage-slot.active { box-shadow: 0 0 0 2px var(--game-accent), 0 0 12px rgba(124,58,237,0.35); }
 .mage-slot.empty  {
-  background-size: 115% 115%;
+  background-size: 100% 100%;
   background-position: center center;
   min-height: 90px;
   cursor: pointer;

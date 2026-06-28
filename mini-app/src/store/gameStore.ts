@@ -45,11 +45,9 @@ const initialState: GameState = {
 
 function calcTotalDps(
   ownedMages: OwnedMage[],
-  activeMageIds: string[],
   dpsMultiplier: number
 ): number {
-  const active = ownedMages.filter((m) => activeMageIds.includes(m.id));
-  const raw = active.reduce((sum, m) => sum + getMageDps(m), 0);
+  const raw = ownedMages.reduce((sum, m) => sum + getMageDps(m), 0);
   return Math.floor(raw * dpsMultiplier);
 }
 
@@ -96,25 +94,16 @@ export const useGameStore = create<GameStore>((set, get) => ({
   setView: (view) => set({ view }),
 
   selectBoss: (level) => {
-    const dps = calcTotalDps(get().ownedMages, get().activeMageIds, get().boost.dpsMultiplier);
+    const dps = calcTotalDps(get().ownedMages, get().boost.dpsMultiplier);
     set({ selectedBossLevel: level, battle: { ...initialState.battle, totalDps: dps } });
   },
 
-  toggleMage: (mageId) => {
-    const { activeMageIds, ownedMages, boost } = get();
-    let next: string[];
-    if (activeMageIds.includes(mageId)) {
-      next = activeMageIds.filter((id) => id !== mageId);
-    } else {
-      if (activeMageIds.length >= 5) return;
-      next = [...activeMageIds, mageId];
-    }
-    const dps = calcTotalDps(ownedMages, next, boost.dpsMultiplier);
-    set({ activeMageIds: next, battle: { ...get().battle, totalDps: dps } });
+  toggleMage: (_mageId) => {
+    // No-op: all owned mages automatically participate in battle
   },
 
   upgradeMage: (mageId) => {
-    const { ownedMages, balances, activeMageIds, boost } = get();
+    const { ownedMages, balances, boost } = get();
     const mage = ownedMages.find((m) => m.id === mageId);
     if (!mage) return;
     const cost = mage.upgradeCost * mage.level;
@@ -122,7 +111,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const updated = ownedMages.map((m) =>
       m.id === mageId ? { ...m, level: m.level + 1 } : m
     );
-    const dps = calcTotalDps(updated, activeMageIds, boost.dpsMultiplier);
+    const dps = calcTotalDps(updated, boost.dpsMultiplier);
     set({
       ownedMages: updated,
       balances: { ...balances, tonyx: balances.tonyx - cost },
@@ -131,9 +120,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   startBattle: () => {
-    const { ownedMages, activeMageIds, boost } = get();
-    if (activeMageIds.length === 0) return;
-    const dps = calcTotalDps(ownedMages, activeMageIds, boost.dpsMultiplier);
+    const { ownedMages, boost } = get();
+    if (ownedMages.length === 0) return;
+    const dps = calcTotalDps(ownedMages, boost.dpsMultiplier);
     set({
       view: "battle",
       battle: { active: true, bossHpPercent: 100, heroHp: 100, totalDps: dps, lastRewards: null },
@@ -165,7 +154,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   resetBattle: () => {
-    const dps = calcTotalDps(get().ownedMages, get().activeMageIds, get().boost.dpsMultiplier);
+    const dps = calcTotalDps(get().ownedMages, get().boost.dpsMultiplier);
     set({ battle: { ...initialState.battle, totalDps: dps }, view: "home" });
   },
 
@@ -211,7 +200,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       newMultiplier = 1.2;
       expiresAt = Date.now() + 24 * 60 * 60 * 1000;
     }
-    const dps = calcTotalDps(get().ownedMages, get().activeMageIds, newMultiplier);
+    const dps = calcTotalDps(get().ownedMages, newMultiplier);
     set({
       boost: { ...boost, adWatchedCount: newCount, dpsMultiplier: newMultiplier, boostExpiresAt: expiresAt },
       battle: { ...get().battle, totalDps: dps },
@@ -225,13 +214,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   init: () => {
-    const { boost, ownedMages, activeMageIds } = get();
+    const { boost, ownedMages } = get();
     let dpsMultiplier = boost.dpsMultiplier;
     if (boost.boostExpiresAt && Date.now() > boost.boostExpiresAt) {
       dpsMultiplier = 1.0;
       set({ boost: { ...boost, dpsMultiplier: 1.0, boostExpiresAt: null, adWatchedCount: 0 } });
     }
-    const dps = calcTotalDps(ownedMages, activeMageIds, dpsMultiplier);
+    const dps = calcTotalDps(ownedMages, dpsMultiplier);
     set({ view: "home", battle: { ...get().battle, totalDps: dps } });
   },
 }));

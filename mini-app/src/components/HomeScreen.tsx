@@ -89,7 +89,7 @@ export default function HomeScreen() {
         {/* Row 1 */}
         <button
           className="btn btn-primary"
-          style={{ flex: "1 1 0" }}
+          style={{ flex: "2 1 0" }}
           onClick={startBattle}
           disabled={!canStart}
         >

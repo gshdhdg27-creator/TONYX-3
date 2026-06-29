@@ -80,17 +80,23 @@ router.get("/orders", async (req, res) => {
     .where(eq(systemSettingsTable.key, "queue_depth")).then(r => r[0] ?? null);
   const allowedQueueDepth = depthRow ? Math.max(1, parseInt(depthRow.value) || 1) : 1;
 
-  // 2. All open orders sorted by id ASC → position in queue (oldest = #1)
+  // 2. All open orders sorted by id ASC → per-category position in queue (oldest = #1)
   const allOpen = await db
-    .select({ id: miniMarketOrdersTable.id })
+    .select({ id: miniMarketOrdersTable.id, category: miniMarketOrdersTable.category })
     .from(miniMarketOrdersTable)
     .where(eq(miniMarketOrdersTable.status, "open"))
     .orderBy(asc(miniMarketOrdersTable.id));
 
+  // Build per-category position counters
+  const catCounters = new Map<string, number>();
   const positionMap = new Map<number, number>();
-  allOpen.forEach((o, idx) => positionMap.set(o.id, idx + 1));
+  for (const o of allOpen) {
+    const cnt = (catCounters.get(o.category) ?? 0) + 1;
+    catCounters.set(o.category, cnt);
+    positionMap.set(o.id, cnt);
+  }
 
-  // 3. Filtered list for display (newest first)
+  // 3. Filtered list for display (oldest first — first created appears at top)
   let query = db.select().from(miniMarketOrdersTable)
     .where(eq(miniMarketOrdersTable.status, "open"))
     .$dynamic();
@@ -102,7 +108,7 @@ router.get("/orders", async (req, res) => {
     ));
   }
 
-  const orders = await query.orderBy(desc(miniMarketOrdersTable.createdAt));
+  const orders = await query.orderBy(asc(miniMarketOrdersTable.createdAt));
   res.json({
     orders: orders.map(o => ({
       ...formatOrder(o),
@@ -282,16 +288,19 @@ router.post("/orders/:id/buy", async (req, res) => {
     .where(eq(systemSettingsTable.key, "queue_depth")).then(r => r[0] ?? null);
   const allowedQueueDepth = depthRow ? Math.max(1, parseInt(depthRow.value) || 1) : 1;
 
-  // Load all open orders sorted oldest-first
-  const openOrders = await db.select({ id: miniMarketOrdersTable.id })
+  // Load open orders in the same category, oldest-first → per-category queue
+  const openOrdersInCat = await db.select({ id: miniMarketOrdersTable.id })
     .from(miniMarketOrdersTable)
-    .where(eq(miniMarketOrdersTable.status, "open"))
-    .orderBy(miniMarketOrdersTable.createdAt); // ASC = oldest first
+    .where(and(
+      eq(miniMarketOrdersTable.status, "open"),
+      eq(miniMarketOrdersTable.category, order.category),
+    ))
+    .orderBy(asc(miniMarketOrdersTable.createdAt));
 
-  const allowedIds = new Set(openOrders.slice(0, allowedQueueDepth).map(o => o.id));
+  const allowedIds = new Set(openOrdersInCat.slice(0, allowedQueueDepth).map(o => o.id));
   if (!allowedIds.has(id)) {
     res.status(403).json({
-      error: `Покупка заблокирована очередью. Сейчас доступны только первые ${allowedQueueDepth} ордеров в списке.`,
+      error: `Покупка заблокирована очередью. В тире ${(order.category as string).toUpperCase()} доступны только первые ${allowedQueueDepth} ордеров.`,
       queueDepth: allowedQueueDepth,
     });
     return;
@@ -388,6 +397,45 @@ router.post("/orders/:id/buy", async (req, res) => {
   const responseBody = { ...formatOrder(updated), bonusCoins, bonusPct, isPartial };
   if (idempotencyKey) idemCache.set(idempotencyKey, { status: 200, body: responseBody, exp: Date.now() + IDEM_TTL });
   res.json(responseBody);
+});
+
+/* ─── POST /orders/:id/buyback — seller buys back own order (gets 50%) ─── */
+router.post("/orders/:id/buyback", async (req, res) => {
+  const id = parseInt(req.params.id);
+  const { telegramId } = req.body as { telegramId: string };
+
+  if (!telegramId) { res.status(400).json({ error: "telegramId required" }); return; }
+
+  const order = await db.select().from(miniMarketOrdersTable)
+    .where(and(eq(miniMarketOrdersTable.id, id), eq(miniMarketOrdersTable.status, "open")))
+    .then(r => r[0] ?? null);
+
+  if (!order) { res.status(404).json({ error: "Ордер не найден или уже закрыт" }); return; }
+  if (order.sellerId !== telegramId) { res.status(403).json({ error: "Это не ваш ордер" }); return; }
+
+  // Seller gets back only 50% of escrowed TONYX (penalty for early buyback)
+  const returnAmount = Math.floor(order.amount * 0.5);
+  const lostAmount   = order.amount - returnAmount;
+
+  const updated = await db.transaction(async (tx) => {
+    const [upd] = await tx.update(miniMarketOrdersTable)
+      .set({ status: "cancelled", updatedAt: new Date() })
+      .where(eq(miniMarketOrdersTable.id, id))
+      .returning();
+
+    const seller = await tx.select().from(usersTable)
+      .where(eq(usersTable.telegramId, telegramId)).then(r => r[0]);
+    if (seller) {
+      await tx.update(usersTable)
+        .set({ tonyxCoins: seller.tonyxCoins + returnAmount, updatedAt: new Date() })
+        .where(eq(usersTable.telegramId, telegramId));
+    }
+
+    return upd;
+  });
+
+  console.log(`[Market] Buyback order #${id} by ${telegramId}: returned ${returnAmount} TONYX, lost ${lostAmount} TONYX`);
+  res.json({ ...formatOrder(updated), returnAmount, lostAmount });
 });
 
 export default router;

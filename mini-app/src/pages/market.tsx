@@ -120,10 +120,13 @@ function InfoCell({ label, value, unit, color = "#e2e8f0", highlight = false }: 
 /* ══════════════════════════════════════════════
    ORDER CARD
 ══════════════════════════════════════════════ */
-function OrderCard({ order, isMine, onBuy, onCancel, buying, cancelling, t }: {
+function OrderCard({ order, isMine, onBuy, onBuyback, onBuybackConfirm, onBuybackCancel, buying, buyingBack, confirmingBuyback, t }: {
   order: Order; isMine: boolean;
-  onBuy: (o: Order) => void; onCancel: (id: number) => void;
-  buying: boolean; cancelling: boolean;
+  onBuy: (o: Order) => void;
+  onBuyback: (id: number) => void;
+  onBuybackConfirm: (id: number) => void;
+  onBuybackCancel: () => void;
+  buying: boolean; buyingBack: boolean; confirmingBuyback: boolean;
   t: ReturnType<typeof useLang>["t"]["market"];
 }) {
   const tier = TIER_CFG[order.category] ?? TIER_CFG.start;
@@ -187,9 +190,29 @@ function OrderCard({ order, isMine, onBuy, onCancel, buying, cancelling, t }: {
       {/* Row 4: Action button */}
       {order.status === "open" && (
         isMine ? (
-          <button onClick={() => onCancel(order.id)} disabled={cancelling} style={{ width: "100%", padding: "11px 0", borderRadius: 11, border: "1px solid rgba(248,113,113,0.3)", background: "rgba(220,38,38,0.08)", color: "#f87171", fontSize: 13, fontWeight: 700, fontFamily: "inherit", cursor: cancelling ? "not-allowed" : "pointer", opacity: cancelling ? 0.7 : 1 }}>
-            {cancelling ? t.cardCancelling : t.cardCancelBtn}
-          </button>
+          confirmingBuyback ? (
+            /* ── Confirmation step ── */
+            <div style={{ border: "1px solid rgba(251,191,36,0.35)", borderRadius: 11, padding: "10px 12px", background: "rgba(180,83,9,0.1)" }}>
+              <div style={{ fontSize: 11, color: "#fbbf24", fontWeight: 700, marginBottom: 8, textAlign: "center" }}>
+                ⚠️ Вы получите только {Math.floor(order.amount * 0.5).toLocaleString()} TONYX из {order.amount.toLocaleString()} (−50%)
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button onClick={() => onBuybackConfirm(order.id)} disabled={buyingBack}
+                  style={{ flex: 2, padding: "10px 0", borderRadius: 9, border: "1px solid rgba(251,191,36,0.4)", background: "rgba(180,83,9,0.25)", color: "#fbbf24", fontSize: 13, fontWeight: 800, fontFamily: "inherit", cursor: buyingBack ? "not-allowed" : "pointer", opacity: buyingBack ? 0.7 : 1 }}>
+                  {buyingBack ? t.cardBuyingBack : t.cardBuybackConfirmBtn}
+                </button>
+                <button onClick={onBuybackCancel} disabled={buyingBack}
+                  style={{ flex: 1, padding: "10px 0", borderRadius: 9, border: "1px solid rgba(100,116,139,0.3)", background: "rgba(30,41,59,0.5)", color: "#64748b", fontSize: 13, fontWeight: 700, fontFamily: "inherit", cursor: "pointer" }}>
+                  {t.cardBuybackCancelBtn}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button onClick={() => { haptic("medium"); onBuyback(order.id); }} disabled={buyingBack}
+              style={{ width: "100%", padding: "11px 0", borderRadius: 11, border: "1px solid rgba(251,191,36,0.3)", background: "rgba(180,83,9,0.1)", color: "#fbbf24", fontSize: 13, fontWeight: 700, fontFamily: "inherit", cursor: "pointer" }}>
+              {t.cardBuybackBtn}
+            </button>
+          )
         ) : (
           <button onClick={() => { haptic("medium"); onBuy(order); }} disabled={buying} style={{ width: "100%", padding: "13px 0", borderRadius: 11, border: "none", background: buying ? "rgba(37,99,235,0.4)" : "linear-gradient(135deg,#1d4ed8,#3b82f6)", color: "#fff", fontSize: 14, fontWeight: 800, fontFamily: "inherit", cursor: buying ? "not-allowed" : "pointer", boxShadow: buying ? "none" : "0 0 24px rgba(59,130,246,0.4)", transition: "all 0.2s" }}>
             {buying ? t.cardProcessing : `${t.cardBuyBtn} · ${order.totalTon.toFixed(2)} TON`}
@@ -612,8 +635,9 @@ export default function MarketPage() {
   const [myOrders, setMyOrders]       = useState<Order[]>([]);
   const [stats, setStats]             = useState<MarketStats>({ inOrdersTon: 0, volume24h: 0, avgProfit: 1.5, openCount: 0 });
   const [ordersLoading, setOrdersLoading] = useState(true);
-  const [buyingId, setBuyingId]       = useState<number | null>(null);
-  const [cancellingId, setCancellingId] = useState<number | null>(null);
+  const [buyingId, setBuyingId]           = useState<number | null>(null);
+  const [buyingBackId, setBuyingBackId]   = useState<number | null>(null);
+  const [buybackConfirmId, setBuybackConfirmId] = useState<number | null>(null);
 
   const flash = (msg: string, type: "success" | "error" | "info") => { setToast({ msg, type }); setTimeout(() => setToast(null), 3000); };
 
@@ -663,16 +687,29 @@ export default function MarketPage() {
   const handleBuy = (order: Order) => { setBuyOrder(order); };
   const handleBuyConfirmed = () => { refreshAll(); setBuyOrder(null); };
 
-  const handleCancel = async (id: number) => {
+  const handleBuyback = (id: number) => {
+    setBuybackConfirmId(id);
+  };
+
+  const handleBuybackConfirm = async (id: number) => {
     if (!telegramId) return;
-    haptic("medium"); setCancellingId(id);
+    haptic("medium"); setBuyingBackId(id);
     try {
-      const r = await fetch(`/api/mini/market/orders/${id}`, { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ telegramId }) });
+      const r = await fetch(`/api/mini/market/orders/${id}/buyback`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ telegramId }),
+      });
       const d = await r.json();
       if (!r.ok) { flash(d.error || "Ошибка", "error"); }
-      else { hapticNotify("success"); flash(m.toastCancelled, "info"); refreshAll(); }
+      else {
+        hapticNotify("success");
+        flash(m.toastBuyback(d.returnAmount ?? 0), "info");
+        setBuybackConfirmId(null);
+        refreshAll();
+      }
     } catch { flash(m.errNetwork, "error"); }
-    finally { setCancellingId(null); }
+    finally { setBuyingBackId(null); }
   };
 
   // My Orders: backend already returns only open orders; filter for safety
@@ -777,8 +814,13 @@ export default function MarketPage() {
         ) : (
           displayOrders.map(order => (
             <OrderCard key={order.id} order={order} isMine={order.sellerId === telegramId}
-              onBuy={handleBuy} onCancel={handleCancel}
-              buying={buyingId === order.id} cancelling={cancellingId === order.id}
+              onBuy={handleBuy}
+              onBuyback={handleBuyback}
+              onBuybackConfirm={handleBuybackConfirm}
+              onBuybackCancel={() => setBuybackConfirmId(null)}
+              buying={buyingId === order.id}
+              buyingBack={buyingBackId === order.id}
+              confirmingBuyback={buybackConfirmId === order.id}
               t={m} />
           ))
         )}

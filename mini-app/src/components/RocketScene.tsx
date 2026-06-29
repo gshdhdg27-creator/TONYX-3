@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo } from "react";
+import rocketSrc from "/rocket.png?url";
 
 const CSS = `
   #rk-root{
@@ -177,7 +178,7 @@ export function RocketScene({ onDone }: { onDone: () => void }) {
 
         <div className={`rk-rocket rk-${rocketPhase}`}>
           <div className="rk-rocket-inner">
-            <img src="/rocket.png" className="rk-img" alt="rocket" />
+            <img src={rocketSrc} className="rk-img" alt="rocket" />
             <div className="rk-flame" />
           </div>
         </div>

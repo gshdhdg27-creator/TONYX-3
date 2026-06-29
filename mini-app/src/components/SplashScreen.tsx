@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import tonyxLogoSrc from "/tonyx-logo.jpg?url";
 
 const CSS = `
   #sp-root{
@@ -124,7 +125,7 @@ export function SplashScreen({ onDone }: { onDone: () => void }) {
               <circle className="sp-flare" cx="200" cy="200" r="140" transform="rotate(-90 200 200)" />
             </g>
           </svg>
-          <img className="sp-logo-img" src="/tonyx-logo.jpg" alt="TONYX" />
+          <img className="sp-logo-img" src={tonyxLogoSrc} alt="TONYX" />
         </div>
 
         <div className="sp-wordmark">

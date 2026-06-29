@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import tonyxLogoSrc from "/tonyx-logo.jpg?url";
 import {
   useGetUserProfile,
   getGetUserProfileQueryKey,
@@ -41,7 +42,7 @@ function TonyxIcon({ size = 28 }: { size?: number }) {
       border: "2px solid rgba(0,162,255,0.5)",
       overflow: "hidden", flexShrink: 0, position: "relative",
     }}>
-      <img src="/tonyx-logo.jpg" alt="TONYX" style={{
+      <img src={tonyxLogoSrc} alt="TONYX" style={{
         width: "140%", height: "140%", objectFit: "cover",
         position: "absolute", top: "50%", left: "50%",
         transform: "translate(-50%, -50%)",

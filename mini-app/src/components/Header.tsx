@@ -1,6 +1,7 @@
 import { useGetUserProfile } from "@workspace/api-client-react";
 import { useTelegram } from "@/lib/telegram";
 import toncoinSrc from "@assets/toncoin_1780755414938.png";
+import tonyxLogoSrc from "/tonyx-logo.jpg?url";
 
 function TonIcon() {
   return (
@@ -29,7 +30,7 @@ function TonyxIcon() {
       border: "1.5px solid rgba(0,162,255,0.55)",
     }}>
       <img
-        src="/tonyx-logo.jpg"
+        src={tonyxLogoSrc}
         alt="TONYX"
         style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
       />

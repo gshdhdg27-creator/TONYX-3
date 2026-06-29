@@ -86,39 +86,40 @@ export default function HomeScreen() {
       )}
 
       <div className="action-panel">
-        {/* Row 1 */}
-        <button
-          className="btn btn-primary"
-          style={{ flex: "2 1 0" }}
-          onClick={startBattle}
-          disabled={!canStart}
-        >
-          ⚔️ Начать бой
-        </button>
-        <button
-          className="btn btn-boost"
-          style={{ flex: "1 1 0" }}
-          onClick={handleBoost}
-          disabled={boostActive}
-        >
-          🚀 Boost
-        </button>
-
-        {/* Row 2 */}
-        <button
-          className="btn btn-ghost"
-          style={{ flex: "1 1 0" }}
-          onClick={() => setView("collection")}
-        >
-          🏆 NFT
-        </button>
-        <button
-          className="btn btn-ghost"
-          style={{ flex: "1 1 0" }}
-          onClick={() => setView("hero-shop")}
-        >
-          🛒 Магазин
-        </button>
+        <div className="action-row">
+          <button
+            className="btn btn-primary"
+            style={{ flex: 2 }}
+            onClick={startBattle}
+            disabled={!canStart}
+          >
+            ⚔️ Начать бой
+          </button>
+          <button
+            className="btn btn-boost"
+            style={{ flex: 1 }}
+            onClick={handleBoost}
+            disabled={boostActive}
+          >
+            🚀 Boost
+          </button>
+        </div>
+        <div className="action-row">
+          <button
+            className="btn btn-ghost"
+            style={{ flex: 1 }}
+            onClick={() => setView("collection")}
+          >
+            🏆 NFT
+          </button>
+          <button
+            className="btn btn-ghost"
+            style={{ flex: 1 }}
+            onClick={() => setView("hero-shop")}
+          >
+            🛒 Магазин
+          </button>
+        </div>
       </div>
     </div>
   );

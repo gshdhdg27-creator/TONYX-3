@@ -24,7 +24,6 @@ let _id = 0;
 export default function MageAttackFX() {
   const battleActive = useGameStore((s) => s.battle.active);
   const ownedMages = useGameStore((s) => s.ownedMages);
-  const activeMageIds = useGameStore((s) => s.activeMageIds);
   const speedMultiplier = useGameStore((s) => s.boost.speedMultiplier);
 
   const [particles, setParticles] = useState<FxParticle[]>([]);
@@ -32,12 +31,11 @@ export default function MageAttackFX() {
 
   useEffect(() => {
     if (!battleActive) { setParticles([]); return; }
-    const activeMages = ownedMages.filter((m) => activeMageIds.includes(m.id));
     const spawnRate = Math.max(300, 800 / speedMultiplier);
 
     intervalRef.current = setInterval(() => {
-      if (activeMages.length === 0) return;
-      const mage = activeMages[Math.floor(Math.random() * activeMages.length)];
+      if (ownedMages.length === 0) return;
+      const mage = ownedMages[Math.floor(Math.random() * ownedMages.length)];
       const dps = getMageDps(mage);
       if (dps <= 0) return;
       const px = 20 + Math.random() * 60;
@@ -55,7 +53,7 @@ export default function MageAttackFX() {
     }, spawnRate);
 
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
-  }, [battleActive, activeMageIds, speedMultiplier]); // eslint-disable-line
+  }, [battleActive, ownedMages, speedMultiplier]); // eslint-disable-line
 
   return (
     <div className="battle-fx-layer">

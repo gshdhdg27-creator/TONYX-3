@@ -120,13 +120,11 @@ function InfoCell({ label, value, unit, color = "#e2e8f0", highlight = false }: 
 /* ══════════════════════════════════════════════
    ORDER CARD
 ══════════════════════════════════════════════ */
-function OrderCard({ order, isMine, onBuy, onBuyback, onBuybackConfirm, onBuybackCancel, buying, buyingBack, confirmingBuyback, t }: {
+function OrderCard({ order, isMine, onBuy, onBuyback, buying, t }: {
   order: Order; isMine: boolean;
   onBuy: (o: Order) => void;
-  onBuyback: (id: number) => void;
-  onBuybackConfirm: (id: number) => void;
-  onBuybackCancel: () => void;
-  buying: boolean; buyingBack: boolean; confirmingBuyback: boolean;
+  onBuyback: (o: Order) => void;
+  buying: boolean;
   t: ReturnType<typeof useLang>["t"]["market"];
 }) {
   const tier = TIER_CFG[order.category] ?? TIER_CFG.start;
@@ -190,29 +188,10 @@ function OrderCard({ order, isMine, onBuy, onBuyback, onBuybackConfirm, onBuybac
       {/* Row 4: Action button */}
       {order.status === "open" && (
         isMine ? (
-          confirmingBuyback ? (
-            /* ── Confirmation step ── */
-            <div style={{ border: "1px solid rgba(251,191,36,0.35)", borderRadius: 11, padding: "10px 12px", background: "rgba(180,83,9,0.1)" }}>
-              <div style={{ fontSize: 11, color: "#fbbf24", fontWeight: 700, marginBottom: 8, textAlign: "center" }}>
-                ⚠️ Вы получите только {Math.floor(order.amount * 0.5).toLocaleString()} TONYX из {order.amount.toLocaleString()} (−50%)
-              </div>
-              <div style={{ display: "flex", gap: 8 }}>
-                <button onClick={() => onBuybackConfirm(order.id)} disabled={buyingBack}
-                  style={{ flex: 2, padding: "10px 0", borderRadius: 9, border: "1px solid rgba(251,191,36,0.4)", background: "rgba(180,83,9,0.25)", color: "#fbbf24", fontSize: 13, fontWeight: 800, fontFamily: "inherit", cursor: buyingBack ? "not-allowed" : "pointer", opacity: buyingBack ? 0.7 : 1 }}>
-                  {buyingBack ? t.cardBuyingBack : t.cardBuybackConfirmBtn}
-                </button>
-                <button onClick={onBuybackCancel} disabled={buyingBack}
-                  style={{ flex: 1, padding: "10px 0", borderRadius: 9, border: "1px solid rgba(100,116,139,0.3)", background: "rgba(30,41,59,0.5)", color: "#64748b", fontSize: 13, fontWeight: 700, fontFamily: "inherit", cursor: "pointer" }}>
-                  {t.cardBuybackCancelBtn}
-                </button>
-              </div>
-            </div>
-          ) : (
-            <button onClick={() => { haptic("medium"); onBuyback(order.id); }} disabled={buyingBack}
-              style={{ width: "100%", padding: "11px 0", borderRadius: 11, border: "1px solid rgba(251,191,36,0.3)", background: "rgba(180,83,9,0.1)", color: "#fbbf24", fontSize: 13, fontWeight: 700, fontFamily: "inherit", cursor: "pointer" }}>
-              {t.cardBuybackBtn}
-            </button>
-          )
+          <button onClick={() => { haptic("medium"); onBuyback(order); }}
+            style={{ width: "100%", padding: "11px 0", borderRadius: 11, border: "1px solid rgba(251,191,36,0.3)", background: "rgba(180,83,9,0.1)", color: "#fbbf24", fontSize: 13, fontWeight: 700, fontFamily: "inherit", cursor: "pointer" }}>
+            {t.cardBuybackBtn}
+          </button>
         ) : (
           <button onClick={() => { haptic("medium"); onBuy(order); }} disabled={buying} style={{ width: "100%", padding: "13px 0", borderRadius: 11, border: "none", background: buying ? "rgba(37,99,235,0.4)" : "linear-gradient(135deg,#1d4ed8,#3b82f6)", color: "#fff", fontSize: 14, fontWeight: 800, fontFamily: "inherit", cursor: buying ? "not-allowed" : "pointer", boxShadow: buying ? "none" : "0 0 24px rgba(59,130,246,0.4)", transition: "all 0.2s" }}>
             {buying ? t.cardProcessing : `${t.cardBuyBtn} · ${order.totalTon.toFixed(2)} TON`}
@@ -580,6 +559,97 @@ function BuyOrderModal({ order, onClose, telegramId, tonBalance, onBought, t }: 
 }
 
 /* ══════════════════════════════════════════════
+   BUYBACK MODAL
+══════════════════════════════════════════════ */
+function BuybackModal({ order, telegramId, onClose, onDone, t }: {
+  order: Order; telegramId: string;
+  onClose: () => void; onDone: () => void;
+  t: ReturnType<typeof useLang>["t"]["market"];
+}) {
+  const tier       = TIER_CFG[order.category] ?? TIER_CFG.start;
+  const totalTon   = order.totalTon;
+  const returnTon  = parseFloat((totalTon * 0.5).toFixed(4));
+  const [loading, setLoading] = useState(false);
+  const [toast, setToast]     = useState<{ msg: string; type: "success" | "error" | "info" } | null>(null);
+  const flash = (msg: string, type: "success" | "error" | "info") => { setToast({ msg, type }); setTimeout(() => setToast(null), 2500); };
+
+  const confirm = async () => {
+    haptic("medium"); setLoading(true);
+    try {
+      const r = await fetch(`/api/mini/market/orders/${order.id}/buyback`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ telegramId }),
+      });
+      const d = await r.json();
+      if (!r.ok) { flash(d.error || "Ошибка", "error"); }
+      else { hapticNotify("success"); flash(`✅ Получено ${returnTon} TON`, "success"); setTimeout(() => { onDone(); onClose(); }, 1200); }
+    } catch { flash(t.errNetwork, "error"); }
+    finally { setLoading(false); }
+  };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.82)", display: "flex", alignItems: "flex-end", zIndex: 500 }} onClick={e => { if (e.target === e.currentTarget && !loading) onClose(); }}>
+      {toast && <Toast msg={toast.msg} type={toast.type} />}
+      <div style={{ width: "100%", background: "linear-gradient(180deg,#0d1526 0%,#0a1020 100%)", border: "1px solid rgba(180,83,9,0.45)", borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: "20px 16px 36px" }}>
+
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+          <div style={{ fontSize: 18, fontWeight: 900, color: "#fbbf24" }}>⚠️ Выкуп своего ордера</div>
+          <button onClick={onClose} disabled={loading} style={{ background: "rgba(255,255,255,0.07)", border: "none", color: "#94a3b8", fontSize: 18, width: 32, height: 32, borderRadius: "50%", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "inherit" }}>×</button>
+        </div>
+
+        {/* Order summary */}
+        <div style={{ background: "rgba(15,25,50,0.8)", border: `1px solid ${tier.border}`, borderRadius: 14, padding: "12px 14px", marginBottom: 14 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+            <TierBadge tier={order.category} />
+            <span style={{ fontSize: 11, color: "#4a5568" }}>Ордер #{order.id}</span>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+            <div style={{ background: "rgba(10,18,42,0.8)", borderRadius: 10, padding: "8px 10px" }}>
+              <div style={{ fontSize: 8, color: "#475569", fontWeight: 700, letterSpacing: "0.1em", marginBottom: 3 }}>СТОИМОСТЬ ОРДЕРА</div>
+              <div style={{ fontSize: 18, fontWeight: 900, color: "#e2e8f0" }}>{totalTon.toFixed(2)} TON</div>
+            </div>
+            <div style={{ background: "rgba(10,18,42,0.8)", borderRadius: 10, padding: "8px 10px" }}>
+              <div style={{ fontSize: 8, color: "#475569", fontWeight: 700, letterSpacing: "0.1em", marginBottom: 3 }}>ВАШИ TONYX</div>
+              <div style={{ fontSize: 18, fontWeight: 900, color: "#60a5fa" }}>{order.amount.toLocaleString()} TONYX</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Result */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 14 }}>
+          <div style={{ background: "rgba(22,163,74,0.1)", border: "1px solid rgba(34,197,94,0.3)", borderRadius: 12, padding: "12px 14px" }}>
+            <div style={{ fontSize: 9, color: "#16a34a", fontWeight: 700, letterSpacing: "0.1em", marginBottom: 4 }}>ПОЛУЧИТЕ</div>
+            <div style={{ fontSize: 26, fontWeight: 900, color: "#4ade80" }}>{returnTon}</div>
+            <div style={{ fontSize: 11, color: "#22c55e" }}>TON (50%)</div>
+          </div>
+          <div style={{ background: "rgba(220,38,38,0.08)", border: "1px solid rgba(248,113,113,0.25)", borderRadius: 12, padding: "12px 14px" }}>
+            <div style={{ fontSize: 9, color: "#dc2626", fontWeight: 700, letterSpacing: "0.1em", marginBottom: 4 }}>СПИСЫВАЕТСЯ</div>
+            <div style={{ fontSize: 20, fontWeight: 900, color: "#f87171" }}>{order.amount.toLocaleString()}</div>
+            <div style={{ fontSize: 11, color: "#f87171" }}>TONYX (100%)</div>
+          </div>
+        </div>
+
+        {/* Warning */}
+        <div style={{ background: "rgba(180,83,9,0.1)", border: "1px solid rgba(251,191,36,0.35)", borderRadius: 12, padding: "10px 14px", marginBottom: 16 }}>
+          <div style={{ fontSize: 12, color: "#fbbf24", fontWeight: 700, lineHeight: 1.55 }}>
+            ⚠️ TONYX будут безвозвратно списаны. Вы получите <b>{returnTon} TON</b> (50% от {totalTon.toFixed(2)} TON).
+          </div>
+        </div>
+
+        <div style={{ display: "flex", gap: 10 }}>
+          <button onClick={onClose} disabled={loading} style={{ flex: 1, padding: "13px 0", borderRadius: 12, border: "1px solid rgba(100,116,139,0.3)", background: "rgba(30,41,59,0.5)", color: "#64748b", fontSize: 14, fontWeight: 700, fontFamily: "inherit", cursor: "pointer" }}>
+            Отмена
+          </button>
+          <button onClick={confirm} disabled={loading} style={{ flex: 2, padding: "13px 0", borderRadius: 12, border: "1px solid rgba(251,191,36,0.4)", background: loading ? "rgba(180,83,9,0.15)" : "rgba(180,83,9,0.32)", color: loading ? "#92400e" : "#fbbf24", fontSize: 14, fontWeight: 800, fontFamily: "inherit", cursor: loading ? "not-allowed" : "pointer" }}>
+            {loading ? "Выполняется..." : `Выкупить · +${returnTon} TON`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════
    TICKER
 ══════════════════════════════════════════════ */
 function LiveTicker({ lang }: { lang: string }) {
@@ -636,26 +706,25 @@ export default function MarketPage() {
   const [stats, setStats]             = useState<MarketStats>({ inOrdersTon: 0, volume24h: 0, avgProfit: 1.5, openCount: 0 });
   const [ordersLoading, setOrdersLoading] = useState(true);
   const [buyingId, setBuyingId]           = useState<number | null>(null);
-  const [buyingBackId, setBuyingBackId]   = useState<number | null>(null);
-  const [buybackConfirmId, setBuybackConfirmId] = useState<number | null>(null);
+  const [buybackOrder, setBuybackOrder]   = useState<Order | null>(null);
 
   const flash = (msg: string, type: "success" | "error" | "info") => { setToast({ msg, type }); setTimeout(() => setToast(null), 3000); };
 
   const { data: profile, refetch: refetchProfile } = useGetUserProfile(telegramId ?? "", (
-    { query: { enabled: !!telegramId, refetchInterval: 8000 } } as Parameters<typeof useGetUserProfile>[1]
+    { query: { enabled: !!telegramId, refetchInterval: 15000 } } as Parameters<typeof useGetUserProfile>[1]
   ));
 
   const tonyxBalance = (profile as { tonyxCoins?: number } | undefined)?.tonyxCoins ?? 0;
   const tonBalance   = Number((profile as { ton?: string | number } | undefined)?.ton ?? 0);
 
-  const fetchOrders = useCallback(async (filter: TierFilter) => {
-    setOrdersLoading(true);
+  const fetchOrders = useCallback(async (filter: TierFilter, silent = false) => {
+    if (!silent) setOrdersLoading(true);
     try {
       const url = filter === "all" ? "/api/mini/market/orders" : `/api/mini/market/orders?category=${filter}`;
       const r = await fetch(url);
       if (r.ok) { const d = await r.json(); setAllOrders(d.orders ?? []); }
     } catch { /* silent */ }
-    finally { setOrdersLoading(false); }
+    finally { if (!silent) setOrdersLoading(false); }
   }, []);
 
   const fetchMyOrders = useCallback(async () => {
@@ -680,37 +749,14 @@ export default function MarketPage() {
   useEffect(() => { fetchOrders(tierFilter); fetchStats(); }, [tierFilter]);
   useEffect(() => { fetchMyOrders(); }, [telegramId]);
   useEffect(() => {
-    const iv = setInterval(() => { fetchOrders(tierFilter); fetchStats(); }, 8000);
+    const iv = setInterval(() => { fetchOrders(tierFilter, true); fetchStats(); }, 12000);
     return () => clearInterval(iv);
   }, [tierFilter]);
 
   const handleBuy = (order: Order) => { setBuyOrder(order); };
   const handleBuyConfirmed = () => { refreshAll(); setBuyOrder(null); };
 
-  const handleBuyback = (id: number) => {
-    setBuybackConfirmId(id);
-  };
-
-  const handleBuybackConfirm = async (id: number) => {
-    if (!telegramId) return;
-    haptic("medium"); setBuyingBackId(id);
-    try {
-      const r = await fetch(`/api/mini/market/orders/${id}/buyback`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ telegramId }),
-      });
-      const d = await r.json();
-      if (!r.ok) { flash(d.error || "Ошибка", "error"); }
-      else {
-        hapticNotify("success");
-        flash(m.toastBuyback(d.returnAmount ?? 0), "info");
-        setBuybackConfirmId(null);
-        refreshAll();
-      }
-    } catch { flash(m.errNetwork, "error"); }
-    finally { setBuyingBackId(null); }
-  };
+  const handleBuyback = (order: Order) => { setBuybackOrder(order); };
 
   // My Orders: backend already returns only open orders; filter for safety
   const activeMyOrders = myOrders.filter(o => o.status === "open");
@@ -736,6 +782,9 @@ export default function MarketPage() {
       )}
       {buyOrder && telegramId && (
         <BuyOrderModal order={buyOrder} telegramId={telegramId} tonBalance={tonBalance} onClose={() => setBuyOrder(null)} onBought={handleBuyConfirmed} t={m} />
+      )}
+      {buybackOrder && telegramId && (
+        <BuybackModal order={buybackOrder} telegramId={telegramId} onClose={() => setBuybackOrder(null)} onDone={refreshAll} t={m} />
       )}
 
       {/* ── HEADER ── */}
@@ -816,11 +865,7 @@ export default function MarketPage() {
             <OrderCard key={order.id} order={order} isMine={order.sellerId === telegramId}
               onBuy={handleBuy}
               onBuyback={handleBuyback}
-              onBuybackConfirm={handleBuybackConfirm}
-              onBuybackCancel={() => setBuybackConfirmId(null)}
               buying={buyingId === order.id}
-              buyingBack={buyingBackId === order.id}
-              confirmingBuyback={buybackConfirmId === order.id}
               t={m} />
           ))
         )}

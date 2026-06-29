@@ -399,7 +399,7 @@ router.post("/orders/:id/buy", async (req, res) => {
   res.json(responseBody);
 });
 
-/* ─── POST /orders/:id/buyback — seller buys back own order (gets 50%) ─── */
+/* ─── POST /orders/:id/buyback — seller buys back own order (gets 50% of TON) ─── */
 router.post("/orders/:id/buyback", async (req, res) => {
   const id = parseInt(req.params.id);
   const { telegramId } = req.body as { telegramId: string };
@@ -413,9 +413,11 @@ router.post("/orders/:id/buyback", async (req, res) => {
   if (!order) { res.status(404).json({ error: "Ордер не найден или уже закрыт" }); return; }
   if (order.sellerId !== telegramId) { res.status(403).json({ error: "Это не ваш ордер" }); return; }
 
-  // Seller gets back only 50% of escrowed TONYX (penalty for early buyback)
-  const returnAmount = Math.floor(order.amount * 0.5);
-  const lostAmount   = order.amount - returnAmount;
+  // Seller gets back 50% of the TON value of the order.
+  // The escrowed TONYX is forfeited (burned). No TONYX is returned.
+  const totalTon    = Number(order.totalTon);
+  const returnTon   = parseFloat((totalTon * 0.5).toFixed(8));
+  const forfeitedTonyx = order.amount;
 
   const updated = await db.transaction(async (tx) => {
     const [upd] = await tx.update(miniMarketOrdersTable)
@@ -427,15 +429,18 @@ router.post("/orders/:id/buyback", async (req, res) => {
       .where(eq(usersTable.telegramId, telegramId)).then(r => r[0]);
     if (seller) {
       await tx.update(usersTable)
-        .set({ tonyxCoins: seller.tonyxCoins + returnAmount, updatedAt: new Date() })
+        .set({
+          ton: String(Number(seller.ton) + returnTon),
+          updatedAt: new Date(),
+        })
         .where(eq(usersTable.telegramId, telegramId));
     }
 
     return upd;
   });
 
-  console.log(`[Market] Buyback order #${id} by ${telegramId}: returned ${returnAmount} TONYX, lost ${lostAmount} TONYX`);
-  res.json({ ...formatOrder(updated), returnAmount, lostAmount });
+  console.log(`[Market] Buyback order #${id} by ${telegramId}: returned ${returnTon} TON, forfeited ${forfeitedTonyx} TONYX`);
+  res.json({ ...formatOrder(updated), returnTon, forfeitedTonyx });
 });
 
 export default router;

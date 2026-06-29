@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useTonConnectUI, useTonAddress } from "@tonconnect/ui-react";
 import tonyxLogoSrc from "/tonyx-logo.jpg?url";
 import {
   useGetUserProfile,
@@ -12,7 +13,7 @@ import { CountUp } from "@/components/count-up";
 import { useLang } from "@/lib/LanguageContext";
 import type { Lang } from "@/lib/i18n";
 
-const TOPUP_WALLET = "UQA8d39yaqa-CGw6BUCQw6U3LGelzpS3GxFaVwVDY3BnCDwe";
+const TOPUP_WALLET = "UQBDrAxyWlMMmtSgq5TjQyO1nKacS_nA0_7ZQ88m8eMmU1jO";
 
 function Toast({ msg, type }: { msg: string; type: "success" | "error" }) {
   return (
@@ -121,6 +122,11 @@ export default function ProfilePage() {
   const [topupStep, setTopupStep]   = useState<TopupStep>("idle");
   const [topupChecking, setTopupChecking] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [depositAmount, setDepositAmount] = useState("");
+
+  // TonConnect
+  const [tonConnectUI] = useTonConnectUI();
+  const connectedAddress = useTonAddress();
 
   // Unified transaction history state
   const [txHistory, setTxHistory] = useState<{ deposits: DepositHistoryItem[]; withdrawals: WithdrawalHistoryItem[] }>({ deposits: [], withdrawals: [] });
@@ -208,6 +214,53 @@ export default function ProfilePage() {
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
     setTopupStep("idle");
     setTopupChecking(false);
+  };
+
+  /* ── TonConnect deposit ── */
+  const buildCommentPayload = (comment: string): string => {
+    const textBytes = new TextEncoder().encode(comment);
+    // Cell data: 4 zero bytes (text opcode 0) + comment UTF-8
+    const data = new Uint8Array(4 + textBytes.length);
+    data.set(textBytes, 4);
+    // Cell body: d1=0 (no refs, level 0), d2=len*2 (full bytes), then data
+    const body = new Uint8Array(2 + data.length);
+    body[0] = 0;            // d1
+    body[1] = data.length * 2; // d2
+    body.set(data, 2);
+    // BOC: magic(4) + flags/size(1) + off_bytes(1) + cells(1) + roots(1) + absent(1) + tot_size(1) + root_idx(1) + body
+    const boc = new Uint8Array([
+      0xb5, 0xee, 0x9c, 0x72, // magic
+      0x01,                    // ref_byte_size=1, no idx/crc/cache
+      0x01,                    // off_bytes=1
+      0x01, 0x01, 0x00,       // cells=1, roots=1, absent=0
+      body.length & 0xff,      // tot_cells_size (fits in 1 byte for short memos)
+      0x00,                    // root_list[0]=0
+      ...body,
+    ]);
+    return btoa(String.fromCharCode(...boc));
+  };
+
+  const sendTonDeposit = async () => {
+    const amount = parseFloat(depositAmount);
+    if (isNaN(amount) || amount < 0.1) { showToast("Минимум 0.1 TON", "error"); return; }
+    haptic("medium");
+    try {
+      await tonConnectUI.sendTransaction({
+        validUntil: Math.floor(Date.now() / 1000) + 600,
+        messages: [{
+          address: TOPUP_WALLET,
+          amount: String(Math.floor(amount * 1e9)),
+          payload: buildCommentPayload(memo),
+        }],
+      });
+      showToast("✅ Транзакция отправлена! Ожидайте зачисления.", "success");
+      startVerification();
+    } catch (e: unknown) {
+      const msg = (e as { message?: string })?.message ?? "";
+      if (!msg.includes("User rejects")) {
+        showToast("Ошибка отправки. Попробуйте ещё раз.", "error");
+      }
+    }
   };
 
   /* ── Submit withdraw ── */
@@ -432,14 +485,59 @@ export default function ProfilePage() {
 
           <style>{`@keyframes scanPulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.4;transform:scale(0.7)} }`}</style>
 
-          {/* Transfer instructions */}
+          {/* TonConnect quick deposit */}
+          <div style={{ background: "rgba(0,152,234,0.07)", border: "1px solid rgba(0,152,234,0.35)", borderRadius: 18, padding: 16, marginBottom: 14 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+              <TonIcon size={22} />
+              <div style={{ fontSize: 14, fontWeight: 800, color: "#38bdf8" }}>Пополнить через TON кошелёк</div>
+            </div>
+
+            {connectedAddress ? (
+              <div style={{ fontSize: 10, color: "#22d3ee", fontFamily: "monospace", background: "rgba(0,152,234,0.08)", borderRadius: 8, padding: "5px 10px", marginBottom: 10, wordBreak: "break-all" }}>
+                🔗 {connectedAddress.slice(0, 8)}...{connectedAddress.slice(-6)}
+              </div>
+            ) : null}
+
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 11, color: "#64748b", fontWeight: 600, marginBottom: 6 }}>Сумма в TON:</div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <input
+                  type="number"
+                  value={depositAmount}
+                  onChange={e => setDepositAmount(e.target.value)}
+                  placeholder="0.5"
+                  min="0.1"
+                  step="any"
+                  style={{ flex: 1, background: "rgba(15,23,42,0.85)", border: "1px solid rgba(0,152,234,0.45)", borderRadius: 12, padding: "12px 14px", color: "#f1f5f9", fontFamily: "inherit", fontSize: 16, fontWeight: 800, outline: "none", boxSizing: "border-box" as const }}
+                />
+                {(["1","5","10"] as const).map(v => (
+                  <button key={v} onClick={() => setDepositAmount(v)} style={{ flexShrink: 0, padding: "0 12px", borderRadius: 10, border: "1px solid rgba(0,152,234,0.35)", background: depositAmount === v ? "rgba(0,152,234,0.25)" : "rgba(15,23,42,0.6)", color: depositAmount === v ? "#38bdf8" : "#475569", fontSize: 12, fontWeight: 800, fontFamily: "inherit", cursor: "pointer" }}>{v}</button>
+                ))}
+              </div>
+              <div style={{ fontSize: 10, color: "#475569", marginTop: 5 }}>Мин. 0.1 TON · Memo добавляется автоматически</div>
+            </div>
+
+            <button
+              onClick={connectedAddress ? sendTonDeposit : () => tonConnectUI.openModal()}
+              style={{ width: "100%", padding: "14px 0", borderRadius: 13, border: "none", background: "linear-gradient(135deg,#0077b5,#0098ea,#22d3ee)", color: "#fff", fontSize: 15, fontWeight: 800, fontFamily: "inherit", cursor: "pointer", boxShadow: "0 0 28px rgba(0,152,234,0.4)", letterSpacing: "0.01em" }}
+            >
+              {connectedAddress ? `💎 Оплатить ${depositAmount ? `${depositAmount} TON` : ""}` : "🔗 Подключить кошелёк"}
+            </button>
+            {connectedAddress && (
+              <button onClick={() => tonConnectUI.disconnect()} style={{ display: "block", margin: "8px auto 0", background: "none", border: "none", color: "#334155", fontSize: 10, cursor: "pointer", fontFamily: "inherit" }}>
+                Отключить кошелёк
+              </button>
+            )}
+          </div>
+
+          {/* Manual transfer instructions */}
           <div style={{ background: "rgba(14,116,144,0.08)", border: "1px solid rgba(14,116,144,0.35)", borderRadius: 18, padding: 16 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
               <TonIcon size={22} />
-              <div style={{ fontSize: 14, fontWeight: 800, color: "#22d3ee" }}>Пополнение TON</div>
+              <div style={{ fontSize: 14, fontWeight: 800, color: "#22d3ee" }}>Ручное пополнение</div>
             </div>
             <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 16, lineHeight: 1.65 }}>
-              Отправьте TON на адрес ниже с точным комментарием-memo. Зачисление произойдёт автоматически в течение нескольких минут.
+              Или отправьте TON на адрес ниже с точным комментарием-memo. Зачисление произойдёт автоматически в течение нескольких минут.
             </div>
 
             {/* Step 1 — Wallet address */}

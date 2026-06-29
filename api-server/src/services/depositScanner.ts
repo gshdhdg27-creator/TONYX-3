@@ -1,37 +1,46 @@
 /**
- * Background deposit scanner — runs every 30 seconds.
- * Scans recent incoming transactions to the project wallet,
- * matches comments of the form "TONYX-{telegramId}" (or legacy "TOPUP_{telegramId}"),
- * and auto-credits users who sent TON with the correct memo.
+ * Background deposit scanner — runs every 15 seconds.
+ *
+ * Strategy:
+ *   1. Try TonAPI v2 (requires TONAPI_KEY, fastest)
+ *   2. Fallback to Toncenter v2 (free, no key, slightly slower)
+ *
+ * For each incoming transaction that has a matching "TONYX-{telegramId}"
+ * (or legacy "TOPUP_{telegramId}") comment, it credits the user's TON
+ * balance and sends a Telegram bot notification.
+ *
+ * Idempotency: tx_hash is stored in mini_topup_requests with a UNIQUE
+ * constraint, so no double-credits can occur even under concurrent runs.
  */
 
 import { db } from "@workspace/db";
 import { usersTable, miniTopupRequestsTable } from "@workspace/db/schema";
-import { eq, and } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { notifyUser } from "./botNotify.js";
 
 const PROJECT_WALLET =
   process.env.PROJECT_WALLET_ADDRESS ??
-  "UQA8d39yaqa-CGw6BUCQw6U3LGelzpS3GxFaVwVDY3BnCDwe";
+  "UQBDrAxyWlMMmtSgq5TjQyO1nKacS_nA0_7ZQ88m8eMmU1jO";
 
-const SCAN_INTERVAL_MS = 30_000; // 30 seconds
-const MIN_TON = 0.05;            // ignore dust
+const SCAN_INTERVAL_MS = 15_000;  // 15 seconds
+const MIN_TON          = 0.05;    // ignore dust / test txs
 
-// Concurrency guard — prevents two scanOnce() calls from running at the same
-// time within the same process (background timer + cron endpoint overlap).
 let _scanLock = false;
 
-interface TonApiTx {
-  hash: string;
-  lt: string | number;
-  utime: number;
-  in_msg?: {
-    value?: string | number;
-    decoded_body?: { comment?: string } | null;
-  } | null;
+/* ──────────────────────────────────────────────
+   Normalised transaction shape
+────────────────────────────────────────────── */
+interface NormTx {
+  hash:    string;
+  lt:      string;
+  utime:   number;
+  valueTon: number;   // already converted from nanoTON
+  comment: string;
 }
 
-/** Parse memo → telegramId (supports both TONYX-ID and legacy TOPUP_ID) */
+/* ──────────────────────────────────────────────
+   Memo parser
+────────────────────────────────────────────── */
 function extractTelegramId(comment: string): string | null {
   const m1 = comment.match(/^TONYX-(\d+)$/);
   if (m1) return m1[1];
@@ -40,37 +49,145 @@ function extractTelegramId(comment: string): string | null {
   return null;
 }
 
-/** Fetch up to 100 recent txs for the project wallet via TonAPI */
-async function fetchRecentTxs(): Promise<TonApiTx[]> {
-  const encodedAddr = encodeURIComponent(PROJECT_WALLET);
-  const apiKey      = process.env.TONAPI_KEY;
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
-  if (apiKey) headers["Authorization"] = `Bearer ${apiKey}`;
+/* ──────────────────────────────────────────────
+   TonAPI v2 (primary)
+────────────────────────────────────────────── */
+async function fetchViaTonApi(): Promise<NormTx[] | null> {
+  const apiKey = process.env.TONAPI_KEY;
+  if (!apiKey) return null;
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 12_000);
+  const url = `https://tonapi.io/v2/blockchain/accounts/${encodeURIComponent(PROJECT_WALLET)}/transactions?limit=50&sort_order=desc`;
+
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), 12_000);
   try {
-    const r = await fetch(
-      `https://tonapi.io/v2/blockchain/accounts/${encodedAddr}/transactions?limit=100&sort_order=desc`,
-      { headers, signal: controller.signal },
-    );
+    const r = await fetch(url, {
+      headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      signal: ac.signal,
+    });
     clearTimeout(timer);
-    if (!r.ok) {
-      console.warn(`[DepositScanner] TonAPI returned ${r.status}`);
-      return [];
+
+    if (r.status === 401 || r.status === 403) {
+      console.warn(`[DepositScanner] TonAPI auth failed (${r.status}) — switching to Toncenter`);
+      return null;
     }
-    const data = await r.json() as { transactions?: TonApiTx[] };
-    return data.transactions ?? [];
+    if (!r.ok) {
+      console.warn(`[DepositScanner] TonAPI error ${r.status}`);
+      return null;
+    }
+
+    const data = await r.json() as {
+      transactions?: Array<{
+        hash: string;
+        lt: string | number;
+        utime: number;
+        in_msg?: {
+          value?: string | number;
+          decoded_body?: { comment?: string } | null;
+        } | null;
+      }>;
+    };
+
+    return (data.transactions ?? []).map(tx => ({
+      hash:     tx.hash,
+      lt:       String(tx.lt),
+      utime:    tx.utime,
+      valueTon: Number(tx.in_msg?.value ?? 0) / 1e9,
+      comment:  tx.in_msg?.decoded_body?.comment ?? "",
+    }));
   } catch (e) {
     clearTimeout(timer);
     if ((e as Error)?.name !== "AbortError") {
-      console.warn("[DepositScanner] fetch error:", (e as Error)?.message ?? e);
+      console.warn("[DepositScanner] TonAPI fetch error:", (e as Error)?.message ?? e);
+    }
+    return null;
+  }
+}
+
+/* ──────────────────────────────────────────────
+   Toncenter v2 (fallback — free, no key)
+────────────────────────────────────────────── */
+async function fetchViaToncenter(): Promise<NormTx[]> {
+  const apiKey = process.env.TONAPI_KEY ?? "";
+  // Toncenter accepts an optional api_key query param
+  const qs = new URLSearchParams({
+    address: PROJECT_WALLET,
+    limit:   "30",
+    to_lt:   "0",
+  });
+  if (apiKey) qs.set("api_key", apiKey);
+
+  const url = `https://toncenter.com/api/v2/getTransactions?${qs.toString()}`;
+
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), 15_000);
+  try {
+    const r = await fetch(url, {
+      headers: { "Content-Type": "application/json" },
+      signal: ac.signal,
+    });
+    clearTimeout(timer);
+
+    if (!r.ok) {
+      console.warn(`[DepositScanner] Toncenter error ${r.status}`);
+      return [];
+    }
+
+    const data = await r.json() as {
+      ok: boolean;
+      result?: Array<{
+        transaction_id: { hash: string; lt: string };
+        utime:           number;
+        in_msg?: {
+          value?:   string;
+          message?: string;   // plain-text comment (decoded by toncenter)
+        } | null;
+      }>;
+    };
+
+    if (!data.ok || !data.result?.length) return [];
+
+    return data.result.map(tx => {
+      const rawMsg = tx.in_msg?.message ?? "";
+      // Toncenter sometimes base64-encodes the message — try decode
+      let comment = rawMsg;
+      if (rawMsg && !rawMsg.includes("-") && rawMsg.length > 0) {
+        try {
+          const decoded = atob(rawMsg);
+          if (decoded.startsWith("TONYX") || decoded.startsWith("TOPUP")) {
+            comment = decoded;
+          }
+        } catch { /* not base64, use as-is */ }
+      }
+      return {
+        hash:     tx.transaction_id.hash,
+        lt:       tx.transaction_id.lt,
+        utime:    tx.utime,
+        valueTon: Number(tx.in_msg?.value ?? 0) / 1e9,
+        comment,
+      };
+    });
+  } catch (e) {
+    clearTimeout(timer);
+    if ((e as Error)?.name !== "AbortError") {
+      console.warn("[DepositScanner] Toncenter fetch error:", (e as Error)?.message ?? e);
     }
     return [];
   }
 }
 
-/** Check if a txKey was already processed */
+/* ──────────────────────────────────────────────
+   Combined fetch with fallback
+────────────────────────────────────────────── */
+async function fetchRecentTxs(): Promise<NormTx[]> {
+  const tonApiResult = await fetchViaTonApi();
+  if (tonApiResult !== null) return tonApiResult;
+  return fetchViaToncenter();
+}
+
+/* ──────────────────────────────────────────────
+   Idempotency helpers
+────────────────────────────────────────────── */
 async function isAlreadyProcessed(txKey: string): Promise<boolean> {
   const rows = await db
     .select({ id: miniTopupRequestsTable.id })
@@ -79,11 +196,9 @@ async function isAlreadyProcessed(txKey: string): Promise<boolean> {
   return rows.length > 0;
 }
 
-/** Credit user and record the transaction.
- *  Second-guard: re-checks txKey inside a try/catch so that if a
- *  concurrent process (cross-Vercel-instance) already inserted the same
- *  txHash, the DB unique-violation error is caught and we bail out safely.
- */
+/* ──────────────────────────────────────────────
+   Credit user
+────────────────────────────────────────────── */
 async function creditUser(
   telegramId: string,
   receivedTon: number,
@@ -101,87 +216,78 @@ async function creditUser(
     return;
   }
 
-  // Second guard — re-verify txKey hasn't been inserted between our first
-  // check and now (covers cross-process races on Vercel serverless).
+  // Double-check inside transaction (guards against concurrent scanner instances)
   const doubleCheck = await isAlreadyProcessed(txKey);
   if (doubleCheck) {
-    console.warn(`[DepositScanner] txKey already processed (double-check): ${txKey}`);
+    console.log(`[DepositScanner] Already processed: ${txKey}`);
     return;
   }
 
   const newTon = parseFloat((Number(user.ton ?? 0) + receivedTon).toFixed(8));
 
   try {
-    // Insert the record FIRST — if this throws a unique-constraint error from
-    // a concurrent insert, we catch it and skip the balance update.
     await db.insert(miniTopupRequestsTable).values({
       telegramId,
-      tonAmount: String(receivedTon),
+      tonAmount:     String(receivedTon),
       memo,
-      txBoc: null,
-      txHash: txKey,
+      txBoc:         null,
+      txHash:        txKey,
       walletAddress: null,
-      status: "completed",
+      status:        "completed",
     });
   } catch (insertErr: unknown) {
-    // Unique-constraint violation (another concurrent process beat us to it).
     const msg = insertErr instanceof Error ? insertErr.message : String(insertErr);
     if (msg.includes("unique") || msg.includes("duplicate") || msg.includes("23505")) {
-      console.warn(`[DepositScanner] Concurrent insert detected for txKey=${txKey}, skipping.`);
+      console.log(`[DepositScanner] Concurrent insert — already credited: ${txKey}`);
       return;
     }
-    throw insertErr; // Re-throw unrelated errors
+    throw insertErr;
   }
 
-  // Balance update only after the record is safely committed.
   await db
     .update(usersTable)
     .set({ ton: String(newTon), updatedAt: new Date() })
     .where(eq(usersTable.telegramId, telegramId));
 
-  console.log(
-    `[DepositScanner] ✅ Credited ${receivedTon} TON → ${telegramId} (txKey=${txKey})`,
-  );
+  console.log(`[DepositScanner] ✅ +${receivedTon} TON → user ${telegramId} (tx=${txKey.slice(0, 16)}…)`);
 
   void notifyUser(
     telegramId,
-    `💎 <b>Пополнение TONYX получено!</b>\n\n` +
+    `💎 <b>Пополнение получено!</b>\n\n` +
     `Зачислено: <b>+${receivedTon.toFixed(4)} TON</b>\n` +
     `Комментарий: <code>${memo}</code>\n\n` +
     `Ваш баланс обновлён. Хорошей игры! 🎮`,
   );
 }
 
-/** Single scan pass — exported so the cron endpoint can trigger it directly.
- *  Protected by _scanLock to prevent concurrent runs within the same process
- *  (e.g. background timer fires while cron endpoint is still running).
- */
+/* ──────────────────────────────────────────────
+   Single scan pass
+────────────────────────────────────────────── */
 export async function scanOnce(): Promise<void> {
-  if (_scanLock) {
-    console.warn("[DepositScanner] scanOnce skipped — previous scan still running");
-    return;
-  }
+  if (_scanLock) return;
   _scanLock = true;
   try {
     const txs = await fetchRecentTxs();
     if (!txs.length) return;
 
+    let credited = 0;
     for (const tx of txs) {
-      const comment = tx.in_msg?.decoded_body?.comment ?? "";
-      if (!comment) continue;
+      if (!tx.comment) continue;
 
-      const telegramId = extractTelegramId(comment);
+      const telegramId = extractTelegramId(tx.comment);
       if (!telegramId) continue;
 
-      const valueTon = Number(tx.in_msg?.value ?? 0) / 1e9;
-      if (valueTon < MIN_TON) continue;
+      if (tx.valueTon < MIN_TON) continue;
 
-      const txKey = `${tx.hash}-${String(tx.lt)}`;
-
+      const txKey = `${tx.hash}:${tx.lt}`;
       const alreadyDone = await isAlreadyProcessed(txKey);
       if (alreadyDone) continue;
 
-      await creditUser(telegramId, valueTon, comment, txKey);
+      await creditUser(telegramId, tx.valueTon, tx.comment, txKey);
+      credited++;
+    }
+    if (credited > 0) {
+      console.log(`[DepositScanner] Scan complete — credited ${credited} deposit(s)`);
     }
   } catch (e) {
     console.error("[DepositScanner] scanOnce error:", e);
@@ -190,13 +296,18 @@ export async function scanOnce(): Promise<void> {
   }
 }
 
-/** Start the background scanner (call once at server startup) */
+/* ──────────────────────────────────────────────
+   Startup
+────────────────────────────────────────────── */
 export function startDepositScanner(): void {
+  const walletShort = PROJECT_WALLET.slice(0, 16);
+  const hasTonApi   = !!process.env.TONAPI_KEY;
   console.log(
-    `[DepositScanner] Started — scanning wallet ${PROJECT_WALLET.slice(0, 12)}… every ${SCAN_INTERVAL_MS / 1000}s`,
+    `[DepositScanner] Starting — wallet: ${walletShort}… ` +
+    `interval: ${SCAN_INTERVAL_MS / 1000}s ` +
+    `API: ${hasTonApi ? "TonAPI+Toncenter" : "Toncenter only"}`,
   );
 
-  // Run immediately on start, then on interval
   void scanOnce();
   setInterval(() => { void scanOnce(); }, SCAN_INTERVAL_MS);
 }

@@ -19,10 +19,36 @@ import { telegramAuthMiddleware } from "../../middleware/verifyTelegram.js";
 
 const router: IRouter = Router();
 
-// All routes (including /admin) require verified Telegram initData.
-// The verifiedTelegramId extracted from initData is attached to res.locals
-// and used by admin middleware instead of trusting client-supplied IDs.
+// Step 1: Verify Telegram initData and attach verifiedTelegramId to res.locals.
 router.use(telegramAuthMiddleware);
+
+// Step 2: Identity binding — in production, reject requests where any client-supplied
+// telegramId doesn't match the cryptographically verified identity.
+// This prevents IDOR: one authenticated user acting on another user's account.
+// Admin routes are excluded because admins legitimately operate on other users' accounts
+// (and admin access is itself verified via res.locals.verifiedTelegramId).
+router.use((req, res, next) => {
+  const verifiedId = (res.locals as Record<string, unknown>)["verifiedTelegramId"] as string | undefined;
+  // Dev mode or no BOT_TOKEN — no verified identity to compare against, skip enforcement.
+  if (!verifiedId) { next(); return; }
+  // Admin routes have their own identity enforcement.
+  if (req.path.startsWith("/admin")) { next(); return; }
+
+  // Check all common sources of telegramId in the request.
+  const sources: Array<string | undefined> = [
+    req.body?.telegramId as string | undefined,
+    req.query.telegramId as string | undefined,
+    req.params.telegramId as string | undefined,
+  ];
+
+  for (const supplied of sources) {
+    if (supplied && String(supplied) !== verifiedId) {
+      res.status(403).json({ error: "Forbidden: supplied telegramId does not match authenticated user" });
+      return;
+    }
+  }
+  next();
+});
 
 router.use("/language", languageRouter);
 router.use("/wallet", walletRouter);

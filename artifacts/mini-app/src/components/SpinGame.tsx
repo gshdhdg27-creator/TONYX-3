@@ -212,6 +212,57 @@ function useCountdown(startAt: string | null): number | null {
 }
 
 /* ═══════════════════════════════════════════════════════════
+   JACKPOT WHEEL — named export used by games/index.tsx
+═══════════════════════════════════════════════════════════ */
+export function JackpotWheel({
+  players,
+  spinning,
+  winnerId,
+}: {
+  players: SpinPlayer[];
+  spinning: boolean;
+  winnerId: string | null;
+}) {
+  const rafRef = useRef<number | null>(null);
+  const [rotateDeg, setRotateDeg] = useState(0);
+  const currentDegRef = useRef(0);
+
+  useEffect(() => {
+    if (spinning) {
+      let last = performance.now();
+      const tick = (now: number) => {
+        const dt = now - last;
+        last = now;
+        currentDegRef.current = (currentDegRef.current + dt * 0.36) % 360;
+        setRotateDeg(currentDegRef.current);
+        rafRef.current = requestAnimationFrame(tick);
+      };
+      rafRef.current = requestAnimationFrame(tick);
+      return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
+    }
+    if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
+    if (winnerId && players.length > 0) {
+      const total = players.reduce((s, p) => s + p.stake, 0) || 1;
+      let acc = 0;
+      for (const p of players) {
+        const span = (p.stake / total) * 360;
+        if (p.telegramId === winnerId) {
+          const midAngle = acc + span / 2;
+          const target = (360 - midAngle + 5 * 360) % 360;
+          setRotateDeg(target);
+          currentDegRef.current = target;
+          break;
+        }
+        acc += span;
+      }
+    }
+    return undefined;
+  }, [spinning, winnerId, players]);
+
+  return <WheelSVG players={players} rotateDeg={rotateDeg} spinning={spinning} />;
+}
+
+/* ═══════════════════════════════════════════════════════════
    MAIN COMPONENT
 ═══════════════════════════════════════════════════════════ */
 interface Props {

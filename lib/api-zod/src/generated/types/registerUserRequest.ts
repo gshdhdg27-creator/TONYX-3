@@ -11,5 +11,6 @@ export interface RegisterUserRequest {
   username?: string;
   firstName?: string;
   lastName?: string;
+  photoUrl?: string;
   referredBy?: string;
 }

@@ -86,7 +86,7 @@ router.post("/market/reserve", async (req: Request, res: Response) => {
 
   console.log(`[Pool] ${telegramId}: ${tonAmount} TON → ${coins} TONYX (total sold: ${newSold})`);
 
-  res.json({
+  return res.json({
     status: "confirmed",
     coins,
     tonAmount,

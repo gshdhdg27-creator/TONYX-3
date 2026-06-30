@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import ArenaGame from "@/components/ArenaGame";
-import SpinGame from "@/components/SpinGame";
+import SpinGame, { JackpotWheel } from "@/components/SpinGame";
 import FairnessModal, { type FairData } from "@/components/FairnessModal";
 import {
   useGetUserProfile,
@@ -596,7 +596,7 @@ function _SpinGameInline_REMOVED({ telegramId, tonBalance, onBalanceChange, onOp
         </div>
       )}
 
-      <JackpotWheel players={players} spinning={spinning} winnerId={round?.winnerId} />
+      <JackpotWheel players={players} spinning={spinning} winnerId={round?.winnerId ?? null} />
 
       {isIn && myP && players.length >= 2 && (
         <div style={{ background: "rgba(30,58,143,0.1)", border: "1px solid rgba(30,58,143,0.25)", borderRadius: 12, padding: "10px 14px", marginTop: 10 }}>

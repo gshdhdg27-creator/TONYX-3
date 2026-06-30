@@ -19,12 +19,10 @@ import { telegramAuthMiddleware } from "../../middleware/verifyTelegram.js";
 
 const router: IRouter = Router();
 
-// Admin routes have their own authentication (extractAdminId + checkAdmin).
-// Telegram WebApp init-data auth only applies to user-facing routes.
-router.use((req, res, next) => {
-  if (req.path.startsWith("/admin")) { next(); return; }
-  return telegramAuthMiddleware(req, res, next);
-});
+// All routes (including /admin) require verified Telegram initData.
+// The verifiedTelegramId extracted from initData is attached to res.locals
+// and used by admin middleware instead of trusting client-supplied IDs.
+router.use(telegramAuthMiddleware);
 
 router.use("/language", languageRouter);
 router.use("/wallet", walletRouter);

@@ -32,6 +32,18 @@ function verifyInitData(initData: string, botToken: string): boolean {
   }
 }
 
+export function parseVerifiedTelegramId(initData: string): string | null {
+  try {
+    const params = new URLSearchParams(initData);
+    const userStr = params.get("user");
+    if (!userStr) return null;
+    const user = JSON.parse(userStr) as { id?: number | string };
+    return user.id ? String(user.id) : null;
+  } catch {
+    return null;
+  }
+}
+
 export function telegramAuthMiddleware(
   req: Request,
   res: Response,
@@ -60,6 +72,11 @@ export function telegramAuthMiddleware(
     console.warn(`[Auth] Invalid Telegram signature on ${req.method} ${req.path} — initData length: ${initData.length}`);
     res.status(401).json({ error: "Invalid Telegram signature" });
     return;
+  }
+
+  const verifiedId = parseVerifiedTelegramId(initData);
+  if (verifiedId) {
+    res.locals["verifiedTelegramId"] = verifiedId;
   }
 
   next();

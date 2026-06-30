@@ -8,6 +8,7 @@ import {
   GetAdStatusResponse,
 } from "@workspace/api-zod";
 import { eq, and, gte, desc } from "drizzle-orm";
+import crypto from "crypto";
 
 const router: IRouter = Router();
 
@@ -162,6 +163,24 @@ router.post("/watch", async (req, res) => {
 });
 
 router.get("/adsgram-reward", async (req, res) => {
+  // Verify request is from AdsGram via shared secret.
+  // Set ADSGRAM_CALLBACK_SECRET in env to match your AdsGram dashboard callback secret.
+  const adsgramSecret = process.env["ADSGRAM_CALLBACK_SECRET"];
+  if (adsgramSecret) {
+    const authHeader = req.headers["authorization"] ?? "";
+    const providedSecret = String(authHeader).replace(/^Bearer\s+/i, "").trim();
+    if (!providedSecret || !crypto.timingSafeEqual(
+      Buffer.from(providedSecret.padEnd(64, "\0")),
+      Buffer.from(adsgramSecret.padEnd(64, "\0")),
+    )) {
+      console.warn(`[AdsGram] Rejected callback — invalid or missing secret`);
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+  } else if (process.env["NODE_ENV"] === "production") {
+    console.warn(`[AdsGram] ADSGRAM_CALLBACK_SECRET is not set in production — reward callback is unprotected!`);
+  }
+
   const userid = String(req.query.userid ?? "").trim();
   if (!userid) {
     res.status(400).json({ error: "Missing userid" });

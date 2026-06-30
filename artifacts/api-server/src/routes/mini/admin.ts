@@ -26,12 +26,25 @@ function normalizeId(raw: unknown): string {
   return String(raw).trim();
 }
 
-/* ─── Extract the calling admin's ID from query, body, or header ─── */
-function extractAdminId(req: import("express").Request): string {
-  // Accept from: ?adminId=, body.adminId, or X-Admin-Id header
-  return normalizeId(
+/* ─── Extract the calling admin's ID ─────────────────────────────────────────
+   In production (BOT_TOKEN set), the only trusted source is res.locals.verifiedTelegramId
+   which was set by telegramAuthMiddleware after HMAC-verifying the initData.
+   In development (no BOT_TOKEN), fall back to request params with a warning.
+────────────────────────────────────────────────────────────────────────────── */
+function extractAdminId(req: import("express").Request, res: import("express").Response): string {
+  const botToken = process.env["TELEGRAM_BOT_TOKEN"];
+  if (botToken) {
+    // PRODUCTION: only trust the cryptographically-verified ID from initData
+    return normalizeId((res.locals as Record<string, unknown>)["verifiedTelegramId"]);
+  }
+  // DEVELOPMENT only — fall back to request, log a warning
+  const fallback = normalizeId(
     req.query.adminId ?? req.body?.adminId ?? req.headers["x-admin-id"]
   );
+  if (fallback) {
+    console.warn(`[Admin] DEV MODE: trusting unverified adminId=${fallback} (no BOT_TOKEN)`);
+  }
+  return fallback;
 }
 
 /* ─── Async check: superadmin list (sync) OR DB isAdmin flag ─── */
@@ -101,7 +114,7 @@ router.get("/online-count", async (_req, res) => {
 ════════════════════════════════════════════════════ */
 
 router.use(async (req, res, next) => {
-  const id = extractAdminId(req);
+  const id = extractAdminId(req, res);
 
   // SYNCHRONOUS fast-path for owner — zero DB overhead
   if (id === OWNER_ID) { next(); return; }
@@ -120,7 +133,7 @@ router.use(async (req, res, next) => {
 
 /* GET /admin/stats */
 router.get("/stats", async (req, res) => {
-  const adminId = extractAdminId(req);
+  const adminId = extractAdminId(req, res);
   const isSuperAdmin = adminId === OWNER_ID;
   try {
     const [usersCount, soldRow, activeOrders, settingsRows, adminRows] = await Promise.all([
@@ -275,7 +288,7 @@ router.post("/market/force-activate", async (_req, res) => {
 
 /* POST /admin/team/grant */
 router.post("/team/grant", async (req, res) => {
-  const adminId  = extractAdminId(req);
+  const adminId  = extractAdminId(req, res);
   const targetId = normalizeId(req.body?.targetId);
   if (!targetId) { res.status(400).json({ error: "targetId required" }); return; }
   if (adminId !== OWNER_ID) {
@@ -293,7 +306,7 @@ router.post("/team/grant", async (req, res) => {
 
 /* POST /admin/team/revoke */
 router.post("/team/revoke", async (req, res) => {
-  const adminId  = extractAdminId(req);
+  const adminId  = extractAdminId(req, res);
   const targetId = normalizeId(req.body?.targetId);
   if (!targetId) { res.status(400).json({ error: "targetId required" }); return; }
   if (adminId !== OWNER_ID) {
@@ -375,7 +388,7 @@ router.post("/users/:id/restore", async (req, res) => {
 
 /* POST /admin/users/:id/reset */
 router.post("/users/:id/reset", async (req, res) => {
-  const adminId = extractAdminId(req);
+  const adminId = extractAdminId(req, res);
   const { id } = req.params;
   if (id === OWNER_ID) { res.status(400).json({ error: "Нельзя сбросить данные суперадмина" }); return; }
   if (!await checkAdmin(adminId)) { res.status(403).json({ error: "Нет доступа" }); return; }
@@ -480,7 +493,7 @@ router.post("/tasks/:id/toggle", async (req, res) => {
 
 /* DELETE /admin/tasks/:id */
 router.delete("/tasks/:id", async (req, res) => {
-  const adminId = extractAdminId(req);
+  const adminId = extractAdminId(req, res);
   if (adminId !== OWNER_ID) { res.status(403).json({ error: "Только суперадмин может удалять задания" }); return; }
   const id = parseInt(req.params.id);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
@@ -502,7 +515,7 @@ router.post("/users/:id/force-win", async (req, res) => {
 
 /* DELETE /admin/users/:id — permanently removes user and all their data */
 router.delete("/users/:id", async (req, res) => {
-  const adminId = extractAdminId(req);
+  const adminId = extractAdminId(req, res);
   if (adminId !== OWNER_ID) {
     res.status(403).json({ error: "Только суперадмин может удалять пользователей" }); return;
   }
@@ -531,7 +544,7 @@ router.delete("/users/:id", async (req, res) => {
 
 /* POST /admin/users/:id/delete-data */
 router.post("/users/:id/delete-data", async (req, res) => {
-  const adminId = extractAdminId(req);
+  const adminId = extractAdminId(req, res);
   if (adminId !== OWNER_ID) {
     res.status(403).json({ error: "Только суперадмин может удалять данные пользователей" }); return;
   }

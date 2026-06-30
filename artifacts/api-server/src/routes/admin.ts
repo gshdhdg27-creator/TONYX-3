@@ -2,17 +2,60 @@ import { Router, type IRouter, type Request, type Response, type NextFunction } 
 import { db } from "@workspace/db";
 import { usersTable, withdrawalsTable, adViewsTable } from "@workspace/db/schema";
 import { eq, desc, ilike, or, sql, count } from "drizzle-orm";
+import { parseVerifiedTelegramId } from "../middleware/verifyTelegram.js";
+import crypto from "crypto";
 
 const router: IRouter = Router();
 
 const ADMIN_IDS = new Set(["7257793582"]);
 
+function verifyInitData(initData: string, botToken: string): boolean {
+  try {
+    const params = new URLSearchParams(initData);
+    const hash = params.get("hash");
+    if (!hash) return false;
+    params.delete("hash");
+    const dataCheckString = Array.from(params.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([k, v]) => `${k}=${v}`)
+      .join("\n");
+    const secretKey = crypto.createHmac("sha256", "WebAppData").update(botToken).digest();
+    const expectedHash = crypto.createHmac("sha256", secretKey).update(dataCheckString).digest("hex");
+    return crypto.timingSafeEqual(
+      Buffer.from(hash.padEnd(64, "0"), "hex"),
+      Buffer.from(expectedHash, "hex"),
+    );
+  } catch {
+    return false;
+  }
+}
+
 function adminOnly(req: Request, res: Response, next: NextFunction) {
+  const botToken = process.env["TELEGRAM_BOT_TOKEN"];
+
+  if (botToken) {
+    // PRODUCTION: verify via Telegram initData, trust only cryptographically-verified ID
+    const initData = req.headers["x-telegram-init-data"] as string | undefined;
+    if (!initData || !verifyInitData(initData, botToken)) {
+      res.status(401).json({ error: "Missing or invalid Telegram auth" });
+      return;
+    }
+    const telegramId = parseVerifiedTelegramId(initData);
+    if (!telegramId || !ADMIN_IDS.has(telegramId)) {
+      res.status(403).json({ error: "Forbidden" });
+      return;
+    }
+    next();
+    return;
+  }
+
+  // DEVELOPMENT (no BOT_TOKEN): fall back to header with a warning
   const adminId = req.headers["x-admin-id"] as string | undefined;
   if (!adminId || !ADMIN_IDS.has(adminId)) {
     res.status(403).json({ error: "Forbidden" });
     return;
   }
+  console.warn(`[Admin] DEV MODE: trusting unverified adminId=${adminId} (no BOT_TOKEN)`);
   next();
 }
 
@@ -93,7 +136,7 @@ router.patch("/users/:telegramId", async (req, res) => {
 
 // ── Add/subtract coins ────────────────────────────────────────────────────────
 router.post("/users/:telegramId/coins", async (req, res) => {
-  const { delta, reason } = req.body; // delta can be negative
+  const { delta, reason } = req.body;
   const user = await db.select().from(usersTable)
     .where(eq(usersTable.telegramId, req.params.telegramId))
     .then(r => r[0] ?? null);
@@ -126,7 +169,6 @@ router.patch("/withdrawals/:id", async (req, res) => {
     .where(eq(withdrawalsTable.id, Number(req.params.id))).returning();
   if (!updated) { res.status(404).json({ error: "Not found" }); return; }
 
-  // If rejected — refund coins to user
   if (status === "rejected") {
     const user = await db.select().from(usersTable)
       .where(eq(usersTable.telegramId, updated.telegramId)).then(r => r[0] ?? null);

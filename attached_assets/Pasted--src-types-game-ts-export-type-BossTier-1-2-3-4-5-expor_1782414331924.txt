@@ -1,0 +1,179 @@
+// src/types/game.ts
+
+export type BossTier =
+  | 1
+  | 2
+  | 3
+  | 4
+  | 5;
+
+export type HeroElement =
+  | "arcane"
+  | "ice"
+  | "fire"
+  | "lightning"
+  | "wind"
+  | "shadow"
+  | "crystal"
+  | "void"
+  | "ancient"
+  | "royal";
+
+export type HeroAttackType =
+  | "energy_ball"
+  | "ice_arrow"
+  | "fireball"
+  | "thunder_strike"
+  | "tornado"
+  | "shadow_beam"
+  | "crystal_shards"
+  | "void_portal"
+  | "ancient_beam"
+  | "royal_magic";
+
+export type BossAnimationType =
+  | "idle"
+  | "ground_stomp"
+  | "hand_swing"
+  | "fire_breath"
+  | "rage";
+
+export interface Boss {
+  id: number;
+  tier: BossTier;
+  name: string;
+  maxHp: number;
+  chestType: string;
+  rewardMultiplier: number;
+}
+
+export interface Hero {
+  id: number;
+  name: string;
+  element: HeroElement;
+  attackType: HeroAttackType;
+
+  dps: number;
+
+  attackSpeed: number;
+
+  unlocked: boolean;
+
+  requiredTonyx?: number;
+
+  requiredTon?: number;
+
+  requiredStars?: number;
+
+  isKingMage?: boolean;
+}
+
+export interface BattleHeroSlot {
+  slotId: number;
+
+  unlocked: boolean;
+
+  heroId: number | null;
+}
+
+export interface BattleState {
+  active: boolean;
+
+  bossId: number;
+
+  bossCurrentHp: number;
+
+  bossMaxHp: number;
+
+  totalDps: number;
+
+  startedAt: number;
+
+  estimatedEndAt: number;
+
+  boost20Active: boolean;
+
+  boost20ExpiresAt: number | null;
+
+  x2BoostActive: boolean;
+
+  x2BoostExpiresAt: number | null;
+}
+
+export interface BossRespawnState {
+  available: boolean;
+
+  respawnAt: number | null;
+
+  adsWatched: number;
+}
+
+export interface DamageNumber {
+  id: string;
+
+  value: number;
+
+  critical: boolean;
+
+  createdAt: number;
+}
+
+export interface BossAction {
+  type: BossAnimationType;
+
+  startedAt: number;
+}
+
+export interface PlayerStats {
+  totalBossKills: number;
+
+  currentKillStreak: number;
+
+  highestKillStreak: number;
+
+  totalDamageDealt: number;
+}
+
+export interface HeroCollection {
+  ownedHeroIds: number[];
+
+  equippedHeroIds: number[];
+}
+
+export interface SlotUnlockData {
+  slotId: number;
+
+  tonyxCost?: number;
+
+  tonCost?: number;
+
+  unlocked: boolean;
+}
+
+export interface RewardPreview {
+  chestType: string;
+
+  tonyxMin: number;
+
+  tonyxMax: number;
+
+  nftChance: number;
+
+  tonChance: number;
+}
+
+export interface GameSave {
+  battle: BattleState | null;
+
+  respawn: BossRespawnState;
+
+  heroes: HeroCollection;
+
+  slots: BattleHeroSlot[];
+
+  stats: PlayerStats;
+
+  selectedBossTier: BossTier;
+
+  lastOnlineAt: number;
+}

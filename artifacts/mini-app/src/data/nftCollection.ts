@@ -1,0 +1,138 @@
+export interface NFTGift {
+  id: number;
+
+  name: string;
+
+  rarity:
+    | "COMMON"
+    | "RARE"
+    | "EPIC"
+    | "LEGENDARY";
+
+  fragmentsRequired: number;
+
+  image: string;
+}
+
+export interface PlayerNFTProgress {
+  nftId: number;
+
+  collectedFragments: number;
+
+  completed: boolean;
+}
+
+export const NFT_FRAGMENT_COUNT = 9;
+
+export const NFT_GIFTS: NFTGift[] = [
+  {
+    id: 1,
+    name: "Golden Bone",
+    rarity: "COMMON",
+    fragmentsRequired: 9,
+    image: "/nft/golden-bone.png"
+  },
+
+  {
+    id: 2,
+    name: "Diamond Chain",
+    rarity: "RARE",
+    fragmentsRequired: 9,
+    image: "/nft/diamond-chain.png"
+  },
+
+  {
+    id: 3,
+    name: "Royal Crown",
+    rarity: "EPIC",
+    fragmentsRequired: 9,
+    image: "/nft/royal-crown.png"
+  },
+
+  {
+    id: 4,
+    name: "Boss Dogg Throne",
+    rarity: "LEGENDARY",
+    fragmentsRequired: 9,
+    image: "/nft/boss-dogg-throne.png"
+  }
+];
+
+export function getNFTById(
+  nftId: number
+): NFTGift | undefined {
+  return NFT_GIFTS.find(
+    nft => nft.id === nftId
+  );
+}
+
+export function createEmptyCollection(): PlayerNFTProgress[] {
+  return NFT_GIFTS.map(
+    nft => ({
+      nftId: nft.id,
+
+      collectedFragments: 0,
+
+      completed: false
+    })
+  );
+}
+
+export function addFragment(
+  collection: PlayerNFTProgress[],
+  nftId: number
+): PlayerNFTProgress[] {
+  return collection.map(
+    item => {
+      if (
+        item.nftId !== nftId
+      ) {
+        return item;
+      }
+
+      const nft =
+        getNFTById(nftId);
+
+      if (!nft) {
+        return item;
+      }
+
+      const newCount =
+        Math.min(
+          nft.fragmentsRequired,
+          item.collectedFragments + 1
+        );
+
+      return {
+        ...item,
+
+        collectedFragments:
+          newCount,
+
+        completed:
+          newCount >=
+          nft.fragmentsRequired
+      };
+    }
+  );
+}
+
+export function getCompletionPercent(
+  fragments: number,
+  required: number
+) {
+  return Math.floor(
+    (fragments / required) *
+      100
+  );
+}
+
+export function canCraftNFT(
+  progress: PlayerNFTProgress,
+  nft: NFTGift
+) {
+  return (
+    progress.collectedFragments >=
+    nft.fragmentsRequired
+  );
+}

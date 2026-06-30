@@ -1,0 +1,188 @@
+// src/engine/nftEngine.ts
+
+import {
+  NFT_GIFTS,
+  NFTGift,
+  PlayerNFTProgress,
+  createEmptyCollection,
+  addFragment,
+  canCraftNFT
+} from "../data/nftCollection";
+
+export interface PlayerNFTInventory {
+  ownedNFTs: number[];
+  collection: PlayerNFTProgress[];
+}
+
+export function createInventory(): PlayerNFTInventory {
+  return {
+    ownedNFTs: [],
+    collection: createEmptyCollection()
+  };
+}
+
+export function getRandomNFTId(): number {
+  const randomIndex = Math.floor(
+    Math.random() * NFT_GIFTS.length
+  );
+
+  return NFT_GIFTS[randomIndex].id;
+}
+
+export function giveRandomFragment(
+  inventory: PlayerNFTInventory
+): PlayerNFTInventory {
+  const nftId = getRandomNFTId();
+
+  const updatedCollection =
+    addFragment(
+      inventory.collection,
+      nftId
+    );
+
+  return {
+    ...inventory,
+    collection: updatedCollection
+  };
+}
+
+export function giveFullNFT(
+  inventory: PlayerNFTInventory,
+  nftId: number
+): PlayerNFTInventory {
+
+  if (
+    inventory.ownedNFTs.includes(
+      nftId
+    )
+  ) {
+    return inventory;
+  }
+
+  return {
+    ...inventory,
+    ownedNFTs: [
+      ...inventory.ownedNFTs,
+      nftId
+    ]
+  };
+}
+
+export function craftAvailableNFTs(
+  inventory: PlayerNFTInventory
+): PlayerNFTInventory {
+
+  let ownedNFTs = [
+    ...inventory.ownedNFTs
+  ];
+
+  for (
+    const progress of inventory.collection
+  ) {
+
+    const nft =
+      NFT_GIFTS.find(
+        item =>
+          item.id === progress.nftId
+      );
+
+    if (!nft) {
+      continue;
+    }
+
+    const canCraft =
+      canCraftNFT(
+        progress,
+        nft
+      );
+
+    if (
+      canCraft &&
+      !ownedNFTs.includes(
+        nft.id
+      )
+    ) {
+      ownedNFTs.push(
+        nft.id
+      );
+    }
+  }
+
+  return {
+    ...inventory,
+    ownedNFTs
+  };
+}
+
+export function getOwnedNFTs(
+  inventory: PlayerNFTInventory
+): NFTGift[] {
+
+  return NFT_GIFTS.filter(
+    nft =>
+      inventory.ownedNFTs.includes(
+        nft.id
+      )
+  );
+}
+
+export function getCollectionProgress(
+  inventory: PlayerNFTInventory
+) {
+
+  const totalFragments =
+    inventory.collection.reduce(
+      (
+        sum,
+        item
+      ) =>
+        sum +
+        item.collectedFragments,
+      0
+    );
+
+  const maxFragments =
+    inventory.collection.length * 9;
+
+  return {
+    current: totalFragments,
+    max: maxFragments,
+    percent:
+      Math.floor(
+        (totalFragments /
+          maxFragments) *
+          100
+      )
+  };
+}
+
+export function saveNFTInventory(
+  inventory: PlayerNFTInventory
+) {
+  localStorage.setItem(
+    "boss_hunt_nft_inventory",
+    JSON.stringify(
+      inventory
+    )
+  );
+}
+
+export function loadNFTInventory():
+  | PlayerNFTInventory
+  | null {
+
+  const raw =
+    localStorage.getItem(
+      "boss_hunt_nft_inventory"
+    );
+
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}

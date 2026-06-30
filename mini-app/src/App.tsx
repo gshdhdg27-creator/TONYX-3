@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Switch, Route, Router as WouterRouter } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { TonConnectUIProvider } from "@tonconnect/ui-react";
@@ -14,7 +15,7 @@ import LeaderboardPage from "@/pages/leaderboard";
 import AdminPage from "@/pages/admin";
 import { initTelegram, useTelegram } from "@/lib/telegram";
 import { LanguageProvider } from "@/lib/LanguageContext";
-import { useRegisterUser } from "@workspace/api-client-react";
+import { useRegisterUser, getGetUserProfileQueryKey } from "@workspace/api-client-react";
 import { SplashScreen } from "@/components/SplashScreen";
 import { RocketScene } from "@/components/RocketScene";
 import { OnboardingTour } from "@/components/OnboardingTour";
@@ -94,6 +95,7 @@ function TelegramOnlyScreen() {
 function AppShell() {
   const { telegramId, isInTelegram, username, firstName, lastName, photoUrl, startParam } = useTelegram();
   const register = useRegisterUser();
+  const qc = useQueryClient();
   const [blockStatus, setBlockStatus] = useState<"loading"|"ok"|"banned"|"soft_deleted">("loading");
   const [bannedReason, setBannedReason] = useState<string|null>(null);
 
@@ -102,17 +104,25 @@ function AppShell() {
   }, []);
 
   useEffect(() => {
-    if (telegramId) {
-      register.mutate({
+    if (!telegramId) return;
+    register.mutate(
+      {
         data: {
           telegramId,
-          username: username ?? undefined,
-          firstName: firstName ?? undefined,
-          lastName: lastName ?? undefined,
+          username:   username   ?? undefined,
+          firstName:  firstName  ?? undefined,
+          lastName:   lastName   ?? undefined,
           referredBy: startParam ?? undefined,
         },
-      });
-    }
+      },
+      {
+        onSuccess: (data) => {
+          // Immediately populate the profile cache so every page that calls
+          // useGetUserProfile already has depositCode without waiting for refetch.
+          qc.setQueryData(getGetUserProfileQueryKey(telegramId), data);
+        },
+      },
+    );
   }, [telegramId]);
 
   useEffect(() => {

@@ -143,7 +143,7 @@ export default function ProfilePage() {
     setTimeout(() => setToast(null), 3000);
   };
 
-  const depositCode = (profile as { depositCode?: string } | undefined)?.depositCode ?? null;
+  const depositCode = profile?.depositCode ?? null;
   const memo = depositCode ?? `TONYX-${telegramId ?? ""}`;
 
   // Cleanup polling on unmount

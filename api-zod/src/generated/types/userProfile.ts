@@ -13,8 +13,12 @@ export interface UserProfile {
   firstName?: string;
   coins: number;
   ton: number;
+  tonyxCoins?: number;
+  boostRate?: number;
   totalAdsWatched: number;
   totalReferrals: number;
   isBlocked: boolean;
+  isAdmin?: boolean;
+  depositCode?: string;
   createdAt: Date;
 }

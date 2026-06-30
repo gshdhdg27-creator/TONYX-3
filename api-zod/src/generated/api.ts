@@ -41,7 +41,8 @@ export const RegisterUserResponse = zod.object({
   "totalReferrals": zod.number(),
   "isBlocked": zod.boolean(),
   "isAdmin": zod.boolean(),
-  "createdAt": zod.string()
+  "createdAt": zod.string(),
+  "depositCode": zod.string().optional()
 })
 
 
@@ -65,7 +66,8 @@ export const GetUserProfileResponse = zod.object({
   "totalReferrals": zod.number(),
   "isBlocked": zod.boolean(),
   "isAdmin": zod.boolean(),
-  "createdAt": zod.string()
+  "createdAt": zod.string(),
+  "depositCode": zod.string().optional()
 })
 
 

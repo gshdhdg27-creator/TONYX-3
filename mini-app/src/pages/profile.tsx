@@ -143,7 +143,8 @@ export default function ProfilePage() {
     setTimeout(() => setToast(null), 3000);
   };
 
-  const memo = `TONYX-${telegramId ?? ""}`;
+  const depositCode = (profile as { depositCode?: string } | undefined)?.depositCode ?? null;
+  const memo = depositCode ?? `TONYX-${telegramId ?? ""}`;
 
   // Cleanup polling on unmount
   useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current); }, []);
@@ -556,23 +557,53 @@ export default function ProfilePage() {
               </div>
             </div>
 
-            {/* Step 2 — Memo */}
+            {/* Step 2 — Memo / Deposit Code */}
             <div style={{ marginBottom: 14 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
                 <div style={{ width: 20, height: 20, borderRadius: "50%", background: "rgba(147,197,253,0.2)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 800, color: "#93c5fd", flexShrink: 0 }}>2</div>
-                <div style={{ fontSize: 11, color: "#93c5fd", fontWeight: 700, letterSpacing: "0.08em" }}>КОММЕНТАРИЙ (MEMO) — обязательно!</div>
+                <div style={{ fontSize: 11, color: "#93c5fd", fontWeight: 700, letterSpacing: "0.08em" }}>ВАШ ПЕРСОНАЛЬНЫЙ КОД (MEMO)</div>
               </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <div style={{ flex: 1, background: "rgba(15,23,42,0.8)", borderRadius: 10, padding: "12px 14px", fontSize: 15, color: "#c7d2fe", fontWeight: 800, fontFamily: "monospace", border: "1px solid rgba(99,102,241,0.4)", letterSpacing: "0.05em" }}>
-                  {memo}
+
+              {/* Code display card */}
+              <div style={{ background: "linear-gradient(135deg, rgba(15,23,42,0.95), rgba(30,27,75,0.9))", border: "1px solid rgba(139,92,246,0.5)", borderRadius: 14, padding: "14px 16px", marginBottom: 8 }}>
+                <div style={{ fontSize: 10, color: "#7c3aed", fontWeight: 700, letterSpacing: "0.12em", marginBottom: 8 }}>
+                  🔑 УНИКАЛЬНЫЙ КОД ДЛЯ ПОПОЛНЕНИЯ
                 </div>
-                <button onClick={copyMemo} style={{ flexShrink: 0, padding: "12px 16px", borderRadius: 10, border: "none", background: memoCopied ? "rgba(34,197,94,0.25)" : "rgba(99,102,241,0.25)", color: memoCopied ? "#4ade80" : "#c7d2fe", fontFamily: "inherit", fontSize: 13, fontWeight: 700, cursor: "pointer", transition: "all 0.2s" }}>
-                  {memoCopied ? "✓" : "📋"}
-                </button>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <div style={{
+                    flex: 1,
+                    fontFamily: "monospace",
+                    fontSize: depositCode ? 22 : 15,
+                    fontWeight: 900,
+                    color: depositCode ? "#e9d5ff" : "#c7d2fe",
+                    letterSpacing: depositCode ? "0.18em" : "0.05em",
+                    wordBreak: "break-all",
+                  }}>
+                    {memo}
+                  </div>
+                  <button
+                    onClick={copyMemo}
+                    style={{
+                      flexShrink: 0, padding: "10px 14px", borderRadius: 10, border: "none",
+                      background: memoCopied ? "rgba(34,197,94,0.3)" : "rgba(139,92,246,0.3)",
+                      color: memoCopied ? "#4ade80" : "#c4b5fd",
+                      fontFamily: "inherit", fontSize: 13, fontWeight: 700,
+                      cursor: "pointer", transition: "all 0.2s",
+                    }}
+                  >
+                    {memoCopied ? "✓ Скопировано" : "📋 Копировать"}
+                  </button>
+                </div>
+                {depositCode && (
+                  <div style={{ fontSize: 10, color: "#6d28d9", marginTop: 8, lineHeight: 1.5 }}>
+                    Этот код уникален только для вас и не меняется. Укажите его в поле «Комментарий» при переводе.
+                  </div>
+                )}
               </div>
-              <div style={{ marginTop: 8, padding: "8px 12px", borderRadius: 8, background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)" }}>
+
+              <div style={{ padding: "8px 12px", borderRadius: 8, background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)" }}>
                 <div style={{ fontSize: 11, color: "#f87171", fontWeight: 700 }}>
-                  ⚠️ Без точного комментария средства не будут зачислены!
+                  ⚠️ Без точного кода средства не будут зачислены!
                 </div>
               </div>
             </div>

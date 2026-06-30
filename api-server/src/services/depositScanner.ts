@@ -39,13 +39,27 @@ interface NormTx {
 }
 
 /* ──────────────────────────────────────────────
-   Memo parser
+   Memo parser — extracts deposit code
+   Format 1 (new):  "A3K7X9M2P1Q8"      — exactly 12 uppercase alphanumeric
+   Format 2 (legacy): "TONYX-{telegramId}" or "TOPUP_{telegramId}"
 ────────────────────────────────────────────── */
-function extractTelegramId(comment: string): string | null {
-  const m1 = comment.match(/^TONYX-(\d+)$/);
-  if (m1) return m1[1];
-  const m2 = comment.match(/^TOPUP_(\d+)$/);
-  if (m2) return m2[1];
+const DEPOSIT_CODE_RE = /^[A-Z2-9]{12}$/;
+
+interface ParsedMemo {
+  type: "code" | "telegramId";
+  value: string;
+}
+
+function parseMemo(comment: string): ParsedMemo | null {
+  const c = comment.trim();
+  // New format: 12-char deposit code
+  if (DEPOSIT_CODE_RE.test(c)) return { type: "code", value: c };
+  // Legacy format: TONYX-{id}
+  const m1 = c.match(/^TONYX-(\d+)$/);
+  if (m1) return { type: "telegramId", value: m1[1] };
+  // Legacy format: TOPUP_{id}
+  const m2 = c.match(/^TOPUP_(\d+)$/);
+  if (m2) return { type: "telegramId", value: m2[1] };
   return null;
 }
 
@@ -197,37 +211,49 @@ async function isAlreadyProcessed(txKey: string): Promise<boolean> {
 }
 
 /* ──────────────────────────────────────────────
-   Credit user
+   Credit user — looks up by deposit code (new) or telegramId (legacy)
 ────────────────────────────────────────────── */
+async function findUser(parsed: ParsedMemo) {
+  if (parsed.type === "code") {
+    return db
+      .select()
+      .from(usersTable)
+      .where(eq(usersTable.depositCode, parsed.value))
+      .then(r => r[0] ?? null);
+  }
+  return db
+    .select()
+    .from(usersTable)
+    .where(eq(usersTable.telegramId, parsed.value))
+    .then(r => r[0] ?? null);
+}
+
 async function creditUser(
-  telegramId: string,
+  parsed: ParsedMemo,
   receivedTon: number,
   memo: string,
   txKey: string,
-): Promise<void> {
-  const user = await db
-    .select()
-    .from(usersTable)
-    .where(eq(usersTable.telegramId, telegramId))
-    .then(r => r[0] ?? null);
+): Promise<boolean> {
+  const user = await findUser(parsed);
 
   if (!user) {
-    console.warn(`[DepositScanner] User not found: ${telegramId}`);
-    return;
+    const hint = parsed.type === "code" ? `code=${parsed.value}` : `telegramId=${parsed.value}`;
+    console.warn(`[DepositScanner] User not found (${hint})`);
+    return false;
   }
 
   // Double-check inside transaction (guards against concurrent scanner instances)
   const doubleCheck = await isAlreadyProcessed(txKey);
   if (doubleCheck) {
     console.log(`[DepositScanner] Already processed: ${txKey}`);
-    return;
+    return false;
   }
 
   const newTon = parseFloat((Number(user.ton ?? 0) + receivedTon).toFixed(8));
 
   try {
     await db.insert(miniTopupRequestsTable).values({
-      telegramId,
+      telegramId:    user.telegramId,
       tonAmount:     String(receivedTon),
       memo,
       txBoc:         null,
@@ -239,7 +265,7 @@ async function creditUser(
     const msg = insertErr instanceof Error ? insertErr.message : String(insertErr);
     if (msg.includes("unique") || msg.includes("duplicate") || msg.includes("23505")) {
       console.log(`[DepositScanner] Concurrent insert — already credited: ${txKey}`);
-      return;
+      return false;
     }
     throw insertErr;
   }
@@ -247,17 +273,20 @@ async function creditUser(
   await db
     .update(usersTable)
     .set({ ton: String(newTon), updatedAt: new Date() })
-    .where(eq(usersTable.telegramId, telegramId));
+    .where(eq(usersTable.telegramId, user.telegramId));
 
-  console.log(`[DepositScanner] ✅ +${receivedTon} TON → user ${telegramId} (tx=${txKey.slice(0, 16)}…)`);
+  console.log(
+    `[DepositScanner] ✅ +${receivedTon} TON → user ${user.telegramId} ` +
+    `(code=${user.depositCode ?? "legacy"}, tx=${txKey.slice(0, 16)}…)`,
+  );
 
   void notifyUser(
-    telegramId,
+    user.telegramId,
     `💎 <b>Пополнение получено!</b>\n\n` +
     `Зачислено: <b>+${receivedTon.toFixed(4)} TON</b>\n` +
-    `Комментарий: <code>${memo}</code>\n\n` +
     `Ваш баланс обновлён. Хорошей игры! 🎮`,
   );
+  return true;
 }
 
 /* ──────────────────────────────────────────────
@@ -274,8 +303,8 @@ export async function scanOnce(): Promise<void> {
     for (const tx of txs) {
       if (!tx.comment) continue;
 
-      const telegramId = extractTelegramId(tx.comment);
-      if (!telegramId) continue;
+      const parsed = parseMemo(tx.comment);
+      if (!parsed) continue;
 
       if (tx.valueTon < MIN_TON) continue;
 
@@ -283,11 +312,11 @@ export async function scanOnce(): Promise<void> {
       const alreadyDone = await isAlreadyProcessed(txKey);
       if (alreadyDone) continue;
 
-      await creditUser(telegramId, tx.valueTon, tx.comment, txKey);
-      credited++;
+      const ok = await creditUser(parsed, tx.valueTon, tx.comment, txKey);
+      if (ok) credited++;
     }
     if (credited > 0) {
-      console.log(`[DepositScanner] Scan complete — credited ${credited} deposit(s)`);
+      console.log(`[DepositScanner] Scan complete — actually credited ${credited} deposit(s)`);
     }
   } catch (e) {
     console.error("[DepositScanner] scanOnce error:", e);

@@ -39,6 +39,10 @@ export const usersTable = pgTable("users", {
   referredBy: text("referred_by"),
   referralEarnings: integer("referral_earnings").notNull().default(0),
 
+  /* Unique deposit code — 12 uppercase alphanumeric chars generated at registration.
+     Users include this in their TON transfer comment so the scanner can credit them. */
+  depositCode: text("deposit_code").unique(),
+
   /* Misc */
   photoUrl: text("photo_url"),
   lastIp: text("last_ip"),

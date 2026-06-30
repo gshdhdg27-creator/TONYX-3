@@ -280,29 +280,34 @@ router.post("/topup/verify", async (req, res) => {
   const { telegramId, expectedAmount } = req.body ?? {};
   if (!telegramId) { res.status(400).json({ error: "telegramId required" }); return; }
 
-  // Support both new TONYX-{id} and legacy TOPUP_{id} memo formats
-  const memoNew    = `TONYX-${telegramId}`;
-  const memoLegacy = `TOPUP_${telegramId}`;
-  const minTon     = expectedAmount ? Number(expectedAmount) * 0.99 : 0.05;
+  const minTon = expectedAmount ? Number(expectedAmount) * 0.99 : 0.05;
 
   try {
+    // Load user to get their deposit code
+    const user = await db.select().from(usersTable)
+      .where(eq(usersTable.telegramId, String(telegramId))).then(r => r[0] ?? null);
+    if (!user) { res.status(404).json({ error: "Пользователь не найден" }); return; }
+
+    // Build list of all valid memos for this user
+    const validMemos = new Set<string>();
+    if (user.depositCode) validMemos.add(user.depositCode);
+    validMemos.add(`TONYX-${telegramId}`);
+    validMemos.add(`TOPUP_${telegramId}`);
+
     const txs = await queryProjectWalletTxs();
 
     const matchingTx = txs.find(tx => {
       const comment  = tx.in_msg?.decoded_body?.comment ?? "";
       const valueTon = Number(tx.in_msg?.value ?? 0) / 1e9;
-      return (comment === memoNew || comment === memoLegacy) && valueTon >= minTon;
+      return validMemos.has(comment) && valueTon >= minTon;
     });
-
-    const memo = matchingTx
-      ? (matchingTx.in_msg?.decoded_body?.comment ?? memoNew)
-      : memoNew;
 
     if (!matchingTx) {
       res.json({ found: false, message: "Транзакция ещё не найдена. Ожидайте подтверждения..." });
       return;
     }
 
+    const memo       = matchingTx.in_msg?.decoded_body?.comment ?? "";
     const txKey      = `${matchingTx.hash}-${String(matchingTx.lt)}`;
     const receivedTon = Number(matchingTx.in_msg?.value ?? 0) / 1e9;
 
@@ -317,10 +322,6 @@ router.post("/topup/verify", async (req, res) => {
       res.json({ found: true, alreadyCredited: true, message: "Транзакция уже была зачислена ранее" });
       return;
     }
-
-    const user = await db.select().from(usersTable)
-      .where(eq(usersTable.telegramId, String(telegramId))).then(r => r[0] ?? null);
-    if (!user) { res.status(404).json({ error: "Пользователь не найден" }); return; }
 
     const newTon = parseFloat((Number(user.ton ?? 0) + receivedTon).toFixed(8));
 

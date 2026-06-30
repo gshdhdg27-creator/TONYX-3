@@ -112,6 +112,7 @@ function AppShell() {
           username:   username   ?? undefined,
           firstName:  firstName  ?? undefined,
           lastName:   lastName   ?? undefined,
+          photoUrl:   photoUrl   ?? undefined,
           referredBy: startParam ?? undefined,
         },
       },

@@ -569,31 +569,35 @@ export default function ProfilePage() {
                 <div style={{ fontSize: 10, color: "#7c3aed", fontWeight: 700, letterSpacing: "0.12em", marginBottom: 8 }}>
                   🔑 УНИКАЛЬНЫЙ КОД ДЛЯ ПОПОЛНЕНИЯ
                 </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <div style={{
-                    flex: 1,
-                    fontFamily: "monospace",
-                    fontSize: depositCode ? 22 : 15,
-                    fontWeight: 900,
-                    color: depositCode ? "#e9d5ff" : "#c7d2fe",
-                    letterSpacing: depositCode ? "0.18em" : "0.05em",
-                    wordBreak: "break-all",
-                  }}>
-                    {memo}
+                {!profile ? (
+                  <div style={{ height: 32, borderRadius: 8, background: "rgba(139,92,246,0.15)", animation: "pulse 1.4s ease-in-out infinite" }} />
+                ) : (
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <div style={{
+                      flex: 1,
+                      fontFamily: "monospace",
+                      fontSize: depositCode ? 22 : 15,
+                      fontWeight: 900,
+                      color: depositCode ? "#e9d5ff" : "#c7d2fe",
+                      letterSpacing: depositCode ? "0.18em" : "0.05em",
+                      wordBreak: "break-all",
+                    }}>
+                      {memo}
+                    </div>
+                    <button
+                      onClick={copyMemo}
+                      style={{
+                        flexShrink: 0, padding: "10px 14px", borderRadius: 10, border: "none",
+                        background: memoCopied ? "rgba(34,197,94,0.3)" : "rgba(139,92,246,0.3)",
+                        color: memoCopied ? "#4ade80" : "#c4b5fd",
+                        fontFamily: "inherit", fontSize: 13, fontWeight: 700,
+                        cursor: "pointer", transition: "all 0.2s",
+                      }}
+                    >
+                      {memoCopied ? "✓ Скопировано" : "📋 Копировать"}
+                    </button>
                   </div>
-                  <button
-                    onClick={copyMemo}
-                    style={{
-                      flexShrink: 0, padding: "10px 14px", borderRadius: 10, border: "none",
-                      background: memoCopied ? "rgba(34,197,94,0.3)" : "rgba(139,92,246,0.3)",
-                      color: memoCopied ? "#4ade80" : "#c4b5fd",
-                      fontFamily: "inherit", fontSize: 13, fontWeight: 700,
-                      cursor: "pointer", transition: "all 0.2s",
-                    }}
-                  >
-                    {memoCopied ? "✓ Скопировано" : "📋 Копировать"}
-                  </button>
-                </div>
+                )}
                 {depositCode && (
                   <div style={{ fontSize: 10, color: "#6d28d9", marginTop: 8, lineHeight: 1.5 }}>
                     Этот код уникален только для вас и не меняется. Укажите его в поле «Комментарий» при переводе.

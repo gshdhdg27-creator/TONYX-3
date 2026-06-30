@@ -27,11 +27,16 @@ export interface UserProfile {
   telegramId: string;
   username?: string;
   firstName?: string;
+  photoUrl?: string;
   coins: number;
   ton: number;
+  tonyxCoins: number;
+  boostRate: number;
   totalAdsWatched: number;
   totalReferrals: number;
   isBlocked: boolean;
+  isAdmin: boolean;
+  depositCode?: string;
   createdAt: string;
 }
 

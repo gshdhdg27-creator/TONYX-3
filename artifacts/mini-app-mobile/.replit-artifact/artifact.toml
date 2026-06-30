@@ -1,0 +1,27 @@
+kind = "mobile"
+previewPath = "/mini-app-mobile/"
+title = "TONYX Mobile"
+version = "1.0.0"
+id = "artifacts/mini-app-mobile"
+router = "expo-domain"
+
+[[integratedSkills]]
+name = "expo"
+version = "1.0.0"
+
+[[services]]
+ensurePreviewReachable = "/status"
+name = "expo"
+paths = [ "/mini-app-mobile/" ]
+localPort = 25366
+
+[services.development]
+run = "pnpm --filter @workspace/mini-app-mobile run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/mini-app-mobile", "run", "build" ]
+run = [ "pnpm", "--filter", "@workspace/mini-app-mobile", "run", "serve" ]
+
+[services.env]
+PORT = "25366"
+BASE_PATH = "/mini-app-mobile/"

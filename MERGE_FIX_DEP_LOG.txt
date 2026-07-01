@@ -1,0 +1,3 @@
+Merge branch 'fix/deposit-scanner-logging' into main
+
+See merge for detailed logging improvements in depositScanner.

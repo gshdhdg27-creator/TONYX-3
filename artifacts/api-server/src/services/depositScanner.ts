@@ -23,7 +23,7 @@ const PROJECT_WALLET =
   "UQBDrAxyWlMMmtSgq5TjQyO1nKacS_nA0_7ZQ88m8eMmU1jO";
 
 const SCAN_INTERVAL_MS = 15_000;  // 15 seconds
-const MIN_TON          = 0.05;    // ignore dust / test txs
+const MIN_TON = Number(process.env.MIN_TON_THRESHOLD ?? "0.05"); // ignore dust / test txs (configurable)
 
 let _scanLock = false;
 
@@ -195,8 +195,33 @@ async function fetchViaToncenter(): Promise<NormTx[]> {
 ────────────────────────────────────────────── */
 async function fetchRecentTxs(): Promise<NormTx[]> {
   const tonApiResult = await fetchViaTonApi();
-  if (tonApiResult !== null) return tonApiResult;
-  return fetchViaToncenter();
+  if (tonApiResult !== null) {
+    console.log(`[DepositScanner] TonAPI returned ${tonApiResult.length} tx(s)`);
+    for (const tx of tonApiResult) {
+      tx.comment = (tx.comment ?? "").trim();
+      if (tx.comment) {
+        const decoded = tryBase64DecodeIfLooksLike(tx.comment);
+        if (decoded !== tx.comment) {
+          console.log(`[DepositScanner] Decoded TonAPI comment base64 -> "${decoded}" for tx ${tx.hash}:${tx.lt}`);
+          tx.comment = decoded;
+        }
+      }
+    }
+    return tonApiResult;
+  }
+  const toncenterResult = await fetchViaToncenter();
+  console.log(`[DepositScanner] Toncenter returned ${toncenterResult.length} tx(s)`);
+  for (const tx of toncenterResult) {
+    tx.comment = (tx.comment ?? "").trim();
+    if (tx.comment) {
+      const decoded = tryBase64DecodeIfLooksLike(tx.comment);
+      if (decoded !== tx.comment) {
+        console.log(`[DepositScanner] Decoded Toncenter comment base64 -> "${decoded}" for tx ${tx.hash}:${tx.lt}`);
+        tx.comment = decoded;
+      }
+    }
+  }
+  return toncenterResult;
 }
 
 /* ──────────────────────────────────────────────
@@ -215,11 +240,25 @@ async function isAlreadyProcessed(txKey: string): Promise<boolean> {
 ────────────────────────────────────────────── */
 async function findUser(parsed: ParsedMemo) {
   if (parsed.type === "code") {
-    return db
-      .select()
-      .from(usersTable)
-      .where(eq(usersTable.depositCode, parsed.value))
-      .then(r => r[0] ?? null);
+    const code = String(parsed.value ?? "").trim().toUpperCase();
+    // Drizzle does not currently expose a generic upper() helper in this repo; use raw SQL fragment
+    // We'll attempt a safe raw where using sql`` if available. If not, fallback to equality (case-sensitive).
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { sql } = require("drizzle-orm");
+      return db
+        .select()
+        .from(usersTable)
+        .where(sql`upper(${usersTable.depositCode}) = ${code}`)
+        .then((r: any[]) => r[0] ?? null);
+    } catch (e) {
+      // Fallback: case-sensitive search (best effort)
+      return db
+        .select()
+        .from(usersTable)
+        .where(eq(usersTable.depositCode, parsed.value))
+        .then(r => r[0] ?? null);
+    }
   }
   return db
     .select()
@@ -297,26 +336,57 @@ export async function scanOnce(): Promise<void> {
   _scanLock = true;
   try {
     const txs = await fetchRecentTxs();
-    if (!txs.length) return;
+    if (!txs.length) {
+      console.log("[DepositScanner] No transactions returned");
+      return;
+    }
 
     let credited = 0;
     for (const tx of txs) {
-      if (!tx.comment) continue;
-
-      const parsed = parseMemo(tx.comment);
-      if (!parsed) continue;
-
-      if (tx.valueTon < MIN_TON) continue;
-
       const txKey = `${tx.hash}:${tx.lt}`;
-      const alreadyDone = await isAlreadyProcessed(txKey);
-      if (alreadyDone) continue;
+      console.log(`[DepositScanner] TX: ${txKey} value=${tx.valueTon} comment="${tx.comment}"`);
 
-      const ok = await creditUser(parsed, tx.valueTon, tx.comment, txKey);
-      if (ok) credited++;
+      if (!tx.comment || !tx.comment.trim()) {
+        console.log(`[DepositScanner] SKIP ${txKey} reason=no_comment`);
+        continue;
+      }
+
+      // normalize and attempt base64 decode
+      let comment = tx.comment.trim().replace(/\s+/g, " ");
+      comment = tryBase64DecodeIfLooksLike(comment);
+
+      let parsed = parseMemo(comment);
+      if (!parsed) {
+        // try uppercase fallback (some users paste lowercase deposit codes)
+        parsed = parseMemo(comment.toUpperCase());
+      }
+      if (!parsed) {
+        console.log(`[DepositScanner] SKIP ${txKey} reason=parse_failed comment="${comment}"`);
+        continue;
+      }
+
+      if (tx.valueTon < MIN_TON) {
+        console.log(`[DepositScanner] SKIP ${txKey} reason=dust value=${tx.valueTon}`);
+        continue;
+      }
+
+      const alreadyDone = await isAlreadyProcessed(txKey);
+      if (alreadyDone) {
+        console.log(`[DepositScanner] SKIP ${txKey} reason=already_processed`);
+        continue;
+      }
+
+      const ok = await creditUser(parsed, tx.valueTon, comment, txKey);
+      if (!ok) {
+        console.log(`[DepositScanner] SKIP ${txKey} reason=user_not_credited`);
+        continue;
+      }
+      credited++;
     }
     if (credited > 0) {
       console.log(`[DepositScanner] Scan complete — actually credited ${credited} deposit(s)`);
+    } else {
+      console.log("[DepositScanner] Scan complete — nothing credited");
     }
   } catch (e) {
     console.error("[DepositScanner] scanOnce error:", e);
@@ -334,7 +404,8 @@ export function startDepositScanner(): void {
   console.log(
     `[DepositScanner] Starting — wallet: ${walletShort}… ` +
     `interval: ${SCAN_INTERVAL_MS / 1000}s ` +
-    `API: ${hasTonApi ? "TonAPI+Toncenter" : "Toncenter only"}`,
+    `API: ${hasTonApi ? "TonAPI+Toncenter" : "Toncenter only"} ` +
+    `MIN_TON=${MIN_TON}`,
   );
 
   void scanOnce();

@@ -1,0 +1,3 @@
+- [Neon DB schema sync](neon-schema-sync.md) — Neon prod DB can lag behind code schema; missing columns cause 500/404; fix with ALTER TABLE directly.
+- [Vercel API routing](vercel-api-routing.md) — Vercel serves static only; all /api/* calls 404 in prod unless VITE_API_BASE_URL is set to deployed API server URL.
+- [NEON_DATABASE_URL priority](neon-db-priority.md) — lib/db/src/index.ts uses NEON_DATABASE_URL ?? DATABASE_URL; new Repls get empty local DB without NEON_DATABASE_URL secret.

@@ -9,6 +9,7 @@
   },
   "devDependencies": {
     "@types/node": "catalog:",
-    "tsx": "catalog:"
+    "tsx": "catalog:",
+    "esbuild": "^0.27.7"
   }
 }

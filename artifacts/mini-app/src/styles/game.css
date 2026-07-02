@@ -272,37 +272,27 @@
 .mage-slot .ms-lvl   { position: absolute; top: 3px; right: 3px; font-size: 8px; font-weight: 700; color: var(--game-accent2); background: rgba(124,58,237,0.2); border-radius: 3px; padding: 1px 3px; }
 .mage-slot .ms-plus  { font-size: 26px; color: rgba(110, 145, 200, 0.5); line-height: 1; }
 
-/* Filled slot — card image covers the frame */
+/* Filled slot — card sits inside the frame, frame stays visible */
 .mage-slot.filled {
-  padding: 0;
+  padding: 5px 4px 8px;
+  overflow: visible;
+  /* background-image from .mage-slot is kept — the frame shows around the card */
+}
+.mage-slot-img-wrap {
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+  border-radius: 6px;
   overflow: hidden;
-  background-image: none;
-  background-color: #0d0d1a;
-}
-.mage-slot-overlay {
-  position: absolute;
-  inset: 0;
   display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  pointer-events: none;
-  padding: 3px;
+  align-items: stretch;
 }
-.mage-slot-overlay .ms-lvl {
-  position: static;
-  align-self: flex-end;
-  font-size: 8px; font-weight: 700;
-  color: var(--game-accent2);
-  background: rgba(0,0,0,0.55);
-  border-radius: 3px; padding: 1px 3px;
-}
-.mage-slot-overlay .ms-dps {
-  align-self: center;
-  font-size: 9px; font-weight: 800;
-  color: var(--game-gold);
-  background: rgba(0,0,0,0.6);
-  border-radius: 4px; padding: 1px 4px;
-  white-space: nowrap;
+.mage-slot-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  border-radius: 6px;
 }
 
 /* ─── ACTION PANEL ─────────────────────────────────── */

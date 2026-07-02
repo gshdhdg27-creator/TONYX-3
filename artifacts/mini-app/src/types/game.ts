@@ -24,11 +24,18 @@ export interface BossConfig {
 
 // ─── MAGE ──────────────────────────────────────────────
 export type MageType = "fire" | "ice" | "lightning" | "wind";
+export type MageRarity = "rare" | "epic" | "legendary";
 
 export interface MageConfig {
   id: string;
   name: string;
   type: MageType;
+  rarity: MageRarity;
+  atk: number;
+  interval: number; // seconds
+  dps: number;
+  priceTon: number; // 0 = free
+  image: string;
   baseDps: number;
   upgradeCost: number;
   level: number;

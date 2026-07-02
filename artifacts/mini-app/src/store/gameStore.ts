@@ -16,8 +16,6 @@ import {
   NFT_FULL_DROP_CHANCE,
 } from "../constants/nft";
 
-const initialOwnedMages: OwnedMage[] = MAGES.slice(0, 3).map((m) => ({ ...m }));
-
 const initialState: GameState = {
   view: "loading",
   balances: { ton: 0.05, tonyx: 200 },
@@ -29,8 +27,10 @@ const initialState: GameState = {
     totalDps: 0,
     lastRewards: null,
   },
-  ownedMages: initialOwnedMages,
-  activeMageIds: [initialOwnedMages[0].id],
+  ownedMages: [],
+  activeMageIds: [],
+  equippedSlots: [null, null, null, null, null],
+  pendingSlotIndex: null,
   nftInventory: {
     fragments: { shadow_dogg: 0, flame_dogg: 0, ice_dogg: 0 },
     assembled: [],
@@ -45,9 +45,14 @@ const initialState: GameState = {
 
 function calcTotalDps(
   ownedMages: OwnedMage[],
+  equippedSlots: (string | null)[],
   dpsMultiplier: number
 ): number {
-  const raw = ownedMages.reduce((sum, m) => sum + getMageDps(m), 0);
+  const equipped = equippedSlots
+    .filter(Boolean)
+    .map((id) => ownedMages.find((m) => m.id === id))
+    .filter((m): m is OwnedMage => !!m);
+  const raw = equipped.reduce((sum, m) => sum + getMageDps(m), 0);
   return Math.floor(raw * dpsMultiplier);
 }
 
@@ -81,6 +86,12 @@ interface GameActions {
   watchAd: () => Promise<void>;
   buySpeedBoost: () => void;
   init: () => void;
+  /** Open hero-shop to pick a card for slot [index] */
+  clickSlot: (index: number) => void;
+  /** Place a purchased mage into the pending slot, then go back to home */
+  equipMageToSlot: (mageId: string) => void;
+  /** Add a mage to ownedMages (purchase) */
+  buyMage: (mageId: string) => void;
 }
 
 interface GameStore extends GameState, GameActions {
@@ -94,16 +105,17 @@ export const useGameStore = create<GameStore>((set, get) => ({
   setView: (view) => set({ view }),
 
   selectBoss: (level) => {
-    const dps = calcTotalDps(get().ownedMages, get().boost.dpsMultiplier);
+    const { ownedMages, equippedSlots, boost } = get();
+    const dps = calcTotalDps(ownedMages, equippedSlots, boost.dpsMultiplier);
     set({ selectedBossLevel: level, battle: { ...initialState.battle, totalDps: dps } });
   },
 
   toggleMage: (_mageId) => {
-    // No-op: all owned mages automatically participate in battle
+    // No-op: slot system replaces toggle
   },
 
   upgradeMage: (mageId) => {
-    const { ownedMages, balances, boost } = get();
+    const { ownedMages, balances, boost, equippedSlots } = get();
     const mage = ownedMages.find((m) => m.id === mageId);
     if (!mage) return;
     const cost = mage.upgradeCost * mage.level;
@@ -111,7 +123,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const updated = ownedMages.map((m) =>
       m.id === mageId ? { ...m, level: m.level + 1 } : m
     );
-    const dps = calcTotalDps(updated, boost.dpsMultiplier);
+    const dps = calcTotalDps(updated, equippedSlots, boost.dpsMultiplier);
     set({
       ownedMages: updated,
       balances: { ...balances, tonyx: balances.tonyx - cost },
@@ -120,9 +132,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   startBattle: () => {
-    const { ownedMages, boost } = get();
-    if (ownedMages.length === 0) return;
-    const dps = calcTotalDps(ownedMages, boost.dpsMultiplier);
+    const { ownedMages, equippedSlots, boost } = get();
+    const equippedCount = equippedSlots.filter(Boolean).length;
+    if (equippedCount === 0) return;
+    const dps = calcTotalDps(ownedMages, equippedSlots, boost.dpsMultiplier);
     set({
       view: "battle",
       battle: { active: true, bossHpPercent: 100, heroHp: 100, totalDps: dps, lastRewards: null },
@@ -154,7 +167,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   resetBattle: () => {
-    const dps = calcTotalDps(get().ownedMages, get().boost.dpsMultiplier);
+    const { ownedMages, equippedSlots, boost } = get();
+    const dps = calcTotalDps(ownedMages, equippedSlots, boost.dpsMultiplier);
     set({ battle: { ...initialState.battle, totalDps: dps }, view: "home" });
   },
 
@@ -192,7 +206,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   watchAd: async () => {
     await new Promise<void>((resolve) => setTimeout(resolve, 1500));
-    const { boost } = get();
+    const { boost, ownedMages, equippedSlots } = get();
     const newCount = boost.adWatchedCount + 1;
     let newMultiplier = boost.dpsMultiplier;
     let expiresAt = boost.boostExpiresAt;
@@ -200,7 +214,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       newMultiplier = 1.2;
       expiresAt = Date.now() + 24 * 60 * 60 * 1000;
     }
-    const dps = calcTotalDps(get().ownedMages, newMultiplier);
+    const dps = calcTotalDps(ownedMages, equippedSlots, newMultiplier);
     set({
       boost: { ...boost, adWatchedCount: newCount, dpsMultiplier: newMultiplier, boostExpiresAt: expiresAt },
       battle: { ...get().battle, totalDps: dps },
@@ -214,13 +228,56 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   init: () => {
-    const { boost, ownedMages } = get();
+    const { boost, ownedMages, equippedSlots } = get();
     let dpsMultiplier = boost.dpsMultiplier;
     if (boost.boostExpiresAt && Date.now() > boost.boostExpiresAt) {
       dpsMultiplier = 1.0;
       set({ boost: { ...boost, dpsMultiplier: 1.0, boostExpiresAt: null, adWatchedCount: 0 } });
     }
-    const dps = calcTotalDps(ownedMages, dpsMultiplier);
+    const dps = calcTotalDps(ownedMages, equippedSlots, dpsMultiplier);
     set({ view: "home", battle: { ...get().battle, totalDps: dps } });
+  },
+
+  clickSlot: (index) => {
+    set({ pendingSlotIndex: index });
+    get().setView("hero-shop");
+  },
+
+  equipMageToSlot: (mageId) => {
+    const { pendingSlotIndex, equippedSlots, ownedMages, boost } = get();
+    if (pendingSlotIndex === null) return;
+    if (pendingSlotIndex < 0 || pendingSlotIndex > 4) return;
+    // Only allow equipping owned mages
+    if (!ownedMages.find((m) => m.id === mageId)) return;
+    // Remove this mage from any other slot first
+    const newSlots = equippedSlots.map((id) =>
+      id === mageId ? null : id
+    ) as (string | null)[];
+    // Place in the target slot
+    newSlots[pendingSlotIndex] = mageId;
+    const dps = calcTotalDps(ownedMages, newSlots, boost.dpsMultiplier);
+    set({
+      equippedSlots: newSlots,
+      pendingSlotIndex: null,
+      battle: { ...get().battle, totalDps: dps },
+    });
+    get().setView("home");
+  },
+
+  buyMage: (mageId) => {
+    const { ownedMages, equippedSlots, boost, balances } = get();
+    if (ownedMages.find((m) => m.id === mageId)) return;
+    const mage = MAGES.find((m) => m.id === mageId);
+    if (!mage) return;
+    // Validate balance (free mages have priceTon === 0)
+    if (mage.priceTon > 0 && balances.ton < mage.priceTon) return;
+    const newOwned = [...ownedMages, { ...mage }];
+    const newTon = mage.priceTon > 0 ? balances.ton - mage.priceTon : balances.ton;
+    const dps = calcTotalDps(newOwned, equippedSlots, boost.dpsMultiplier);
+    set({
+      ownedMages: newOwned,
+      balances: { ...balances, ton: newTon },
+      battle: { ...get().battle, totalDps: dps },
+    });
   },
 }));

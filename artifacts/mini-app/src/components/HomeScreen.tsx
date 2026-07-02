@@ -22,17 +22,22 @@ function removeAdsgramOverlays(snapshot: Set<Element>) {
 export default function HomeScreen() {
   const bossLevel = useGameStore((s) => s.selectedBossLevel);
   const ownedMages = useGameStore((s) => s.ownedMages);
+  const equippedSlots = useGameStore((s) => s.equippedSlots);
   const totalDps = useGameStore((s) => s.battle.totalDps);
   const boost = useGameStore((s) => s.boost);
   const startBattle = useGameStore((s) => s.startBattle);
   const setView = useGameStore((s) => s.setView);
+  const clickSlot = useGameStore((s) => s.clickSlot);
   const watchAd = useGameStore((s) => s.watchAd);
 
   const bodySnapshotRef = useRef<Set<Element>>(new Set());
 
   const boss = BOSSES[bossLevel];
-  const canStart = ownedMages.length > 0;
-  const slots = Array.from({ length: 5 }, (_, i) => ownedMages[i] ?? null);
+  const canStart = equippedSlots.some(Boolean);
+  // Resolve equipped mage objects from slot IDs
+  const slots = equippedSlots.map((id) =>
+    id ? (ownedMages.find((m) => m.id === id) ?? null) : null
+  );
   const boostActive = boost.boostExpiresAt !== null && Date.now() < boost.boostExpiresAt;
 
   const handleBoost = useCallback(async () => {
@@ -70,13 +75,15 @@ export default function HomeScreen() {
       </div>
 
       <div className="mage-slots">
-        {slots.map((mage, i) =>
-          mage ? (
-            <MageSlot key={mage.id} mage={mage} />
-          ) : (
-            <MageSlot key={`empty-${i}`} isEmpty />
-          )
-        )}
+        {slots.map((mage, i) => (
+          <MageSlot
+            key={mage ? mage.id : `empty-${i}`}
+            mage={mage}
+            isEmpty={!mage}
+            slotIndex={i}
+            onClick={clickSlot}
+          />
+        ))}
       </div>
 
       {!boostActive && (

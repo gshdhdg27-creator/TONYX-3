@@ -101,6 +101,10 @@ export interface GameState {
   battle: BattleState;
   ownedMages: OwnedMage[];
   activeMageIds: string[];
+  /** 5 equipped slots — each holds a mage ID or null */
+  equippedSlots: (string | null)[];
+  /** index of slot the user tapped (0-4) when navigating to shop to pick a card */
+  pendingSlotIndex: number | null;
   nftInventory: NFTInventory;
   boost: BoostState;
 }

@@ -272,17 +272,16 @@
 .mage-slot .ms-lvl   { position: absolute; top: 3px; right: 3px; font-size: 8px; font-weight: 700; color: var(--game-accent2); background: rgba(124,58,237,0.2); border-radius: 3px; padding: 1px 3px; }
 .mage-slot .ms-plus  { font-size: 26px; color: rgba(110, 145, 200, 0.5); line-height: 1; }
 
-/* Filled slot — card sits inside the frame, frame stays visible */
+/* Filled slot — card sits tightly inside the frame */
 .mage-slot.filled {
-  padding: 5px 4px 8px;
-  overflow: visible;
-  /* background-image from .mage-slot is kept — the frame shows around the card */
+  padding: 2px;
+  overflow: hidden;
 }
 .mage-slot-img-wrap {
   width: 100%;
   flex: 1;
   min-height: 0;
-  border-radius: 6px;
+  border-radius: 5px;
   overflow: hidden;
   display: flex;
   align-items: stretch;
@@ -292,7 +291,7 @@
   height: 100%;
   object-fit: cover;
   display: block;
-  border-radius: 6px;
+  border-radius: 5px;
 }
 
 /* ─── ACTION PANEL ─────────────────────────────────── */

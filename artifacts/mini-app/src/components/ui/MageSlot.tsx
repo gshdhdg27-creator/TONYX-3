@@ -30,8 +30,6 @@ export default function MageSlot({ mage, isEmpty, slotIndex, onClick }: MageSlot
           <span className="ms-emoji">{mage.emoji}</span>
         )}
       </div>
-      {/* Only level badge — no DPS text */}
-      <span className="ms-lvl">L{mage.level}</span>
     </div>
   );
 }

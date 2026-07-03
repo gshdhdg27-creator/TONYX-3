@@ -23,7 +23,6 @@ export default function HomeScreen() {
   const bossLevel = useGameStore((s) => s.selectedBossLevel);
   const ownedMages = useGameStore((s) => s.ownedMages);
   const equippedSlots = useGameStore((s) => s.equippedSlots);
-  const totalDps = useGameStore((s) => s.battle.totalDps);
   const boost = useGameStore((s) => s.boost);
   const startBattle = useGameStore((s) => s.startBattle);
   const setView = useGameStore((s) => s.setView);
@@ -39,6 +38,12 @@ export default function HomeScreen() {
     id ? (ownedMages.find((m) => m.id === id) ?? null) : null
   );
   const boostActive = boost.boostExpiresAt !== null && Date.now() < boost.boostExpiresAt;
+
+  // Display DPS = sum of actual mage.dps values (matches card stats table)
+  const displayDps = slots
+    .filter((m): m is NonNullable<typeof m> => !!m)
+    .reduce((sum, m) => sum + m.dps, 0)
+    .toFixed(2);
 
   const handleBoost = useCallback(async () => {
     bodySnapshotRef.current = new Set(Array.from(document.body.children));
@@ -68,7 +73,7 @@ export default function HomeScreen() {
       </div>
 
       <div className="dps-display">
-        ⚔️ <span>{totalDps.toLocaleString()}</span> ДПС/с
+        ⚔️ <span>{displayDps}</span> ДПС/с
         {boostActive && (
           <span className="tag tag-boost" style={{ marginLeft: 8 }}>+20% BOOST</span>
         )}

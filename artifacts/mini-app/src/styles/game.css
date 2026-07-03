@@ -241,7 +241,7 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 8px 4px;
+  padding: 4px;
   border-radius: var(--game-radius);
   border: none;
   background-image: url('/hero-frame.jpg');
@@ -254,15 +254,15 @@
   position: relative;
   -webkit-tap-highlight-color: transparent;
   min-width: 0;
-  min-height: 80px;
+  height: 88px;
+  min-height: 0;
   justify-content: center;
-  overflow: visible;
+  overflow: hidden;
 }
 .mage-slot.active { box-shadow: 0 0 0 2px var(--game-accent), 0 0 12px rgba(124,58,237,0.35); }
 .mage-slot.empty  {
   background-size: 100% 100%;
   background-position: center center;
-  min-height: 80px;
   cursor: pointer;
 }
 .mage-slot:active { transform: scale(0.94); }
@@ -272,15 +272,13 @@
 .mage-slot .ms-lvl   { position: absolute; top: 3px; right: 3px; font-size: 8px; font-weight: 700; color: var(--game-accent2); background: rgba(124,58,237,0.2); border-radius: 3px; padding: 1px 3px; }
 .mage-slot .ms-plus  { font-size: 26px; color: rgba(110, 145, 200, 0.5); line-height: 1; }
 
-/* Filled slot — card sits tightly inside the frame */
+/* Filled slot — card image fills the fixed frame */
 .mage-slot.filled {
-  padding: 2px;
-  overflow: hidden;
+  padding: 4px;
 }
 .mage-slot-img-wrap {
   width: 100%;
-  flex: 1;
-  min-height: 0;
+  height: 100%;
   border-radius: 5px;
   overflow: hidden;
   display: flex;

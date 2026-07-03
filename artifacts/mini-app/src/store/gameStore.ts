@@ -92,6 +92,8 @@ interface GameActions {
   equipMageToSlot: (mageId: string) => void;
   /** Add a mage to ownedMages (purchase) */
   buyMage: (mageId: string) => void;
+  /** Sync real TON wallet balance from backend profile */
+  setTonBalance: (ton: number) => void;
 }
 
 interface GameStore extends GameState, GameActions {
@@ -269,12 +271,19 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (ownedMages.find((m) => m.id === mageId)) return;
     const mage = MAGES.find((m) => m.id === mageId);
     if (!mage) return;
-    // TON payment handled externally — add to owned immediately
+    // Check TON balance (free mages have priceTon === 0)
+    if (mage.priceTon > 0 && balances.ton < mage.priceTon) return;
     const newOwned = [...ownedMages, { ...mage }];
+    const newTon = mage.priceTon > 0 ? balances.ton - mage.priceTon : balances.ton;
     const dps = calcTotalDps(newOwned, equippedSlots, boost.dpsMultiplier);
     set({
       ownedMages: newOwned,
+      balances: { ...balances, ton: newTon },
       battle: { ...get().battle, totalDps: dps },
     });
+  },
+
+  setTonBalance: (ton) => {
+    set({ balances: { ...get().balances, ton } });
   },
 }));

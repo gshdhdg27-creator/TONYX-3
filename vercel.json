@@ -12,7 +12,7 @@
   "crons": [
     {
       "path": "/api/cron/scan-deposits",
-      "schedule": "*/1 * * * *"
+      "schedule": "0 12 * * *"
     }
   ]
 }

@@ -68,7 +68,7 @@ export default function HomeScreen() {
       </div>
 
       <div className="dps-display">
-        ⚔️ <span>{totalDps.toLocaleString()}</span> АТК
+        ⚔️ <span>{totalDps.toLocaleString()}</span> ДПС/с
         {boostActive && (
           <span className="tag tag-boost" style={{ marginLeft: 8 }}>+20% BOOST</span>
         )}

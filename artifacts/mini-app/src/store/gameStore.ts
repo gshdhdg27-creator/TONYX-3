@@ -269,14 +269,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (ownedMages.find((m) => m.id === mageId)) return;
     const mage = MAGES.find((m) => m.id === mageId);
     if (!mage) return;
-    // Validate balance (free mages have priceTon === 0)
-    if (mage.priceTon > 0 && balances.ton < mage.priceTon) return;
+    // TON payment handled externally — add to owned immediately
     const newOwned = [...ownedMages, { ...mage }];
-    const newTon = mage.priceTon > 0 ? balances.ton - mage.priceTon : balances.ton;
     const dps = calcTotalDps(newOwned, equippedSlots, boost.dpsMultiplier);
     set({
       ownedMages: newOwned,
-      balances: { ...balances, ton: newTon },
       battle: { ...get().battle, totalDps: dps },
     });
   },

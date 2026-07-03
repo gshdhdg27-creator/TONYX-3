@@ -39,11 +39,11 @@ export default function HomeScreen() {
   );
   const boostActive = boost.boostExpiresAt !== null && Date.now() < boost.boostExpiresAt;
 
-  // Display DPS = sum of actual mage.dps values (matches card stats table)
-  const displayDps = slots
+  // Display DPS = sum of card dps values (from table), scaled by boost multiplier
+  const rawDisplayDps = slots
     .filter((m): m is NonNullable<typeof m> => !!m)
-    .reduce((sum, m) => sum + m.dps, 0)
-    .toFixed(2);
+    .reduce((sum, m) => sum + m.dps, 0);
+  const displayDps = (rawDisplayDps * boost.dpsMultiplier).toFixed(2);
 
   const handleBoost = useCallback(async () => {
     bodySnapshotRef.current = new Set(Array.from(document.body.children));

@@ -20,10 +20,12 @@ export default function HomePage() {
     query: { enabled: !!telegramId, refetchInterval: 30000 },
   } as Parameters<typeof useGetUserProfile>[1]);
 
-  // Sync real TON balance from backend into game store
+  // Sync real TON balance from backend into game store (only when profile is loaded)
   useEffect(() => {
-    const ton = Number((profile as { ton?: string | number } | undefined)?.ton ?? 0);
-    if (ton > 0) setTonBalance(ton);
+    if (!profile) return;
+    const raw = (profile as { ton?: string | number } | undefined)?.ton;
+    const ton = Number(raw ?? 0);
+    if (Number.isFinite(ton) && ton >= 0) setTonBalance(ton);
   }, [profile, setTonBalance]);
 
   useEffect(() => {

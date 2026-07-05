@@ -272,24 +272,58 @@
 .mage-slot .ms-lvl   { position: absolute; top: 3px; right: 3px; font-size: 8px; font-weight: 700; color: var(--game-accent2); background: rgba(124,58,237,0.2); border-radius: 3px; padding: 1px 3px; }
 .mage-slot .ms-plus  { font-size: 26px; color: rgba(110, 145, 200, 0.5); line-height: 1; }
 
-/* Filled slot — card image fills the entire slot, frame hidden */
+/* Filled slot — card image fills the slot, rarity border frames the sides */
 .mage-slot.filled {
   padding: 0;
-  background-image: none; /* remove frame when card is placed */
+  background-image: none;
+  border-width: 2px;
+  border-style: solid;
+  border-color: #60a5fa; /* default = rare, overridden below */
 }
+.mage-slot.filled[data-rarity="rare"] {
+  border-color: #60a5fa;
+  box-shadow: inset 0 0 10px rgba(96,165,250,0.25),
+              0 0 10px rgba(96,165,250,0.20);
+}
+.mage-slot.filled[data-rarity="epic"] {
+  border-color: #a855f7;
+  box-shadow: inset 0 0 12px rgba(168,85,247,0.30),
+              0 0 12px rgba(168,85,247,0.25);
+}
+.mage-slot.filled[data-rarity="legendary"] {
+  border-color: #f59e0b;
+  box-shadow: inset 0 0 14px rgba(245,158,11,0.35),
+              0 0 14px rgba(245,158,11,0.30);
+}
+
 .mage-slot-img-wrap {
   position: absolute;
   inset: 0;
-  border-radius: var(--game-radius);
+  border-radius: calc(var(--game-radius) - 2px);
   overflow: hidden;
+}
+/* side-fade: subtle gradient darkens the left/right edges so focus is on the centre */
+.mage-slot-img-wrap::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to right,
+    rgba(0,0,0,0.35) 0%,
+    transparent 28%,
+    transparent 72%,
+    rgba(0,0,0,0.35) 100%
+  );
+  pointer-events: none;
 }
 .mage-slot-img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  object-position: center top;
   display: block;
 }
-/* Level badge sits above the card image */
+/* Level badge sits above everything */
 .mage-slot .ms-lvl { z-index: 3; }
 
 /* ─── ACTION PANEL ─────────────────────────────────── */

@@ -17,7 +17,7 @@ export default function MageSlot({ mage, isEmpty, slotIndex, onClick }: MageSlot
   }
 
   return (
-    <div className="mage-slot filled" onClick={() => onClick(slotIndex)}>
+    <div className="mage-slot filled" data-rarity={mage.rarity} onClick={() => onClick(slotIndex)}>
       {/* Card image fills the slot 100% */}
       <div className="mage-slot-img-wrap">
         {mage.image ? (

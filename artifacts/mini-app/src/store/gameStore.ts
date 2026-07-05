@@ -42,6 +42,7 @@ const initialState: GameState = {
     boostExpiresAt: null,
     speedMultiplier: 1,
   },
+  hasInitializedTonFromBackend: false,
 };
 
 function calcTotalDps(
@@ -95,6 +96,8 @@ interface GameActions {
   buyMage: (mageId: string) => void;
   /** Sync real TON wallet balance from backend profile */
   setTonBalance: (ton: number) => void;
+  /** Mark that the initial backend balance has been synced — prevents future overwrites */
+  markTonInitialized: () => void;
 }
 
 interface GameStore extends GameState, GameActions {
@@ -289,6 +292,10 @@ export const useGameStore = create<GameStore>()(
   setTonBalance: (ton) => {
     set({ balances: { ...get().balances, ton } });
   },
+
+  markTonInitialized: () => {
+    set({ hasInitializedTonFromBackend: true });
+  },
     }),
     {
       name: "tonyx-game-state",
@@ -302,6 +309,7 @@ export const useGameStore = create<GameStore>()(
         nftInventory: state.nftInventory,
         boost: state.boost,
         selectedBossLevel: state.selectedBossLevel,
+        hasInitializedTonFromBackend: state.hasInitializedTonFromBackend,
       }),
     }
   )

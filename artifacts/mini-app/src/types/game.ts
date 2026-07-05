@@ -107,4 +107,6 @@ export interface GameState {
   pendingSlotIndex: number | null;
   nftInventory: NFTInventory;
   boost: BoostState;
+  /** Set to true after the first successful backend balance sync — prevents later refetches from overwriting in-game spend */
+  hasInitializedTonFromBackend: boolean;
 }

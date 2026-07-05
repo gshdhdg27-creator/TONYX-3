@@ -14,19 +14,29 @@ export default function HomePage() {
   const view = useGameStore((s) => s.view);
   const init = useGameStore((s) => s.init);
   const setTonBalance = useGameStore((s) => s.setTonBalance);
+  const markTonInitialized = useGameStore((s) => s.markTonInitialized);
+  const hasInitializedTonFromBackend = useGameStore((s) => s.hasInitializedTonFromBackend);
 
   const { telegramId } = useTelegram();
   const { data: profile } = useGetUserProfile(telegramId ?? "", {
-    query: { enabled: !!telegramId, refetchInterval: 30000 },
+    // Fetch once; disable periodic re-fetches so backend doesn't overwrite in-game spend
+    query: {
+      enabled: !!telegramId && !hasInitializedTonFromBackend,
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: false,
+    },
   } as Parameters<typeof useGetUserProfile>[1]);
 
-  // Sync real TON balance from backend into game store (only when profile is loaded)
+  // Sync real TON balance from backend — only once, on first successful profile load
   useEffect(() => {
-    if (!profile) return;
+    if (!profile || hasInitializedTonFromBackend) return;
     const raw = (profile as { ton?: string | number } | undefined)?.ton;
     const ton = Number(raw ?? 0);
-    if (Number.isFinite(ton) && ton >= 0) setTonBalance(ton);
-  }, [profile, setTonBalance]);
+    if (Number.isFinite(ton) && ton >= 0) {
+      setTonBalance(ton);
+      markTonInitialized();
+    }
+  }, [profile, hasInitializedTonFromBackend, setTonBalance, markTonInitialized]);
 
   useEffect(() => {
     const t = setTimeout(() => init(), 500);

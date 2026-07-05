@@ -1,5 +1,4 @@
-import { useGetUserProfile } from "@workspace/api-client-react";
-import { useTelegram } from "@/lib/telegram";
+import { useGameStore } from "@/store/gameStore";
 import toncoinSrc from "@assets/toncoin_1780755414938.png";
 import tonyxLogoSrc from "/tonyx-logo.jpg?url";
 
@@ -39,13 +38,8 @@ function TonyxIcon() {
 }
 
 export default function Header() {
-  const { telegramId } = useTelegram();
-  const { data: profile } = useGetUserProfile(telegramId ?? "", {
-    query: { enabled: !!telegramId, refetchInterval: 6000 } as any,
-  });
-
-  const ton   = Number((profile as { ton?: string | number } | undefined)?.ton ?? 0);
-  const tonyx = Number((profile as { tonyxCoins?: number } | undefined)?.tonyxCoins ?? 0);
+  const ton   = useGameStore((s) => s.balances.ton);
+  const tonyx = useGameStore((s) => s.balances.tonyx);
 
   return (
     <div style={{

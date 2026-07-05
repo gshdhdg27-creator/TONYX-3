@@ -365,7 +365,13 @@ export default function HeroShopScreen() {
                 owned={ownedIds.has(mage.id)}
                 equipped={equippedIds.has(mage.id)}
                 selectMode={selectMode}
-                onBuy={() => buyMage(mage.id)}
+                onBuy={() => {
+                  buyMage(mage.id);
+                  // In select mode: auto-equip to pending slot right after buying
+                  if (selectMode) {
+                    equipMageToSlot(mage.id);
+                  }
+                }}
                 onSelect={() => equipMageToSlot(mage.id)}
               />
             ))}

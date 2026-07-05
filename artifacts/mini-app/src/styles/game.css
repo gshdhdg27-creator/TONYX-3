@@ -272,25 +272,35 @@
 .mage-slot .ms-lvl   { position: absolute; top: 3px; right: 3px; font-size: 8px; font-weight: 700; color: var(--game-accent2); background: rgba(124,58,237,0.2); border-radius: 3px; padding: 1px 3px; }
 .mage-slot .ms-plus  { font-size: 26px; color: rgba(110, 145, 200, 0.5); line-height: 1; }
 
-/* Filled slot — card image fills the fixed frame */
+/* Filled slot — card image fills the frame exactly, frame overlays on top */
 .mage-slot.filled {
-  padding: 4px;
+  padding: 0;
+  background-image: none; /* frame rendered as overlay instead */
 }
 .mage-slot-img-wrap {
-  width: 100%;
-  height: 100%;
-  border-radius: 5px;
+  position: absolute;
+  inset: 0;
+  border-radius: var(--game-radius);
   overflow: hidden;
-  display: flex;
-  align-items: stretch;
 }
 .mage-slot-img {
   width: 100%;
   height: 100%;
   object-fit: cover;
   display: block;
-  border-radius: 5px;
 }
+/* Frame overlay sits on top of the card image, always same size as slot */
+.mage-slot-frame-overlay {
+  position: absolute;
+  inset: 0;
+  background-image: url('/hero-frame.jpg');
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+  pointer-events: none;
+  z-index: 2;
+}
+/* Level badge above the frame overlay */
+.mage-slot .ms-lvl { z-index: 3; }
 
 /* ─── ACTION PANEL ─────────────────────────────────── */
 .action-panel {

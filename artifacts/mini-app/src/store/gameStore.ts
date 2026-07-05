@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { persist, createJSONStorage } from "zustand/middleware";
 import type {
   GameState,
   BossLevel,
@@ -53,7 +54,7 @@ function calcTotalDps(
     .map((id) => ownedMages.find((m) => m.id === id))
     .filter((m): m is OwnedMage => !!m);
   const raw = equipped.reduce((sum, m) => sum + getMageDps(m), 0);
-  return Math.floor(raw * dpsMultiplier);
+  return raw * dpsMultiplier;
 }
 
 function generateChestRewards(bossLevel: BossLevel): ChestReward[] {
@@ -100,7 +101,9 @@ interface GameStore extends GameState, GameActions {
   bossAnimState: BossAnimState;
 }
 
-export const useGameStore = create<GameStore>((set, get) => ({
+export const useGameStore = create<GameStore>()(
+  persist(
+    (set, get) => ({
   ...initialState,
   bossAnimState: "idle",
 
@@ -286,4 +289,20 @@ export const useGameStore = create<GameStore>((set, get) => ({
   setTonBalance: (ton) => {
     set({ balances: { ...get().balances, ton } });
   },
-}));
+    }),
+    {
+      name: "tonyx-game-state",
+      storage: createJSONStorage(() => localStorage),
+      // Persist only the game progress fields; let view/battle reset on load
+      partialize: (state) => ({
+        ownedMages: state.ownedMages,
+        equippedSlots: state.equippedSlots,
+        balances: state.balances,
+        activeMageIds: state.activeMageIds,
+        nftInventory: state.nftInventory,
+        boost: state.boost,
+        selectedBossLevel: state.selectedBossLevel,
+      }),
+    }
+  )
+);

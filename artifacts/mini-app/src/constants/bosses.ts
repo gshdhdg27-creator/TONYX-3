@@ -4,7 +4,7 @@ export const BOSSES: Record<number, BossConfig> = {
   1: {
     level: 1,
     name: "Shadow Pup",
-    maxHp: 25000,
+    maxHp: 50,
     baseAttack: 2,
     attackInterval: [10, 15],
     rewardTon: 0.01,
@@ -14,7 +14,7 @@ export const BOSSES: Record<number, BossConfig> = {
   2: {
     level: 2,
     name: "Rage Dogg",
-    maxHp: 50000,
+    maxHp: 200,
     baseAttack: 5,
     attackInterval: [10, 14],
     rewardTon: 0.03,
@@ -24,7 +24,7 @@ export const BOSSES: Record<number, BossConfig> = {
   3: {
     level: 3,
     name: "Inferno Dogg",
-    maxHp: 100000,
+    maxHp: 700,
     baseAttack: 12,
     attackInterval: [9, 13],
     rewardTon: 0.08,
@@ -34,7 +34,7 @@ export const BOSSES: Record<number, BossConfig> = {
   4: {
     level: 4,
     name: "Storm Dogg",
-    maxHp: 250000,
+    maxHp: 2000,
     baseAttack: 25,
     attackInterval: [8, 12],
     rewardTon: 0.2,
@@ -44,7 +44,7 @@ export const BOSSES: Record<number, BossConfig> = {
   5: {
     level: 5,
     name: "Boss Dogg Prime",
-    maxHp: 500000,
+    maxHp: 6000,
     baseAttack: 60,
     attackInterval: [8, 11],
     rewardTon: 0.5,

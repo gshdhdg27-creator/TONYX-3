@@ -272,16 +272,15 @@
 .mage-slot .ms-lvl   { position: absolute; top: 3px; right: 3px; font-size: 8px; font-weight: 700; color: var(--game-accent2); background: rgba(124,58,237,0.2); border-radius: 3px; padding: 1px 3px; }
 .mage-slot .ms-plus  { font-size: 26px; color: rgba(110, 145, 200, 0.5); line-height: 1; }
 
-/* Filled slot — card image sits inside the frame background */
+/* Filled slot — card image fills the entire slot, frame hidden */
 .mage-slot.filled {
   padding: 0;
-  /* frame background-image is inherited from .mage-slot */
+  background-image: none; /* remove frame when card is placed */
 }
 .mage-slot-img-wrap {
   position: absolute;
-  /* small inset so the frame border peeks around the card edge */
-  inset: 3px;
-  border-radius: calc(var(--game-radius) - 2px);
+  inset: 0;
+  border-radius: var(--game-radius);
   overflow: hidden;
 }
 .mage-slot-img {

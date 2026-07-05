@@ -30,8 +30,6 @@ export default function MageSlot({ mage, isEmpty, slotIndex, onClick }: MageSlot
           <span className="ms-emoji">{mage.emoji}</span>
         )}
       </div>
-      {/* Frame overlay — always exactly the same size as the slot */}
-      <div className="mage-slot-frame-overlay" />
       {mage.level > 1 && <span className="ms-lvl">Lv{mage.level}</span>}
     </div>
   );

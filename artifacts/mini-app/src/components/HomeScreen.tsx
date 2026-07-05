@@ -1,5 +1,6 @@
 import { useCallback, useRef } from "react";
 import { useGameStore } from "../store/gameStore";
+import { getMageDps } from "../constants/mages";
 import { BOSSES } from "../constants/bosses";
 import BossLevelSelect from "./boss/BossLevelSelect";
 import BossArena from "./boss/BossArena";
@@ -39,10 +40,10 @@ export default function HomeScreen() {
   );
   const boostActive = boost.boostExpiresAt !== null && Date.now() < boost.boostExpiresAt;
 
-  // Display DPS = sum of card dps values (from table), scaled by boost multiplier
+  // Display DPS = same formula used in battle (baseDps * level scaling * boost)
   const rawDisplayDps = slots
     .filter((m): m is NonNullable<typeof m> => !!m)
-    .reduce((sum, m) => sum + m.dps, 0);
+    .reduce((sum, m) => sum + getMageDps(m), 0);
   const displayDps = (rawDisplayDps * boost.dpsMultiplier).toFixed(2);
 
   const handleBoost = useCallback(async () => {

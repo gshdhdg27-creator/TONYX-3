@@ -247,4 +247,4 @@ export const MAGES: MageConfig[] = [
 ];
 
 export const getMageDps = (mage: MageConfig): number =>
-  mage.dps * Math.pow(1.4, mage.level - 1);
+  mage.baseDps * Math.pow(1.4, mage.level - 1);

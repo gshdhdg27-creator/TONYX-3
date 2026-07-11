@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTonConnectUI, useTonAddress } from "@tonconnect/ui-react";
-import tonyxLogoSrc from "/tonyx-logo.jpg?url";
+const tonyxLogoSrc = "/tonyx-logo.jpg";
 import {
   useGetUserProfile,
   getGetUserProfileQueryKey,

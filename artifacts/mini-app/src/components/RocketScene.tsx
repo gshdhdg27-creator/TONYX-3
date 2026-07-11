@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from "react";
-import rocketSrc from "/rocket.png?url";
+const rocketSrc = "/rocket.png";
 
 const CSS = `
   #rk-root{

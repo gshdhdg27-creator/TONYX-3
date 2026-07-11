@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import tonyxLogoSrc from "/tonyx-logo.jpg?url";
+const tonyxLogoSrc = "/tonyx-logo.jpg";
 
 const CSS = `
   #sp-root{

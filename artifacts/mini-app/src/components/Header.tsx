@@ -1,6 +1,6 @@
 import { useGameStore } from "@/store/gameStore";
 import toncoinSrc from "@assets/toncoin_1780755414938.png";
-import tonyxLogoSrc from "/tonyx-logo.jpg?url";
+const tonyxLogoSrc = "/tonyx-logo.jpg";
 
 function TonIcon() {
   return (

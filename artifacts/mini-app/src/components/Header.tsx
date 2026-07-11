@@ -1,4 +1,6 @@
 import { useGameStore } from "@/store/gameStore";
+import { useGetUserProfile } from "@workspace/api-client-react";
+import { useTelegram } from "@/lib/telegram";
 import toncoinSrc from "@assets/toncoin_1780755414938.png";
 const tonyxLogoSrc = "/tonyx-logo.jpg";
 
@@ -38,8 +40,21 @@ function TonyxIcon() {
 }
 
 export default function Header() {
-  const ton   = useGameStore((s) => s.balances.ton);
-  const tonyx = useGameStore((s) => s.balances.tonyx);
+  const storeTon   = useGameStore((s) => s.balances.ton);
+  const storeTonyx = useGameStore((s) => s.balances.tonyx);
+
+  const { telegramId } = useTelegram();
+  const { data: profile } = useGetUserProfile(telegramId ?? "", {
+    query: {
+      enabled: !!telegramId,
+      refetchInterval: 30_000,
+      refetchOnWindowFocus: true,
+    },
+  } as Parameters<typeof useGetUserProfile>[1]);
+
+  // Prefer live server balance; fall back to local store (covers local gameplay state)
+  const ton   = profile ? Number((profile as { ton?: string | number }).ton   ?? 0) : storeTon;
+  const tonyx = profile ? Number((profile as { tonyxCoins?: number }).tonyxCoins ?? 0) : storeTonyx;
 
   return (
     <div style={{

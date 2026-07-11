@@ -25,6 +25,7 @@ export default function BoostModal({ onClose }: Props) {
   const buyDpsBoost = useGameStore((s) => s.buyDpsBoost);
 
   const [watching, setWatching] = useState(false);
+  const [adError, setAdError] = useState<string | null>(null);
   const bodySnapshotRef = useRef<Set<Element>>(new Set());
 
   const adBoostActive = !!(boost.boostExpiresAt && Date.now() < boost.boostExpiresAt);
@@ -42,6 +43,7 @@ export default function BoostModal({ onClose }: Props) {
 
   const handleWatchAd = async () => {
     if (watching || adBoostActive) return;
+    setAdError(null);
     setWatching(true);
     bodySnapshotRef.current = new Set(Array.from(document.body.children));
     await showRewardedAd({
@@ -50,10 +52,21 @@ export default function BoostModal({ onClose }: Props) {
         removeAdsgramOverlays(bodySnapshotRef.current);
         watchAd();
       },
-      onSkip: () => removeAdsgramOverlays(bodySnapshotRef.current),
+      onSkip: () => {
+        removeAdsgramOverlays(bodySnapshotRef.current);
+      },
       onError: (err: AdError) => {
         removeAdsgramOverlays(bodySnapshotRef.current);
         console.error("[AdsGram]", err);
+        if (err.reason === "not_loaded") {
+          setAdError("Реклама недоступна. Убедитесь, что вы открыли приложение через Telegram.");
+        } else if (err.reason === "no_ads") {
+          setAdError("Нет доступной рекламы. Попробуйте позже.");
+        } else if (err.reason === "network") {
+          setAdError("Ошибка сети. Проверьте соединение и попробуйте снова.");
+        } else {
+          setAdError("Не удалось показать рекламу. Попробуйте позже.");
+        }
       },
     });
     setWatching(false);
@@ -85,6 +98,15 @@ export default function BoostModal({ onClose }: Props) {
             {watching ? "⏳" : adBoostActive ? "Готово" : "▶ Смотреть"}
           </button>
         </div>
+        {adError && (
+          <div style={{
+            fontSize: 11, color: "#f87171", marginTop: 6, lineHeight: 1.4,
+            padding: "6px 10px", background: "rgba(239,68,68,0.1)",
+            borderRadius: 8, border: "1px solid rgba(239,68,68,0.25)",
+          }}>
+            {adError}
+          </div>
+        )}
 
         {/* ── Option 2: +50% paid ── */}
         <div className={`boost-option${currentTonMult >= 1.5 && tonBoostActive ? " boost-option--active" : ""}`}>

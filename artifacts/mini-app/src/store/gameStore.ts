@@ -19,7 +19,7 @@ import {
 
 const initialState: GameState = {
   view: "loading",
-  balances: { ton: 0.05, tonyx: 200 },
+  balances: { ton: 0, tonyx: 0 },
   selectedBossLevel: 1,
   battle: {
     active: false,
@@ -101,6 +101,8 @@ interface GameActions {
   buyMage: (mageId: string) => void;
   /** Sync real TON wallet balance from backend profile */
   setTonBalance: (ton: number) => void;
+  /** Sync real TONYX balance from backend profile */
+  setTonyxBalance: (tonyx: number) => void;
   /** Mark that the initial backend balance has been synced — prevents future overwrites */
   markTonInitialized: () => void;
 }
@@ -371,6 +373,10 @@ export const useGameStore = create<GameStore>()(
 
   setTonBalance: (ton) => {
     set({ balances: { ...get().balances, ton } });
+  },
+
+  setTonyxBalance: (tonyx) => {
+    set({ balances: { ...get().balances, tonyx } });
   },
 
   markTonInitialized: () => {

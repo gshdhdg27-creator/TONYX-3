@@ -19,29 +19,29 @@ export default function HomePage() {
   const view = useGameStore((s) => s.view);
   const init = useGameStore((s) => s.init);
   const setTonBalance = useGameStore((s) => s.setTonBalance);
+  const setTonyxBalance = useGameStore((s) => s.setTonyxBalance);
   const markTonInitialized = useGameStore((s) => s.markTonInitialized);
-  const hasInitializedTonFromBackend = useGameStore((s) => s.hasInitializedTonFromBackend);
 
   const { telegramId } = useTelegram();
   const { data: profile } = useGetUserProfile(telegramId ?? "", {
-    // Fetch once; disable periodic re-fetches so backend doesn't overwrite in-game spend
     query: {
-      enabled: !!telegramId && !hasInitializedTonFromBackend,
-      refetchOnWindowFocus: false,
-      refetchOnReconnect: false,
+      enabled: !!telegramId,
+      refetchInterval: 30_000,
+      refetchOnWindowFocus: true,
     },
   } as Parameters<typeof useGetUserProfile>[1]);
 
-  // Sync real TON balance from backend — only once, on first successful profile load
+  // Sync TON + TONYX balances from backend on every profile load
   useEffect(() => {
-    if (!profile || hasInitializedTonFromBackend) return;
-    const raw = (profile as { ton?: string | number } | undefined)?.ton;
-    const ton = Number(raw ?? 0);
-    if (Number.isFinite(ton) && ton >= 0) {
-      setTonBalance(ton);
-      markTonInitialized();
-    }
-  }, [profile, hasInitializedTonFromBackend, setTonBalance, markTonInitialized]);
+    if (!profile) return;
+    const rawTon = (profile as { ton?: string | number }).ton;
+    const ton = Number(rawTon ?? 0);
+    const rawTonyx = (profile as { tonyxCoins?: number }).tonyxCoins;
+    const tonyx = Number(rawTonyx ?? 0);
+    if (Number.isFinite(ton) && ton >= 0) setTonBalance(ton);
+    if (Number.isFinite(tonyx) && tonyx >= 0) setTonyxBalance(tonyx);
+    markTonInitialized();
+  }, [profile, setTonBalance, setTonyxBalance, markTonInitialized]);
 
   useEffect(() => {
     const t = setTimeout(() => init(), 500);

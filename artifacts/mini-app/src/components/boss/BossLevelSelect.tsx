@@ -17,8 +17,8 @@ export default function BossLevelSelect() {
           key={lvl}
           className={`level-btn${selected === lvl ? " active" : ""}`}
           style={selected === lvl ? { borderColor: BOSSES[lvl].color, color: BOSSES[lvl].color } : {}}
-          onClick={() => !battleActive && selectBoss(lvl)}
-          disabled={battleActive}
+          onClick={() => selectBoss(lvl)}
+          disabled={false}
         >
           Boss {NUMERALS[i]}
         </button>

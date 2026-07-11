@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="90" height="120" viewBox="0 0 90 120">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#60a5fa" stop-opacity="0.9"/>
+      <stop offset="100%" stop-color="#1e3a8a"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="45%" r="40%">
+      <stop offset="0%" stop-color="#60a5fa" stop-opacity="0.4"/>
+      <stop offset="100%" stop-color="transparent"/>
+    </radialGradient>
+  </defs>
+  <rect width="90" height="120" fill="url(#bg)" rx="6"/>
+  <rect width="90" height="120" fill="url(#glow)" rx="6"/>
+  <rect x="1" y="1" width="88" height="118" fill="none" stroke="#60a5fa" stroke-width="1.5" stroke-opacity="0.6" rx="5"/>
+  <text x="45" y="58" text-anchor="middle" dominant-baseline="middle" font-size="38" font-family="Segoe UI Emoji,Apple Color Emoji,sans-serif">⚡</text>
+  <circle cx="45" cy="112" r="3" fill="#60a5fa" opacity="0.9"/>
+</svg>

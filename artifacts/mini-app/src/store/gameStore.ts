@@ -42,6 +42,8 @@ const initialState: GameState = {
     adWatchedCount: 0,
     boostExpiresAt: null,
     speedMultiplier: 1,
+    tonBoostMultiplier: 1.0,
+    tonBoostExpiresAt: null,
   },
   hasInitializedTonFromBackend: false,
 };
@@ -88,6 +90,8 @@ interface GameActions {
   claimChestRewards: () => void;
   watchAd: () => Promise<void>;
   buySpeedBoost: () => void;
+  /** Purchase a paid DPS boost: multiplier = 1.5 (+50%) or 2.0 (+100%) */
+  buyDpsBoost: (multiplier: number, costTon: number) => void;
   init: () => void;
   /** Open hero-shop to pick a card for slot [index] */
   clickSlot: (index: number) => void;
@@ -144,7 +148,8 @@ export const useGameStore = create<GameStore>()(
     const { ownedMages, equippedSlots, boost } = get();
     const equippedCount = equippedSlots.filter(Boolean).length;
     if (equippedCount === 0) return;
-    const dps = calcTotalDps(ownedMages, equippedSlots, boost.dpsMultiplier);
+    const tonMult = (boost.tonBoostExpiresAt && Date.now() < boost.tonBoostExpiresAt) ? boost.tonBoostMultiplier : 1;
+    const dps = calcTotalDps(ownedMages, equippedSlots, boost.dpsMultiplier * tonMult);
     // Stay on home view — battle runs in the background with countdown on button
     set({
       battle: {
@@ -243,16 +248,41 @@ export const useGameStore = create<GameStore>()(
     set({ boost: { ...boost, speedMultiplier: 2 }, balances: { ...balances, ton: balances.ton - 0.1 } });
   },
 
+  buyDpsBoost: (multiplier, costTon) => {
+    const { boost, balances, ownedMages, equippedSlots, battle } = get();
+    if (balances.ton < costTon) return;
+    const newBoost = {
+      ...boost,
+      tonBoostMultiplier: multiplier,
+      tonBoostExpiresAt: Date.now() + 24 * 60 * 60 * 1000,
+    };
+    const dps = calcTotalDps(ownedMages, equippedSlots, newBoost.dpsMultiplier * multiplier);
+    set({
+      balances: { ...balances, ton: balances.ton - costTon },
+      boost: newBoost,
+      battle: { ...battle, totalDps: dps },
+    });
+  },
+
   init: () => {
     const { boost, ownedMages, equippedSlots, battle, selectedBossLevel } = get();
 
-    // Expire boost if needed
+    // Expire ad boost if needed
     let dpsMultiplier = boost.dpsMultiplier;
+    let currentBoost = boost;
     if (boost.boostExpiresAt && Date.now() > boost.boostExpiresAt) {
       dpsMultiplier = 1.0;
-      set({ boost: { ...boost, dpsMultiplier: 1.0, boostExpiresAt: null, adWatchedCount: 0 } });
+      currentBoost = { ...boost, dpsMultiplier: 1.0, boostExpiresAt: null, adWatchedCount: 0 };
+      set({ boost: currentBoost });
     }
-    const dps = calcTotalDps(ownedMages, equippedSlots, dpsMultiplier);
+    // Expire paid TON boost if needed
+    let tonMult = currentBoost.tonBoostMultiplier ?? 1;
+    if (currentBoost.tonBoostExpiresAt && Date.now() > currentBoost.tonBoostExpiresAt) {
+      tonMult = 1.0;
+      currentBoost = { ...currentBoost, tonBoostMultiplier: 1.0, tonBoostExpiresAt: null };
+      set({ boost: currentBoost });
+    }
+    const dps = calcTotalDps(ownedMages, equippedSlots, dpsMultiplier * tonMult);
 
     // ── Offline progress ────────────────────────────────────────────────
     // If a battle was running when the app closed, apply damage for the

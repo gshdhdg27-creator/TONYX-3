@@ -86,10 +86,14 @@ export interface BattleState {
 
 // ─── BOOST ─────────────────────────────────────────────
 export interface BoostState {
+  /** Ad-earned multiplier: 1.0 or 1.2 */
   dpsMultiplier: number;
   adWatchedCount: number;
   boostExpiresAt: number | null;
   speedMultiplier: number;
+  /** TON-purchased multiplier: 1.0, 1.5 (+50%), or 2.0 (+100%) */
+  tonBoostMultiplier: number;
+  tonBoostExpiresAt: number | null;
 }
 
 // ─── ROOT GAME STATE ───────────────────────────────────

@@ -17,6 +17,8 @@ import {
   NFT_FULL_DROP_CHANCE,
 } from "../constants/nft";
 
+export const BATTLE_DURATION_SEC = 60;
+
 const initialState: GameState = {
   view: "loading",
   balances: { ton: 0.05, tonyx: 200 },
@@ -27,6 +29,7 @@ const initialState: GameState = {
     heroHp: 100,
     totalDps: 0,
     lastRewards: null,
+    battleStartedAt: null,
   },
   ownedMages: [],
   activeMageIds: [],
@@ -144,15 +147,27 @@ export const useGameStore = create<GameStore>()(
     const equippedCount = equippedSlots.filter(Boolean).length;
     if (equippedCount === 0) return;
     const dps = calcTotalDps(ownedMages, equippedSlots, boost.dpsMultiplier);
+    // Stay on home view — battle runs in the background with countdown on button
     set({
-      view: "battle",
-      battle: { active: true, bossHpPercent: 100, heroHp: 100, totalDps: dps, lastRewards: null },
+      battle: {
+        active: true,
+        bossHpPercent: 100,
+        heroHp: 100,
+        totalDps: dps,
+        lastRewards: null,
+        battleStartedAt: Date.now(),
+      },
     });
   },
 
   tickBattle: (deltaMs) => {
     const { battle, selectedBossLevel, boost } = get();
     if (!battle.active) return;
+    // Time-based completion: battle lasts BATTLE_DURATION_SEC seconds
+    const elapsed = battle.battleStartedAt
+      ? (Date.now() - battle.battleStartedAt) / 1000
+      : BATTLE_DURATION_SEC;
+    if (elapsed >= BATTLE_DURATION_SEC) { get().finishBoss(); return; }
     const boss = BOSSES[selectedBossLevel];
     const dmgToBoss = (battle.totalDps * (deltaMs / 1000)) * boost.speedMultiplier;
     const dmgPercent = (dmgToBoss / boss.maxHp) * 100;
@@ -177,7 +192,7 @@ export const useGameStore = create<GameStore>()(
   resetBattle: () => {
     const { ownedMages, equippedSlots, boost } = get();
     const dps = calcTotalDps(ownedMages, equippedSlots, boost.dpsMultiplier);
-    set({ battle: { ...initialState.battle, totalDps: dps }, view: "home" });
+    set({ battle: { ...initialState.battle, totalDps: dps, battleStartedAt: null }, view: "home" });
   },
 
   setBossAnimState: (state) => set({ bossAnimState: state }),

@@ -1,6 +1,7 @@
-import { useCallback, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useGameStore } from "../store/gameStore";
 import { getMageDps } from "../constants/mages";
+import { BATTLE_DURATION_SEC } from "../store/gameStore";
 import { BOSSES } from "../constants/bosses";
 import BossLevelSelect from "./boss/BossLevelSelect";
 import BossArena from "./boss/BossArena";
@@ -26,11 +27,29 @@ export default function HomeScreen() {
   const equippedSlots = useGameStore((s) => s.equippedSlots);
   const boost = useGameStore((s) => s.boost);
   const startBattle = useGameStore((s) => s.startBattle);
+  const battleActive = useGameStore((s) => s.battle.active);
+  const battleStartedAt = useGameStore((s) => s.battle.battleStartedAt);
   const setView = useGameStore((s) => s.setView);
   const clickSlot = useGameStore((s) => s.clickSlot);
   const watchAd = useGameStore((s) => s.watchAd);
 
   const bodySnapshotRef = useRef<Set<Element>>(new Set());
+
+  // Countdown: updates every 500ms while battle is active
+  const [timeLeft, setTimeLeft] = useState(BATTLE_DURATION_SEC);
+  useEffect(() => {
+    if (!battleActive || !battleStartedAt) {
+      setTimeLeft(BATTLE_DURATION_SEC);
+      return;
+    }
+    const update = () => {
+      const elapsed = (Date.now() - battleStartedAt) / 1000;
+      setTimeLeft(Math.max(0, BATTLE_DURATION_SEC - elapsed));
+    };
+    update();
+    const id = setInterval(update, 500);
+    return () => clearInterval(id);
+  }, [battleActive, battleStartedAt]);
 
   const boss = BOSSES[bossLevel];
   const canStart = equippedSlots.some(Boolean);
@@ -103,10 +122,12 @@ export default function HomeScreen() {
           <button
             className="btn btn-primary"
             style={{ flex: 2 }}
-            onClick={startBattle}
-            disabled={!canStart}
+            onClick={battleActive ? undefined : startBattle}
+            disabled={!canStart || battleActive}
           >
-            ⚔️ Начать бой
+            {battleActive
+              ? `⚔️ ${String(Math.floor(timeLeft / 60)).padStart(2, "0")}:${String(Math.floor(timeLeft % 60)).padStart(2, "0")}`
+              : "⚔️ Начать бой"}
           </button>
           <button
             className="btn btn-boost"

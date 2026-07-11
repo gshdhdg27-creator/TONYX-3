@@ -80,6 +80,8 @@ export interface BattleState {
   heroHp: number;
   totalDps: number;
   lastRewards: ChestReward[] | null;
+  /** Timestamp (ms) when the current battle started, for countdown */
+  battleStartedAt: number | null;
 }
 
 // ─── BOOST ─────────────────────────────────────────────

@@ -3,14 +3,19 @@ import { useGameStore } from "@/store/gameStore";
 import { useTelegram } from "@/lib/telegram";
 import { useGetUserProfile } from "@workspace/api-client-react";
 import HomeScreen from "@/components/HomeScreen";
-import BattleScreen from "@/components/battle/BattleScreen";
 import ChestScreen from "@/components/chest/ChestScreen";
 import CollectionScreen from "@/components/collection/CollectionScreen";
 import HeroShopScreen from "@/components/hero-shop/HeroShopScreen";
 import LoadingScreen from "@/components/ui/LoadingScreen";
+import { useBattleLoop } from "@/hooks/useBattleLoop";
+import { useBossAnimation } from "@/hooks/useBossAnimation";
 import "@/styles/game.css";
 
 export default function HomePage() {
+  // Battle loop and boss animation run here so they work regardless of sub-view
+  useBattleLoop();
+  useBossAnimation();
+
   const view = useGameStore((s) => s.view);
   const init = useGameStore((s) => s.init);
   const setTonBalance = useGameStore((s) => s.setTonBalance);
@@ -47,7 +52,6 @@ export default function HomePage() {
     <>
       {view === "loading" && <LoadingScreen />}
       {view === "home" && <HomeScreen />}
-      {view === "battle" && <BattleScreen />}
       {view === "chest" && <ChestScreen />}
       {view === "collection" && <CollectionScreen />}
       {view === "hero-shop" && <HeroShopScreen />}

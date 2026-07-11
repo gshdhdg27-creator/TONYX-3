@@ -1,13 +1,24 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useGameStore } from "../store/gameStore";
 import { getMageDps } from "../constants/mages";
-import { BATTLE_DURATION_SEC } from "../store/gameStore";
 import { BOSSES } from "../constants/bosses";
 import BossLevelSelect from "./boss/BossLevelSelect";
 import BossArena from "./boss/BossArena";
 import HpBar from "./ui/HpBar";
 import MageSlot from "./ui/MageSlot";
 import { showRewardedAd, ADSGRAM_BLOCK_ID, type AdError } from "@/lib/adsgram";
+
+/** Format seconds → "01:23" / "02:30:45" / "3д 02:30" */
+function formatTimeLeft(sec: number): string {
+  if (!isFinite(sec) || sec <= 0) return "00:00";
+  const d = Math.floor(sec / 86400);
+  const h = Math.floor((sec % 86400) / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = Math.floor(sec % 60);
+  if (d > 0) return `${d}д ${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+  if (h > 0) return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
 
 function removeAdsgramOverlays(snapshot: Set<Element>) {
   try {
@@ -22,48 +33,44 @@ function removeAdsgramOverlays(snapshot: Set<Element>) {
 }
 
 export default function HomeScreen() {
-  const bossLevel = useGameStore((s) => s.selectedBossLevel);
-  const ownedMages = useGameStore((s) => s.ownedMages);
-  const equippedSlots = useGameStore((s) => s.equippedSlots);
-  const boost = useGameStore((s) => s.boost);
-  const startBattle = useGameStore((s) => s.startBattle);
-  const battleActive = useGameStore((s) => s.battle.active);
-  const battleStartedAt = useGameStore((s) => s.battle.battleStartedAt);
-  const setView = useGameStore((s) => s.setView);
-  const clickSlot = useGameStore((s) => s.clickSlot);
-  const watchAd = useGameStore((s) => s.watchAd);
+  const bossLevel      = useGameStore((s) => s.selectedBossLevel);
+  const ownedMages     = useGameStore((s) => s.ownedMages);
+  const equippedSlots  = useGameStore((s) => s.equippedSlots);
+  const boost          = useGameStore((s) => s.boost);
+  const startBattle    = useGameStore((s) => s.startBattle);
+  const battleActive   = useGameStore((s) => s.battle.active);
+  const bossHpPercent  = useGameStore((s) => s.battle.bossHpPercent);
+  const battleTotalDps = useGameStore((s) => s.battle.totalDps);
+  const setView        = useGameStore((s) => s.setView);
+  const clickSlot      = useGameStore((s) => s.clickSlot);
+  const watchAd        = useGameStore((s) => s.watchAd);
 
-  const bodySnapshotRef = useRef<Set<Element>>(new Set());
-
-  // Countdown: updates every 500ms while battle is active
-  const [timeLeft, setTimeLeft] = useState(BATTLE_DURATION_SEC);
-  useEffect(() => {
-    if (!battleActive || !battleStartedAt) {
-      setTimeLeft(BATTLE_DURATION_SEC);
-      return;
-    }
-    const update = () => {
-      const elapsed = (Date.now() - battleStartedAt) / 1000;
-      setTimeLeft(Math.max(0, BATTLE_DURATION_SEC - elapsed));
-    };
-    update();
-    const id = setInterval(update, 500);
-    return () => clearInterval(id);
-  }, [battleActive, battleStartedAt]);
-
-  const boss = BOSSES[bossLevel];
-  const canStart = equippedSlots.some(Boolean);
-  // Resolve equipped mage objects from slot IDs
-  const slots = equippedSlots.map((id) =>
+  const boss      = BOSSES[bossLevel];
+  const canStart  = equippedSlots.some(Boolean);
+  const slots     = equippedSlots.map((id) =>
     id ? (ownedMages.find((m) => m.id === id) ?? null) : null
   );
   const boostActive = boost.boostExpiresAt !== null && Date.now() < boost.boostExpiresAt;
 
-  // Display DPS = same formula used in battle (baseDps * level scaling * boost)
+  // Display DPS (same formula as battle)
   const rawDisplayDps = slots
     .filter((m): m is NonNullable<typeof m> => !!m)
     .reduce((sum, m) => sum + getMageDps(m), 0);
   const displayDps = (rawDisplayDps * boost.dpsMultiplier).toFixed(2);
+
+  // Time-to-kill = remaining HP / current DPS
+  const remainingHp   = boss.maxHp * (bossHpPercent / 100);
+  const secondsToKill = battleTotalDps > 0 ? remainingHp / battleTotalDps : Infinity;
+
+  // Ticker: re-render every second so the countdown stays fresh
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    if (!battleActive) return;
+    const id = setInterval(() => setTick((t) => t + 1), 1000);
+    return () => clearInterval(id);
+  }, [battleActive]);
+
+  const bodySnapshotRef = useRef<Set<Element>>(new Set());
 
   const handleBoost = useCallback(async () => {
     bodySnapshotRef.current = new Set(Array.from(document.body.children));
@@ -73,9 +80,7 @@ export default function HomeScreen() {
         removeAdsgramOverlays(bodySnapshotRef.current);
         watchAd();
       },
-      onSkip: () => {
-        removeAdsgramOverlays(bodySnapshotRef.current);
-      },
+      onSkip: () => removeAdsgramOverlays(bodySnapshotRef.current),
       onError: (err: AdError) => {
         removeAdsgramOverlays(bodySnapshotRef.current);
         console.error("[AdsGram boost] error:", err.reason, err.description);
@@ -89,7 +94,12 @@ export default function HomeScreen() {
       <BossArena />
 
       <div style={{ padding: "4px 16px 2px" }}>
-        <HpBar hp={100} maxHp={boss.maxHp} bossName={boss.name} />
+        {/* Show live boss HP during battle, full bar otherwise */}
+        <HpBar
+          hp={battleActive ? bossHpPercent : 100}
+          maxHp={boss.maxHp}
+          bossName={boss.name}
+        />
       </div>
 
       <div className="dps-display">
@@ -126,7 +136,7 @@ export default function HomeScreen() {
             disabled={!canStart || battleActive}
           >
             {battleActive
-              ? `⚔️ ${String(Math.floor(timeLeft / 60)).padStart(2, "0")}:${String(Math.floor(timeLeft % 60)).padStart(2, "0")}`
+              ? `⚔️ ${formatTimeLeft(secondsToKill)}`
               : "⚔️ Начать бой"}
           </button>
           <button

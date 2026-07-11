@@ -244,13 +244,55 @@ export const useGameStore = create<GameStore>()(
   },
 
   init: () => {
-    const { boost, ownedMages, equippedSlots } = get();
+    const { boost, ownedMages, equippedSlots, battle, selectedBossLevel } = get();
+
+    // Expire boost if needed
     let dpsMultiplier = boost.dpsMultiplier;
     if (boost.boostExpiresAt && Date.now() > boost.boostExpiresAt) {
       dpsMultiplier = 1.0;
       set({ boost: { ...boost, dpsMultiplier: 1.0, boostExpiresAt: null, adWatchedCount: 0 } });
     }
     const dps = calcTotalDps(ownedMages, equippedSlots, dpsMultiplier);
+
+    // ── Offline progress ────────────────────────────────────────────────
+    // If a battle was running when the app closed, apply damage for the
+    // time the user was away and either finish the boss or resume the fight.
+    if (battle.active && battle.battleStartedAt) {
+      const boss = BOSSES[selectedBossLevel];
+      const offlineSec = (Date.now() - battle.battleStartedAt) / 1000;
+      const offlineDmg = battle.totalDps * offlineSec * boost.speedMultiplier;
+      const offlineDmgPct = (offlineDmg / boss.maxHp) * 100;
+      const newHpPct = Math.max(0, battle.bossHpPercent - offlineDmgPct);
+
+      if (newHpPct <= 0) {
+        // Boss was killed while offline → show chest immediately
+        const rewards = generateChestRewards(selectedBossLevel);
+        set({
+          view: "chest",
+          battle: {
+            ...battle,
+            active: false,
+            bossHpPercent: 0,
+            lastRewards: rewards,
+            totalDps: dps,
+          },
+        });
+      } else {
+        // Battle continues — update HP, refresh DPS, stamp new start time
+        set({
+          view: "home",
+          battle: {
+            ...battle,
+            bossHpPercent: newHpPct,
+            totalDps: dps,
+            battleStartedAt: Date.now(),
+          },
+        });
+      }
+      return;
+    }
+    // ───────────────────────────────────────────────────────────────────
+
     set({ view: "home", battle: { ...get().battle, totalDps: dps } });
   },
 
@@ -308,7 +350,7 @@ export const useGameStore = create<GameStore>()(
     {
       name: "tonyx-game-state",
       storage: createJSONStorage(() => localStorage),
-      // Persist only the game progress fields; let view/battle reset on load
+      // Persist game progress including active battle for offline progress
       partialize: (state) => ({
         ownedMages: state.ownedMages,
         equippedSlots: state.equippedSlots,
@@ -318,6 +360,7 @@ export const useGameStore = create<GameStore>()(
         boost: state.boost,
         selectedBossLevel: state.selectedBossLevel,
         hasInitializedTonFromBackend: state.hasInitializedTonFromBackend,
+        battle: state.battle,
       }),
     }
   )

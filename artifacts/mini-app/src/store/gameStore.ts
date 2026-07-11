@@ -384,18 +384,16 @@ export const useGameStore = create<GameStore>()(
   },
     }),
     {
-      name: "tonyx-game-state",
+      name: "tonyx-game-state-v2",
       storage: createJSONStorage(() => localStorage),
-      // Persist game progress including active battle for offline progress
+      // Persist game progress; balances come exclusively from the server on every load
       partialize: (state) => ({
         ownedMages: state.ownedMages,
         equippedSlots: state.equippedSlots,
-        balances: state.balances,
         activeMageIds: state.activeMageIds,
         nftInventory: state.nftInventory,
         boost: state.boost,
         selectedBossLevel: state.selectedBossLevel,
-        hasInitializedTonFromBackend: state.hasInitializedTonFromBackend,
         battle: state.battle,
       }),
     }

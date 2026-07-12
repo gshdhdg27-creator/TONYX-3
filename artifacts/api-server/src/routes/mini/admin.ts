@@ -95,6 +95,42 @@ router.get("/user-status", async (req, res) => {
   }
 });
 
+/* GET /admin/settings/game-config — PUBLIC, read by game frontend + admin panel */
+router.get("/settings/game-config", async (_req, res) => {
+  try {
+    const rows = await db.select().from(systemSettingsTable);
+    const s: Record<string, string> = {};
+    for (const r of rows) s[r.key] = r.value;
+    res.json({
+      bosses: [1,2,3,4,5].map(level => ({
+        level,
+        hp:         s[`boss_hp_${level}`]          ? parseInt(s[`boss_hp_${level}`]!)           : null,
+        reviveTon:  s[`boss_revive_ton_${level}`]  ? parseFloat(s[`boss_revive_ton_${level}`]!) : null,
+        reviveAds:  s[`boss_revive_ads_${level}`]  !== undefined ? (s[`boss_revive_ads_${level}`] === "null" ? null : parseInt(s[`boss_revive_ads_${level}`]!)) : undefined,
+      })),
+      respawnHours: parseInt(s["boss_respawn_hours"] ?? "") || 24,
+      adBoostPct:   parseInt(s["boost_ad_pct"] ?? "") || 20,
+      tonBoostPct1: parseInt(s["boost_ton_pct_1"] ?? "") || 50,
+      tonBoostPct2: parseInt(s["boost_ton_pct_2"] ?? "") || 100,
+    });
+  } catch (e) { res.status(500).json({ error: String(e) }); }
+});
+
+/* GET /admin/settings/games-enabled — PUBLIC */
+router.get("/settings/games-enabled", async (_req, res) => {
+  try {
+    const rows = await db.select().from(systemSettingsTable);
+    const s: Record<string, string> = {};
+    for (const r of rows) s[r.key] = r.value;
+    res.json({
+      spin:  s["game_enabled_spin"]  !== "false",
+      mines: s["game_enabled_mines"] !== "false",
+      arena: s["game_enabled_arena"] !== "false",
+      igro:  s["game_enabled_igro"]  !== "false",
+    });
+  } catch (e) { res.status(500).json({ error: String(e) }); }
+});
+
 /* GET /admin/online-count — public, no auth required */
 router.get("/online-count", async (_req, res) => {
   try {
@@ -866,6 +902,215 @@ router.post("/topups/:id/reject", async (req, res) => {
     console.error("[Admin] topup reject error:", e);
     res.status(500).json({ error: "Server error" });
   }
+});
+
+/* ══════════════════════════════════════════════════════════════════
+   GAME CONFIG — protected write
+══════════════════════════════════════════════════════════════════ */
+
+router.post("/settings/game-config", async (req, res) => {
+  try {
+    const body = req.body as Record<string, unknown>;
+    const upserts: { key: string; value: string }[] = [];
+    const bosses = body.bosses as Record<string, unknown>[] | undefined;
+    if (bosses) {
+      for (let i = 0; i < bosses.length; i++) {
+        const b = bosses[i] as Record<string, unknown>;
+        const level = i + 1;
+        if (b.hp        != null) upserts.push({ key: `boss_hp_${level}`,          value: String(b.hp) });
+        if (b.reviveTon != null) upserts.push({ key: `boss_revive_ton_${level}`,  value: String(b.reviveTon) });
+        if ("reviveAds" in b)    upserts.push({ key: `boss_revive_ads_${level}`,  value: b.reviveAds == null ? "null" : String(b.reviveAds) });
+      }
+    }
+    if (body.respawnHours != null) upserts.push({ key: "boss_respawn_hours", value: String(body.respawnHours) });
+    if (body.adBoostPct   != null) upserts.push({ key: "boost_ad_pct",       value: String(body.adBoostPct) });
+    if (body.tonBoostPct1 != null) upserts.push({ key: "boost_ton_pct_1",    value: String(body.tonBoostPct1) });
+    if (body.tonBoostPct2 != null) upserts.push({ key: "boost_ton_pct_2",    value: String(body.tonBoostPct2) });
+    for (const { key, value } of upserts) {
+      await db.insert(systemSettingsTable).values({ key, value })
+        .onConflictDoUpdate({ target: systemSettingsTable.key, set: { value, updatedAt: new Date() } });
+    }
+    res.json({ success: true, message: "✅ Настройки игры сохранены" });
+  } catch (e) { res.status(500).json({ error: String(e) }); }
+});
+
+/* POST /admin/settings/games-enabled */
+router.post("/settings/games-enabled", async (req, res) => {
+  try {
+    const body = req.body as Record<string, boolean>;
+    for (const game of ["spin", "mines", "arena", "igro"]) {
+      if (game in body) {
+        const value = body[game] !== false ? "true" : "false";
+        await db.insert(systemSettingsTable).values({ key: `game_enabled_${game}`, value })
+          .onConflictDoUpdate({ target: systemSettingsTable.key, set: { value, updatedAt: new Date() } });
+      }
+    }
+    res.json({ success: true, message: "✅ Настройки игр сохранены" });
+  } catch (e) { res.status(500).json({ error: String(e) }); }
+});
+
+/* ═══════════════════════════════════════
+   AD CONFIG
+═══════════════════════════════════════ */
+
+router.get("/settings/ad-config", async (_req, res) => {
+  try {
+    const rows = await db.select().from(systemSettingsTable);
+    const s: Record<string, string> = {};
+    for (const r of rows) s[r.key] = r.value;
+    res.json({
+      rewardPts:  parseInt(s["ad_reward_pts"] ?? "") || 50,
+      dailyLimit: parseInt(s["ad_daily_limit"] ?? "") || 10,
+    });
+  } catch (e) { res.status(500).json({ error: String(e) }); }
+});
+
+router.post("/settings/ad-config", async (req, res) => {
+  try {
+    const { rewardPts, dailyLimit } = req.body as { rewardPts?: number; dailyLimit?: number };
+    if (rewardPts  != null) {
+      await db.insert(systemSettingsTable).values({ key: "ad_reward_pts", value: String(Math.max(0, rewardPts)) })
+        .onConflictDoUpdate({ target: systemSettingsTable.key, set: { value: String(Math.max(0, rewardPts)), updatedAt: new Date() } });
+    }
+    if (dailyLimit != null) {
+      await db.insert(systemSettingsTable).values({ key: "ad_daily_limit", value: String(Math.max(1, dailyLimit)) })
+        .onConflictDoUpdate({ target: systemSettingsTable.key, set: { value: String(Math.max(1, dailyLimit)), updatedAt: new Date() } });
+    }
+    res.json({ success: true, message: "✅ Настройки рекламы сохранены" });
+  } catch (e) { res.status(500).json({ error: String(e) }); }
+});
+
+/* ═══════════════════════════════════════
+   MARKET CONFIG
+═══════════════════════════════════════ */
+
+router.get("/settings/market-config", async (_req, res) => {
+  try {
+    const rows = await db.select().from(systemSettingsTable);
+    const s: Record<string, string> = {};
+    for (const r of rows) s[r.key] = r.value;
+    res.json({
+      feePct:           parseFloat(s["market_fee_pct"] ?? "") || 0,
+      profitPct:        parseFloat(s["market_profit_pct"] ?? "") || 0,
+      maxOrdersStart:   parseInt(s["market_max_start"] ?? "") || 3,
+      maxOrdersPro:     parseInt(s["market_max_pro"] ?? "") || 3,
+      maxOrdersElite:   parseInt(s["market_max_elite"] ?? "") || 3,
+    });
+  } catch (e) { res.status(500).json({ error: String(e) }); }
+});
+
+router.post("/settings/market-config", async (req, res) => {
+  try {
+    const body = req.body as Record<string, unknown>;
+    const pairs: [string, unknown][] = [
+      ["market_fee_pct",    body.feePct],
+      ["market_profit_pct", body.profitPct],
+      ["market_max_start",  body.maxOrdersStart],
+      ["market_max_pro",    body.maxOrdersPro],
+      ["market_max_elite",  body.maxOrdersElite],
+    ];
+    for (const [key, val] of pairs) {
+      if (val != null) {
+        await db.insert(systemSettingsTable).values({ key, value: String(val) })
+          .onConflictDoUpdate({ target: systemSettingsTable.key, set: { value: String(val), updatedAt: new Date() } });
+      }
+    }
+    res.json({ success: true, message: "✅ Настройки маркета сохранены" });
+  } catch (e) { res.status(500).json({ error: String(e) }); }
+});
+
+/* POST /admin/market/admin-order — create a market order bypassing daily limits */
+router.post("/market/admin-order", async (req, res) => {
+  try {
+    const { sellerId, tier, amount, priceTon } = req.body as {
+      sellerId?: string; tier?: string; amount?: number; priceTon?: number;
+    };
+    if (!tier || !amount || !priceTon) {
+      res.status(400).json({ error: "tier, amount и priceTon обязательны" }); return;
+    }
+    const sid = sellerId?.trim() || "0";
+    await db.insert(miniMarketOrdersTable).values({
+      sellerId: sid,
+      tier: tier as "start" | "pro" | "elite",
+      amount: Math.floor(amount),
+      priceTon: String(priceTon),
+      status: "open",
+    });
+    res.json({ success: true, message: `✅ Ордер создан: ${amount} TONYX @ ${priceTon} TON (tier=${tier})` });
+  } catch (e) { res.status(500).json({ error: String(e) }); }
+});
+
+/* ═══════════════════════════════════════
+   TWINS — IP-based duplicate account list
+═══════════════════════════════════════ */
+
+router.get("/twins", async (_req, res) => {
+  try {
+    const rows = await db.execute<{
+      last_ip: string; cnt: number; telegram_ids: string; usernames: string; first_names: string; created_ats: string;
+    }>(sql`
+      SELECT
+        last_ip,
+        COUNT(*)::int AS cnt,
+        STRING_AGG(telegram_id, ',' ORDER BY created_at ASC) AS telegram_ids,
+        STRING_AGG(COALESCE(username,''), ',' ORDER BY created_at ASC) AS usernames,
+        STRING_AGG(COALESCE(first_name,''), ',' ORDER BY created_at ASC) AS first_names,
+        STRING_AGG(created_at::text, ',' ORDER BY created_at ASC) AS created_ats
+      FROM users
+      WHERE last_ip IS NOT NULL AND last_ip != ''
+      GROUP BY last_ip
+      HAVING COUNT(*) > 1
+      ORDER BY cnt DESC
+      LIMIT 100
+    `);
+    const groups = rows.rows.map(r => {
+      const ids      = r.telegram_ids.split(",");
+      const names    = r.usernames.split(",");
+      const fnames   = r.first_names.split(",");
+      const dates    = r.created_ats.split(",");
+      return {
+        ip: r.last_ip,
+        count: r.cnt,
+        accounts: ids.map((id, i) => ({
+          telegramId: id,
+          username: names[i] || null,
+          firstName: fnames[i] || null,
+          createdAt: dates[i] || null,
+          isMain: i === 0,
+        })),
+      };
+    });
+    res.json({ groups });
+  } catch (e) { res.status(500).json({ error: String(e) }); }
+});
+
+/* POST /admin/twins/ban-group — ban all twin accounts in an IP group (keep main) */
+router.post("/twins/ban-group", async (req, res) => {
+  try {
+    const { ip, keepMain = true, reason } = req.body as { ip?: string; keepMain?: boolean; reason?: string };
+    if (!ip) { res.status(400).json({ error: "ip обязателен" }); return; }
+
+    const rows = await db.execute<{ telegram_id: string }>(
+      sql`SELECT telegram_id FROM users WHERE last_ip = ${ip} ORDER BY created_at ASC`
+    );
+    const ids = rows.rows.map(r => r.telegram_id).filter(id => id !== OWNER_ID);
+    if (!ids.length) { res.status(404).json({ error: "Аккаунты с таким IP не найдены" }); return; }
+
+    const toBan = keepMain ? ids.slice(1) : ids;
+    const banReason = reason?.trim() || "Твинк-аккаунт (мульти-аккаунт)";
+
+    for (const id of toBan) {
+      await db.update(usersTable).set({
+        userStatus: "banned", isBlocked: true, bannedReason: banReason, updatedAt: new Date(),
+      }).where(eq(usersTable.telegramId, id));
+      void notifyUser(id,
+        `🔴 <b>Ваш аккаунт TONYX заблокирован</b>\n\n` +
+        `Причина: ${banReason}\n\n` +
+        `Использование нескольких аккаунтов запрещено правилами проекта.`
+      );
+    }
+    res.json({ success: true, banned: toBan.length, message: `🔴 Заблокировано ${toBan.length} твинк-аккаунтов` });
+  } catch (e) { res.status(500).json({ error: String(e) }); }
 });
 
 export default router;

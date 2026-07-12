@@ -347,6 +347,34 @@
 .mage-slot .ms-dps   { font-size: 10px; font-weight: 700; color: var(--game-gold); }
 .mage-slot .ms-lvl   { position: absolute; top: 3px; right: 3px; font-size: 8px; font-weight: 700; color: var(--game-accent2); background: rgba(124,58,237,0.2); border-radius: 3px; padding: 1px 3px; }
 .mage-slot .ms-plus  { font-size: 26px; color: rgba(110, 145, 200, 0.5); line-height: 1; }
+.mage-slot .ms-empty-label { font-size: 8px; color: rgba(90,120,180,0.5); margin-top: 3px; font-weight: 600; letter-spacing: 0.5px; }
+
+/* Name bar at bottom of filled cards */
+.ms-name-bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 10px 3px 3px;
+  background: linear-gradient(transparent, rgba(0,0,0,0.82));
+  border-radius: 0 0 calc(var(--game-radius) - 2px) calc(var(--game-radius) - 2px);
+  z-index: 3;
+  pointer-events: none;
+}
+.ms-name {
+  display: block;
+  font-size: 7.5px;
+  font-weight: 800;
+  color: rgba(255,255,255,0.92);
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  width: 100%;
+  letter-spacing: 0.2px;
+  line-height: 1.2;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.8);
+}
 
 /* Filled slot — card image fills the slot, rarity border frames the sides */
 .mage-slot.filled {

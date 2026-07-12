@@ -53,6 +53,16 @@ export const BOSSES: Record<number, BossConfig> = {
   },
 };
 
+export const BOSS_REVIVE_COST: Record<number, { ton: number; ads: number | null }> = {
+  1: { ton: 0.10, ads: 10  },
+  2: { ton: 0.25, ads: 25  },
+  3: { ton: 0.50, ads: 50  },
+  4: { ton: 1.00, ads: 100 },
+  5: { ton: 2.50, ads: null }, // TON only for Boss V
+};
+
+export const BOSS_RESPAWN_MS = 24 * 60 * 60 * 1000; // 24 hours
+
 export const BOSS_ANIM_STATES = [
   "idle",
   "rage",

@@ -104,7 +104,13 @@ export interface GameState {
     tonyx: number;
   };
   selectedBossLevel: BossLevel;
+  /** Which boss level the currently active battle is fighting — null when no battle */
+  battleBossLevel: BossLevel | null;
   battle: BattleState;
+  /** Unix timestamp (ms) when each boss respawns after being defeated. Missing = alive */
+  bossRespawnAt: Partial<Record<BossLevel, number>>;
+  /** Ads watched toward revival per boss level */
+  reviveAdProgress: Partial<Record<BossLevel, number>>;
   ownedMages: OwnedMage[];
   activeMageIds: string[];
   /** 5 equipped slots — each holds a mage ID or null */

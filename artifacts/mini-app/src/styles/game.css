@@ -322,12 +322,8 @@
   align-items: center;
   padding: 4px;
   border-radius: var(--game-radius);
-  border: none;
-  background-image: url('/hero-frame.jpg');
-  background-size: 100% 100%;
-  background-position: center center;
-  background-repeat: no-repeat;
-  background-color: transparent;
+  border: 1.5px solid rgba(50, 100, 180, 0.5);
+  background: linear-gradient(160deg, rgba(8,16,36,0.96) 0%, rgba(4,9,22,0.96) 100%);
   cursor: pointer;
   transition: all .15s;
   position: relative;
@@ -337,12 +333,13 @@
   min-height: 0;
   justify-content: center;
   overflow: hidden;
+  box-shadow: inset 0 1px 0 rgba(100,160,255,0.10), inset 0 0 14px rgba(0,0,0,0.45), 0 2px 8px rgba(0,0,0,0.35);
 }
 .mage-slot.active { box-shadow: 0 0 0 2px var(--game-accent), 0 0 12px rgba(124,58,237,0.35); }
-.mage-slot.empty  {
-  background-size: 100% 100%;
-  background-position: center center;
-  cursor: pointer;
+.mage-slot.empty {
+  border: 1.5px dashed rgba(70, 130, 220, 0.4);
+  background: linear-gradient(160deg, rgba(5,10,24,0.82) 0%, rgba(3,7,18,0.82) 100%);
+  box-shadow: inset 0 0 18px rgba(20, 50, 120, 0.14);
 }
 .mage-slot:active { transform: scale(0.94); }
 .mage-slot .ms-emoji { font-size: 22px; line-height: 1; }

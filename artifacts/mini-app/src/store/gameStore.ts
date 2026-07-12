@@ -8,7 +8,7 @@ import type {
   BossAnimState,
   ViewName,
 } from "../types/game";
-import { BOSSES } from "../constants/bosses";
+import { BOSSES, BOSS_REVIVE_COST, BOSS_RESPAWN_MS } from "../constants/bosses";
 import { MAGES, getMageDps } from "../constants/mages";
 import {
   NFT_CONFIGS,
@@ -21,6 +21,9 @@ const initialState: GameState = {
   view: "loading",
   balances: { ton: 0, tonyx: 0 },
   selectedBossLevel: 1,
+  battleBossLevel: null,
+  bossRespawnAt: {},
+  reviveAdProgress: {},
   battle: {
     active: false,
     bossHpPercent: 100,
@@ -105,6 +108,10 @@ interface GameActions {
   setTonyxBalance: (tonyx: number) => void;
   /** Mark that the initial backend balance has been synced — prevents future overwrites */
   markTonInitialized: () => void;
+  /** Revive a dead boss by paying TON */
+  reviveBossWithTon: (level: BossLevel) => void;
+  /** Record one ad watched toward boss revival; revives boss when threshold reached */
+  watchAdForRevive: (level: BossLevel) => void;
 }
 
 interface GameStore extends GameState, GameActions {
@@ -120,7 +127,12 @@ export const useGameStore = create<GameStore>()(
   setView: (view) => set({ view }),
 
   selectBoss: (level) => {
-    const { ownedMages, equippedSlots, boost } = get();
+    const { ownedMages, equippedSlots, boost, battle } = get();
+    // If a battle is active, only switch the viewed level — don't reset the fight
+    if (battle.active) {
+      set({ selectedBossLevel: level });
+      return;
+    }
     const dps = calcTotalDps(ownedMages, equippedSlots, boost.dpsMultiplier);
     set({ selectedBossLevel: level, battle: { ...initialState.battle, totalDps: dps } });
   },
@@ -147,13 +159,13 @@ export const useGameStore = create<GameStore>()(
   },
 
   startBattle: () => {
-    const { ownedMages, equippedSlots, boost } = get();
+    const { ownedMages, equippedSlots, boost, selectedBossLevel } = get();
     const equippedCount = equippedSlots.filter(Boolean).length;
     if (equippedCount === 0) return;
     const tonMult = (boost.tonBoostExpiresAt && Date.now() < boost.tonBoostExpiresAt) ? boost.tonBoostMultiplier : 1;
     const dps = calcTotalDps(ownedMages, equippedSlots, boost.dpsMultiplier * tonMult);
-    // Stay on home view — battle runs in the background with countdown on button
     set({
+      battleBossLevel: selectedBossLevel,
       battle: {
         active: true,
         bossHpPercent: 100,
@@ -166,9 +178,9 @@ export const useGameStore = create<GameStore>()(
   },
 
   tickBattle: (deltaMs) => {
-    const { battle, selectedBossLevel, boost } = get();
-    if (!battle.active) return;
-    const boss = BOSSES[selectedBossLevel];
+    const { battle, battleBossLevel, boost } = get();
+    if (!battle.active || !battleBossLevel) return;
+    const boss = BOSSES[battleBossLevel];
     const dmgToBoss = (battle.totalDps * (deltaMs / 1000)) * boost.speedMultiplier;
     const dmgPercent = (dmgToBoss / boss.maxHp) * 100;
     const newBossHp = Math.max(0, battle.bossHpPercent - dmgPercent);
@@ -177,8 +189,16 @@ export const useGameStore = create<GameStore>()(
   },
 
   finishBoss: () => {
-    const rewards = generateChestRewards(get().selectedBossLevel);
-    set({ battle: { ...get().battle, active: false, bossHpPercent: 0, lastRewards: rewards }, view: "chest" });
+    const { battleBossLevel, selectedBossLevel, bossRespawnAt } = get();
+    const level = battleBossLevel ?? selectedBossLevel;
+    const rewards = generateChestRewards(level);
+    const newRespawnAt = { ...bossRespawnAt, [level]: Date.now() + BOSS_RESPAWN_MS };
+    set({
+      battle: { ...get().battle, active: false, bossHpPercent: 0, lastRewards: rewards },
+      view: "chest",
+      battleBossLevel: null,
+      bossRespawnAt: newRespawnAt,
+    });
   },
 
   finishBossAd: () => {
@@ -267,7 +287,7 @@ export const useGameStore = create<GameStore>()(
   },
 
   init: () => {
-    const { boost, ownedMages, equippedSlots, battle, selectedBossLevel } = get();
+    const { boost, ownedMages, equippedSlots, battle, battleBossLevel, selectedBossLevel } = get();
 
     // Expire ad boost if needed
     let dpsMultiplier = boost.dpsMultiplier;
@@ -286,44 +306,27 @@ export const useGameStore = create<GameStore>()(
     }
     const dps = calcTotalDps(ownedMages, equippedSlots, dpsMultiplier * tonMult);
 
-    // ── Offline progress ────────────────────────────────────────────────
-    // If a battle was running when the app closed, apply damage for the
-    // time the user was away and either finish the boss or resume the fight.
+    // ── Offline progress ──────────────────────────────────────────────
+    const fightLevel = battleBossLevel ?? selectedBossLevel;
     if (battle.active && battle.battleStartedAt) {
-      const boss = BOSSES[selectedBossLevel];
+      const boss = BOSSES[fightLevel];
       const offlineSec = (Date.now() - battle.battleStartedAt) / 1000;
       const offlineDmg = battle.totalDps * offlineSec * boost.speedMultiplier;
       const offlineDmgPct = (offlineDmg / boss.maxHp) * 100;
       const newHpPct = Math.max(0, battle.bossHpPercent - offlineDmgPct);
 
       if (newHpPct <= 0) {
-        // Boss was killed while offline → show chest immediately
-        const rewards = generateChestRewards(selectedBossLevel);
-        set({
-          view: "chest",
-          battle: {
-            ...battle,
-            active: false,
-            bossHpPercent: 0,
-            lastRewards: rewards,
-            totalDps: dps,
-          },
-        });
+        // finishBoss handles rewards + respawnAt + battleBossLevel reset
+        get().finishBoss();
       } else {
-        // Battle continues — update HP, refresh DPS, stamp new start time
         set({
           view: "home",
-          battle: {
-            ...battle,
-            bossHpPercent: newHpPct,
-            totalDps: dps,
-            battleStartedAt: Date.now(),
-          },
+          battle: { ...battle, bossHpPercent: newHpPct, totalDps: dps, battleStartedAt: Date.now() },
         });
       }
       return;
     }
-    // ───────────────────────────────────────────────────────────────────
+    // ──────────────────────────────────────────────────────────────────
 
     set({ view: "home", battle: { ...get().battle, totalDps: dps } });
   },
@@ -382,6 +385,32 @@ export const useGameStore = create<GameStore>()(
   markTonInitialized: () => {
     set({ hasInitializedTonFromBackend: true });
   },
+
+  reviveBossWithTon: (level) => {
+    const { balances, bossRespawnAt } = get();
+    const cost = BOSS_REVIVE_COST[level].ton;
+    if (balances.ton < cost) return;
+    const newRespawnAt = { ...bossRespawnAt };
+    delete newRespawnAt[level];
+    set({ balances: { ...balances, ton: balances.ton - cost }, bossRespawnAt: newRespawnAt });
+  },
+
+  watchAdForRevive: (level) => {
+    const { reviveAdProgress, bossRespawnAt } = get();
+    const reviveCost = BOSS_REVIVE_COST[level];
+    if (reviveCost.ads === null) return;
+    const current = reviveAdProgress[level] ?? 0;
+    const newProgress = current + 1;
+    if (newProgress >= reviveCost.ads) {
+      const newRespawnAt = { ...bossRespawnAt };
+      delete newRespawnAt[level];
+      const newProgress2 = { ...reviveAdProgress };
+      delete newProgress2[level];
+      set({ bossRespawnAt: newRespawnAt, reviveAdProgress: newProgress2 });
+    } else {
+      set({ reviveAdProgress: { ...reviveAdProgress, [level]: newProgress } });
+    }
+  },
     }),
     {
       name: "tonyx-game-state-v2",
@@ -395,6 +424,9 @@ export const useGameStore = create<GameStore>()(
         boost: state.boost,
         selectedBossLevel: state.selectedBossLevel,
         battle: state.battle,
+        battleBossLevel: state.battleBossLevel,
+        bossRespawnAt: state.bossRespawnAt,
+        reviveAdProgress: state.reviveAdProgress,
       }),
     }
   )

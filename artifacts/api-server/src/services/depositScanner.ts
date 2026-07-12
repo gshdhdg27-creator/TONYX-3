@@ -50,6 +50,36 @@ interface ParsedMemo {
   value: string;
 }
 
+/**
+ * TON wallet comments are sometimes base64-encoded by the sending wallet.
+ * If the string looks like base64 (and isn't already a plain deposit-code /
+ * legacy memo), try decoding it; otherwise return the original string.
+ */
+function tryBase64DecodeIfLooksLike(comment: string): string {
+  const c = comment.trim();
+  if (!c) return c;
+  // Already a recognizable plain memo — don't touch it.
+  if (DEPOSIT_CODE_RE.test(c) || /^TONYX-\d+$/.test(c) || /^TOPUP_\d+$/.test(c)) {
+    return c;
+  }
+  // Base64 charset only, length multiple of 4, no spaces.
+  if (!/^[A-Za-z0-9+/]+=*$/.test(c) || c.length % 4 !== 0) return c;
+  try {
+    const decoded = atob(c);
+    // Only accept the decode if it looks like a real memo.
+    if (
+      DEPOSIT_CODE_RE.test(decoded) ||
+      decoded.startsWith("TONYX") ||
+      decoded.startsWith("TOPUP")
+    ) {
+      return decoded;
+    }
+  } catch {
+    // not valid base64 — fall through
+  }
+  return c;
+}
+
 function parseMemo(comment: string): ParsedMemo | null {
   const c = comment.trim();
   // New format: 12-char deposit code

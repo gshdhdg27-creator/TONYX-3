@@ -121,4 +121,6 @@ export interface GameState {
   boost: BoostState;
   /** Set to true after the first successful backend balance sync — prevents later refetches from overwriting in-game spend */
   hasInitializedTonFromBackend: boolean;
+  /** Bumped once the admin-configured game settings (boss HP, boost %, etc.) finish loading, so views re-render with live values */
+  configVersion: number;
 }

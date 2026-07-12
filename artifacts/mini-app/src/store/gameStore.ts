@@ -8,7 +8,8 @@ import type {
   BossAnimState,
   ViewName,
 } from "../types/game";
-import { BOSSES, BOSS_REVIVE_COST, BOSS_RESPAWN_MS } from "../constants/bosses";
+import { BOSSES, BOSS_REVIVE_COST } from "../constants/bosses";
+import { BOOST_CONFIG } from "../lib/liveGameConfig";
 import { MAGES, getMageDps } from "../constants/mages";
 import {
   NFT_CONFIGS,
@@ -49,6 +50,7 @@ const initialState: GameState = {
     tonBoostExpiresAt: null,
   },
   hasInitializedTonFromBackend: false,
+  configVersion: 0,
 };
 
 function calcTotalDps(
@@ -112,6 +114,8 @@ interface GameActions {
   reviveBossWithTon: (level: BossLevel) => void;
   /** Record one ad watched toward boss revival; revives boss when threshold reached */
   watchAdForRevive: (level: BossLevel) => void;
+  /** Bump configVersion to force views to re-read the (mutated) BOSSES/BOOST_CONFIG objects */
+  bumpConfigVersion: () => void;
 }
 
 interface GameStore extends GameState, GameActions {
@@ -411,6 +415,8 @@ export const useGameStore = create<GameStore>()(
       set({ reviveAdProgress: { ...reviveAdProgress, [level]: newProgress } });
     }
   },
+
+  bumpConfigVersion: () => set((s) => ({ configVersion: s.configVersion + 1 })),
     }),
     {
       name: "tonyx-game-state-v2",

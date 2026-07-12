@@ -1029,11 +1029,13 @@ router.post("/market/admin-order", async (req, res) => {
       res.status(400).json({ error: "tier, amount и priceTon обязательны" }); return;
     }
     const sid = sellerId?.trim() || "0";
+    const amt = Math.floor(amount);
     await db.insert(miniMarketOrdersTable).values({
       sellerId: sid,
-      tier: tier as "start" | "pro" | "elite",
-      amount: Math.floor(amount),
-      priceTon: String(priceTon),
+      category: tier,
+      amount: amt,
+      pricePerCoin: String(priceTon),
+      totalTon: String(amt * priceTon),
       status: "open",
     });
     res.json({ success: true, message: `✅ Ордер создан: ${amount} TONYX @ ${priceTon} TON (tier=${tier})` });

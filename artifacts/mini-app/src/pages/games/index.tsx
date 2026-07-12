@@ -1371,6 +1371,17 @@ const GAME_CARDS = [
 
 type ActiveGame = null | "arena" | "spin" | "mines";
 
+function useGamesEnabled() {
+  const [enabled, setEnabled] = useState<Record<string, boolean>>({ spin: true, mines: true, arena: true, igro: true });
+  useEffect(() => {
+    fetch("/api/mini/admin/settings/games-enabled")
+      .then(r => r.json())
+      .then(d => setEnabled(d))
+      .catch(() => {});
+  }, []);
+  return enabled;
+}
+
 function useOnlineCounts() {
   const [counts, setCounts] = useState<Record<string, number>>({});
   useEffect(() => {
@@ -1515,13 +1526,14 @@ function SpinIllustration({ glow }: { glow: string }) {
 }
 
 function GameCard({
-  card, online, lang, onSelect, index,
+  card, online, lang, onSelect, index, disabled,
 }: {
   card: typeof GAME_CARDS[number];
   online: number;
   lang: Lang;
   onSelect: () => void;
   index: number;
+  disabled?: boolean;
 }) {
   const [hovered, setHovered] = useState(false);
   const [pressed, setPressed] = useState(false);
@@ -1531,11 +1543,11 @@ function GameCard({
   return (
     <div
       onClick={onSelect}
-      onMouseEnter={() => setHovered(true)}
+      onMouseEnter={() => !disabled && setHovered(true)}
       onMouseLeave={() => { setHovered(false); setPressed(false); }}
-      onMouseDown={() => setPressed(true)}
+      onMouseDown={() => !disabled && setPressed(true)}
       onMouseUp={() => setPressed(false)}
-      onTouchStart={() => setPressed(true)}
+      onTouchStart={() => !disabled && setPressed(true)}
       onTouchEnd={() => setPressed(false)}
       style={{
         position: "relative",
@@ -1545,7 +1557,7 @@ function GameCard({
           : hovered
           ? "rgba(18,24,36,0.98)"
           : "rgba(13,17,25,0.96)",
-        cursor: "pointer",
+        cursor: disabled ? "not-allowed" : "pointer",
         border: `1px solid ${pressed ? card.border : hovered ? card.border + "88" : "#1e2a3a"}`,
         boxShadow: pressed
           ? `0 2px 8px rgba(0,0,0,0.7)`
@@ -1561,6 +1573,8 @@ function GameCard({
         display: "flex",
         alignItems: "stretch",
         overflow: "hidden",
+        opacity: disabled ? 0.55 : 1,
+        filter: disabled ? "grayscale(0.6)" : "none",
       }}
     >
       {/* Left accent bar */}
@@ -1573,8 +1587,16 @@ function GameCard({
       {/* Text section */}
       <div style={{ flex: 1, padding: "16px 10px 16px 22px", display: "flex", flexDirection: "column", justifyContent: "space-between", zIndex: 1 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
-          <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#22C55E", boxShadow: "0 0 7px rgba(34,197,94,0.8)", animation: "pulse-dot 2s ease-in-out infinite", flexShrink: 0 }} />
-          <span style={{ fontSize: 11, fontWeight: 500, color: "#6B7280" }}>{online} {translations[lang].games.onlineText}</span>
+          {disabled ? (
+            <span style={{ fontSize: 11, fontWeight: 700, color: "#f87171", background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 6, padding: "2px 8px" }}>
+              {lang === "en" ? "Temporarily unavailable" : "Временно недоступна"}
+            </span>
+          ) : (
+            <>
+              <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#22C55E", boxShadow: "0 0 7px rgba(34,197,94,0.8)", animation: "pulse-dot 2s ease-in-out infinite", flexShrink: 0 }} />
+              <span style={{ fontSize: 11, fontWeight: 500, color: "#6B7280" }}>{online} {translations[lang].games.onlineText}</span>
+            </>
+          )}
         </div>
         <div style={{ fontSize: 20, fontWeight: 800, color: "#F1F5F9", letterSpacing: "-0.02em", lineHeight: 1.15, marginBottom: 5 }}>{title}</div>
         <div style={{ fontSize: 13, fontWeight: 400, color: "#6B7280", lineHeight: 1.45 }}>{desc}</div>
@@ -1596,6 +1618,7 @@ export default function GamesPage() {
   const [active, setActive] = useState<ActiveGame>(null);
   const [toast, setToast] = useState<{ msg: string; type: "success"|"error"|"info" } | null>(null);
   const online = useOnlineCounts();
+  const gamesEnabled = useGamesEnabled();
 
   /* History state */
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -1615,6 +1638,11 @@ export default function GamesPage() {
   };
 
   const handleSelect = (card: typeof GAME_CARDS[number]) => {
+    if (gamesEnabled[card.id] === false) {
+      haptic("light");
+      showToast(lang === "en" ? "Game temporarily unavailable" : "Игра временно недоступна", "error");
+      return;
+    }
     haptic("light");
     setActive(card.id as ActiveGame);
   };
@@ -1723,6 +1751,7 @@ export default function GamesPage() {
             lang={lang}
             onSelect={() => handleSelect(card)}
             index={i}
+            disabled={gamesEnabled[card.id] === false}
           />
         ))}
       </div>

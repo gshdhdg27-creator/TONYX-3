@@ -1,3 +1,5 @@
 - [Neon DB schema sync](neon-schema-sync.md) — Neon prod DB can lag behind code schema; missing columns cause 500/404; fix with ALTER TABLE directly.
 - [Vercel API routing](vercel-api-routing.md) — Vercel serves static only; all /api/* calls 404 in prod unless VITE_API_BASE_URL is set to deployed API server URL.
 - [NEON_DATABASE_URL priority](neon-db-priority.md) — lib/db/src/index.ts uses NEON_DATABASE_URL ?? DATABASE_URL; new Repls get empty local DB without NEON_DATABASE_URL secret.
+- [Artifact registration recovery](artifact-registration-recovery.md) — createArtifact refuses existing dirs but its rescan also re-registers other lost artifacts; rename-out/create/rename-back trick to recover.
+- [OpenAPI spec must stay full](openapi-spec-completeness.md) — a reduced/stub openapi.yaml breaks codegen silently downstream (missing Zod schemas), not at codegen time itself; always diff against any backup/original spec before trusting it.

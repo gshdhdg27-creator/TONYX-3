@@ -9,6 +9,7 @@ import HeroShopScreen from "@/components/hero-shop/HeroShopScreen";
 import LoadingScreen from "@/components/ui/LoadingScreen";
 import { useBattleLoop } from "@/hooks/useBattleLoop";
 import { useBossAnimation } from "@/hooks/useBossAnimation";
+import { loadLiveGameConfig } from "@/lib/liveGameConfig";
 import "@/styles/game.css";
 
 export default function HomePage() {
@@ -21,6 +22,9 @@ export default function HomePage() {
   const setTonBalance = useGameStore((s) => s.setTonBalance);
   const setTonyxBalance = useGameStore((s) => s.setTonyxBalance);
   const markTonInitialized = useGameStore((s) => s.markTonInitialized);
+  const bumpConfigVersion = useGameStore((s) => s.bumpConfigVersion);
+  // Force a re-render once config loads so subscribers see it (BOSSES/BOOST_CONFIG are read directly, not from store state)
+  useGameStore((s) => s.configVersion);
 
   const { telegramId } = useTelegram();
   const { data: profile } = useGetUserProfile(telegramId ?? "", {
@@ -47,6 +51,12 @@ export default function HomePage() {
     const t = setTimeout(() => init(), 500);
     return () => clearTimeout(t);
   }, [init]);
+
+  // Pull the admin-configured boss HP / revive cost / boost % values once on startup
+  // and bump configVersion so views relying on them re-render with the live numbers.
+  useEffect(() => {
+    loadLiveGameConfig().then(() => bumpConfigVersion());
+  }, [bumpConfigVersion]);
 
   return (
     <>

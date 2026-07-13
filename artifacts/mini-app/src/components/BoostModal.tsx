@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { useGameStore } from "../store/gameStore";
 import { showRewardedAd, ADSGRAM_BLOCK_ID, type AdError } from "@/lib/adsgram";
+import { BOOST_CONFIG } from "@/lib/liveGameConfig";
 
 interface Props {
   onClose: () => void;
@@ -31,6 +32,12 @@ export default function BoostModal({ onClose }: Props) {
   const adBoostActive = !!(boost.boostExpiresAt && Date.now() < boost.boostExpiresAt);
   const tonBoostActive = !!(boost.tonBoostExpiresAt && Date.now() < boost.tonBoostExpiresAt);
   const currentTonMult = tonBoostActive ? boost.tonBoostMultiplier : 1;
+
+  const adBoostPct = BOOST_CONFIG.adBoostPct;
+  const tonBoostPct1 = BOOST_CONFIG.tonBoostPct1;
+  const tonBoostPct2 = BOOST_CONFIG.tonBoostPct2;
+  const tonBoostMult1 = 1 + tonBoostPct1 / 100;
+  const tonBoostMult2 = 1 + tonBoostPct2 / 100;
 
   // Format remaining time for an expiry timestamp
   function timeLeft(expiresAt: number): string {
@@ -83,7 +90,7 @@ export default function BoostModal({ onClose }: Props) {
         <div className={`boost-option${adBoostActive ? " boost-option--active" : ""}`}>
           <div className="boost-option-icon">📺</div>
           <div className="boost-option-info">
-            <div className="boost-option-name">+20% урон на 24ч</div>
+            <div className="boost-option-name">+{adBoostPct}% урон на 24ч</div>
             <div className="boost-option-desc">
               {adBoostActive
                 ? `✅ Активен · осталось ${timeLeft(boost.boostExpiresAt!)}`
@@ -108,41 +115,41 @@ export default function BoostModal({ onClose }: Props) {
           </div>
         )}
 
-        {/* ── Option 2: +50% paid ── */}
-        <div className={`boost-option${currentTonMult >= 1.5 && tonBoostActive ? " boost-option--active" : ""}`}>
+        {/* ── Option 2: paid tier 1 ── */}
+        <div className={`boost-option${currentTonMult >= tonBoostMult1 && tonBoostActive ? " boost-option--active" : ""}`}>
           <div className="boost-option-icon">⚡</div>
           <div className="boost-option-info">
-            <div className="boost-option-name">+50% урон на 24ч</div>
+            <div className="boost-option-name">+{tonBoostPct1}% урон на 24ч</div>
             <div className="boost-option-desc">
-              {currentTonMult >= 1.5 && tonBoostActive
+              {currentTonMult >= tonBoostMult1 && tonBoostActive
                 ? `✅ Активен · осталось ${timeLeft(boost.tonBoostExpiresAt!)}`
                 : `Стоимость · 1 TON`}
             </div>
           </div>
           <button
             className="btn btn-primary btn-sm"
-            onClick={() => buyDpsBoost(1.5, 1)}
-            disabled={balances.ton < 1 || (tonBoostActive && currentTonMult >= 1.5)}
+            onClick={() => buyDpsBoost(tonBoostMult1, 1)}
+            disabled={balances.ton < 1 || (tonBoostActive && currentTonMult >= tonBoostMult1)}
           >
             1 TON
           </button>
         </div>
 
-        {/* ── Option 3: +100% paid ── */}
-        <div className={`boost-option${currentTonMult >= 2.0 && tonBoostActive ? " boost-option--active" : ""}`}>
+        {/* ── Option 3: paid tier 2 ── */}
+        <div className={`boost-option${currentTonMult >= tonBoostMult2 && tonBoostActive ? " boost-option--active" : ""}`}>
           <div className="boost-option-icon">💥</div>
           <div className="boost-option-info">
-            <div className="boost-option-name">+100% урон на 24ч</div>
+            <div className="boost-option-name">+{tonBoostPct2}% урон на 24ч</div>
             <div className="boost-option-desc">
-              {currentTonMult >= 2.0 && tonBoostActive
+              {currentTonMult >= tonBoostMult2 && tonBoostActive
                 ? `✅ Активен · осталось ${timeLeft(boost.tonBoostExpiresAt!)}`
                 : `Стоимость · 10 TON`}
             </div>
           </div>
           <button
             className="btn btn-primary btn-sm"
-            onClick={() => buyDpsBoost(2.0, 10)}
-            disabled={balances.ton < 10 || (tonBoostActive && currentTonMult >= 2.0)}
+            onClick={() => buyDpsBoost(tonBoostMult2, 10)}
+            disabled={balances.ton < 10 || (tonBoostActive && currentTonMult >= tonBoostMult2)}
           >
             10 TON
           </button>

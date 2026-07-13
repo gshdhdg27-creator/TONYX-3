@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useGameStore } from "../store/gameStore";
 import { getMageDps } from "../constants/mages";
 import { BOSSES, BOSS_REVIVE_COST } from "../constants/bosses";
+import { BOOST_CONFIG } from "../lib/liveGameConfig";
 import { showRewardedAd } from "../lib/adsgram";
 import BossLevelSelect from "./boss/BossLevelSelect";
 import BossArena from "./boss/BossArena";
@@ -70,9 +71,11 @@ export default function HomeScreen() {
   void bodySnapshotRef;
 
   const boostLabel = (() => {
-    if (tonBoostActive && tonMult >= 2.0) return "+100% BOOST";
-    if (tonBoostActive && tonMult >= 1.5) return "+50% BOOST";
-    if (adBoostActive) return "+20% BOOST";
+    const mult2 = 1 + BOOST_CONFIG.tonBoostPct2 / 100;
+    const mult1 = 1 + BOOST_CONFIG.tonBoostPct1 / 100;
+    if (tonBoostActive && tonMult >= mult2) return `+${BOOST_CONFIG.tonBoostPct2}% BOOST`;
+    if (tonBoostActive && tonMult >= mult1) return `+${BOOST_CONFIG.tonBoostPct1}% BOOST`;
+    if (adBoostActive) return `+${BOOST_CONFIG.adBoostPct}% BOOST`;
     return null;
   })();
 

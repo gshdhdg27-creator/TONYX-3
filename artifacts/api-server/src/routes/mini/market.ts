@@ -22,8 +22,17 @@ const CATEGORIES = {
   elite: { min: 100, max: Infinity, bonusPct: 2.5, minPartialBuy: 50, label: "ELITE" },
 } as const;
 type Category = keyof typeof CATEGORIES;
-const DAILY_LIMIT = 3;
+const DEFAULT_DAILY_LIMIT = 3;
 const FIXED_RATE  = 1000; // 1 TON = 1000 TONYX
+
+/** Reads the admin-configured per-tier daily order caps (falls back to 3 when unset). "base" has no admin field, always 3. */
+async function getDailyLimit(category: Category): Promise<number> {
+  if (category === "base") return DEFAULT_DAILY_LIMIT;
+  const key = category === "start" ? "market_max_start" : category === "pro" ? "market_max_pro" : "market_max_elite";
+  const row = await db.select().from(systemSettingsTable).where(eq(systemSettingsTable.key, key)).then(r => r[0] ?? null);
+  const parsed = row ? parseInt(row.value) : NaN;
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_DAILY_LIMIT;
+}
 
 function getCategory(totalTon: number): Category | null {
   if (totalTon >= 3   && totalTon <= 10)  return "start";
@@ -190,7 +199,8 @@ router.post("/orders", async (req, res) => {
   ) as keyof typeof user;
 
   const currentCount = user[countField] as number;
-  if (currentCount >= DAILY_LIMIT) {
+  const dailyLimit = await getDailyLimit(category);
+  if (currentCount >= dailyLimit) {
     res.status(429).json({ error: `Лимит ордеров в категории ${CATEGORIES[category].label} исчерпан на сегодня` }); return;
   }
 

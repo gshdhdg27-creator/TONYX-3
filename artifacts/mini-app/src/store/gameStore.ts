@@ -196,7 +196,7 @@ export const useGameStore = create<GameStore>()(
     const { battleBossLevel, selectedBossLevel, bossRespawnAt } = get();
     const level = battleBossLevel ?? selectedBossLevel;
     const rewards = generateChestRewards(level);
-    const newRespawnAt = { ...bossRespawnAt, [level]: Date.now() + BOSS_RESPAWN_MS };
+    const newRespawnAt = { ...bossRespawnAt, [level]: Date.now() + BOOST_CONFIG.respawnHours * 60 * 60 * 1000 };
     set({
       battle: { ...get().battle, active: false, bossHpPercent: 0, lastRewards: rewards },
       view: "chest",
@@ -257,8 +257,9 @@ export const useGameStore = create<GameStore>()(
     const newCount = boost.adWatchedCount + 1;
     let newMultiplier = boost.dpsMultiplier;
     let expiresAt = boost.boostExpiresAt;
-    if (newCount >= 10 && boost.dpsMultiplier < 1.2) {
-      newMultiplier = 1.2;
+    const adBoostMultiplier = 1 + BOOST_CONFIG.adBoostPct / 100;
+    if (newCount >= 10 && boost.dpsMultiplier < adBoostMultiplier) {
+      newMultiplier = adBoostMultiplier;
       expiresAt = Date.now() + 24 * 60 * 60 * 1000;
     }
     const dps = calcTotalDps(ownedMages, equippedSlots, newMultiplier);

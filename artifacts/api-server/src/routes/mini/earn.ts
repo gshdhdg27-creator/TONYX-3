@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
-import { usersTable, adViewsTable } from "@workspace/db/schema";
+import { usersTable, adViewsTable, systemSettingsTable } from "@workspace/db/schema";
 import {
   GetMiniEarnStatusParams,
   GetMiniEarnStatusResponse,
@@ -13,9 +13,17 @@ const router: IRouter = Router();
 const TON_PER_AD = 0.0001;
 const COOLDOWN_SECONDS = 60;
 const DEDUP_SECONDS = 2;
-const DAILY_LIMIT = 100;
+const DEFAULT_DAILY_LIMIT = 100;
 const MINI_BLOCK_ID = "33819";
 const REFERRAL_PCT = 0.10;
+
+/** Admin-configured daily ad-watch cap (Игра → Реклама → "Дневной лимит"); falls back to 100 when unset. */
+async function getAdDailyLimit(): Promise<number> {
+  const row = await db.select().from(systemSettingsTable)
+    .where(eq(systemSettingsTable.key, "ad_daily_limit")).then(r => r[0] ?? null);
+  const parsed = row ? parseInt(row.value) : NaN;
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_DAILY_LIMIT;
+}
 
 function startOfDayUtc(): Date {
   const d = new Date();
@@ -53,13 +61,14 @@ router.get("/status/:telegramId", async (req, res) => {
     }
   }
 
-  const canWatch = todayViews.length < DAILY_LIMIT && cooldownSeconds === 0;
+  const dailyLimit = await getAdDailyLimit();
+  const canWatch = todayViews.length < dailyLimit && cooldownSeconds === 0;
 
   const data = GetMiniEarnStatusResponse.parse({
     canWatch,
     cooldownSeconds,
     adsWatchedToday: todayViews.length,
-    dailyLimit: DAILY_LIMIT,
+    dailyLimit,
     minCoins: 0,
     maxCoins: 0,
   });
@@ -95,8 +104,9 @@ router.post("/watch", async (req, res) => {
       )
     );
 
-  if (todayViews.length >= DAILY_LIMIT) {
-    res.status(429).json({ error: `Daily limit of ${DAILY_LIMIT} ads reached` });
+  const dailyLimit = await getAdDailyLimit();
+  if (todayViews.length >= dailyLimit) {
+    res.status(429).json({ error: `Daily limit of ${dailyLimit} ads reached` });
     return;
   }
 

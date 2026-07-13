@@ -227,6 +227,9 @@ export interface MiniEarnStatus {
   dailyLimit: number;
   minCoins: number;
   maxCoins: number;
+  minTon?: number;
+  maxTon?: number;
+  rewardTonyx?: number;
 }
 
 export interface MiniWatchAdInput {
@@ -236,6 +239,8 @@ export interface MiniWatchAdInput {
 
 export interface MiniAdWatchResult {
   coinsEarned: number;
+  tonEarned?: number;
+  tonyxEarned?: number;
   newBalance: number;
   adsWatchedToday: number;
   cooldownSeconds: number;

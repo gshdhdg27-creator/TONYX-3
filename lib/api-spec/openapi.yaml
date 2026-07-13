@@ -1178,6 +1178,12 @@ components:
           type: integer
         maxCoins:
           type: integer
+        minTon:
+          type: number
+        maxTon:
+          type: number
+        rewardTonyx:
+          type: number
       required: [canWatch, cooldownSeconds, adsWatchedToday, dailyLimit, minCoins, maxCoins]
 
     MiniWatchAdInput:
@@ -1194,8 +1200,12 @@ components:
       properties:
         coinsEarned:
           type: integer
+        tonEarned:
+          type: number
+        tonyxEarned:
+          type: number
         newBalance:
-          type: integer
+          type: number
         adsWatchedToday:
           type: integer
         cooldownSeconds:

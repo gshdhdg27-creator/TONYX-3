@@ -13,4 +13,7 @@ export interface MiniEarnStatus {
   dailyLimit: number;
   minCoins: number;
   maxCoins: number;
+  minTon?: number;
+  maxTon?: number;
+  rewardTonyx?: number;
 }

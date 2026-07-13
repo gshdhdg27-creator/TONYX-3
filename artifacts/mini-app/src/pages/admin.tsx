@@ -281,7 +281,10 @@ function MarketTab({ adminId, stats, isSuperAdmin, onRefresh, activating, onMark
   const { toast, flash } = useToast();
   const [depth, setDepth]         = useState("1");
   const [feePct, setFeePct]       = useState("0");
-  const [profitPct, setProfitPct] = useState("0");
+  const [profitStart, setProfitStart] = useState("1.4");
+  const [profitBase, setProfitBase]   = useState("1.7");
+  const [profitPro, setProfitPro]     = useState("2");
+  const [profitElite, setProfitElite] = useState("2.5");
   const [maxStart, setMaxStart]   = useState("3");
   const [maxPro, setMaxPro]       = useState("3");
   const [maxElite, setMaxElite]   = useState("3");
@@ -299,7 +302,10 @@ function MarketTab({ adminId, stats, isSuperAdmin, onRefresh, activating, onMark
     ]).then(([q, m]) => {
       if (q.depth)     setDepth(String(q.depth));
       if (m.feePct    != null) setFeePct(String(m.feePct));
-      if (m.profitPct != null) setProfitPct(String(m.profitPct));
+      if (m.profitPctStart != null) setProfitStart(String(m.profitPctStart));
+      if (m.profitPctBase  != null) setProfitBase(String(m.profitPctBase));
+      if (m.profitPctPro   != null) setProfitPro(String(m.profitPctPro));
+      if (m.profitPctElite != null) setProfitElite(String(m.profitPctElite));
       if (m.maxOrdersStart) setMaxStart(String(m.maxOrdersStart));
       if (m.maxOrdersPro)   setMaxPro(String(m.maxOrdersPro));
       if (m.maxOrdersElite) setMaxElite(String(m.maxOrdersElite));
@@ -312,7 +318,9 @@ function MarketTab({ adminId, stats, isSuperAdmin, onRefresh, activating, onMark
       const [r1, r2] = await Promise.all([
         apiCall("settings/queue-depth", { adminId, method:"POST", body:JSON.stringify({ depth:parseInt(depth)||1 }) }),
         apiCall("settings/market-config", { adminId, method:"POST", body:JSON.stringify({
-          feePct: parseFloat(feePct)||0, profitPct: parseFloat(profitPct)||0,
+          feePct: parseFloat(feePct)||0,
+          profitPctStart: parseFloat(profitStart)||0, profitPctBase: parseFloat(profitBase)||0,
+          profitPctPro: parseFloat(profitPro)||0, profitPctElite: parseFloat(profitElite)||0,
           maxOrdersStart:parseInt(maxStart)||3, maxOrdersPro:parseInt(maxPro)||3, maxOrdersElite:parseInt(maxElite)||3,
         }) }),
       ]);
@@ -375,12 +383,15 @@ function MarketTab({ adminId, stats, isSuperAdmin, onRefresh, activating, onMark
         <SectionTitle icon="⚙️" label="Настройки маркета" color="#38bdf8" />
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:10 }}>
           {[
-            { label:"Комиссия %",    val:feePct,    set:setFeePct    },
-            { label:"Доходность %",  val:profitPct, set:setProfitPct },
-            { label:"Лимит START/д", val:maxStart,  set:setMaxStart  },
-            { label:"Лимит PRO/д",   val:maxPro,    set:setMaxPro    },
-            { label:"Лимит ELITE/д", val:maxElite,  set:setMaxElite  },
-            { label:"Очередь выкупа",val:depth,     set:setDepth     },
+            { label:"Комиссия %",         val:feePct,     set:setFeePct     },
+            { label:"Доходность START %", val:profitStart,set:setProfitStart},
+            { label:"Доходность BASE %",  val:profitBase, set:setProfitBase },
+            { label:"Доходность PRO %",   val:profitPro,  set:setProfitPro  },
+            { label:"Доходность ELITE %", val:profitElite,set:setProfitElite},
+            { label:"Лимит START/д",      val:maxStart,   set:setMaxStart   },
+            { label:"Лимит PRO/д",        val:maxPro,     set:setMaxPro     },
+            { label:"Лимит ELITE/д",      val:maxElite,   set:setMaxElite   },
+            { label:"Очередь выкупа",     val:depth,      set:setDepth      },
           ].map(({ label, val, set }) => (
             <div key={label}>
               <div style={{ fontSize:9, color:"#475569", fontWeight:700, marginBottom:4 }}>{label.toUpperCase()}</div>
@@ -492,21 +503,28 @@ function GamesTab({ adminId }: { adminId: string }) {
 /* ══════════════════ TAB 3: TASKS ══════════════════ */
 function AdConfigSection({ adminId }: { adminId: string }) {
   const { toast, flash } = useToast();
-  const [rewardPts, setRewardPts]   = useState("50");
-  const [dailyLimit, setDailyLimit] = useState("10");
-  const [loading, setLoading]       = useState(false);
+  const [rewardTon, setRewardTon]     = useState("0.0001");
+  const [rewardTonyx, setRewardTonyx] = useState("0");
+  const [dailyLimit, setDailyLimit]   = useState("100");
+  const [resetHours, setResetHours]   = useState("24");
+  const [loading, setLoading]         = useState(false);
 
   useEffect(() => {
     apiCall("settings/ad-config", { adminId }).then(r=>r.json()).then(d=>{
-      if (d.rewardPts)  setRewardPts(String(d.rewardPts));
-      if (d.dailyLimit) setDailyLimit(String(d.dailyLimit));
+      if (d.rewardTon   != null) setRewardTon(String(d.rewardTon));
+      if (d.rewardTonyx != null) setRewardTonyx(String(d.rewardTonyx));
+      if (d.dailyLimit)          setDailyLimit(String(d.dailyLimit));
+      if (d.resetHours)          setResetHours(String(d.resetHours));
     }).catch(()=>{});
   }, [adminId]);
 
   const save = async () => {
     setLoading(true);
     try {
-      const r = await apiCall("settings/ad-config", { adminId, method:"POST", body:JSON.stringify({ rewardPts:parseInt(rewardPts)||50, dailyLimit:parseInt(dailyLimit)||10 }) });
+      const r = await apiCall("settings/ad-config", { adminId, method:"POST", body:JSON.stringify({
+        rewardTon: parseFloat(rewardTon)||0, rewardTonyx: parseFloat(rewardTonyx)||0,
+        dailyLimit: parseInt(dailyLimit)||100, resetHours: parseFloat(resetHours)||24,
+      }) });
       const d = await r.json();
       if (!r.ok) flash(d.error||"Ошибка","error");
       else flash(d.message||"✅ Сохранено","success");
@@ -520,13 +538,24 @@ function AdConfigSection({ adminId }: { adminId: string }) {
       <SectionTitle icon="📺" label="Настройки рекламы" color="#fbbf24" />
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:12 }}>
         <div>
-          <div style={{ fontSize:9, color:"#475569", fontWeight:700, marginBottom:4 }}>НАГРАДА ЗА РЕКЛАМУ (PTS)</div>
-          <NumInput value={rewardPts} onChange={setRewardPts} placeholder="50" min={0} style={{ width:"100%", boxSizing:"border-box" as const }} />
+          <div style={{ fontSize:9, color:"#475569", fontWeight:700, marginBottom:4 }}>НАГРАДА (TON)</div>
+          <NumInput value={rewardTon} onChange={setRewardTon} placeholder="0.0001" min={0} step={0.0001} style={{ width:"100%", boxSizing:"border-box" as const }} />
         </div>
         <div>
-          <div style={{ fontSize:9, color:"#475569", fontWeight:700, marginBottom:4 }}>ЛИМИТ В ДЕНЬ</div>
-          <NumInput value={dailyLimit} onChange={setDailyLimit} placeholder="10" min={1} style={{ width:"100%", boxSizing:"border-box" as const }} />
+          <div style={{ fontSize:9, color:"#475569", fontWeight:700, marginBottom:4 }}>НАГРАДА (TONYX)</div>
+          <NumInput value={rewardTonyx} onChange={setRewardTonyx} placeholder="0" min={0} style={{ width:"100%", boxSizing:"border-box" as const }} />
         </div>
+        <div>
+          <div style={{ fontSize:9, color:"#475569", fontWeight:700, marginBottom:4 }}>ПРОСМОТРОВ ДО СБРОСА</div>
+          <NumInput value={dailyLimit} onChange={setDailyLimit} placeholder="100" min={1} style={{ width:"100%", boxSizing:"border-box" as const }} />
+        </div>
+        <div>
+          <div style={{ fontSize:9, color:"#475569", fontWeight:700, marginBottom:4 }}>СБРОС ЧЕРЕЗ (ЧАСОВ)</div>
+          <NumInput value={resetHours} onChange={setResetHours} placeholder="24" min={0.1} step={0.5} style={{ width:"100%", boxSizing:"border-box" as const }} />
+        </div>
+      </div>
+      <div style={{ fontSize:10, color:"#64748b", marginBottom:12, lineHeight:1.5 }}>
+        Пример: 10 просмотров, сброс через 2ч → игрок смотрит 10 роликов, затем ждёт 2 часа и может снова. Награда 0 в TON или TONYX означает, что эта валюта не выдаётся.
       </div>
       <button onClick={save} disabled={loading} style={{ width:"100%", padding:"11px 0", borderRadius:10, border:"none", fontFamily:"inherit", background:"linear-gradient(135deg,#b45309,#d97706)", color:"#fff", fontSize:13, fontWeight:800, cursor:"pointer" }}>
         {loading?"⏳...":"💾 Сохранить"}

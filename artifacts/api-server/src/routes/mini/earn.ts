@@ -10,37 +10,51 @@ import { eq, and, gte, desc } from "drizzle-orm";
 
 const router: IRouter = Router();
 
-const TON_PER_AD = 0.0001;
+const DEFAULT_REWARD_TON   = 0.0001;
+const DEFAULT_REWARD_TONYX = 0;
 const COOLDOWN_SECONDS = 60;
 const DEDUP_SECONDS = 2;
 const DEFAULT_DAILY_LIMIT = 100;
+const DEFAULT_RESET_HOURS = 24;
 const MINI_BLOCK_ID = "33819";
 const REFERRAL_PCT = 0.10;
 
-/** Admin-configured daily ad-watch cap (Игра → Реклама → "Дневной лимит"); falls back to 100 when unset. */
-async function getAdDailyLimit(): Promise<number> {
-  const row = await db.select().from(systemSettingsTable)
-    .where(eq(systemSettingsTable.key, "ad_daily_limit")).then(r => r[0] ?? null);
-  const parsed = row ? parseInt(row.value) : NaN;
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_DAILY_LIMIT;
+/**
+ * Admin-configured ad settings (Игра → Реклама). Only TON/TONYX are ever paid out —
+ * there is no separate "points" currency in this app.
+ */
+async function getAdConfig(): Promise<{ rewardTon: number; rewardTonyx: number; dailyLimit: number; resetHours: number }> {
+  const rows = await db.select().from(systemSettingsTable);
+  const s: Record<string, string> = {};
+  for (const r of rows) s[r.key] = r.value;
+  const rewardTon   = parseFloat(s["ad_reward_ton"] ?? "");
+  const rewardTonyx = parseFloat(s["ad_reward_tonyx"] ?? "");
+  const dailyLimit  = parseInt(s["ad_daily_limit"] ?? "");
+  const resetHours  = parseFloat(s["ad_reset_hours"] ?? "");
+  return {
+    rewardTon:   Number.isFinite(rewardTon)   && rewardTon   >= 0 ? rewardTon   : DEFAULT_REWARD_TON,
+    rewardTonyx: Number.isFinite(rewardTonyx) && rewardTonyx >= 0 ? rewardTonyx : DEFAULT_REWARD_TONYX,
+    dailyLimit:  Number.isFinite(dailyLimit)  && dailyLimit  > 0  ? dailyLimit  : DEFAULT_DAILY_LIMIT,
+    resetHours:  Number.isFinite(resetHours)  && resetHours  > 0  ? resetHours  : DEFAULT_RESET_HOURS,
+  };
 }
 
-function startOfDayUtc(): Date {
-  const d = new Date();
-  d.setUTCHours(0, 0, 0, 0);
-  return d;
+/** Sliding window start: `resetHours` ago, instead of a fixed UTC-midnight boundary — so admin-configured reset periods (e.g. "10 ads, then wait 2h") work. */
+function windowStart(resetHours: number): Date {
+  return new Date(Date.now() - resetHours * 60 * 60 * 1000);
 }
 
 router.get("/status/:telegramId", async (req, res) => {
   const { telegramId } = GetMiniEarnStatusParams.parse(req.params);
+  const cfg = await getAdConfig();
 
-  const todayViews = await db
+  const windowViews = await db
     .select()
     .from(adViewsTable)
     .where(
       and(
         eq(adViewsTable.telegramId, telegramId),
-        gte(adViewsTable.viewedAt, startOfDayUtc()),
+        gte(adViewsTable.viewedAt, windowStart(cfg.resetHours)),
         eq(adViewsTable.blockId, MINI_BLOCK_ID)
       )
     );
@@ -61,18 +75,17 @@ router.get("/status/:telegramId", async (req, res) => {
     }
   }
 
-  const dailyLimit = await getAdDailyLimit();
-  const canWatch = todayViews.length < dailyLimit && cooldownSeconds === 0;
+  const canWatch = windowViews.length < cfg.dailyLimit && cooldownSeconds === 0;
 
   const data = GetMiniEarnStatusResponse.parse({
     canWatch,
     cooldownSeconds,
-    adsWatchedToday: todayViews.length,
-    dailyLimit,
+    adsWatchedToday: windowViews.length,
+    dailyLimit: cfg.dailyLimit,
     minCoins: 0,
     maxCoins: 0,
   });
-  res.json({ ...data, minTon: TON_PER_AD, maxTon: TON_PER_AD });
+  res.json({ ...data, minTon: cfg.rewardTon, maxTon: cfg.rewardTon, rewardTonyx: cfg.rewardTonyx });
 });
 
 router.post("/watch", async (req, res) => {
@@ -93,20 +106,21 @@ router.post("/watch", async (req, res) => {
     return;
   }
 
-  const todayViews = await db
+  const cfg = await getAdConfig();
+
+  const windowViews = await db
     .select()
     .from(adViewsTable)
     .where(
       and(
         eq(adViewsTable.telegramId, body.telegramId),
-        gte(adViewsTable.viewedAt, startOfDayUtc()),
+        gte(adViewsTable.viewedAt, windowStart(cfg.resetHours)),
         eq(adViewsTable.blockId, MINI_BLOCK_ID)
       )
     );
 
-  const dailyLimit = await getAdDailyLimit();
-  if (todayViews.length >= dailyLimit) {
-    res.status(429).json({ error: `Daily limit of ${dailyLimit} ads reached` });
+  if (windowViews.length >= cfg.dailyLimit) {
+    res.status(429).json({ error: `Daily limit of ${cfg.dailyLimit} ads reached` });
     return;
   }
 
@@ -123,17 +137,20 @@ router.post("/watch", async (req, res) => {
     if (elapsed < DEDUP_SECONDS) {
       res.json({
         tonEarned: 0,
+        tonyxEarned: 0,
         coinsEarned: 0,
         newBalance: Number(user.ton),
-        adsWatchedToday: todayViews.length,
+        adsWatchedToday: windowViews.length,
         cooldownSeconds: Math.ceil(DEDUP_SECONDS - elapsed),
       });
       return;
     }
   }
 
-  const tonEarned = TON_PER_AD;
-  const newTon = Number(user.ton) + tonEarned;
+  const tonEarned   = cfg.rewardTon;
+  const tonyxEarned = cfg.rewardTonyx;
+  const newTon   = Number(user.ton) + tonEarned;
+  const newTonyx = user.tonyxCoins + tonyxEarned;
 
   await db.insert(adViewsTable).values({
     telegramId: body.telegramId,
@@ -144,7 +161,7 @@ router.post("/watch", async (req, res) => {
 
   await db
     .update(usersTable)
-    .set({ ton: String(newTon), totalAdsWatched: user.totalAdsWatched + 1, updatedAt: new Date() })
+    .set({ ton: String(newTon), tonyxCoins: newTonyx, totalAdsWatched: user.totalAdsWatched + 1, updatedAt: new Date() })
     .where(eq(usersTable.telegramId, body.telegramId));
 
   if (user.referredBy && user.referredBy !== body.telegramId) {
@@ -165,9 +182,10 @@ router.post("/watch", async (req, res) => {
 
   res.json({
     tonEarned,
+    tonyxEarned,
     coinsEarned: 0,
     newBalance: newTon,
-    adsWatchedToday: todayViews.length + 1,
+    adsWatchedToday: windowViews.length + 1,
     cooldownSeconds: COOLDOWN_SECONDS,
   });
 });

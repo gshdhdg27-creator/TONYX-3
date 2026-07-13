@@ -15,7 +15,6 @@ import { useTelegram, haptic, hapticNotify } from "@/lib/telegram";
 import { useLang } from "@/lib/LanguageContext";
 
 const BLOCK_ID = ADSGRAM_BLOCK_ID;
-const TON_PER_AD = 0.0001;
 
 function Toast({ msg, type }: { msg: string; type: "success" | "error" }) {
   return (
@@ -51,6 +50,7 @@ export default function TasksPage() {
   const qc = useQueryClient();
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
   const [justEarned, setJustEarned] = useState(0);
+  const [justEarnedTonyx, setJustEarnedTonyx] = useState(0);
   // Local 1-second countdown — smooth timer independent of network refetch
   const [countdown, setCountdown] = useState(0);
   const bodySnapshotRef = useRef<Set<Element>>(new Set());
@@ -97,13 +97,18 @@ export default function TasksPage() {
   const recordWatch = useRecordMiniAdWatch({
     mutation: {
       onSuccess: (data) => {
-        const tonEarned = (data as unknown as { tonEarned?: number }).tonEarned ?? 0;
+        const tonEarned   = (data as unknown as { tonEarned?: number }).tonEarned ?? 0;
+        const tonyxEarned = (data as unknown as { tonyxEarned?: number }).tonyxEarned ?? 0;
         hapticNotify("success");
-        setJustEarned(tonEarned || data.coinsEarned);
-        showToast(tonEarned > 0 ? t.tasks.toastEarnedTon(tonEarned) : t.tasks.toastEarnedPts(data.coinsEarned), "success");
+        setJustEarned(tonEarned);
+        setJustEarnedTonyx(tonyxEarned);
+        showToast(
+          tonyxEarned > 0 ? `+${tonEarned} TON +${tonyxEarned} TONYX` : t.tasks.toastEarnedTon(tonEarned),
+          "success"
+        );
         qc.invalidateQueries({ queryKey: getGetMiniEarnStatusQueryKey(telegramId ?? "") });
         qc.invalidateQueries({ queryKey: getGetUserProfileQueryKey(telegramId ?? "") });
-        setTimeout(() => setJustEarned(0), 2500);
+        setTimeout(() => { setJustEarned(0); setJustEarnedTonyx(0); }, 2500);
       },
       onError: (e: unknown) => {
         hapticNotify("error");
@@ -177,6 +182,8 @@ export default function TasksPage() {
   const canWatch = earnStatus?.canWatch ?? false;
   const watched = earnStatus?.adsWatchedToday ?? 0;
   const limit = earnStatus?.dailyLimit ?? 100;
+  const rewardTon   = (earnStatus as unknown as { minTon?: number })?.minTon ?? 0;
+  const rewardTonyx = (earnStatus as unknown as { rewardTonyx?: number })?.rewardTonyx ?? 0;
 
   const btnLabel = recordWatch.isPending
     ? t.tasks.processing
@@ -228,12 +235,16 @@ export default function TasksPage() {
           }} />
         </div>
 
-        {justEarned > 0 && (
+        {(justEarned > 0 || justEarnedTonyx > 0) && (
           <div style={{
             fontSize: 28, fontWeight: 900, color: "#4ade80", textAlign: "center",
             marginBottom: 10, animation: "bounceIn 0.3s ease-out",
             textShadow: "0 0 16px rgba(74,222,128,0.6)",
-          }}>+{justEarned} TON</div>
+          }}>
+            {justEarned > 0 && <>+{justEarned} TON</>}
+            {justEarned > 0 && justEarnedTonyx > 0 && " "}
+            {justEarnedTonyx > 0 && <>+{justEarnedTonyx} TONYX</>}
+          </div>
         )}
 
         <button

@@ -8,6 +8,8 @@
 
 export interface MiniAdWatchResult {
   coinsEarned: number;
+  tonEarned?: number;
+  tonyxEarned?: number;
   newBalance: number;
   adsWatchedToday: number;
   cooldownSeconds: number;

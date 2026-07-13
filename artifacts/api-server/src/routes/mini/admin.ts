@@ -953,28 +953,36 @@ router.post("/settings/games-enabled", async (req, res) => {
    AD CONFIG
 ═══════════════════════════════════════ */
 
+/* Reward is paid in the app's two real balances (TON / TONYX) — no separate "points" currency. */
 router.get("/settings/ad-config", async (_req, res) => {
   try {
     const rows = await db.select().from(systemSettingsTable);
     const s: Record<string, string> = {};
     for (const r of rows) s[r.key] = r.value;
     res.json({
-      rewardPts:  parseInt(s["ad_reward_pts"] ?? "") || 50,
-      dailyLimit: parseInt(s["ad_daily_limit"] ?? "") || 10,
+      rewardTon:   parseFloat(s["ad_reward_ton"] ?? "") || 0.0001,
+      rewardTonyx: parseFloat(s["ad_reward_tonyx"] ?? "") || 0,
+      dailyLimit:  parseInt(s["ad_daily_limit"] ?? "") || 100,
+      resetHours:  parseFloat(s["ad_reset_hours"] ?? "") || 24,
     });
   } catch (e) { res.status(500).json({ error: String(e) }); }
 });
 
 router.post("/settings/ad-config", async (req, res) => {
   try {
-    const { rewardPts, dailyLimit } = req.body as { rewardPts?: number; dailyLimit?: number };
-    if (rewardPts  != null) {
-      await db.insert(systemSettingsTable).values({ key: "ad_reward_pts", value: String(Math.max(0, rewardPts)) })
-        .onConflictDoUpdate({ target: systemSettingsTable.key, set: { value: String(Math.max(0, rewardPts)), updatedAt: new Date() } });
-    }
-    if (dailyLimit != null) {
-      await db.insert(systemSettingsTable).values({ key: "ad_daily_limit", value: String(Math.max(1, dailyLimit)) })
-        .onConflictDoUpdate({ target: systemSettingsTable.key, set: { value: String(Math.max(1, dailyLimit)), updatedAt: new Date() } });
+    const { rewardTon, rewardTonyx, dailyLimit, resetHours } = req.body as {
+      rewardTon?: number; rewardTonyx?: number; dailyLimit?: number; resetHours?: number;
+    };
+    const pairs: [string, unknown][] = [
+      ["ad_reward_ton",   rewardTon   != null ? Math.max(0, rewardTon)   : null],
+      ["ad_reward_tonyx", rewardTonyx != null ? Math.max(0, rewardTonyx) : null],
+      ["ad_daily_limit",  dailyLimit  != null ? Math.max(1, dailyLimit)  : null],
+      ["ad_reset_hours",  resetHours  != null ? Math.max(0.1, resetHours) : null],
+    ];
+    for (const [key, val] of pairs) {
+      if (val == null) continue;
+      await db.insert(systemSettingsTable).values({ key, value: String(val) })
+        .onConflictDoUpdate({ target: systemSettingsTable.key, set: { value: String(val), updatedAt: new Date() } });
     }
     res.json({ success: true, message: "✅ Настройки рекламы сохранены" });
   } catch (e) { res.status(500).json({ error: String(e) }); }
@@ -991,7 +999,11 @@ router.get("/settings/market-config", async (_req, res) => {
     for (const r of rows) s[r.key] = r.value;
     res.json({
       feePct:           parseFloat(s["market_fee_pct"] ?? "") || 0,
-      profitPct:        parseFloat(s["market_profit_pct"] ?? "") || 0,
+      /* Per-tier seller bonus % — replaces the hardcoded 1.4/1.7/2/2.5 defaults when set */
+      profitPctStart:   s["market_profit_pct_start"] != null ? parseFloat(s["market_profit_pct_start"]) : 1.4,
+      profitPctBase:    s["market_profit_pct_base"]  != null ? parseFloat(s["market_profit_pct_base"])  : 1.7,
+      profitPctPro:     s["market_profit_pct_pro"]   != null ? parseFloat(s["market_profit_pct_pro"])   : 2,
+      profitPctElite:   s["market_profit_pct_elite"] != null ? parseFloat(s["market_profit_pct_elite"]) : 2.5,
       maxOrdersStart:   parseInt(s["market_max_start"] ?? "") || 3,
       maxOrdersPro:     parseInt(s["market_max_pro"] ?? "") || 3,
       maxOrdersElite:   parseInt(s["market_max_elite"] ?? "") || 3,
@@ -1003,8 +1015,11 @@ router.post("/settings/market-config", async (req, res) => {
   try {
     const body = req.body as Record<string, unknown>;
     const pairs: [string, unknown][] = [
-      ["market_fee_pct",    body.feePct],
-      ["market_profit_pct", body.profitPct],
+      ["market_fee_pct",         body.feePct],
+      ["market_profit_pct_start", body.profitPctStart],
+      ["market_profit_pct_base",  body.profitPctBase],
+      ["market_profit_pct_pro",   body.profitPctPro],
+      ["market_profit_pct_elite", body.profitPctElite],
       ["market_max_start",  body.maxOrdersStart],
       ["market_max_pro",    body.maxOrdersPro],
       ["market_max_elite",  body.maxOrdersElite],

@@ -34,6 +34,21 @@ async function getDailyLimit(category: Category): Promise<number> {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_DAILY_LIMIT;
 }
 
+/** Admin-configured per-tier seller bonus % (overrides the CATEGORIES default when set). */
+async function getBonusPct(category: Category): Promise<number> {
+  const key = `market_profit_pct_${category}`;
+  const row = await db.select().from(systemSettingsTable).where(eq(systemSettingsTable.key, key)).then(r => r[0] ?? null);
+  const parsed = row ? parseFloat(row.value) : NaN;
+  return Number.isFinite(parsed) ? parsed : CATEGORIES[category].bonusPct;
+}
+
+/** Admin-configured platform commission %, taken out of the TONYX the buyer receives. */
+async function getFeePct(): Promise<number> {
+  const row = await db.select().from(systemSettingsTable).where(eq(systemSettingsTable.key, "market_fee_pct")).then(r => r[0] ?? null);
+  const parsed = row ? parseFloat(row.value) : NaN;
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+}
+
 function getCategory(totalTon: number): Category | null {
   if (totalTon >= 3   && totalTon <= 10)  return "start";
   if (totalTon > 10   && totalTon <= 50)  return "base";
@@ -208,7 +223,7 @@ router.post("/orders", async (req, res) => {
     res.status(400).json({ error: `Недостаточно TONYX. Нужно ${amount}, у вас ${user.tonyxCoins}` }); return;
   }
 
-  const bonusPct = CATEGORIES[category].bonusPct;
+  const bonusPct = await getBonusPct(category);
 
   // ── Atomic: deduct TONYX escrow + insert order ──
   const order = await db.transaction(async (tx) => {
@@ -342,8 +357,10 @@ router.post("/orders/:id/buy", async (req, res) => {
   }
 
   const bonusPct           = Number(order.bonusPct);
+  const feePct             = await getFeePct();
   const partialEscrowTonyx = Math.floor(purchaseTon * FIXED_RATE);
-  const bonusCoins         = Math.floor(partialEscrowTonyx * (1 + bonusPct / 100));
+  // Platform commission (feePct) is taken out of what the buyer receives, on top of the seller's bonus %.
+  const bonusCoins         = Math.floor(partialEscrowTonyx * (1 + bonusPct / 100) * (1 - feePct / 100));
 
   // ── Atomic transaction: balance check + all balance/order updates ──
   let updated: typeof miniMarketOrdersTable.$inferSelect;

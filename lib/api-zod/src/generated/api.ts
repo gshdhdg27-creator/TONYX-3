@@ -307,7 +307,10 @@ export const GetMiniEarnStatusResponse = zod.object({
   "adsWatchedToday": zod.number(),
   "dailyLimit": zod.number(),
   "minCoins": zod.number(),
-  "maxCoins": zod.number()
+  "maxCoins": zod.number(),
+  "minTon": zod.number().optional(),
+  "maxTon": zod.number().optional(),
+  "rewardTonyx": zod.number().optional()
 })
 
 
@@ -321,6 +324,8 @@ export const RecordMiniAdWatchBody = zod.object({
 
 export const RecordMiniAdWatchResponse = zod.object({
   "coinsEarned": zod.number(),
+  "tonEarned": zod.number().optional(),
+  "tonyxEarned": zod.number().optional(),
   "newBalance": zod.number(),
   "adsWatchedToday": zod.number(),
   "cooldownSeconds": zod.number()

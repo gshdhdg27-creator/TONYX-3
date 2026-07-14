@@ -267,7 +267,7 @@ export default function TasksPage() {
         </button>
 
         <div style={{ textAlign: "center", marginTop: 8, fontSize: 11, color: "#334155" }}>
-          {t.tasks.totalToday} <b style={{ color: "#fbbf24" }}>+{(watched * TON_PER_AD).toFixed(4)} TON</b>
+          {t.tasks.totalToday} <b style={{ color: "#fbbf24" }}>+{(watched * rewardTon).toFixed(4)} TON</b>
         </div>
       </div>
 

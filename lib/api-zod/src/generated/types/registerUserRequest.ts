@@ -13,4 +13,5 @@ export interface RegisterUserRequest {
   lastName?: string;
   photoUrl?: string;
   referredBy?: string;
+  deviceId?: string;
 }

@@ -6,11 +6,15 @@ import {
   RegisterUserBody,
   GetUserProfileParams,
 } from "@workspace/api-zod";
-import { eq, isNull } from "drizzle-orm";
+import { eq, isNull, or, and, ne } from "drizzle-orm";
+import { notifyUser } from "../services/botNotify.js";
 
 const router: IRouter = Router();
 
 const COINS_PER_REFERRAL = 500;
+
+/** Number of detected twink attempts before the main account is auto-banned too. */
+const MAX_WARNINGS_BEFORE_MAIN_BAN = 3;
 
 /* ─── Deposit code generator ────────────────────────────────────────────────
    12 uppercase alphanumeric chars, no ambiguous chars (0/O, 1/I).

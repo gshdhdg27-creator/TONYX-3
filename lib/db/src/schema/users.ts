@@ -46,6 +46,12 @@ export const usersTable = pgTable("users", {
   /* Misc */
   photoUrl: text("photo_url"),
   lastIp: text("last_ip"),
+  /* Persistent per-device identifier (generated client-side, stored in localStorage)
+     used together with lastIp for multi-account ("twink") detection. */
+  deviceId: text("device_id"),
+  /* Number of detected twink (multi-account) attempts tied to this account as the main account.
+     Reaching 3 triggers an automatic ban of the main account. */
+  warningCount: integer("warning_count").notNull().default(0),
   language: text("language").notNull().default("ru"),
   isBlocked: boolean("is_blocked").notNull().default(false),
   isAdmin: boolean("is_admin").notNull().default(false),

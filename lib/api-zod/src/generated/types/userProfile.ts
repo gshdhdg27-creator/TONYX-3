@@ -21,5 +21,6 @@ export interface UserProfile {
   isBlocked: boolean;
   isAdmin: boolean;
   depositCode?: string;
+  warningCount?: number;
   createdAt: Date;
 }

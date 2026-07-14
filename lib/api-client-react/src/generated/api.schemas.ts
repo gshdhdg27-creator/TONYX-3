@@ -21,6 +21,7 @@ export interface RegisterUserRequest {
   lastName?: string;
   photoUrl?: string;
   referredBy?: string;
+  deviceId?: string;
 }
 
 export interface UserProfile {
@@ -38,6 +39,7 @@ export interface UserProfile {
   isBlocked: boolean;
   isAdmin: boolean;
   depositCode?: string;
+  warningCount?: number;
   createdAt: string;
 }
 

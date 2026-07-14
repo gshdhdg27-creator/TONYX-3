@@ -25,7 +25,8 @@ export const RegisterUserBody = zod.object({
   "firstName": zod.string().optional(),
   "lastName": zod.string().optional(),
   "photoUrl": zod.string().optional(),
-  "referredBy": zod.string().optional()
+  "referredBy": zod.string().optional(),
+  "deviceId": zod.string().optional()
 })
 
 export const RegisterUserResponse = zod.object({
@@ -43,6 +44,7 @@ export const RegisterUserResponse = zod.object({
   "isBlocked": zod.boolean(),
   "isAdmin": zod.boolean(),
   "depositCode": zod.string().optional(),
+  "warningCount": zod.number().optional(),
   "createdAt": zod.coerce.date()
 })
 
@@ -69,6 +71,7 @@ export const GetUserProfileResponse = zod.object({
   "isBlocked": zod.boolean(),
   "isAdmin": zod.boolean(),
   "depositCode": zod.string().optional(),
+  "warningCount": zod.number().optional(),
   "createdAt": zod.coerce.date()
 })
 

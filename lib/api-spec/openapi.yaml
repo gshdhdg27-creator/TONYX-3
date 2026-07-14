@@ -827,6 +827,8 @@ components:
           type: string
         referredBy:
           type: string
+        deviceId:
+          type: string
       required: [telegramId]
 
     UserProfile:
@@ -860,6 +862,8 @@ components:
           type: boolean
         depositCode:
           type: string
+        warningCount:
+          type: integer
         createdAt:
           type: string
           format: date-time

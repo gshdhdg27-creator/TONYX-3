@@ -394,8 +394,10 @@ export interface MiniTaskCompleteInput {
 }
 
 export interface MiniTaskCompleteResult {
-  coinsEarned: number;
+  tonyxEarned: number;
+  tonEarned?: number;
   newBalance: number;
+  newTon?: number;
   taskTitle: string;
 }
 

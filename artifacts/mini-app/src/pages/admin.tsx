@@ -662,7 +662,7 @@ function TasksTab({ adminId, isSuperAdmin }: { adminId: string; isSuperAdmin: bo
                 <div style={{ flex:1, minWidth:0 }}>
                   <div style={{ fontSize:12, fontWeight:700, color:t.isActive?"#e2e8f0":"#475569", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{t.title}</div>
                   <div style={{ display:"flex", gap:5, marginTop:4, flexWrap:"wrap" }}>
-                    {t.reward>0 && <span style={{ fontSize:10, fontWeight:700, color:"#60a5fa", background:"rgba(37,99,235,0.12)", borderRadius:5, padding:"1px 5px" }}>+{t.reward.toLocaleString()} pts</span>}
+                    {t.reward>0 && <span style={{ fontSize:10, fontWeight:700, color:"#60a5fa", background:"rgba(37,99,235,0.12)", borderRadius:5, padding:"1px 5px" }}>+{t.reward.toLocaleString()} TONYX</span>}
                     {!!t.rewardTon && <span style={{ fontSize:10, fontWeight:700, color:"#fbbf24", background:"rgba(251,191,36,0.12)", borderRadius:5, padding:"1px 5px" }}>+{t.rewardTon} TON</span>}
                     {t.maxCompletions && <span style={{ fontSize:10, color:"#94a3b8", background:"rgba(30,45,69,0.5)", borderRadius:5, padding:"1px 5px" }}>{t.currentCompletions}/{t.maxCompletions}</span>}
                     <span style={{ fontSize:10, color:"#334155", background:"rgba(30,45,69,0.3)", borderRadius:5, padding:"1px 5px" }}>{t.type}</span>
@@ -962,7 +962,7 @@ function GeneralTab({ adminId, isSuperAdmin }: { adminId: string; isSuperAdmin: 
 }
 
 /* ══════════════════ TAB 5: PLAYERS (TWINS) ══════════════════ */
-interface TwinGroup { ip: string; count: number; accounts: { telegramId: string; username: string | null; firstName: string | null; createdAt: string | null; isMain: boolean }[]; }
+interface TwinGroup { ip: string; matchedBy: "ip" | "device" | "ip+device"; count: number; accounts: { telegramId: string; username: string | null; firstName: string | null; createdAt: string | null; warningCount: number; isMain: boolean }[]; }
 
 function TeamSection({ admins, adminId, onRefresh }: { admins: { telegramId: string; username: string | null }[]; adminId: string; onRefresh: ()=>void }) {
   const { toast, flash } = useToast();
@@ -1019,10 +1019,13 @@ function PlayersTab({ adminId, isSuperAdmin, stats, onRefresh }: { adminId: stri
 
   useEffect(() => { loadTwins(); }, [loadTwins]);
 
-  const banGroup = async (ip: string, keepMain: boolean) => {
-    setBanningIp(ip);
+  const banGroup = async (group: TwinGroup, keepMain: boolean) => {
+    setBanningIp(group.ip);
     try {
-      const r = await apiCall("twins/ban-group", { adminId, method:"POST", body:JSON.stringify({ ip, keepMain, reason:"Твинк-аккаунт (мульти-аккаунт)" }) });
+      const body = group.matchedBy === "device"
+        ? { deviceId: group.ip, keepMain, reason:"Твинк-аккаунт (мульти-аккаунт)" }
+        : { ip: group.ip, keepMain, reason:"Твинк-аккаунт (мульти-аккаунт)" };
+      const r = await apiCall("twins/ban-group", { adminId, method:"POST", body:JSON.stringify(body) });
       const d = await r.json();
       if (!r.ok) flash(d.error||"Ошибка","error");
       else { flash(d.message||"✅ Заблокировано","success"); loadTwins(); }
@@ -1040,11 +1043,11 @@ function PlayersTab({ adminId, isSuperAdmin, stats, onRefresh }: { adminId: stri
 
       <SectionCard color="#dc2626">
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14 }}>
-          <SectionTitle icon="🔍" label="Твинк-аккаунты (по IP)" color="#f87171" />
+          <SectionTitle icon="🔍" label="Твинк-аккаунты (по IP и устройству)" color="#f87171" />
           <button onClick={loadTwins} style={{ padding:"6px 12px", borderRadius:8, border:"1px solid rgba(220,38,38,0.3)", background:"rgba(30,45,69,0.5)", color:"#f87171", fontFamily:"inherit", fontSize:11, fontWeight:700, cursor:"pointer" }}>🔄</button>
         </div>
         <div style={{ fontSize:11, color:"#475569", marginBottom:12 }}>
-          Пользователи, вошедшие с одного IP-адреса. Первый аккаунт считается главным.
+          Пользователи, совпавшие по IP-адресу и/или устройству. Первый (по дате регистрации) аккаунт считается главным. При регистрации новый твинк-аккаунт блокируется автоматически, а главный получает предупреждение (после 3-х — блокируется тоже).
         </div>
 
         {loading ? (
@@ -1056,7 +1059,9 @@ function PlayersTab({ adminId, isSuperAdmin, stats, onRefresh }: { adminId: stri
             <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10 }}>
               <div>
                 <div style={{ fontFamily:"monospace", fontSize:12, color:"#fca5a5", fontWeight:700 }}>{g.ip}</div>
-                <div style={{ fontSize:10, color:"#475569", marginTop:2 }}>{g.count} аккаунтов</div>
+                <div style={{ fontSize:10, color:"#475569", marginTop:2 }}>
+                  {g.count} аккаунтов · совпадение: {g.matchedBy==="ip"?"IP":g.matchedBy==="device"?"устройство":"IP + устройство"}
+                </div>
               </div>
               <span style={{ fontSize:11, fontWeight:900, color:"#f87171", background:"rgba(220,38,38,0.2)", padding:"3px 10px", borderRadius:8 }}>×{g.count} ТВИНКОВ</span>
             </div>
@@ -1071,6 +1076,11 @@ function PlayersTab({ adminId, isSuperAdmin, stats, onRefresh }: { adminId: stri
                     </div>
                     <div style={{ fontSize:9, color:"#334155" }}>ID: {acc.telegramId}</div>
                   </div>
+                  {acc.isMain && acc.warningCount > 0 && (
+                    <span style={{ flexShrink:0, fontSize:9, fontWeight:900, padding:"2px 7px", borderRadius:6, background:"rgba(251,191,36,0.15)", color:"#fbbf24" }}>
+                      ⚠️ {acc.warningCount}/3
+                    </span>
+                  )}
                   <span style={{ flexShrink:0, fontSize:9, fontWeight:900, padding:"2px 7px", borderRadius:6, background:acc.isMain?"rgba(34,197,94,0.15)":"rgba(220,38,38,0.15)", color:acc.isMain?"#4ade80":"#f87171" }}>
                     {acc.isMain?"ГЛАВНЫЙ":`ТВИНК #${i}`}
                   </span>
@@ -1079,11 +1089,11 @@ function PlayersTab({ adminId, isSuperAdmin, stats, onRefresh }: { adminId: stri
             </div>
             {isSuperAdmin && (
               <div style={{ display:"flex", gap:8 }}>
-                <button onClick={()=>banGroup(g.ip, true)} disabled={banningIp===g.ip}
+                <button onClick={()=>banGroup(g, true)} disabled={banningIp===g.ip}
                   style={{ flex:2, padding:"10px 0", borderRadius:10, border:"none", fontFamily:"inherit", background:"rgba(220,38,38,0.15)", color:"#f87171", fontSize:12, fontWeight:800, cursor:"pointer" }}>
                   {banningIp===g.ip?"⏳...":"🔴 Бан твинков (главный остаётся)"}
                 </button>
-                <button onClick={()=>banGroup(g.ip, false)} disabled={banningIp===g.ip}
+                <button onClick={()=>banGroup(g, false)} disabled={banningIp===g.ip}
                   style={{ flex:1, padding:"10px 0", borderRadius:10, border:"none", fontFamily:"inherit", background:"rgba(127,29,29,0.3)", color:"#fca5a5", fontSize:12, fontWeight:800, cursor:"pointer" }}>
                   {banningIp===g.ip?"⏳...":"💀 Всех"}
                 </button>

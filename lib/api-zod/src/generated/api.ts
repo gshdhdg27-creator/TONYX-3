@@ -665,8 +665,10 @@ export const CompleteMiniTaskBody = zod.object({
 })
 
 export const CompleteMiniTaskResponse = zod.object({
-  "coinsEarned": zod.number(),
+  "tonyxEarned": zod.number(),
+  "tonEarned": zod.number().optional(),
   "newBalance": zod.number(),
+  "newTon": zod.number().optional(),
   "taskTitle": zod.string()
 })
 

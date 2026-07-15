@@ -151,8 +151,8 @@ export default function TasksPage() {
         hapticNotify("success");
         const tonEarned = (data as unknown as { tonEarned?: number }).tonEarned ?? 0;
         const msg = tonEarned > 0
-          ? `${data.taskTitle} +${data.coinsEarned} pts +${tonEarned} TON ✅`
-          : `${data.taskTitle} +${data.coinsEarned} pts ✅`;
+          ? `${data.taskTitle} +${data.tonyxEarned} TONYX +${tonEarned} TON ✅`
+          : `${data.taskTitle} +${data.tonyxEarned} TONYX ✅`;
         showToast(msg, "success");
         qc.invalidateQueries({ queryKey: getGetMiniTasksQueryKey(telegramId ?? "") });
         qc.invalidateQueries({ queryKey: getGetUserProfileQueryKey(telegramId ?? "") });
@@ -306,7 +306,7 @@ export default function TasksPage() {
                     )}
                     <div style={{ display: "flex", gap: 6, marginTop: 4, flexWrap: "wrap" }}>
                       {(task.reward ?? 0) > 0 && (
-                        <span style={{ fontSize: 12, color: "#60a5fa", fontWeight: 600 }}>+{task.reward} pts</span>
+                        <span style={{ fontSize: 12, color: "#60a5fa", fontWeight: 600 }}>+{task.reward} TONYX</span>
                       )}
                       {(task as { rewardTon?: number | null }).rewardTon && (task as { rewardTon?: number | null }).rewardTon! > 0 && (
                         <span style={{ fontSize: 12, color: "#fbbf24", fontWeight: 700 }}>+{(task as { rewardTon?: number | null }).rewardTon} TON</span>
@@ -350,7 +350,7 @@ export default function TasksPage() {
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: 14, fontWeight: 500, color: "#94a3b8", textDecoration: "line-through" }}>{task.title}</div>
                     <div style={{ display: "flex", gap: 5, marginTop: 2, flexWrap: "wrap" }}>
-                      {(task.reward ?? 0) > 0 && <span style={{ fontSize: 12, color: "#4ade80" }}>+{task.reward} pts</span>}
+                      {(task.reward ?? 0) > 0 && <span style={{ fontSize: 12, color: "#4ade80" }}>+{task.reward} TONYX</span>}
                       {(task as { rewardTon?: number | null }).rewardTon && (task as { rewardTon?: number | null }).rewardTon! > 0 && (
                         <span style={{ fontSize: 12, color: "#fbbf24" }}>+{(task as { rewardTon?: number | null }).rewardTon} TON</span>
                       )}

@@ -12,6 +12,7 @@ import {
   GetMineGameResponse,
 } from "@workspace/api-zod";
 import { eq, and } from "drizzle-orm";
+import { isGameEnabled, GAME_DISABLED_MESSAGE } from "../../lib/game-config.js";
 
 const router: IRouter = Router();
 
@@ -91,6 +92,11 @@ router.get("/:gameId", async (req, res) => {
 
 router.post("/start", async (req, res) => {
   const body = StartMineGameBody.parse(req.body);
+
+  if (!(await isGameEnabled("mines"))) {
+    res.status(403).json({ error: GAME_DISABLED_MESSAGE });
+    return;
+  }
 
   if (body.minesCount < 1 || body.minesCount > 24) {
     res.status(400).json({ error: "Mines count must be between 1 and 24" });

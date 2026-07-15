@@ -59,6 +59,85 @@ async function getReferralCount(telegramId: string): Promise<number> {
   return referrals.length;
 }
 
+/**
+ * Multi-account ("twink") detection.
+ *
+ * Runs right after a brand-new account is created. Looks for an existing,
+ * different account sharing the same device (persisted client-side ID) or
+ * IP address. If one is found, the earliest-created account in that group is
+ * treated as the "main" account:
+ *  - the brand-new account is immediately blocked (a Telegram identity can't
+ *    be swapped by the web app, so we can't literally "log the user into"
+ *    their main account — instead we block the twink and tell them to use
+ *    their main account)
+ *  - the main account receives a warning strike; after
+ *    MAX_WARNINGS_BEFORE_MAIN_BAN strikes the main account is banned too.
+ */
+async function checkAndHandleTwinkAccount(
+  newUser: typeof usersTable.$inferSelect,
+  ip: string | null,
+  deviceId: string | null,
+): Promise<typeof usersTable.$inferSelect> {
+  if (!ip && !deviceId) return newUser;
+
+  const matchConditions = [];
+  if (deviceId) matchConditions.push(eq(usersTable.deviceId, deviceId));
+  if (ip) matchConditions.push(eq(usersTable.lastIp, ip));
+
+  const candidates = await db
+    .select()
+    .from(usersTable)
+    .where(and(ne(usersTable.telegramId, newUser.telegramId), or(...matchConditions)))
+    .orderBy(usersTable.createdAt);
+
+  if (!candidates.length) return newUser;
+
+  const main = candidates[0];
+
+  const [bannedTwink] = await db
+    .update(usersTable)
+    .set({
+      isBlocked: true,
+      userStatus: "banned",
+      bannedReason: "Твинк-аккаунт (мульти-аккаунт)",
+      updatedAt: new Date(),
+    })
+    .where(eq(usersTable.telegramId, newUser.telegramId))
+    .returning();
+
+  const newWarningCount = main.warningCount + 1;
+  const mainShouldBeBanned = newWarningCount >= MAX_WARNINGS_BEFORE_MAIN_BAN;
+
+  await db
+    .update(usersTable)
+    .set({
+      warningCount: newWarningCount,
+      ...(mainShouldBeBanned
+        ? { isBlocked: true, userStatus: "banned" as const, bannedReason: "Множественные аккаунты (3 предупреждения)" }
+        : {}),
+      updatedAt: new Date(),
+    })
+    .where(eq(usersTable.telegramId, main.telegramId));
+
+  void notifyUser(
+    newUser.telegramId,
+    `🔴 <b>Регистрация заблокирована</b>\n\n` +
+      `Мы обнаружили, что вы уже используете основной аккаунт TONYX на этом устройстве/сети.\n` +
+      `Использование нескольких аккаунтов запрещено правилами проекта — пожалуйста, продолжайте играть со своего основного аккаунта.`,
+  );
+  void notifyUser(
+    main.telegramId,
+    mainShouldBeBanned
+      ? `🔴 <b>Ваш аккаунт TONYX заблокирован</b>\n\n` +
+          `Причина: множественные аккаунты (получено 3 предупреждения о попытках регистрации твинк-аккаунтов с вашего устройства/IP).`
+      : `⚠️ <b>Предупреждение TONYX</b>\n\n` +
+          `С вашего устройства/сети была обнаружена попытка регистрации ещё одного аккаунта — это запрещено правилами проекта.\n` +
+          `Предупреждение ${newWarningCount}/${MAX_WARNINGS_BEFORE_MAIN_BAN}. После ${MAX_WARNINGS_BEFORE_MAIN_BAN}-го предупреждения ваш основной аккаунт будет заблокирован.`,
+  );
+
+  return bannedTwink;
+}
+
 function userResponse(user: typeof usersTable.$inferSelect, totalReferrals: number) {
   return {
     id: user.id,
@@ -75,6 +154,7 @@ function userResponse(user: typeof usersTable.$inferSelect, totalReferrals: numb
     isBlocked: user.isBlocked,
     isAdmin: user.isAdmin,
     depositCode: user.depositCode ?? undefined,
+    warningCount: user.warningCount,
     createdAt: user.createdAt.toISOString(),
   };
 }
@@ -82,6 +162,7 @@ function userResponse(user: typeof usersTable.$inferSelect, totalReferrals: numb
 router.post("/register", async (req, res) => {
   const body = RegisterUserBody.parse(req.body);
   const ip = getClientIp(req);
+  const deviceId = body.deviceId?.trim() || null;
 
   let user = await db
     .select()
@@ -101,6 +182,7 @@ router.post("/register", async (req, res) => {
         photoUrl: body.photoUrl ?? null,
         referredBy: body.referredBy ?? null,
         lastIp: ip,
+        deviceId,
         coins: 0,
         totalAdsWatched: 0,
         isBlocked: false,
@@ -109,7 +191,10 @@ router.post("/register", async (req, res) => {
       .returning();
     user = created;
 
-    if (body.referredBy && body.referredBy !== body.telegramId) {
+    // Multi-account ("twink") detection — only relevant for brand-new accounts.
+    user = await checkAndHandleTwinkAccount(user, ip, deviceId);
+
+    if (!user.isBlocked && body.referredBy && body.referredBy !== body.telegramId) {
       const referrer = await db
         .select()
         .from(usersTable)
@@ -134,6 +219,7 @@ router.post("/register", async (req, res) => {
       lastName:    body.lastName  ?? user.lastName  ?? undefined,
       photoUrl:    body.photoUrl  ?? user.photoUrl  ?? undefined,
       lastIp:      ip ?? user.lastIp ?? undefined,
+      deviceId:    deviceId ?? user.deviceId ?? undefined,
       lastLoginAt: new Date(),
       updatedAt:   new Date(),
     };

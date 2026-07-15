@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import { usersTable, miniIgroGamesTable } from "@workspace/db/schema";
 import { eq, and, desc } from "drizzle-orm";
+import { isGameEnabled, GAME_DISABLED_MESSAGE } from "../../lib/game-config.js";
 
 const router: IRouter = Router();
 
@@ -108,6 +109,10 @@ router.get("/history", async (req, res) => {
 
 /* ─── POST /start ─── */
 router.post("/start", async (req, res) => {
+  if (!(await isGameEnabled("igro"))) {
+    res.status(403).json({ error: GAME_DISABLED_MESSAGE });
+    return;
+  }
   const { telegramId, betTon, bombCount } = req.body as {
     telegramId?: string; betTon?: number; bombCount?: number;
   };

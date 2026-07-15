@@ -3,3 +3,4 @@
 - [NEON_DATABASE_URL priority](neon-db-priority.md) — lib/db/src/index.ts uses NEON_DATABASE_URL ?? DATABASE_URL; new Repls get empty local DB without NEON_DATABASE_URL secret.
 - [Artifact registration recovery](artifact-registration-recovery.md) — createArtifact refuses existing dirs but its rescan also re-registers other lost artifacts; rename-out/create/rename-back trick to recover.
 - [OpenAPI spec must stay full](openapi-spec-completeness.md) — a reduced/stub openapi.yaml breaks codegen silently downstream (missing Zod schemas), not at codegen time itself; always diff against any backup/original spec before trusting it.
+- [TONYX dual route tree](tonyx-dual-route-architecture.md) — legacy (coins-based) and mini (TON/TONYX-based) route trees are both live; never assume a route is dead without grepping frontend hook usage first.

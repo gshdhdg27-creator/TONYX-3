@@ -14,6 +14,7 @@ import ProfilePage from "@/pages/profile";
 import LeaderboardPage from "@/pages/leaderboard";
 import AdminPage from "@/pages/admin";
 import { initTelegram, useTelegram } from "@/lib/telegram";
+import { getDeviceId } from "@/lib/deviceId";
 import { LanguageProvider } from "@/lib/LanguageContext";
 import { useRegisterUser, getGetUserProfileQueryKey } from "@workspace/api-client-react";
 import { SplashScreen } from "@/components/SplashScreen";
@@ -114,6 +115,7 @@ function AppShell() {
           lastName:   lastName   ?? undefined,
           photoUrl:   photoUrl   ?? undefined,
           referredBy: startParam ?? undefined,
+          deviceId:   getDeviceId() || undefined,
         },
       },
       {

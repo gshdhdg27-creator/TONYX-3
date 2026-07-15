@@ -1063,53 +1063,104 @@ router.post("/market/admin-order", async (req, res) => {
 
 router.get("/twins", async (_req, res) => {
   try {
-    const rows = await db.execute<{
-      last_ip: string; cnt: number; telegram_ids: string; usernames: string; first_names: string; created_ats: string;
-    }>(sql`
-      SELECT
-        last_ip,
-        COUNT(*)::int AS cnt,
-        STRING_AGG(telegram_id, ',' ORDER BY created_at ASC) AS telegram_ids,
-        STRING_AGG(COALESCE(username,''), ',' ORDER BY created_at ASC) AS usernames,
-        STRING_AGG(COALESCE(first_name,''), ',' ORDER BY created_at ASC) AS first_names,
-        STRING_AGG(created_at::text, ',' ORDER BY created_at ASC) AS created_ats
-      FROM users
-      WHERE last_ip IS NOT NULL AND last_ip != ''
-      GROUP BY last_ip
-      HAVING COUNT(*) > 1
-      ORDER BY cnt DESC
-      LIMIT 100
-    `);
-    const groups = rows.rows.map(r => {
-      const ids      = r.telegram_ids.split(",");
-      const names    = r.usernames.split(",");
-      const fnames   = r.first_names.split(",");
-      const dates    = r.created_ats.split(",");
-      return {
-        ip: r.last_ip,
-        count: r.cnt,
-        accounts: ids.map((id, i) => ({
-          telegramId: id,
-          username: names[i] || null,
-          firstName: fnames[i] || null,
-          createdAt: dates[i] || null,
-          isMain: i === 0,
-        })),
-      };
-    });
-    res.json({ groups });
+    // Group by IP and by device_id separately, then merge any group that
+    // has more than one distinct account into a single list. A group's key
+    // is labelled so the admin UI can show whether accounts were matched by
+    // shared IP, shared device, or both.
+    const [byIp, byDevice] = await Promise.all([
+      db.execute<{
+        last_ip: string; cnt: number; telegram_ids: string; usernames: string; first_names: string; created_ats: string; warning_counts: string;
+      }>(sql`
+        SELECT
+          last_ip,
+          COUNT(*)::int AS cnt,
+          STRING_AGG(telegram_id, ',' ORDER BY created_at ASC) AS telegram_ids,
+          STRING_AGG(COALESCE(username,''), ',' ORDER BY created_at ASC) AS usernames,
+          STRING_AGG(COALESCE(first_name,''), ',' ORDER BY created_at ASC) AS first_names,
+          STRING_AGG(created_at::text, ',' ORDER BY created_at ASC) AS created_ats,
+          STRING_AGG(warning_count::text, ',' ORDER BY created_at ASC) AS warning_counts
+        FROM users
+        WHERE last_ip IS NOT NULL AND last_ip != ''
+        GROUP BY last_ip
+        HAVING COUNT(*) > 1
+        ORDER BY cnt DESC
+        LIMIT 100
+      `),
+      db.execute<{
+        device_id: string; cnt: number; telegram_ids: string; usernames: string; first_names: string; created_ats: string; warning_counts: string;
+      }>(sql`
+        SELECT
+          device_id,
+          COUNT(*)::int AS cnt,
+          STRING_AGG(telegram_id, ',' ORDER BY created_at ASC) AS telegram_ids,
+          STRING_AGG(COALESCE(username,''), ',' ORDER BY created_at ASC) AS usernames,
+          STRING_AGG(COALESCE(first_name,''), ',' ORDER BY created_at ASC) AS first_names,
+          STRING_AGG(created_at::text, ',' ORDER BY created_at ASC) AS created_ats,
+          STRING_AGG(warning_count::text, ',' ORDER BY created_at ASC) AS warning_counts
+        FROM users
+        WHERE device_id IS NOT NULL AND device_id != ''
+        GROUP BY device_id
+        HAVING COUNT(*) > 1
+        ORDER BY cnt DESC
+        LIMIT 100
+      `),
+    ]);
+
+    function toGroups(rows: readonly Record<string, any>[], keyField: "ip" | "deviceId", matchedBy: "ip" | "device") {
+      return rows.map((r: any) => {
+        const ids      = r.telegram_ids.split(",");
+        const names    = r.usernames.split(",");
+        const fnames   = r.first_names.split(",");
+        const dates    = r.created_ats.split(",");
+        const warns    = r.warning_counts.split(",");
+        return {
+          [keyField]: r.last_ip ?? r.device_id,
+          matchedBy,
+          count: r.cnt,
+          accounts: ids.map((id: string, i: number) => ({
+            telegramId: id,
+            username: names[i] || null,
+            firstName: fnames[i] || null,
+            createdAt: dates[i] || null,
+            warningCount: Number(warns[i] ?? 0),
+            isMain: i === 0,
+          })),
+        };
+      });
+    }
+
+    const ipGroups = toGroups(byIp.rows, "ip", "ip");
+    const deviceGroups = toGroups(byDevice.rows, "deviceId" as any, "device").map((g: any) => ({ ...g, ip: g.deviceId }));
+
+    // Merge groups that share the exact same set of accounts (same twins found by both IP and device).
+    const merged = new Map<string, any>();
+    for (const g of [...ipGroups, ...deviceGroups]) {
+      const key = g.accounts.map((a: any) => a.telegramId).sort().join(",");
+      if (merged.has(key)) {
+        const existing = merged.get(key);
+        existing.matchedBy = "ip+device";
+      } else {
+        merged.set(key, g);
+      }
+    }
+
+    res.json({ groups: Array.from(merged.values()) });
   } catch (e) { res.status(500).json({ error: String(e) }); }
 });
 
-/* POST /admin/twins/ban-group — ban all twin accounts in an IP group (keep main) */
+/* POST /admin/twins/ban-group — ban all twin accounts in an IP or device group (keep main) */
 router.post("/twins/ban-group", async (req, res) => {
   try {
-    const { ip, keepMain = true, reason } = req.body as { ip?: string; keepMain?: boolean; reason?: string };
-    if (!ip) { res.status(400).json({ error: "ip обязателен" }); return; }
+    const { ip, deviceId, keepMain = true, reason } = req.body as { ip?: string; deviceId?: string; keepMain?: boolean; reason?: string };
+    if (!ip && !deviceId) { res.status(400).json({ error: "ip или deviceId обязателен" }); return; }
 
-    const rows = await db.execute<{ telegram_id: string }>(
-      sql`SELECT telegram_id FROM users WHERE last_ip = ${ip} ORDER BY created_at ASC`
-    );
+    const rows = deviceId
+      ? await db.execute<{ telegram_id: string }>(
+          sql`SELECT telegram_id FROM users WHERE device_id = ${deviceId} ORDER BY created_at ASC`
+        )
+      : await db.execute<{ telegram_id: string }>(
+          sql`SELECT telegram_id FROM users WHERE last_ip = ${ip} ORDER BY created_at ASC`
+        );
     const ids = rows.rows.map(r => r.telegram_id).filter(id => id !== OWNER_ID);
     if (!ids.length) { res.status(404).json({ error: "Аккаунты с таким IP не найдены" }); return; }
 

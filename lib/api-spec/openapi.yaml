@@ -1483,13 +1483,17 @@ components:
     MiniTaskCompleteResult:
       type: object
       properties:
-        coinsEarned:
+        tonyxEarned:
           type: integer
+        tonEarned:
+          type: number
         newBalance:
           type: integer
+        newTon:
+          type: number
         taskTitle:
           type: string
-      required: [coinsEarned, newBalance, taskTitle]
+      required: [tonyxEarned, newBalance, taskTitle]
 
     MiniExchangeInput:
       type: object

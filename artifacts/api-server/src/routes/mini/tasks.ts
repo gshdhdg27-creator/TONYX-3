@@ -83,34 +83,36 @@ router.post("/:id/complete", async (req, res) => {
     .set({ currentCompletions: task.currentCompletions + 1 })
     .where(eq(miniTasksTable.id, id));
 
-  // Credit reward
+  // Credit reward — the app only ever has two real balances (TON and TONYX);
+  // `task.reward` (a plain integer set by the admin) is credited as TONYX,
+  // never as the legacy `coins` field.
   const tonReward = task.rewardTon !== null ? Number(task.rewardTon) : 0;
-  const coinReward = task.reward ?? 0;
-  const newCoins = user.coins + coinReward;
+  const tonyxReward = task.reward ?? 0;
+  const newTonyx = user.tonyxCoins + tonyxReward;
   const newTon = tonReward > 0
     ? String(Math.round((Number(user.ton) + tonReward) * 1e6) / 1e6)
     : user.ton;
 
   await db.update(usersTable)
-    .set({ coins: newCoins, ton: newTon, updatedAt: new Date() })
+    .set({ tonyxCoins: newTonyx, ton: newTon, updatedAt: new Date() })
     .where(eq(usersTable.telegramId, telegramId));
 
-  // Referral 10% bonus (coins only)
-  if (coinReward > 0 && user.referredBy && user.referredBy !== telegramId) {
+  // Referral 10% bonus (TONYX only)
+  if (tonyxReward > 0 && user.referredBy && user.referredBy !== telegramId) {
     const referrer = await db.select().from(usersTable)
       .where(eq(usersTable.telegramId, user.referredBy)).then(r => r[0] ?? null);
     if (referrer && !referrer.isBlocked) {
-      const bonus = Math.max(1, Math.round(coinReward * 0.1));
+      const bonus = Math.max(1, Math.round(tonyxReward * 0.1));
       await db.update(usersTable)
-        .set({ coins: referrer.coins + bonus, referralEarnings: referrer.referralEarnings + bonus, updatedAt: new Date() })
+        .set({ tonyxCoins: referrer.tonyxCoins + bonus, referralEarnings: referrer.referralEarnings + bonus, updatedAt: new Date() })
         .where(eq(usersTable.telegramId, user.referredBy));
     }
   }
 
   res.json({
-    coinsEarned: coinReward,
+    tonyxEarned: tonyxReward,
     tonEarned: tonReward,
-    newBalance: newCoins,
+    newBalance: newTonyx,
     newTon: Number(newTon),
     taskTitle: task.title,
   });

@@ -8,6 +8,7 @@ import {
   computeFairnessHash,
   pickWinnerByHash,
 } from "../../lib/fairness.js";
+import { isGameEnabled, GAME_DISABLED_MESSAGE } from "../../lib/game-config.js";
 
 const router: IRouter = Router();
 
@@ -255,6 +256,10 @@ router.get("/last-winner", async (_req, res) => {
 
 /* ── POST /join ── */
 router.post("/join", async (req, res) => {
+  if (!(await isGameEnabled("spin"))) {
+    res.status(403).json({ error: GAME_DISABLED_MESSAGE });
+    return;
+  }
   const { telegramId, stake } = req.body as { telegramId?: string; stake?: number };
   if (!telegramId || typeof stake !== "number" || stake < MIN_STAKE) {
     res.status(400).json({ error: `telegramId и stake >= ${MIN_STAKE} обязательны` }); return;

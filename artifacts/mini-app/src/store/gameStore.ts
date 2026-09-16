@@ -8,15 +8,9 @@ import type {
   BossAnimState,
   ViewName,
 } from "../types/game";
-import { BOSSES, BOSS_REVIVE_COST } from "../constants/bosses";
-import { BOOST_CONFIG } from "../lib/liveGameConfig";
+import { BOSSES } from "../constants/bosses";
 import { MAGES, getMageDps } from "../constants/mages";
-import {
-  NFT_CONFIGS,
-  NFT_IDS,
-  NFT_FRAGMENT_DROP_CHANCE,
-  NFT_FULL_DROP_CHANCE,
-} from "../constants/nft";
+import { battleApi } from "../lib/battleApi";
 
 const initialState: GameState = {
   view: "loading",
@@ -56,7 +50,7 @@ const initialState: GameState = {
 function calcTotalDps(
   ownedMages: OwnedMage[],
   equippedSlots: (string | null)[],
-  dpsMultiplier: number
+  dpsMultiplier: number,
 ): number {
   const equipped = equippedSlots
     .filter(Boolean)
@@ -66,375 +60,454 @@ function calcTotalDps(
   return raw * dpsMultiplier;
 }
 
-function generateChestRewards(bossLevel: BossLevel): ChestReward[] {
-  const boss = BOSSES[bossLevel];
-  const rewards: ChestReward[] = [];
-  rewards.push({ type: "ton", amount: boss.rewardTon });
-  rewards.push({ type: "tonyx", amount: boss.rewardTonyx });
-  if (Math.random() < NFT_FULL_DROP_CHANCE) {
-    const nftId = NFT_IDS[Math.floor(Math.random() * NFT_IDS.length)];
-    rewards.push({ type: "nft_full", nftId });
-  } else if (Math.random() < NFT_FRAGMENT_DROP_CHANCE) {
-    const nftId = NFT_IDS[Math.floor(Math.random() * NFT_IDS.length)];
-    rewards.push({ type: "nft_fragment", fragmentNftId: nftId });
-  }
-  return rewards;
-}
-
 interface GameActions {
   setView: (view: ViewName) => void;
   selectBoss: (level: BossLevel) => void;
   toggleMage: (mageId: string) => void;
-  upgradeMage: (mageId: string) => void;
-  startBattle: () => void;
+  /** Server-authoritative upgrade */
+  upgradeMage: (mageId: string) => Promise<void>;
+  /** Server-authoritative start */
+  startBattle: () => Promise<void>;
+  /** Visual-only tick (does NOT grant rewards) */
   tickBattle: (deltaMs: number) => void;
+  /** Go to chest screen when HP hits 0 (claim is separate) */
   finishBoss: () => void;
   finishBossAd: () => void;
   resetBattle: () => void;
   setBossAnimState: (state: BossAnimState) => void;
-  claimChestRewards: () => void;
+  /** Server-authoritative claim */
+  claimChestRewards: () => Promise<void>;
   watchAd: () => Promise<void>;
   buySpeedBoost: () => void;
-  /** Purchase a paid DPS boost: multiplier = 1.5 (+50%) or 2.0 (+100%) */
   buyDpsBoost: (multiplier: number, costTon: number) => void;
   init: () => void;
-  /** Open hero-shop to pick a card for slot [index] */
+  /** Load authoritative state from server */
+  syncFromServer: () => Promise<void>;
   clickSlot: (index: number) => void;
-  /** Place a purchased mage into the pending slot, then go back to home */
-  equipMageToSlot: (mageId: string) => void;
-  /** Add a mage to ownedMages (purchase) */
-  buyMage: (mageId: string) => void;
-  /** Sync real TON wallet balance from backend profile */
+  equipMageToSlot: (mageId: string) => Promise<void>;
+  /** Server-authoritative buy */
+  buyMage: (mageId: string) => Promise<void>;
   setTonBalance: (ton: number) => void;
-  /** Sync real TONYX balance from backend profile */
   setTonyxBalance: (tonyx: number) => void;
-  /** Mark that the initial backend balance has been synced — prevents future overwrites */
   markTonInitialized: () => void;
-  /** Revive a dead boss by paying TON */
-  reviveBossWithTon: (level: BossLevel) => void;
-  /** Record one ad watched toward boss revival; revives boss when threshold reached */
-  watchAdForRevive: (level: BossLevel) => void;
-  /** Bump configVersion to force views to re-read the (mutated) BOSSES/BOOST_CONFIG objects */
+  /** Server-authoritative revive */
+  reviveBossWithTon: (level: BossLevel) => Promise<void>;
+  watchAdForRevive: (level: BossLevel) => Promise<void>;
   bumpConfigVersion: () => void;
 }
 
 interface GameStore extends GameState, GameActions {
   bossAnimState: BossAnimState;
+  /** Server battle id for claim */
+  activeBattleId: number | null;
+  isSyncing: boolean;
+  lastError: string | null;
 }
 
 export const useGameStore = create<GameStore>()(
   persist(
     (set, get) => ({
-  ...initialState,
-  bossAnimState: "idle",
+      ...initialState,
+      bossAnimState: "idle",
+      activeBattleId: null,
+      isSyncing: false,
+      lastError: null,
 
-  setView: (view) => set({ view }),
+      setView: (view) => set({ view }),
 
-  selectBoss: (level) => {
-    const { ownedMages, equippedSlots, boost, battle } = get();
-    // If a battle is active, only switch the viewed level — don't reset the fight
-    if (battle.active) {
-      set({ selectedBossLevel: level });
-      return;
-    }
-    const dps = calcTotalDps(ownedMages, equippedSlots, boost.dpsMultiplier);
-    set({ selectedBossLevel: level, battle: { ...initialState.battle, totalDps: dps } });
-  },
-
-  toggleMage: (_mageId) => {
-    // No-op: slot system replaces toggle
-  },
-
-  upgradeMage: (mageId) => {
-    const { ownedMages, balances, boost, equippedSlots } = get();
-    const mage = ownedMages.find((m) => m.id === mageId);
-    if (!mage) return;
-    const cost = mage.upgradeCost * mage.level;
-    if (balances.tonyx < cost) return;
-    const updated = ownedMages.map((m) =>
-      m.id === mageId ? { ...m, level: m.level + 1 } : m
-    );
-    const dps = calcTotalDps(updated, equippedSlots, boost.dpsMultiplier);
-    set({
-      ownedMages: updated,
-      balances: { ...balances, tonyx: balances.tonyx - cost },
-      battle: { ...get().battle, totalDps: dps },
-    });
-  },
-
-  startBattle: () => {
-    const { ownedMages, equippedSlots, boost, selectedBossLevel } = get();
-    const equippedCount = equippedSlots.filter(Boolean).length;
-    if (equippedCount === 0) return;
-    const tonMult = (boost.tonBoostExpiresAt && Date.now() < boost.tonBoostExpiresAt) ? boost.tonBoostMultiplier : 1;
-    const dps = calcTotalDps(ownedMages, equippedSlots, boost.dpsMultiplier * tonMult);
-    set({
-      battleBossLevel: selectedBossLevel,
-      battle: {
-        active: true,
-        bossHpPercent: 100,
-        heroHp: 100,
-        totalDps: dps,
-        lastRewards: null,
-        battleStartedAt: Date.now(),
-      },
-    });
-  },
-
-  tickBattle: (deltaMs) => {
-    const { battle, battleBossLevel, boost } = get();
-    if (!battle.active || !battleBossLevel) return;
-    const boss = BOSSES[battleBossLevel];
-    const dmgToBoss = (battle.totalDps * (deltaMs / 1000)) * boost.speedMultiplier;
-    const dmgPercent = (dmgToBoss / boss.maxHp) * 100;
-    const newBossHp = Math.max(0, battle.bossHpPercent - dmgPercent);
-    if (newBossHp <= 0) { get().finishBoss(); return; }
-    set({ battle: { ...battle, bossHpPercent: newBossHp } });
-  },
-
-  finishBoss: () => {
-    const { battleBossLevel, selectedBossLevel, bossRespawnAt } = get();
-    const level = battleBossLevel ?? selectedBossLevel;
-    const rewards = generateChestRewards(level);
-    const newRespawnAt = { ...bossRespawnAt, [level]: Date.now() + BOOST_CONFIG.respawnHours * 60 * 60 * 1000 };
-    set({
-      battle: { ...get().battle, active: false, bossHpPercent: 0, lastRewards: rewards },
-      view: "chest",
-      battleBossLevel: null,
-      bossRespawnAt: newRespawnAt,
-    });
-  },
-
-  finishBossAd: () => {
-    const { battle } = get();
-    if (!battle.active || battle.bossHpPercent > 25) return;
-    const newHp = Math.max(0, battle.bossHpPercent - 1);
-    if (newHp <= 0) { get().finishBoss(); return; }
-    set({ battle: { ...battle, bossHpPercent: newHp } });
-  },
-
-  resetBattle: () => {
-    const { ownedMages, equippedSlots, boost } = get();
-    const dps = calcTotalDps(ownedMages, equippedSlots, boost.dpsMultiplier);
-    set({ battle: { ...initialState.battle, totalDps: dps, battleStartedAt: null }, view: "home" });
-  },
-
-  setBossAnimState: (state) => set({ bossAnimState: state }),
-
-  claimChestRewards: () => {
-    const { battle, balances, nftInventory } = get();
-    if (!battle.lastRewards) return;
-    let newTon = balances.ton;
-    let newTonyx = balances.tonyx;
-    let newFragments = { ...nftInventory.fragments };
-    const newAssembled = [...nftInventory.assembled];
-    for (const reward of battle.lastRewards) {
-      if (reward.type === "ton" && reward.amount) newTon += reward.amount;
-      if (reward.type === "tonyx" && reward.amount) newTonyx += reward.amount;
-      if (reward.type === "nft_fragment" && reward.fragmentNftId) {
-        const id = reward.fragmentNftId;
-        newFragments[id] = (newFragments[id] ?? 0) + 1;
-        if (newFragments[id] >= NFT_CONFIGS[id].totalFragments && !newAssembled.includes(id)) {
-          newAssembled.push(id);
-          newFragments[id] = 0;
+      selectBoss: (level) => {
+        const { ownedMages, equippedSlots, boost, battle } = get();
+        if (battle.active) {
+          set({ selectedBossLevel: level });
+          return;
         }
-      }
-      if (reward.type === "nft_full" && reward.nftId && !newAssembled.includes(reward.nftId)) {
-        newAssembled.push(reward.nftId);
-      }
-    }
-    set({
-      balances: { ton: newTon, tonyx: newTonyx },
-      nftInventory: { fragments: newFragments, assembled: newAssembled },
-      battle: { ...get().battle, lastRewards: null },
-      view: "home",
-    });
-  },
+        const dps = calcTotalDps(ownedMages, equippedSlots, boost.dpsMultiplier);
+        set({ selectedBossLevel: level, battle: { ...initialState.battle, totalDps: dps } });
+      },
 
-  watchAd: async () => {
-    await new Promise<void>((resolve) => setTimeout(resolve, 1500));
-    const { boost, ownedMages, equippedSlots } = get();
-    const newCount = boost.adWatchedCount + 1;
-    let newMultiplier = boost.dpsMultiplier;
-    let expiresAt = boost.boostExpiresAt;
-    const adBoostMultiplier = 1 + BOOST_CONFIG.adBoostPct / 100;
-    if (newCount >= 10 && boost.dpsMultiplier < adBoostMultiplier) {
-      newMultiplier = adBoostMultiplier;
-      expiresAt = Date.now() + 24 * 60 * 60 * 1000;
-    }
-    const dps = calcTotalDps(ownedMages, equippedSlots, newMultiplier);
-    set({
-      boost: { ...boost, adWatchedCount: newCount, dpsMultiplier: newMultiplier, boostExpiresAt: expiresAt },
-      battle: { ...get().battle, totalDps: dps },
-    });
-  },
+      toggleMage: (_mageId) => {
+        // No-op: slot system
+      },
 
-  buySpeedBoost: () => {
-    const { boost, balances } = get();
-    if (balances.ton < 0.1) return;
-    set({ boost: { ...boost, speedMultiplier: 2 }, balances: { ...balances, ton: balances.ton - 0.1 } });
-  },
+      upgradeMage: async (mageId) => {
+        try {
+          set({ lastError: null });
+          const res = await battleApi.upgradeMage(mageId);
+          const { ownedMages, equippedSlots, boost } = get();
+          const updated = ownedMages.map((m) =>
+            m.id === mageId ? { ...m, level: res.level } : m,
+          );
+          const dps = calcTotalDps(updated, equippedSlots, boost.dpsMultiplier);
+          set({
+            ownedMages: updated,
+            balances: { ...get().balances, tonyx: res.balances.tonyx },
+            battle: { ...get().battle, totalDps: dps },
+          });
+        } catch (e) {
+          set({ lastError: e instanceof Error ? e.message : "Upgrade failed" });
+        }
+      },
 
-  buyDpsBoost: (multiplier, costTon) => {
-    const { boost, balances, ownedMages, equippedSlots, battle } = get();
-    if (balances.ton < costTon) return;
-    const newBoost = {
-      ...boost,
-      tonBoostMultiplier: multiplier,
-      tonBoostExpiresAt: Date.now() + 24 * 60 * 60 * 1000,
-    };
-    const dps = calcTotalDps(ownedMages, equippedSlots, newBoost.dpsMultiplier * multiplier);
-    set({
-      balances: { ...balances, ton: balances.ton - costTon },
-      boost: newBoost,
-      battle: { ...battle, totalDps: dps },
-    });
-  },
+      startBattle: async () => {
+        const { selectedBossLevel, equippedSlots } = get();
+        if (!equippedSlots.some(Boolean)) return;
 
-  init: () => {
-    const { boost, ownedMages, equippedSlots, battle, battleBossLevel, selectedBossLevel } = get();
+        try {
+          set({ lastError: null });
+          const res = await battleApi.start(selectedBossLevel);
+          set({
+            battleBossLevel: selectedBossLevel,
+            activeBattleId: res.battleId,
+            battle: {
+              active: true,
+              bossHpPercent: 100,
+              heroHp: 100,
+              totalDps: res.totalDps,
+              lastRewards: null,
+              battleStartedAt: Date.now(),
+            },
+          });
+        } catch (e) {
+          set({ lastError: e instanceof Error ? e.message : "Start battle failed" });
+        }
+      },
 
-    // Expire ad boost if needed
-    let dpsMultiplier = boost.dpsMultiplier;
-    let currentBoost = boost;
-    if (boost.boostExpiresAt && Date.now() > boost.boostExpiresAt) {
-      dpsMultiplier = 1.0;
-      currentBoost = { ...boost, dpsMultiplier: 1.0, boostExpiresAt: null, adWatchedCount: 0 };
-      set({ boost: currentBoost });
-    }
-    // Expire paid TON boost if needed
-    let tonMult = currentBoost.tonBoostMultiplier ?? 1;
-    if (currentBoost.tonBoostExpiresAt && Date.now() > currentBoost.tonBoostExpiresAt) {
-      tonMult = 1.0;
-      currentBoost = { ...currentBoost, tonBoostMultiplier: 1.0, tonBoostExpiresAt: null };
-      set({ boost: currentBoost });
-    }
-    const dps = calcTotalDps(ownedMages, equippedSlots, dpsMultiplier * tonMult);
+      tickBattle: (deltaMs) => {
+        const { battle, battleBossLevel, boost } = get();
+        if (!battle.active || !battleBossLevel) return;
+        const boss = BOSSES[battleBossLevel];
+        const dmgToBoss = battle.totalDps * (deltaMs / 1000) * boost.speedMultiplier;
+        const dmgPercent = (dmgToBoss / boss.maxHp) * 100;
+        const newBossHp = Math.max(0, battle.bossHpPercent - dmgPercent);
+        if (newBossHp <= 0) {
+          get().finishBoss();
+          return;
+        }
+        set({ battle: { ...battle, bossHpPercent: newBossHp } });
+      },
 
-    // ── Offline progress ──────────────────────────────────────────────
-    const fightLevel = battleBossLevel ?? selectedBossLevel;
-    if (battle.active && battle.battleStartedAt) {
-      const boss = BOSSES[fightLevel];
-      const offlineSec = (Date.now() - battle.battleStartedAt) / 1000;
-      const offlineDmg = battle.totalDps * offlineSec * boost.speedMultiplier;
-      const offlineDmgPct = (offlineDmg / boss.maxHp) * 100;
-      const newHpPct = Math.max(0, battle.bossHpPercent - offlineDmgPct);
-
-      if (newHpPct <= 0) {
-        // finishBoss handles rewards + respawnAt + battleBossLevel reset
-        get().finishBoss();
-      } else {
+      finishBoss: () => {
+        // Visual only — rewards come from server on claim
         set({
-          view: "home",
-          battle: { ...battle, bossHpPercent: newHpPct, totalDps: dps, battleStartedAt: Date.now() },
+          battle: { ...get().battle, active: false, bossHpPercent: 0 },
+          view: "chest",
+          battleBossLevel: null,
         });
-      }
-      return;
-    }
-    // ──────────────────────────────────────────────────────────────────
+      },
 
-    set({ view: "home", battle: { ...get().battle, totalDps: dps } });
-  },
+      finishBossAd: () => {
+        const { battle } = get();
+        if (!battle.active || battle.bossHpPercent > 25) return;
+        const newHp = Math.max(0, battle.bossHpPercent - 1);
+        if (newHp <= 0) {
+          get().finishBoss();
+          return;
+        }
+        set({ battle: { ...battle, bossHpPercent: newHp } });
+      },
 
-  clickSlot: (index) => {
-    set({ pendingSlotIndex: index });
-    get().setView("hero-shop");
-  },
+      resetBattle: () => {
+        const { ownedMages, equippedSlots, boost } = get();
+        const dps = calcTotalDps(ownedMages, equippedSlots, boost.dpsMultiplier);
+        set({
+          battle: { ...initialState.battle, totalDps: dps, battleStartedAt: null },
+          activeBattleId: null,
+          view: "home",
+        });
+      },
 
-  equipMageToSlot: (mageId) => {
-    const { pendingSlotIndex, equippedSlots, ownedMages, boost } = get();
-    if (pendingSlotIndex === null) return;
-    if (pendingSlotIndex < 0 || pendingSlotIndex > 4) return;
-    // Only allow equipping owned mages
-    if (!ownedMages.find((m) => m.id === mageId)) return;
-    // Remove this mage from any other slot first
-    const newSlots = equippedSlots.map((id) =>
-      id === mageId ? null : id
-    ) as (string | null)[];
-    // Place in the target slot
-    newSlots[pendingSlotIndex] = mageId;
-    const dps = calcTotalDps(ownedMages, newSlots, boost.dpsMultiplier);
-    set({
-      equippedSlots: newSlots,
-      pendingSlotIndex: null,
-      battle: { ...get().battle, totalDps: dps },
-    });
-    get().setView("home");
-  },
+      setBossAnimState: (state) => set({ bossAnimState: state }),
 
-  buyMage: (mageId) => {
-    const { ownedMages, equippedSlots, boost, balances } = get();
-    if (ownedMages.find((m) => m.id === mageId)) return;
-    const mage = MAGES.find((m) => m.id === mageId);
-    if (!mage) return;
-    // Check TON balance (free mages have priceTon === 0)
-    if (mage.priceTon > 0 && balances.ton < mage.priceTon) return;
-    const newOwned = [...ownedMages, { ...mage }];
-    const newTon = mage.priceTon > 0 ? balances.ton - mage.priceTon : balances.ton;
-    const dps = calcTotalDps(newOwned, equippedSlots, boost.dpsMultiplier);
-    set({
-      ownedMages: newOwned,
-      balances: { ...balances, ton: newTon },
-      battle: { ...get().battle, totalDps: dps },
-    });
-  },
+      claimChestRewards: async () => {
+        const { activeBattleId } = get();
+        if (!activeBattleId) {
+          // Fallback: just go home if no server battle
+          set({
+            battle: { ...get().battle, lastRewards: null },
+            view: "home",
+          });
+          return;
+        }
 
-  setTonBalance: (ton) => {
-    set({ balances: { ...get().balances, ton } });
-  },
+        try {
+          set({ lastError: null });
+          const res = await battleApi.claim(activeBattleId);
+          const level = get().selectedBossLevel;
 
-  setTonyxBalance: (tonyx) => {
-    set({ balances: { ...get().balances, tonyx } });
-  },
+          set({
+            balances: res.balances,
+            nftInventory: {
+              fragments: {
+                shadow_dogg: res.nftInventory.fragments.shadow_dogg ?? 0,
+                flame_dogg: res.nftInventory.fragments.flame_dogg ?? 0,
+                ice_dogg: res.nftInventory.fragments.ice_dogg ?? 0,
+              },
+              assembled: res.nftInventory.assembled as ("shadow_dogg" | "flame_dogg" | "ice_dogg")[],
+            },
+            bossRespawnAt: {
+              ...get().bossRespawnAt,
+              [level]: res.bossRespawnAt,
+            },
+            battle: {
+              ...get().battle,
+              lastRewards: res.rewards as ChestReward[],
+              active: false,
+            },
+            activeBattleId: null,
+            view: "home",
+          });
+        } catch (e) {
+          set({ lastError: e instanceof Error ? e.message : "Claim failed" });
+        }
+      },
 
-  markTonInitialized: () => {
-    set({ hasInitializedTonFromBackend: true });
-  },
+      watchAd: async () => {
+        // Keep local visual progress for now; server ad-boost endpoint can be added later
+        await new Promise<void>((resolve) => setTimeout(resolve, 1500));
+        const { boost, ownedMages, equippedSlots } = get();
+        const newCount = boost.adWatchedCount + 1;
+        let newMultiplier = boost.dpsMultiplier;
+        let expiresAt = boost.boostExpiresAt;
+        if (newCount >= 10 && boost.dpsMultiplier < 1.2) {
+          newMultiplier = 1.2;
+          expiresAt = Date.now() + 24 * 60 * 60 * 1000;
+        }
+        const dps = calcTotalDps(ownedMages, equippedSlots, newMultiplier);
+        set({
+          boost: {
+            ...boost,
+            adWatchedCount: newCount,
+            dpsMultiplier: newMultiplier,
+            boostExpiresAt: expiresAt,
+          },
+          battle: { ...get().battle, totalDps: dps },
+        });
+      },
 
-  reviveBossWithTon: (level) => {
-    const { balances, bossRespawnAt } = get();
-    const cost = BOSS_REVIVE_COST[level].ton;
-    if (balances.ton < cost) return;
-    const newRespawnAt = { ...bossRespawnAt };
-    delete newRespawnAt[level];
-    set({ balances: { ...balances, ton: balances.ton - cost }, bossRespawnAt: newRespawnAt });
-  },
+      buySpeedBoost: () => {
+        // TODO: server endpoint later
+      },
 
-  watchAdForRevive: (level) => {
-    const { reviveAdProgress, bossRespawnAt } = get();
-    const reviveCost = BOSS_REVIVE_COST[level];
-    if (reviveCost.ads === null) return;
-    const current = reviveAdProgress[level] ?? 0;
-    const newProgress = current + 1;
-    if (newProgress >= reviveCost.ads) {
-      const newRespawnAt = { ...bossRespawnAt };
-      delete newRespawnAt[level];
-      const newProgress2 = { ...reviveAdProgress };
-      delete newProgress2[level];
-      set({ bossRespawnAt: newRespawnAt, reviveAdProgress: newProgress2 });
-    } else {
-      set({ reviveAdProgress: { ...reviveAdProgress, [level]: newProgress } });
-    }
-  },
+      buyDpsBoost: (_multiplier, _costTon) => {
+        // TODO: server endpoint later
+      },
 
-  bumpConfigVersion: () => set((s) => ({ configVersion: s.configVersion + 1 })),
+      syncFromServer: async () => {
+        try {
+          set({ isSyncing: true, lastError: null });
+          const data = await battleApi.getGameState();
+
+          const ownedMages: OwnedMage[] = data.ownedMages.map((m) => {
+            const cfg = MAGES.find((c) => c.id === m.id);
+            return {
+              ...(cfg ?? {
+                id: m.id,
+                name: m.id,
+                type: "wind" as const,
+                rarity: "rare" as const,
+                atk: 1,
+                interval: 4,
+                dps: 0.25,
+                priceTon: 0,
+                image: "",
+                baseDps: 10,
+                upgradeCost: 0,
+                level: 1,
+                emoji: "🌀",
+                attackColor: "#34d399",
+              }),
+              level: m.level,
+            };
+          });
+
+          const slots = data.equippedSlots as (string | null)[];
+          const dpsMult = data.boost.dpsMultiplier;
+          const dps = calcTotalDps(ownedMages, slots, dpsMult);
+
+          const bossRespawnAt: Partial<Record<BossLevel, number>> = {};
+          for (const [k, v] of Object.entries(data.bossRespawnAt)) {
+            if (v != null) bossRespawnAt[Number(k) as BossLevel] = v;
+          }
+
+          set({
+            balances: data.balances,
+            ownedMages,
+            equippedSlots: slots,
+            bossRespawnAt,
+            reviveAdProgress: data.reviveAdProgress as Partial<Record<BossLevel, number>>,
+            boost: {
+              adWatchedCount: data.boost.adWatchedCount,
+              dpsMultiplier: data.boost.dpsMultiplier,
+              boostExpiresAt: data.boost.boostExpiresAt,
+              speedMultiplier: data.boost.speedMultiplier,
+              tonBoostMultiplier: data.boost.tonBoostMultiplier,
+              tonBoostExpiresAt: data.boost.tonBoostExpiresAt,
+            },
+            nftInventory: {
+              fragments: {
+                shadow_dogg: data.nftInventory.fragments.shadow_dogg ?? 0,
+                flame_dogg: data.nftInventory.fragments.flame_dogg ?? 0,
+                ice_dogg: data.nftInventory.fragments.ice_dogg ?? 0,
+              },
+              assembled: data.nftInventory.assembled as ("shadow_dogg" | "flame_dogg" | "ice_dogg")[],
+            },
+            battle: { ...get().battle, totalDps: dps },
+            hasInitializedTonFromBackend: true,
+            isSyncing: false,
+          });
+        } catch (e) {
+          set({
+            isSyncing: false,
+            lastError: e instanceof Error ? e.message : "Sync failed",
+          });
+        }
+      },
+
+      init: () => {
+        const { boost, ownedMages, equippedSlots } = get();
+
+        let dpsMultiplier = boost.dpsMultiplier;
+        let currentBoost = boost;
+        if (boost.boostExpiresAt && Date.now() > boost.boostExpiresAt) {
+          dpsMultiplier = 1.0;
+          currentBoost = {
+            ...boost,
+            dpsMultiplier: 1.0,
+            boostExpiresAt: null,
+            adWatchedCount: 0,
+          };
+          set({ boost: currentBoost });
+        }
+        if (currentBoost.tonBoostExpiresAt && Date.now() > currentBoost.tonBoostExpiresAt) {
+          currentBoost = {
+            ...currentBoost,
+            tonBoostMultiplier: 1.0,
+            tonBoostExpiresAt: null,
+          };
+          set({ boost: currentBoost });
+        }
+
+        const dps = calcTotalDps(ownedMages, equippedSlots, dpsMultiplier);
+        set({ view: "home", battle: { ...get().battle, totalDps: dps } });
+
+        // Pull server truth
+        void get().syncFromServer();
+      },
+
+      clickSlot: (index) => {
+        set({ pendingSlotIndex: index });
+        get().setView("hero-shop");
+      },
+
+      equipMageToSlot: async (mageId) => {
+        const { pendingSlotIndex, equippedSlots, ownedMages, boost } = get();
+        if (pendingSlotIndex === null) return;
+        if (pendingSlotIndex < 0 || pendingSlotIndex > 4) return;
+        if (!ownedMages.find((m) => m.id === mageId)) return;
+
+        const newSlots = equippedSlots.map((id) =>
+          id === mageId ? null : id,
+        ) as (string | null)[];
+        newSlots[pendingSlotIndex] = mageId;
+
+        try {
+          set({ lastError: null });
+          await battleApi.setLoadout(newSlots);
+          const dps = calcTotalDps(ownedMages, newSlots, boost.dpsMultiplier);
+          set({
+            equippedSlots: newSlots,
+            pendingSlotIndex: null,
+            battle: { ...get().battle, totalDps: dps },
+          });
+          get().setView("home");
+        } catch (e) {
+          set({ lastError: e instanceof Error ? e.message : "Loadout failed" });
+        }
+      },
+
+      buyMage: async (mageId) => {
+        try {
+          set({ lastError: null });
+          const res = await battleApi.buyMage(mageId);
+          const cfg = MAGES.find((m) => m.id === mageId);
+          if (!cfg) return;
+
+          const { ownedMages, equippedSlots, boost } = get();
+          if (ownedMages.find((m) => m.id === mageId)) return;
+
+          const newOwned = [...ownedMages, { ...cfg, level: res.level }];
+          const dps = calcTotalDps(newOwned, equippedSlots, boost.dpsMultiplier);
+          set({
+            ownedMages: newOwned,
+            balances: { ...get().balances, ton: res.balances.ton },
+            battle: { ...get().battle, totalDps: dps },
+          });
+        } catch (e) {
+          set({ lastError: e instanceof Error ? e.message : "Buy failed" });
+        }
+      },
+
+      setTonBalance: (ton) => {
+        set({ balances: { ...get().balances, ton } });
+      },
+
+      setTonyxBalance: (tonyx) => {
+        set({ balances: { ...get().balances, tonyx } });
+      },
+
+      markTonInitialized: () => {
+        set({ hasInitializedTonFromBackend: true });
+      },
+
+      reviveBossWithTon: async (level) => {
+        try {
+          set({ lastError: null });
+          const res = await battleApi.revive(level, "ton");
+          const newRespawnAt = { ...get().bossRespawnAt };
+          delete newRespawnAt[level];
+          set({
+            balances: res.balances
+              ? { ...get().balances, ton: res.balances.ton }
+              : get().balances,
+            bossRespawnAt: newRespawnAt,
+          });
+        } catch (e) {
+          set({ lastError: e instanceof Error ? e.message : "Revive failed" });
+        }
+      },
+
+      watchAdForRevive: async (level) => {
+        try {
+          set({ lastError: null });
+          const res = await battleApi.revive(level, "ad");
+          if (res.revived) {
+            const newRespawnAt = { ...get().bossRespawnAt };
+            delete newRespawnAt[level];
+            const newProgress = { ...get().reviveAdProgress };
+            delete newProgress[level];
+            set({ bossRespawnAt: newRespawnAt, reviveAdProgress: newProgress });
+          } else {
+            set({
+              reviveAdProgress: {
+                ...get().reviveAdProgress,
+                [level]: res.reviveAdsWatched ?? 0,
+              },
+            });
+          }
+        } catch (e) {
+          set({ lastError: e instanceof Error ? e.message : "Revive ad failed" });
+        }
+      },
+
+      bumpConfigVersion: () => set((s) => ({ configVersion: s.configVersion + 1 })),
     }),
     {
-      name: "tonyx-game-state-v2",
+      name: "tonyx-game-state-v3",
       storage: createJSONStorage(() => localStorage),
-      // Persist game progress; balances come exclusively from the server on every load
+      // Persist only UI prefs; economy comes from server
       partialize: (state) => ({
-        ownedMages: state.ownedMages,
-        equippedSlots: state.equippedSlots,
-        activeMageIds: state.activeMageIds,
-        nftInventory: state.nftInventory,
-        boost: state.boost,
         selectedBossLevel: state.selectedBossLevel,
-        battle: state.battle,
-        battleBossLevel: state.battleBossLevel,
-        bossRespawnAt: state.bossRespawnAt,
-        reviveAdProgress: state.reviveAdProgress,
       }),
-    }
-  )
+    },
+  ),
 );

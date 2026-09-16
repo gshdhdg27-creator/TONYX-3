@@ -1,6 +1,8 @@
 import { type Request, type Response, type NextFunction } from "express";
 import crypto from "crypto";
 
+const MAX_AUTH_AGE_SECONDS = 24 * 60 * 60; // 24 hours
+
 function verifyInitData(initData: string, botToken: string): boolean {
   try {
     const params = new URLSearchParams(initData);
@@ -32,6 +34,18 @@ function verifyInitData(initData: string, botToken: string): boolean {
   }
 }
 
+function getAuthDate(initData: string): number | null {
+  try {
+    const params = new URLSearchParams(initData);
+    const authDate = params.get("auth_date");
+    if (!authDate) return null;
+    const ts = Number(authDate);
+    return Number.isFinite(ts) ? ts : null;
+  } catch {
+    return null;
+  }
+}
+
 export function parseVerifiedTelegramId(initData: string): string | null {
   try {
     const params = new URLSearchParams(initData);
@@ -50,8 +64,16 @@ export function telegramAuthMiddleware(
   next: NextFunction,
 ): void {
   const botToken = process.env["TELEGRAM_BOT_TOKEN"];
+  const isProduction = process.env["NODE_ENV"] === "production";
 
+  // In production we ALWAYS require a valid bot token
   if (!botToken) {
+    if (isProduction) {
+      console.error("[Auth] TELEGRAM_BOT_TOKEN is missing in production");
+      res.status(500).json({ error: "Server misconfiguration" });
+      return;
+    }
+    // Dev without token — allow (for local testing)
     next();
     return;
   }
@@ -59,25 +81,48 @@ export function telegramAuthMiddleware(
   const initData = req.headers["x-telegram-init-data"] as string | undefined;
 
   if (!initData) {
-    if (process.env["NODE_ENV"] !== "production") {
+    if (!isProduction) {
+      // Dev mode: allow missing initData
       next();
       return;
     }
-    console.warn(`[Auth] Missing x-telegram-init-data header on ${req.method} ${req.path}`);
+    console.warn(`[Auth] Missing x-telegram-init-data on ${req.method} ${req.path}`);
     res.status(401).json({ error: "Missing Telegram auth" });
     return;
   }
 
+  // 1. Verify signature
   if (!verifyInitData(initData, botToken)) {
-    console.warn(`[Auth] Invalid Telegram signature on ${req.method} ${req.path} — initData length: ${initData.length}`);
+    console.warn(`[Auth] Invalid Telegram signature on ${req.method} ${req.path}`);
     res.status(401).json({ error: "Invalid Telegram signature" });
     return;
   }
 
-  const verifiedId = parseVerifiedTelegramId(initData);
-  if (verifiedId) {
-    res.locals["verifiedTelegramId"] = verifiedId;
+  // 2. Check auth_date (not older than 24 hours)
+  const authDate = getAuthDate(initData);
+  if (authDate === null) {
+    console.warn(`[Auth] Missing auth_date on ${req.method} ${req.path}`);
+    res.status(401).json({ error: "Invalid Telegram auth_date" });
+    return;
   }
 
+  const now = Math.floor(Date.now() / 1000);
+  if (now - authDate > MAX_AUTH_AGE_SECONDS) {
+    console.warn(
+      `[Auth] Expired auth_date on ${req.method} ${req.path} (age: ${now - authDate}s)`,
+    );
+    res.status(401).json({ error: "Telegram auth expired" });
+    return;
+  }
+
+  // 3. Extract and attach verified telegramId
+  const verifiedId = parseVerifiedTelegramId(initData);
+  if (!verifiedId) {
+    console.warn(`[Auth] Could not parse user id on ${req.method} ${req.path}`);
+    res.status(401).json({ error: "Invalid Telegram user data" });
+    return;
+  }
+
+  (res.locals as Record<string, unknown>)["verifiedTelegramId"] = verifiedId;
   next();
 }

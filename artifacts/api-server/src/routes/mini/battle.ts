@@ -19,6 +19,8 @@ import {
   MAGES,
   getMageDps,
   getMageById,
+  getUpgradeCost,
+  MAX_MAGE_LEVEL,
   NFT_IDS,
   NFT_FULL_DROP_CHANCE,
   NFT_FRAGMENT_DROP_CHANCE,
@@ -28,7 +30,6 @@ import {
   type BossLevel,
   type NftId,
 } from "../../lib/game-constants.js";
-
 const router: IRouter = Router();
 
 /** Helper: get verified telegramId from middleware */

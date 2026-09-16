@@ -16,7 +16,6 @@ import {
   BOSS_RESPAWN_MS,
   BATTLE_MAX_AGE_MS,
   KILL_TIME_TOLERANCE,
-  MAGES,
   getMageDps,
   getMageById,
   getUpgradeCost,
@@ -25,14 +24,12 @@ import {
   NFT_FULL_DROP_CHANCE,
   NFT_FRAGMENT_DROP_CHANCE,
   NFT_FRAGMENTS_NEEDED,
-  AD_BOOST,
   STARTER_MAGE_ID,
   type BossLevel,
-  type NftId,
 } from "../../lib/game-constants.js";
+
 const router: IRouter = Router();
 
-/** Helper: get verified telegramId from middleware */
 function getTelegramId(res: Response): string | null {
   return (res.locals as Record<string, unknown>)["verifiedTelegramId"] as string | null;
 }
@@ -43,7 +40,6 @@ function isBossLevel(n: number): n is BossLevel {
 
 /** Ensure user has starter mage + empty loadout/boosts/nft rows */
 async function ensureGameProfile(telegramId: string) {
-  // Starter mage
   const existingMages = await db
     .select()
     .from(miniUserMagesTable)
@@ -57,7 +53,6 @@ async function ensureGameProfile(telegramId: string) {
     });
   }
 
-  // Loadout
   const loadout = await db
     .select()
     .from(miniUserLoadoutTable)
@@ -71,7 +66,6 @@ async function ensureGameProfile(telegramId: string) {
     });
   }
 
-  // Battle boosts
   const boosts = await db
     .select()
     .from(miniUserBattleBoostsTable)
@@ -82,7 +76,6 @@ async function ensureGameProfile(telegramId: string) {
     await db.insert(miniUserBattleBoostsTable).values({ telegramId });
   }
 
-  // NFT inventory
   const nft = await db
     .select()
     .from(miniNftInventoryTable)
@@ -127,7 +120,7 @@ async function calcServerDps(telegramId: string): Promise<number> {
     if (boostRow.tonBoostExpiresAt && boostRow.tonBoostExpiresAt.getTime() > now) {
       mult *= tonMult;
     }
-    mult *= speedMult; // speed affects effective DPS for kill-time calc
+    mult *= speedMult;
   }
 
   return rawDps * mult;
@@ -136,7 +129,7 @@ async function calcServerDps(telegramId: string): Promise<number> {
 // ─────────────────────────────────────────────────────────────
 // GET /api/mini/battle/game-state
 // ─────────────────────────────────────────────────────────────
-router.get("/game-state", async (req: Request, res: Response) => {
+router.get("/game-state", async (_req: Request, res: Response) => {
   try {
     const telegramId = getTelegramId(res);
     if (!telegramId) {
@@ -218,7 +211,6 @@ router.post("/start", async (req: Request, res: Response) => {
 
     await ensureGameProfile(telegramId);
 
-    // Check boss is alive
     const bossState = await db
       .select()
       .from(miniUserBossStateTable)
@@ -236,7 +228,6 @@ router.post("/start", async (req: Request, res: Response) => {
       return;
     }
 
-    // Cancel any previous active battle
     await db
       .update(miniBattlesTable)
       .set({ status: "expired", expiredAt: new Date() })
@@ -245,7 +236,6 @@ router.post("/start", async (req: Request, res: Response) => {
         eq(miniBattlesTable.status, "active"),
       ));
 
-    // Read loadout from DB (client does NOT send slots)
     const loadout = await db
       .select()
       .from(miniUserLoadoutTable)
@@ -338,7 +328,6 @@ router.post("/claim", async (req: Request, res: Response) => {
     const startedAt = battle.startedAt.getTime();
     const elapsedMs = now - startedAt;
 
-    // Expire if older than 3 hours
     if (elapsedMs > BATTLE_MAX_AGE_MS) {
       await db
         .update(miniBattlesTable)
@@ -352,7 +341,6 @@ router.post("/claim", async (req: Request, res: Response) => {
     const boss = BOSSES[bossLevel];
     const totalDps = Number(battle.totalDpsSnapshot);
 
-    // Required time to kill (seconds)
     const requiredSec = boss.maxHp / totalDps;
     const minSec = requiredSec * (1 - KILL_TIME_TOLERANCE);
     const elapsedSec = elapsedMs / 1000;
@@ -366,7 +354,6 @@ router.post("/claim", async (req: Request, res: Response) => {
       return;
     }
 
-    // ── Generate rewards (server-side random only) ──
     const rewards: Array<{
       type: "ton" | "tonyx" | "nft_fragment" | "nft_full";
       amount?: number;
@@ -386,7 +373,6 @@ router.post("/claim", async (req: Request, res: Response) => {
       rewards.push({ type: "nft_fragment", fragmentNftId: nftId });
     }
 
-    // ── Apply rewards in DB ──
     const user = await db
       .select()
       .from(usersTable)
@@ -406,7 +392,6 @@ router.post("/claim", async (req: Request, res: Response) => {
       if (r.type === "tonyx" && r.amount) newTonyx += r.amount;
     }
 
-    // NFT inventory
     let nftRow = await db
       .select()
       .from(miniNftInventoryTable)
@@ -439,10 +424,8 @@ router.post("/claim", async (req: Request, res: Response) => {
       }
     }
 
-    // Boss respawn 72h
     const respawnAt = new Date(now + BOSS_RESPAWN_MS);
 
-    // Upsert boss state
     const existingBoss = await db
       .select()
       .from(miniUserBossStateTable)
@@ -466,33 +449,19 @@ router.post("/claim", async (req: Request, res: Response) => {
       });
     }
 
-    // Update user balances + nft + battle
     await Promise.all([
-      db
-        .update(usersTable)
-        .set({
-          ton: String(newTon),
-          tonyxCoins: newTonyx,
-          updatedAt: new Date(),
-        })
+      db.update(usersTable)
+        .set({ ton: String(newTon), tonyxCoins: newTonyx, updatedAt: new Date() })
         .where(eq(usersTable.telegramId, telegramId)),
-      db
-        .update(miniNftInventoryTable)
+      db.update(miniNftInventoryTable)
         .set({ fragments, assembled, updatedAt: new Date() })
         .where(eq(miniNftInventoryTable.telegramId, telegramId)),
-      db
-        .update(miniBattlesTable)
-        .set({
-          status: "claimed",
-          rewards,
-          claimedAt: new Date(),
-        })
+      db.update(miniBattlesTable)
+        .set({ status: "claimed", rewards, claimedAt: new Date() })
         .where(eq(miniBattlesTable.id, battleId)),
     ]);
 
-    console.log(
-      `[battle/claim] ${telegramId} boss=${bossLevel} battleId=${battleId} rewards=${JSON.stringify(rewards)}`,
-    );
+    console.log(`[battle/claim] ${telegramId} boss=${bossLevel} battleId=${battleId} rewards=${JSON.stringify(rewards)}`);
 
     res.json({
       rewards,
@@ -502,6 +471,359 @@ router.post("/claim", async (req: Request, res: Response) => {
     });
   } catch (err) {
     console.error("[battle/claim]", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────
+// POST /api/mini/battle/revive
+// Body: { bossLevel: number, method: "ton" | "ad" }
+// ─────────────────────────────────────────────────────────────
+router.post("/revive", async (req: Request, res: Response) => {
+  try {
+    const telegramId = getTelegramId(res);
+    if (!telegramId) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+
+    const bossLevel = Number(req.body?.bossLevel);
+    const method = req.body?.method as "ton" | "ad";
+
+    if (!isBossLevel(bossLevel)) {
+      res.status(400).json({ error: "Invalid bossLevel" });
+      return;
+    }
+    if (method !== "ton" && method !== "ad") {
+      res.status(400).json({ error: "method must be ton or ad" });
+      return;
+    }
+
+    const cost = BOSS_REVIVE_COST[bossLevel];
+
+    const bossState = await db
+      .select()
+      .from(miniUserBossStateTable)
+      .where(and(
+        eq(miniUserBossStateTable.telegramId, telegramId),
+        eq(miniUserBossStateTable.bossLevel, bossLevel),
+      ))
+      .then((r) => r[0] ?? null);
+
+    if (!bossState?.respawnAt || bossState.respawnAt.getTime() <= Date.now()) {
+      res.status(400).json({ error: "Boss is already alive" });
+      return;
+    }
+
+    if (method === "ton") {
+      const user = await db
+        .select()
+        .from(usersTable)
+        .where(eq(usersTable.telegramId, telegramId))
+        .then((r) => r[0] ?? null);
+
+      if (!user) {
+        res.status(404).json({ error: "User not found" });
+        return;
+      }
+
+      const userTon = Number(user.ton);
+      if (userTon < cost.ton) {
+        res.status(400).json({ error: "Not enough TON", need: cost.ton, have: userTon });
+        return;
+      }
+
+      const newTon = userTon - cost.ton;
+
+      await Promise.all([
+        db.update(usersTable)
+          .set({ ton: String(newTon), updatedAt: new Date() })
+          .where(eq(usersTable.telegramId, telegramId)),
+        db.update(miniUserBossStateTable)
+          .set({ respawnAt: null, reviveAdsWatched: 0, updatedAt: new Date() })
+          .where(eq(miniUserBossStateTable.id, bossState.id)),
+      ]);
+
+      console.log(`[battle/revive] ${telegramId} boss=${bossLevel} method=ton cost=${cost.ton}`);
+
+      res.json({
+        ok: true,
+        method: "ton",
+        balances: { ton: newTon },
+        bossRespawnAt: null,
+      });
+      return;
+    }
+
+    // method === "ad"
+    if (cost.ads === null) {
+      res.status(400).json({ error: "This boss can only be revived with TON" });
+      return;
+    }
+
+    const newAds = (bossState.reviveAdsWatched ?? 0) + 1;
+
+    if (newAds >= cost.ads) {
+      await db
+        .update(miniUserBossStateTable)
+        .set({ respawnAt: null, reviveAdsWatched: 0, updatedAt: new Date() })
+        .where(eq(miniUserBossStateTable.id, bossState.id));
+
+      console.log(`[battle/revive] ${telegramId} boss=${bossLevel} method=ad FULL`);
+
+      res.json({
+        ok: true,
+        method: "ad",
+        revived: true,
+        reviveAdsWatched: 0,
+        bossRespawnAt: null,
+      });
+    } else {
+      await db
+        .update(miniUserBossStateTable)
+        .set({ reviveAdsWatched: newAds, updatedAt: new Date() })
+        .where(eq(miniUserBossStateTable.id, bossState.id));
+
+      console.log(`[battle/revive] ${telegramId} boss=${bossLevel} method=ad progress=${newAds}/${cost.ads}`);
+
+      res.json({
+        ok: true,
+        method: "ad",
+        revived: false,
+        reviveAdsWatched: newAds,
+        adsRequired: cost.ads,
+        bossRespawnAt: bossState.respawnAt.getTime(),
+      });
+    }
+  } catch (err) {
+    console.error("[battle/revive]", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────
+// POST /api/mini/battle/mage/buy
+// Body: { mageId: string }
+// ─────────────────────────────────────────────────────────────
+router.post("/mage/buy", async (req: Request, res: Response) => {
+  try {
+    const telegramId = getTelegramId(res);
+    if (!telegramId) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+
+    const mageId = String(req.body?.mageId ?? "");
+    const cfg = getMageById(mageId);
+    if (!cfg) {
+      res.status(400).json({ error: "Unknown mage" });
+      return;
+    }
+
+    const existing = await db
+      .select()
+      .from(miniUserMagesTable)
+      .where(and(
+        eq(miniUserMagesTable.telegramId, telegramId),
+        eq(miniUserMagesTable.mageId, mageId),
+      ))
+      .then((r) => r[0] ?? null);
+
+    if (existing) {
+      res.status(400).json({ error: "Already owned" });
+      return;
+    }
+
+    const user = await db
+      .select()
+      .from(usersTable)
+      .where(eq(usersTable.telegramId, telegramId))
+      .then((r) => r[0] ?? null);
+
+    if (!user) {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
+
+    const userTon = Number(user.ton);
+    if (userTon < cfg.priceTon) {
+      res.status(400).json({ error: "Not enough TON", need: cfg.priceTon, have: userTon });
+      return;
+    }
+
+    const newTon = userTon - cfg.priceTon;
+
+    await Promise.all([
+      db.update(usersTable)
+        .set({ ton: String(newTon), updatedAt: new Date() })
+        .where(eq(usersTable.telegramId, telegramId)),
+      db.insert(miniUserMagesTable).values({
+        telegramId,
+        mageId,
+        level: 1,
+      }),
+    ]);
+
+    console.log(`[battle/mage/buy] ${telegramId} mage=${mageId} cost=${cfg.priceTon}`);
+
+    res.json({
+      ok: true,
+      mageId,
+      level: 1,
+      balances: { ton: newTon },
+    });
+  } catch (err) {
+    console.error("[battle/mage/buy]", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────
+// POST /api/mini/battle/mage/upgrade
+// Body: { mageId: string }
+// ─────────────────────────────────────────────────────────────
+router.post("/mage/upgrade", async (req: Request, res: Response) => {
+  try {
+    const telegramId = getTelegramId(res);
+    if (!telegramId) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+
+    const mageId = String(req.body?.mageId ?? "");
+    const cfg = getMageById(mageId);
+    if (!cfg) {
+      res.status(400).json({ error: "Unknown mage" });
+      return;
+    }
+
+    const owned = await db
+      .select()
+      .from(miniUserMagesTable)
+      .where(and(
+        eq(miniUserMagesTable.telegramId, telegramId),
+        eq(miniUserMagesTable.mageId, mageId),
+      ))
+      .then((r) => r[0] ?? null);
+
+    if (!owned) {
+      res.status(400).json({ error: "Mage not owned" });
+      return;
+    }
+
+    if (owned.level >= MAX_MAGE_LEVEL) {
+      res.status(400).json({ error: "Max level reached", level: owned.level });
+      return;
+    }
+
+    const cost = getUpgradeCost(cfg.upgradeCost, owned.level);
+
+    const user = await db
+      .select()
+      .from(usersTable)
+      .where(eq(usersTable.telegramId, telegramId))
+      .then((r) => r[0] ?? null);
+
+    if (!user) {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
+
+    if (user.tonyxCoins < cost) {
+      res.status(400).json({ error: "Not enough TONYX", need: cost, have: user.tonyxCoins });
+      return;
+    }
+
+    const newLevel = owned.level + 1;
+    const newTonyx = user.tonyxCoins - cost;
+
+    await Promise.all([
+      db.update(usersTable)
+        .set({ tonyxCoins: newTonyx, updatedAt: new Date() })
+        .where(eq(usersTable.telegramId, telegramId)),
+      db.update(miniUserMagesTable)
+        .set({ level: newLevel, updatedAt: new Date() })
+        .where(eq(miniUserMagesTable.id, owned.id)),
+    ]);
+
+    console.log(`[battle/mage/upgrade] ${telegramId} mage=${mageId} level=${newLevel} cost=${cost}`);
+
+    res.json({
+      ok: true,
+      mageId,
+      level: newLevel,
+      balances: { tonyx: newTonyx },
+    });
+  } catch (err) {
+    console.error("[battle/mage/upgrade]", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────
+// POST /api/mini/battle/loadout
+// Body: { equippedSlots: (string | null)[] }
+// ─────────────────────────────────────────────────────────────
+router.post("/loadout", async (req: Request, res: Response) => {
+  try {
+    const telegramId = getTelegramId(res);
+    if (!telegramId) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+
+    const slots = req.body?.equippedSlots;
+    if (!Array.isArray(slots) || slots.length !== 5) {
+      res.status(400).json({ error: "equippedSlots must be array of 5" });
+      return;
+    }
+
+    const owned = await db
+      .select()
+      .from(miniUserMagesTable)
+      .where(eq(miniUserMagesTable.telegramId, telegramId));
+
+    const ownedIds = new Set(owned.map((m) => m.mageId));
+    const cleaned: (string | null)[] = [];
+
+    for (const s of slots) {
+      if (s === null || s === undefined) {
+        cleaned.push(null);
+      } else if (typeof s === "string" && ownedIds.has(s)) {
+        cleaned.push(s);
+      } else {
+        res.status(400).json({ error: `Mage not owned: ${s}` });
+        return;
+      }
+    }
+
+    const nonNull = cleaned.filter(Boolean);
+    if (new Set(nonNull).size !== nonNull.length) {
+      res.status(400).json({ error: "Duplicate mages in slots" });
+      return;
+    }
+
+    const existing = await db
+      .select()
+      .from(miniUserLoadoutTable)
+      .where(eq(miniUserLoadoutTable.telegramId, telegramId))
+      .then((r) => r[0] ?? null);
+
+    if (existing) {
+      await db
+        .update(miniUserLoadoutTable)
+        .set({ equippedSlots: cleaned, updatedAt: new Date() })
+        .where(eq(miniUserLoadoutTable.id, existing.id));
+    } else {
+      await db.insert(miniUserLoadoutTable).values({
+        telegramId,
+        equippedSlots: cleaned,
+      });
+    }
+
+    res.json({ ok: true, equippedSlots: cleaned });
+  } catch (err) {
+    console.error("[battle/loadout]", err);
     res.status(500).json({ error: "Internal server error" });
   }
 });

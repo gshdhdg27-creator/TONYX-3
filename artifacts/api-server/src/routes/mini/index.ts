@@ -16,6 +16,7 @@ import boostsRouter from "./boosts.js";
 import languageRouter from "./language.js";
 import walletRouter from "./wallet.js";
 import { telegramAuthMiddleware } from "../../middleware/verifyTelegram.js";
+import battleRouter from "./battle.js";
 
 const router: IRouter = Router();
 
@@ -64,6 +65,7 @@ router.use("/boosts", boostsRouter);
 router.use("/", financeRouter);
 router.use("/", leaderboardRouter);
 router.use("/", marketPoolRouter);
+router.use("/battle", battleRouter);
 router.use("/", historyRouter);
 router.use("/admin", adminRouter);
 

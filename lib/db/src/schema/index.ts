@@ -14,3 +14,11 @@ export * from "./mini_investments";
 export * from "./mini_boosts";
 export * from "./mini_topup_requests";
 export * from "./mini_igro_games";
+
+// ── Boss / Mage / Battle economy (server-authoritative) ──
+export * from "./mini_user_mages";
+export * from "./mini_user_loadout";
+export * from "./mini_user_boss_state";
+export * from "./mini_battles";
+export * from "./mini_nft_inventory";
+export * from "./mini_user_battle_boosts";

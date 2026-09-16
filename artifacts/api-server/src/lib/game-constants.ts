@@ -74,8 +74,26 @@ export const MAGES: MageConfig[] = [
   { id: "lyra-emerald-chronomancer", name: "Lyra, Emerald Chronomancer", rarity: "legendary", baseDps: 100, priceTon: 22.0, upgradeCost: 2200 },
 ];
 
+export const MAX_MAGE_LEVEL = 10;
+
+/**
+ * Damage multiplier by level:
+ * 1 → 1.0x, 2 → 1.1x, 3 → 1.2x ... 9 → 1.8x, 10 → 2.0x (exactly)
+ */
+export function getMageLevelMultiplier(level: number): number {
+  const lvl = Math.min(Math.max(level, 1), MAX_MAGE_LEVEL);
+  if (lvl >= MAX_MAGE_LEVEL) return 2.0;
+  return 1 + (lvl - 1) * 0.1;
+}
+
 export function getMageDps(baseDps: number, level: number): number {
-  return baseDps * Math.pow(1.4, level - 1);
+  return baseDps * getMageLevelMultiplier(level);
+}
+
+/** Cost to upgrade from currentLevel → currentLevel+1 (+20% each time) */
+export function getUpgradeCost(baseUpgradeCost: number, currentLevel: number): number {
+  if (currentLevel >= MAX_MAGE_LEVEL) return 0;
+  return Math.floor(baseUpgradeCost * Math.pow(1.2, currentLevel - 1));
 }
 
 export function getMageById(mageId: string): MageConfig | undefined {

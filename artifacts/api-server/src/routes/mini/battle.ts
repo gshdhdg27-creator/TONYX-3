@@ -28,6 +28,16 @@ import {
   type BossLevel,
 } from "../../lib/game-constants.js";
 
+import {
+  usersTable,
+  miniUserMagesTable,
+  miniUserLoadoutTable,
+  miniUserBossStateTable,
+  miniBattlesTable,
+  miniNftInventoryTable,
+  miniUserBattleBoostsTable,
+} from "@workspace/db/schema";
+
 const router: IRouter = Router();
 
 function getTelegramId(res: Response): string | null {

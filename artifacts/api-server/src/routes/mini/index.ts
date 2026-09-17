@@ -17,6 +17,7 @@ import languageRouter from "./language.js";
 import walletRouter from "./wallet.js";
 import { telegramAuthMiddleware } from "../../middleware/verifyTelegram.js";
 import battleRouter from "./battle.js";
+import casesRouter from "./cases.js";
 
 const router: IRouter = Router();
 

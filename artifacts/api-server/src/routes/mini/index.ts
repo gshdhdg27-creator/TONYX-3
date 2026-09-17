@@ -69,5 +69,6 @@ router.use("/", marketPoolRouter);
 router.use("/battle", battleRouter);
 router.use("/", historyRouter);
 router.use("/admin", adminRouter);
+router.use("/cases", casesRouter);
 
 export default router;

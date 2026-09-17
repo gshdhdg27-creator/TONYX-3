@@ -117,4 +117,169 @@ export default function CasesGame({
   }
 
   return (
-    <div style={{ padding: "0 16px 32px" 
+    <div style={{ padding: "0 16px 32px" }}>
+      {toast && <Toast msg={toast.msg} type={toast.type} />}
+
+      <div
+        style={{
+          display: "flex",
+          gap: 10,
+          marginBottom: 16,
+          flexWrap: "wrap",
+        }}
+      >
+        <div
+          style={{
+            background: "rgba(15,23,42,0.95)",
+            border: "1px solid rgba(30,58,143,0.35)",
+            borderRadius: 14,
+            padding: "10px 14px",
+            fontSize: 13,
+            color: "#94a3b8",
+          }}
+        >
+          {balances.ton.toFixed(3)} TON
+        </div>
+        <div
+          style={{
+            background: "rgba(15,23,42,0.95)",
+            border: "1px solid rgba(30,58,143,0.35)",
+            borderRadius: 14,
+            padding: "10px 14px",
+            fontSize: 13,
+            color: "#94a3b8",
+          }}
+        >
+          {balances.tonyx} TONYX
+        </div>
+      </div>
+
+      <div style={{ marginBottom: 12, fontSize: 12, color: "#64748b" }}>
+        {lang === "en" ? "Boss keys: " : "Ключи боссов: "}
+        {[1, 2, 3, 4, 5].map((lv) => (
+          <span key={lv} style={{ marginRight: 10 }}>
+            Lv{lv}:{bossKeys[lv] ?? 0}
+          </span>
+        ))}
+      </div>
+
+      {lastReward && (
+        <div
+          style={{
+            textAlign: "center",
+            background: "rgba(22,163,74,0.12)",
+            border: "1px solid rgba(74,222,128,0.3)",
+            borderRadius: 16,
+            padding: 16,
+            marginBottom: 16,
+            color: "#4ade80",
+            fontWeight: 800,
+            fontSize: 18,
+          }}
+        >
+          {lastReward}
+        </div>
+      )}
+
+      <div
+        style={{
+          fontSize: 13,
+          fontWeight: 700,
+          color: "#94a3b8",
+          marginBottom: 10,
+          letterSpacing: "0.06em",
+        }}
+      >
+        {lang === "en" ? "BOSS CASES" : "КЕЙСЫ БОССОВ"}
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 22 }}>
+        {bossCases.map((c) => (
+          <button
+            key={c.id}
+            onClick={() => openCase(c)}
+            disabled={!c.canOpen || busyId === c.id}
+            style={{
+              textAlign: "left",
+              background: "rgba(15,23,42,0.95)",
+              border: `1px solid ${c.canOpen ? "rgba(245,158,11,0.45)" : "rgba(30,58,143,0.35)"}`,
+              borderRadius: 16,
+              padding: "14px 16px",
+              color: "#e2e8f0",
+              fontFamily: "inherit",
+              cursor: c.canOpen ? "pointer" : "not-allowed",
+              opacity: c.canOpen ? 1 : 0.55,
+            }}
+          >
+            <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 4 }}>
+              {lang === "en" ? c.nameEn : c.nameRu}
+            </div>
+            <div style={{ fontSize: 12, color: "#64748b" }}>{costLabel(c, lang)}</div>
+            <div style={{ fontSize: 12, color: c.canOpen ? "#fbbf24" : "#475569", marginTop: 6 }}>
+              {busyId === c.id
+                ? lang === "en"
+                  ? "Opening..."
+                  : "Открываем..."
+                : c.canOpen
+                  ? lang === "en"
+                    ? "Tap to open"
+                    : "Нажми, чтобы открыть"
+                  : lang === "en"
+                    ? "Need a key — beat this boss"
+                    : "Нужен ключ — победи этого босса"}
+            </div>
+          </button>
+        ))}
+      </div>
+
+      <div
+        style={{
+          fontSize: 13,
+          fontWeight: 700,
+          color: "#94a3b8",
+          marginBottom: 10,
+          letterSpacing: "0.06em",
+        }}
+      >
+        {lang === "en" ? "PAID CASES" : "ПЛАТНЫЕ КЕЙСЫ"}
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {paidCases.map((c) => (
+          <button
+            key={c.id}
+            onClick={() => openCase(c)}
+            disabled={!c.canOpen || busyId === c.id}
+            style={{
+              textAlign: "left",
+              background: "rgba(15,23,42,0.95)",
+              border: `1px solid ${c.canOpen ? "rgba(34,211,238,0.4)" : "rgba(30,58,143,0.35)"}`,
+              borderRadius: 16,
+              padding: "14px 16px",
+              color: "#e2e8f0",
+              fontFamily: "inherit",
+              cursor: c.canOpen ? "pointer" : "not-allowed",
+              opacity: c.canOpen ? 1 : 0.55,
+            }}
+          >
+            <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 4 }}>
+              {lang === "en" ? c.nameEn : c.nameRu}
+            </div>
+            <div style={{ fontSize: 12, color: "#64748b" }}>{costLabel(c, lang)}</div>
+            <div style={{ fontSize: 12, color: c.canOpen ? "#22d3ee" : "#475569", marginTop: 6 }}>
+              {busyId === c.id
+                ? lang === "en"
+                  ? "Opening..."
+                  : "Открываем..."
+                : c.canOpen
+                  ? lang === "en"
+                    ? "Tap to open"
+                    : "Нажми, чтобы открыть"
+                  : lang === "en"
+                    ? "Not enough balance"
+                    : "Недостаточно средств"}
+            </div>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}

@@ -10,7 +10,6 @@ import {
   miniUserBattleBoostsTable,
   miniUserBossKeysTable,
 } from "@workspace/db/schema";
-
 import { eq, and } from "drizzle-orm";
 import {
   BOSSES,
@@ -30,7 +29,6 @@ import {
   type BossLevel,
 } from "../../lib/game-constants.js";
 
-
 const router: IRouter = Router();
 
 function getTelegramId(res: Response): string | null {
@@ -41,7 +39,6 @@ function isBossLevel(n: number): n is BossLevel {
   return n === 1 || n === 2 || n === 3 || n === 4 || n === 5;
 }
 
-/** Ensure user has starter mage + empty loadout/boosts/nft rows */
 async function ensureGameProfile(telegramId: string) {
   const existingMages = await db
     .select()
@@ -90,7 +87,6 @@ async function ensureGameProfile(telegramId: string) {
   }
 }
 
-/** Calculate current total DPS from equipped mages + active boosts */
 async function calcServerDps(telegramId: string): Promise<number> {
   const [loadout, mages, boostRow] = await Promise.all([
     db.select().from(miniUserLoadoutTable).where(eq(miniUserLoadoutTable.telegramId, telegramId)).then((r) => r[0] ?? null),
@@ -129,9 +125,7 @@ async function calcServerDps(telegramId: string): Promise<number> {
   return rawDps * mult;
 }
 
-// ─────────────────────────────────────────────────────────────
 // GET /api/mini/battle/game-state
-// ─────────────────────────────────────────────────────────────
 router.get("/game-state", async (_req: Request, res: Response) => {
   try {
     const telegramId = getTelegramId(res);
@@ -142,13 +136,14 @@ router.get("/game-state", async (_req: Request, res: Response) => {
 
     await ensureGameProfile(telegramId);
 
-    const [user, mages, loadout, bossStates, boosts, nft] = await Promise.all([
+    const [user, mages, loadout, bossStates, boosts, nft, keys] = await Promise.all([
       db.select().from(usersTable).where(eq(usersTable.telegramId, telegramId)).then((r) => r[0] ?? null),
       db.select().from(miniUserMagesTable).where(eq(miniUserMagesTable.telegramId, telegramId)),
       db.select().from(miniUserLoadoutTable).where(eq(miniUserLoadoutTable.telegramId, telegramId)).then((r) => r[0] ?? null),
       db.select().from(miniUserBossStateTable).where(eq(miniUserBossStateTable.telegramId, telegramId)),
       db.select().from(miniUserBattleBoostsTable).where(eq(miniUserBattleBoostsTable.telegramId, telegramId)).then((r) => r[0] ?? null),
       db.select().from(miniNftInventoryTable).where(eq(miniNftInventoryTable.telegramId, telegramId)).then((r) => r[0] ?? null),
+      db.select().from(miniUserBossKeysTable).where(eq(miniUserBossKeysTable.telegramId, telegramId)),
     ]);
 
     if (!user) {
@@ -163,6 +158,11 @@ router.get("/game-state", async (_req: Request, res: Response) => {
       reviveAdProgress[s.bossLevel] = s.reviveAdsWatched;
     }
 
+    const bossKeys: Record<number, number> = {};
+    for (const k of keys) {
+      bossKeys[k.bossLevel] = k.keysCount;
+    }
+
     res.json({
       balances: {
         ton: Number(user.ton),
@@ -175,6 +175,7 @@ router.get("/game-state", async (_req: Request, res: Response) => {
       equippedSlots: loadout?.equippedSlots ?? [null, null, null, null, null],
       bossRespawnAt,
       reviveAdProgress,
+      bossKeys,
       boost: {
         adWatchedCount: boosts?.adWatchedCount ?? 0,
         dpsMultiplier: Number(boosts?.dpsMultiplier ?? 1),
@@ -194,10 +195,7 @@ router.get("/game-state", async (_req: Request, res: Response) => {
   }
 });
 
-// ─────────────────────────────────────────────────────────────
 // POST /api/mini/battle/start
-// Body: { bossLevel: number }
-// ─────────────────────────────────────────────────────────────
 router.post("/start", async (req: Request, res: Response) => {
   try {
     const telegramId = getTelegramId(res);
@@ -285,10 +283,7 @@ router.post("/start", async (req: Request, res: Response) => {
   }
 });
 
-// ─────────────────────────────────────────────────────────────
 // POST /api/mini/battle/claim
-// Body: { battleId: number }
-// ─────────────────────────────────────────────────────────────
 router.post("/claim", async (req: Request, res: Response) => {
   try {
     const telegramId = getTelegramId(res);
@@ -452,6 +447,31 @@ router.post("/claim", async (req: Request, res: Response) => {
       });
     }
 
+    // +1 key for this boss level
+    const existingKey = await db
+      .select()
+      .from(miniUserBossKeysTable)
+      .where(and(
+        eq(miniUserBossKeysTable.telegramId, telegramId),
+        eq(miniUserBossKeysTable.bossLevel, bossLevel),
+      ))
+      .then((r) => r[0] ?? null);
+
+    let newKeysCount = 1;
+    if (existingKey) {
+      newKeysCount = existingKey.keysCount + 1;
+      await db
+        .update(miniUserBossKeysTable)
+        .set({ keysCount: newKeysCount, updatedAt: new Date() })
+        .where(eq(miniUserBossKeysTable.id, existingKey.id));
+    } else {
+      await db.insert(miniUserBossKeysTable).values({
+        telegramId,
+        bossLevel,
+        keysCount: 1,
+      });
+    }
+
     await Promise.all([
       db.update(usersTable)
         .set({ ton: String(newTon), tonyxCoins: newTonyx, updatedAt: new Date() })
@@ -464,13 +484,17 @@ router.post("/claim", async (req: Request, res: Response) => {
         .where(eq(miniBattlesTable.id, battleId)),
     ]);
 
-    console.log(`[battle/claim] ${telegramId} boss=${bossLevel} battleId=${battleId} rewards=${JSON.stringify(rewards)}`);
+    console.log(
+      `[battle/claim] ${telegramId} boss=${bossLevel} battleId=${battleId} key=${newKeysCount} rewards=${JSON.stringify(rewards)}`,
+    );
 
     res.json({
       rewards,
       balances: { ton: newTon, tonyx: newTonyx },
       nftInventory: { fragments, assembled },
       bossRespawnAt: respawnAt.getTime(),
+      bossKeyAwarded: 1,
+      bossKeysCount: newKeysCount,
     });
   } catch (err) {
     console.error("[battle/claim]", err);
@@ -478,10 +502,7 @@ router.post("/claim", async (req: Request, res: Response) => {
   }
 });
 
-// ─────────────────────────────────────────────────────────────
 // POST /api/mini/battle/revive
-// Body: { bossLevel: number, method: "ton" | "ad" }
-// ─────────────────────────────────────────────────────────────
 router.post("/revive", async (req: Request, res: Response) => {
   try {
     const telegramId = getTelegramId(res);
@@ -558,7 +579,6 @@ router.post("/revive", async (req: Request, res: Response) => {
       return;
     }
 
-    // method === "ad"
     if (cost.ads === null) {
       res.status(400).json({ error: "This boss can only be revived with TON" });
       return;
@@ -604,10 +624,7 @@ router.post("/revive", async (req: Request, res: Response) => {
   }
 });
 
-// ─────────────────────────────────────────────────────────────
 // POST /api/mini/battle/mage/buy
-// Body: { mageId: string }
-// ─────────────────────────────────────────────────────────────
 router.post("/mage/buy", async (req: Request, res: Response) => {
   try {
     const telegramId = getTelegramId(res);
@@ -681,10 +698,7 @@ router.post("/mage/buy", async (req: Request, res: Response) => {
   }
 });
 
-// ─────────────────────────────────────────────────────────────
 // POST /api/mini/battle/mage/upgrade
-// Body: { mageId: string }
-// ─────────────────────────────────────────────────────────────
 router.post("/mage/upgrade", async (req: Request, res: Response) => {
   try {
     const telegramId = getTelegramId(res);
@@ -763,10 +777,7 @@ router.post("/mage/upgrade", async (req: Request, res: Response) => {
   }
 });
 
-// ─────────────────────────────────────────────────────────────
 // POST /api/mini/battle/loadout
-// Body: { equippedSlots: (string | null)[] }
-// ─────────────────────────────────────────────────────────────
 router.post("/loadout", async (req: Request, res: Response) => {
   try {
     const telegramId = getTelegramId(res);

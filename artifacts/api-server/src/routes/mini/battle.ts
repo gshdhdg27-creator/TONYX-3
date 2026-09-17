@@ -8,7 +8,9 @@ import {
   miniBattlesTable,
   miniNftInventoryTable,
   miniUserBattleBoostsTable,
+  miniUserBossKeysTable,
 } from "@workspace/db/schema";
+
 import { eq, and } from "drizzle-orm";
 import {
   BOSSES,
@@ -28,15 +30,6 @@ import {
   type BossLevel,
 } from "../../lib/game-constants.js";
 
-import {
-  usersTable,
-  miniUserMagesTable,
-  miniUserLoadoutTable,
-  miniUserBossStateTable,
-  miniBattlesTable,
-  miniNftInventoryTable,
-  miniUserBattleBoostsTable,
-} from "@workspace/db/schema";
 
 const router: IRouter = Router();
 

@@ -127,3 +127,148 @@ export const SPEED_BOOST = {
 
 // ── Free starter mage ───────────────────────────────────────────────────
 export const STARTER_MAGE_ID = "wind-whisperer";
+
+// ── Cases ───────────────────────────────────────────────────────────────
+export type CaseCostType = "key" | "ton" | "tonyx";
+
+export interface CaseRewardPoolItem {
+  type: "ton" | "tonyx" | "nft_fragment";
+  weight: number;
+  minAmount?: number;
+  maxAmount?: number;
+  nftId?: string;
+}
+
+export interface CaseConfig {
+  id: string;
+  nameRu: string;
+  nameEn: string;
+  costType: CaseCostType;
+  /** For key cases = boss level 1..5; for paid = price amount */
+  costValue: number;
+  rewards: CaseRewardPoolItem[];
+}
+
+export const CASES: CaseConfig[] = [
+  // Boss key cases
+  {
+    id: "boss_1",
+    nameRu: "Кейс Shadow Pup",
+    nameEn: "Shadow Pup Case",
+    costType: "key",
+    costValue: 1,
+    rewards: [
+      { type: "ton", weight: 40, minAmount: 0.005, maxAmount: 0.02 },
+      { type: "tonyx", weight: 50, minAmount: 20, maxAmount: 80 },
+      { type: "nft_fragment", weight: 10, nftId: "shadow_dogg" },
+    ],
+  },
+  {
+    id: "boss_2",
+    nameRu: "Кейс Rage Dogg",
+    nameEn: "Rage Dogg Case",
+    costType: "key",
+    costValue: 2,
+    rewards: [
+      { type: "ton", weight: 35, minAmount: 0.01, maxAmount: 0.04 },
+      { type: "tonyx", weight: 50, minAmount: 50, maxAmount: 150 },
+      { type: "nft_fragment", weight: 15, nftId: "flame_dogg" },
+    ],
+  },
+  {
+    id: "boss_3",
+    nameRu: "Кейс Inferno Dogg",
+    nameEn: "Inferno Dogg Case",
+    costType: "key",
+    costValue: 3,
+    rewards: [
+      { type: "ton", weight: 30, minAmount: 0.03, maxAmount: 0.1 },
+      { type: "tonyx", weight: 50, minAmount: 100, maxAmount: 400 },
+      { type: "nft_fragment", weight: 20, nftId: "ice_dogg" },
+    ],
+  },
+  {
+    id: "boss_4",
+    nameRu: "Кейс Storm Dogg",
+    nameEn: "Storm Dogg Case",
+    costType: "key",
+    costValue: 4,
+    rewards: [
+      { type: "ton", weight: 30, minAmount: 0.08, maxAmount: 0.25 },
+      { type: "tonyx", weight: 45, minAmount: 300, maxAmount: 1000 },
+      { type: "nft_fragment", weight: 25, nftId: "shadow_dogg" },
+    ],
+  },
+  {
+    id: "boss_5",
+    nameRu: "Кейс Boss Dogg Prime",
+    nameEn: "Boss Dogg Prime Case",
+    costType: "key",
+    costValue: 5,
+    rewards: [
+      { type: "ton", weight: 25, minAmount: 0.2, maxAmount: 0.6 },
+      { type: "tonyx", weight: 45, minAmount: 800, maxAmount: 2500 },
+      { type: "nft_fragment", weight: 30, nftId: "flame_dogg" },
+    ],
+  },
+  // Paid cases
+  {
+    id: "ton_basic",
+    nameRu: "TON Кейс",
+    nameEn: "TON Case",
+    costType: "ton",
+    costValue: 0.1,
+    rewards: [
+      { type: "ton", weight: 50, minAmount: 0.05, maxAmount: 0.25 },
+      { type: "tonyx", weight: 40, minAmount: 50, maxAmount: 200 },
+      { type: "nft_fragment", weight: 10, nftId: "ice_dogg" },
+    ],
+  },
+  {
+    id: "ton_premium",
+    nameRu: "TON Премиум",
+    nameEn: "TON Premium",
+    costType: "ton",
+    costValue: 0.5,
+    rewards: [
+      { type: "ton", weight: 40, minAmount: 0.2, maxAmount: 1.0 },
+      { type: "tonyx", weight: 40, minAmount: 200, maxAmount: 800 },
+      { type: "nft_fragment", weight: 20, nftId: "shadow_dogg" },
+    ],
+  },
+  {
+    id: "tonyx_basic",
+    nameRu: "TONYX Кейс",
+    nameEn: "TONYX Case",
+    costType: "tonyx",
+    costValue: 200,
+    rewards: [
+      { type: "ton", weight: 30, minAmount: 0.02, maxAmount: 0.1 },
+      { type: "tonyx", weight: 55, minAmount: 100, maxAmount: 500 },
+      { type: "nft_fragment", weight: 15, nftId: "flame_dogg" },
+    ],
+  },
+];
+
+export function pickCaseReward(pool: CaseRewardPoolItem[]): {
+  type: "ton" | "tonyx" | "nft_fragment";
+  amount?: number;
+  nftId?: string;
+} {
+  const total = pool.reduce((s, r) => s + r.weight, 0);
+  let roll = Math.random() * total;
+  for (const item of pool) {
+    roll -= item.weight;
+    if (roll <= 0) {
+      if (item.type === "nft_fragment") {
+        return { type: "nft_fragment", nftId: item.nftId };
+      }
+      const min = item.minAmount ?? 0;
+      const max = item.maxAmount ?? min;
+      const amount = Math.round((min + Math.random() * (max - min)) * 1000) / 1000;
+      return { type: item.type, amount };
+    }
+  }
+  const last = pool[pool.length - 1];
+  return { type: last.type, amount: last.minAmount ?? 0, nftId: last.nftId };
+}

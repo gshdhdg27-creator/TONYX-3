@@ -1719,6 +1719,8 @@ export default function GamesPage() {
             onBalanceChange={refresh}
             onOpenHistory={() => openHistory("spin")}
           />
+        ) : active === "cases" ? (
+          <CasesGame lang={lang} onBalanceChange={refresh} />
         ) : null}
       </div>
     );

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import ArenaGame from "@/components/ArenaGame";
 import SpinGame, { JackpotWheel } from "@/components/SpinGame";
+import CasesGame from "@/components/CasesGame";
 import FairnessModal, { type FairData } from "@/components/FairnessModal";
 import {
   useGetUserProfile,

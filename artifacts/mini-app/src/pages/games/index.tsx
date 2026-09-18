@@ -1370,7 +1370,7 @@ const GAME_CARDS = [
   },
 ] as const;
 
-type ActiveGame = null | "arena" | "spin" | "mines";
+type ActiveGame = null | "arena" | "spin" | "mines" | "cases";
 
 function useGamesEnabled() {
   const [enabled, setEnabled] = useState<Record<string, boolean>>({ spin: true, mines: true, arena: true, igro: true });

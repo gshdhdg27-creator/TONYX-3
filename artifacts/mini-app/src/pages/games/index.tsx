@@ -1337,6 +1337,22 @@ const GAME_CARDS = [
     accentB: "#d97706",
   },
   {
+    id: "spin",
+    titleRu: "PvP Барабан",
+    titleEn: "PvP Spin",
+    descRu: "Крути барабан и забирай банк",
+    descEn: "Spin the wheel and take the bank",
+    ready: true,
+    baseOnline: 28,
+    primary: "#06B6D4",
+    gradient: "linear-gradient(180deg,#0891B2,#164E63)",
+    glow: "rgba(6,182,212,0.7)",
+    cardGlow: "rgba(6,182,212,0.12)",
+    border: "#0891B2",
+    accentA: "#22d3ee",
+    accentB: "#0891b2",
+  },
+  {
     id: "mines",
     titleRu: "Mines",
     titleEn: "Mines",
@@ -1608,6 +1624,7 @@ function GameCard({
         {card.id === "mines" && <MinesIllustration glow={card.glow} />}
         {card.id === "arena" && <ArenaIllustration glow={card.glow} />}
         {card.id === "spin"  && <SpinIllustration glow={card.glow} />}
+        {card.id === "cases" && <SpinIllustration glow={card.glow} />}
       </div>
     </div>
   );

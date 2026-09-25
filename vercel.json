@@ -1,9 +1,15 @@
 {
   "version": 2,
-  "buildCommand": "pnpm run build",
+  "buildCommand": "pnpm install && node scripts/bundle-api.mjs && pnpm --filter @workspace/mini-app run build",
   "outputDirectory": "artifacts/mini-app/dist/public",
   "framework": null,
   "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api/server" },
     { "source": "/(.*)", "destination": "/index.html" }
-  ]
+  ],
+  "functions": {
+    "api/server.ts": {
+      "maxDuration": 30
+    }
+  }
 }

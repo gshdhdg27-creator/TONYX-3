@@ -20,8 +20,11 @@ await build({
   target: ["node20"],
   format: "esm",
   outfile: path.resolve(root, "api/_bundled.mjs"),
+  // pg must NOT be bundled — breaks on Vercel serverless
   external: [
+    "pg",
     "pg-native",
+    "pg-cloudflare",
     "better-sqlite3",
     "oracledb",
     "mysql",

@@ -1,4 +1,7 @@
 // @ts-nocheck
+// Важно: явный import, чтобы Vercel положил pg в функцию
+import "pg";
+
 export default async function handler(req, res) {
   try {
     const mod = await import("./_bundled.mjs");
@@ -11,7 +14,6 @@ export default async function handler(req, res) {
         JSON.stringify({
           error: "Bundled module loaded, but default export is not an Express app",
           type: typeof app,
-          keys: app && typeof app === "object" ? Object.keys(app) : [],
         }),
       );
       return;

@@ -13,7 +13,14 @@ if (!connectionString) {
   );
 }
 
-export const pool = new Pool({ connectionString, ssl: { rejectUnauthorized: false } });
+export const pool = new Pool({
+  connectionString,
+  ssl: { rejectUnauthorized: false },
+  max: 1, // важно для Vercel serverless
+  idleTimeoutMillis: 10_000,
+  connectionTimeoutMillis: 10_000,
+});
+
 export const db = drizzle(pool, { schema });
 
 export { db as default };

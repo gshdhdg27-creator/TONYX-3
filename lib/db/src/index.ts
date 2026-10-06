@@ -1,8 +1,6 @@
-import { drizzle } from "drizzle-orm/node-postgres";
-import pg from "pg";
+import { Pool } from "@neondatabase/serverless";
+import { drizzle } from "drizzle-orm/neon-serverless";
 import * as schema from "./schema";
-
-const { Pool } = pg;
 
 const connectionString =
   process.env.NEON_DATABASE_URL ?? process.env.DATABASE_URL;
@@ -13,13 +11,7 @@ if (!connectionString) {
   );
 }
 
-export const pool = new Pool({
-  connectionString,
-  ssl: { rejectUnauthorized: false },
-  max: 1, // важно для Vercel serverless
-  idleTimeoutMillis: 10_000,
-  connectionTimeoutMillis: 10_000,
-});
+const pool = new Pool({ connectionString });
 
 export const db = drizzle(pool, { schema });
 

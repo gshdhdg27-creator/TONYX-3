@@ -72,8 +72,28 @@ router.get("/list", async (_req: Request, res: Response) => {
         costValue: c.costValue,
         canOpen,
         have,
+        imageUrl: (c as { imageUrl?: string | null }).imageUrl ?? null,
+        possibleRewards: c.rewards.map((r) => ({
+          type: r.type,
+          weight: r.weight,
+          minAmount: r.minAmount,
+          maxAmount: r.maxAmount,
+          nftId: r.nftId,
+          labelRu:
+            r.type === "ton"
+              ? `${r.minAmount ?? 0}–${r.maxAmount ?? 0} TON`
+              : r.type === "tonyx"
+                ? `${r.minAmount ?? 0}–${r.maxAmount ?? 0} TONYX`
+                : `Фрагмент ${r.nftId ?? "NFT"}`,
+          labelEn:
+            r.type === "ton"
+              ? `${r.minAmount ?? 0}–${r.maxAmount ?? 0} TON`
+              : r.type === "tonyx"
+                ? `${r.minAmount ?? 0}–${r.maxAmount ?? 0} TONYX`
+                : `Fragment ${r.nftId ?? "NFT"}`,
+          imageUrl: null,
+        })),
       };
-    });
 
     res.json({
       cases,

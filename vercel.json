@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "buildCommand": "pnpm install && node scripts/bundle-api.mjs && pnpm --filter @workspace/mini-app run build",
+  "buildCommand": "pnpm install --no-frozen-lockfile && node scripts/bundle-api.mjs && pnpm --filter @workspace/mini-app run build",
   "outputDirectory": "artifacts/mini-app/dist/public",
   "framework": null,
   "rewrites": [

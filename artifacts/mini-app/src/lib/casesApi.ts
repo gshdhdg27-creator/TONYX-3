@@ -1,3 +1,14 @@
+export type CaseRewardPreview = {
+  type: "ton" | "tonyx" | "nft_fragment";
+  weight: number;
+  minAmount?: number;
+  maxAmount?: number;
+  nftId?: string;
+  labelRu?: string;
+  labelEn?: string;
+  imageUrl?: string | null;
+};
+
 export type CaseListItem = {
   id: string;
   nameRu: string;
@@ -6,6 +17,8 @@ export type CaseListItem = {
   costValue: number;
   canOpen: boolean;
   have: number;
+  imageUrl?: string | null;
+  possibleRewards: CaseRewardPreview[];
 };
 
 export type CasesListResponse = {

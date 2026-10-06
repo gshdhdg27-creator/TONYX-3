@@ -1,5 +1,5 @@
-import { Pool } from "@neondatabase/serverless";
-import { drizzle } from "drizzle-orm/neon-serverless";
+import { neon } from "@neondatabase/serverless";
+import { drizzle } from "drizzle-orm/neon-http";
 import * as schema from "./schema";
 
 const connectionString =
@@ -11,9 +11,10 @@ if (!connectionString) {
   );
 }
 
-const pool = new Pool({ connectionString });
+// HTTP-драйвер Neon — стабильно работает на Vercel serverless
+const sql = neon(connectionString);
 
-export const db = drizzle(pool, { schema });
+export const db = drizzle(sql, { schema });
 
 export { db as default };
 export * from "./schema";

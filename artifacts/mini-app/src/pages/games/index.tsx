@@ -1645,8 +1645,9 @@ export default function GamesPage() {
   const { data: profile } = useGetUserProfile(telegramId ?? "", {
     query: { queryKey: getGetUserProfileQueryKey(telegramId ?? ""), enabled: !!telegramId, refetchInterval: 10000 },
   });
-  const refresh = () => qc.invalidateQueries({ queryKey: getGetUserProfileQueryKey(telegramId ?? "") });
-
+ const refresh = () =>
+  qc.refetchQueries({ queryKey: getGetUserProfileQueryKey(telegramId ?? "") });
+  
   const lang: Lang = ((profile as any)?.language ?? "ru") as Lang;
   const tonBalance = Number(profile?.ton ?? 0);
 

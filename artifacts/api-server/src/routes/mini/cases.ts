@@ -94,6 +94,7 @@ router.get("/list", async (_req: Request, res: Response) => {
           imageUrl: null,
         })),
       };
+              });
 
     res.json({
       cases,

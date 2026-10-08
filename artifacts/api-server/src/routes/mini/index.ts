@@ -18,6 +18,7 @@ import walletRouter from "./wallet.js";
 import { telegramAuthMiddleware } from "../../middleware/verifyTelegram.js";
 import battleRouter from "./battle.js";
 import casesRouter from "./cases.js";
+import adminCasesRouter from "./admin-cases.js";
 
 const router: IRouter = Router();
 
@@ -70,5 +71,6 @@ router.use("/battle", battleRouter);
 router.use("/", historyRouter);
 router.use("/admin", adminRouter);
 router.use("/cases", casesRouter);
+router.use("/admin", adminCasesRouter);
 
 export default router;

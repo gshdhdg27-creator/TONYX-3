@@ -9,6 +9,9 @@ import Header from "@/components/Header";
 import HomePage from "@/pages/home";
 import MarketPage from "@/pages/market";
 import GamesPage from "@/pages/games";
+import CasesPage from "@/pages/cases";
+import PvpPage from "@/pages/pvp";
+import SoloPage from "@/pages/solo";
 import TasksPage from "@/pages/tasks";
 import ProfilePage from "@/pages/profile";
 import LeaderboardPage from "@/pages/leaderboard";
@@ -184,6 +187,9 @@ function AppShell() {
           <Route path="/" component={HomePage} />
           <Route path="/market" component={MarketPage} />
           <Route path="/games" component={GamesPage} />
+          <Route path="/cases" component={CasesPage} />
+          <Route path="/pvp" component={PvpPage} />
+          <Route path="/solo" component={SoloPage} />
           <Route path="/tasks" component={TasksPage} />
           <Route path="/profile" component={ProfilePage} />
           <Route path="/leaderboard" component={LeaderboardPage} />

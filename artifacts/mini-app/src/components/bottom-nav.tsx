@@ -3,6 +3,10 @@ import { useLocation, Link } from "wouter";
 import { haptic } from "@/lib/telegram";
 
 export type MenuMode = 1 | 2 | 3;
+type Section =
+  | "market" | "nft" | "tasks"
+  | "cases" | "pvp" | "solo"
+  | "bosses" | "cards" | "collection";
 
 const MODE_KEY = "tonyx-menu-mode";
 
@@ -12,33 +16,45 @@ const MODE_COLOR: Record<MenuMode, string> = {
   3: "#eab308",
 };
 
-const FIRST_PATH: Record<MenuMode, string> = {
-  1: "/market",
-  2: "/cases",
-  3: "/bosses",
+const FIRST: Record<MenuMode, Section> = {
+  1: "market",
+  2: "cases",
+  3: "bosses",
+};
+
+const PATH: Record<Section, string> = {
+  market: "/market",
+  nft: "/nft-market",
+  tasks: "/tasks",
+  cases: "/games",
+  pvp: "/games",
+  solo: "/games",
+  bosses: "/",
+  cards: "/",
+  collection: "/",
 };
 
 interface TabDef {
-  path: string;
+  section: Section;
   label: string;
   icon: (active: boolean) => ReactNode;
 }
 
 const MODE_TABS: Record<MenuMode, TabDef[]> = {
   1: [
-    { path: "/market", label: "Market", icon: MarketIcon },
-    { path: "/nft-market", label: "NFT", icon: NftIcon },
-    { path: "/tasks", label: "Задания", icon: TasksIcon },
+    { section: "market", label: "Market", icon: MarketIcon },
+    { section: "nft", label: "NFT", icon: NftIcon },
+    { section: "tasks", label: "Задания", icon: TasksIcon },
   ],
   2: [
-    { path: "/cases", label: "Кейсы", icon: CasesIcon },
-    { path: "/pvp", label: "PvP", icon: PvpIcon },
-    { path: "/solo", label: "Solo", icon: SoloIcon },
+    { section: "cases", label: "Кейсы", icon: CasesIcon },
+    { section: "pvp", label: "PvP", icon: PvpIcon },
+    { section: "solo", label: "Solo", icon: SoloIcon },
   ],
   3: [
-    { path: "/bosses", label: "Боссы", icon: BossIcon },
-    { path: "/cards", label: "Карточки", icon: CardsIcon },
-    { path: "/collection", label: "Коллекция", icon: CollectionIcon },
+    { section: "bosses", label: "Боссы", icon: BossIcon },
+    { section: "cards", label: "Карточки", icon: CardsIcon },
+    { section: "collection", label: "Коллекция", icon: CollectionIcon },
   ],
 };
 
@@ -47,24 +63,23 @@ function readMenuMode(): MenuMode {
     const raw = localStorage.getItem(MODE_KEY);
     if (raw === "2") return 2;
     if (raw === "3") return 3;
-  } catch {
-    /* ignore */
-  }
+  } catch { /* ignore */ }
   return 1;
 }
 
 function writeMenuMode(mode: MenuMode) {
-  try {
-    localStorage.setItem(MODE_KEY, String(mode));
-  } catch {
-    /* ignore */
-  }
+  try { localStorage.setItem(MODE_KEY, String(mode)); } catch { /* ignore */ }
 }
 
 function nextMode(mode: MenuMode): MenuMode {
   if (mode === 1) return 2;
   if (mode === 2) return 3;
   return 1;
+}
+
+function openSection(section: Section) {
+  sessionStorage.setItem("tonyx-open", section);
+  window.dispatchEvent(new Event("tonyx-open"));
 }
 
 export default function BottomNav() {
@@ -77,51 +92,55 @@ export default function BottomNav() {
   const [origin, setOrigin] = useState({ x: 36, y: 40 });
   const timer = useRef<number | null>(null);
 
-  useEffect(() => {
-    return () => {
-      if (timer.current) window.clearTimeout(timer.current);
-    };
+  useEffect(() => () => {
+    if (timer.current) window.clearTimeout(timer.current);
   }, []);
+
+  function rememberOrigin() {
+    const rect = buttonRef.current?.getBoundingClientRect();
+    if (rect) setOrigin({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 });
+  }
+
+  function go(section: Section) {
+    openSection(section);
+    setLocation(PATH[section]);
+  }
 
   function switchMode() {
     if (busy) return;
     const upcoming = nextMode(mode);
     haptic("medium");
     setBusy(true);
-
-    const rect = buttonRef.current?.getBoundingClientRect();
-    if (rect) {
-      setOrigin({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 });
-    }
-
+    rememberOrigin();
     setSpinDeg((deg) => deg + 120);
-    setFlood({ color: MODE_COLOR[upcoming], phase: "in" });
 
     timer.current = window.setTimeout(() => {
-      setMode(upcoming);
-      writeMenuMode(upcoming);
-      setLocation(FIRST_PATH[upcoming]);
-      setFlood({ color: MODE_COLOR[upcoming], phase: "out" });
+      setFlood({ color: MODE_COLOR[upcoming], phase: "in" });
       timer.current = window.setTimeout(() => {
-        setFlood(null);
-        setBusy(false);
-      }, 700);
-    }, 900);
+        setMode(upcoming);
+        writeMenuMode(upcoming);
+        go(FIRST[upcoming]);
+        setFlood({ color: MODE_COLOR[upcoming], phase: "out" });
+        timer.current = window.setTimeout(() => {
+          setFlood(null);
+          setBusy(false);
+        }, 560);
+      }, 560);
+    }, 820);
   }
 
   const tabs = MODE_TABS[mode];
-  const profileActive = location === "/profile" || location.startsWith("/profile/");
 
   return (
     <>
       <style>{`
         @keyframes tonyx-flood-in {
-          from { transform: translate(-50%, -50%) scale(0.15); opacity: 0.85; }
+          from { transform: translate(-50%, -50%) scale(0.12); opacity: 0.9; }
           to { transform: translate(-50%, -50%) scale(28); opacity: 1; }
         }
         @keyframes tonyx-flood-out {
           from { transform: translate(-50%, -50%) scale(28); opacity: 1; }
-          to { transform: translate(-50%, -50%) scale(0.2); opacity: 0; }
+          to { transform: translate(-50%, -50%) scale(0.12); opacity: 0; }
         }
       `}</style>
 
@@ -139,8 +158,8 @@ export default function BottomNav() {
             zIndex: 250,
             pointerEvents: "none",
             animation: flood.phase === "in"
-              ? "tonyx-flood-in 0.85s ease-out forwards"
-              : "tonyx-flood-out 0.7s ease-in forwards",
+              ? "tonyx-flood-in 0.55s ease-out forwards"
+              : "tonyx-flood-out 0.55s ease-in forwards",
           }}
         />
       )}
@@ -161,102 +180,73 @@ export default function BottomNav() {
         paddingBottom: "env(safe-area-inset-bottom, 0px)",
         boxShadow: "0 -8px 30px rgba(0,0,0,0.5)",
       }}>
-        <div style={{
-          width: 72,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          borderRight: "1px solid rgba(30, 58, 143, 0.35)",
-        }}>
+        <div style={{ width: 72, display: "flex", alignItems: "center", justifyContent: "center", borderRight: "1px solid rgba(30, 58, 143, 0.35)" }}>
           <button
             ref={buttonRef}
             type="button"
             onClick={switchMode}
             aria-label="Меню"
             style={{
-              width: 46,
-              height: 46,
-              borderRadius: "50%",
+              width: 46, height: 46, borderRadius: "50%",
               border: "2px solid rgba(255,255,255,0.2)",
-              padding: 0,
-              position: "relative",
-              background: "transparent",
+              padding: 0, position: "relative", background: "transparent",
               cursor: busy ? "default" : "pointer",
             }}
           >
             <span style={{
-              position: "absolute",
-              left: 3,
-              right: 3,
-              top: 3,
-              bottom: 3,
-              borderRadius: "50%",
+              position: "absolute", left: 3, right: 3, top: 3, bottom: 3, borderRadius: "50%",
               background: "conic-gradient(#2563eb 0 120deg, #dc2626 120deg 240deg, #eab308 240deg 360deg)",
               transform: `rotate(${spinDeg - 60}deg)`,
               transition: "transform 0.8s cubic-bezier(.2,.8,.2,1)",
             }} />
             <span style={{
-              position: "absolute",
-              left: "50%",
-              top: -6,
-              transform: "translateX(-50%)",
-              width: 0,
-              height: 0,
+              position: "absolute", left: "50%", top: -6, transform: "translateX(-50%)",
+              width: 0, height: 0,
               borderLeft: "5px solid transparent",
               borderRight: "5px solid transparent",
               borderTop: "7px solid #f8fafc",
             }} />
             <span style={{
-              position: "absolute",
-              inset: 14,
-              borderRadius: "50%",
-              background: "#0b1020",
-              color: "#f8fafc",
-              fontSize: 11,
-              fontWeight: 800,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
+              position: "absolute", inset: 14, borderRadius: "50%",
+              background: "#0b1020", color: "#f8fafc", fontSize: 11, fontWeight: 800,
+              display: "flex", alignItems: "center", justifyContent: "center",
             }}>
               {mode}
             </span>
           </button>
         </div>
 
-        {tabs.map(({ path, label, icon }) => {
-          const active = location === path || location.startsWith(path + "/");
+        {tabs.map(({ section, label, icon }) => {
+          const path = PATH[section];
+          const active = location === path && sessionStorage.getItem("tonyx-open") === section;
           return (
-            <Link key={path} href={path} onClick={() => haptic("light")} style={{
-              flex: 1,
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              justifyContent: "center",
-              padding: "8px 2px 6px",
-              textDecoration: "none",
-              opacity: active ? 1 : 0.7,
-            }}>
+            <button
+              key={section}
+              type="button"
+              onClick={() => { haptic("light"); go(section); }}
+              style={{
+                flex: 1, display: "flex", flexDirection: "column", alignItems: "center",
+                justifyContent: "center", padding: "8px 2px 6px",
+                background: "transparent", border: 0, cursor: "pointer",
+                opacity: active ? 1 : 0.7,
+              }}
+            >
               {icon(active)}
               <span style={{ marginTop: 3, fontSize: 10, fontWeight: 700, color: active ? MODE_COLOR[mode] : "#64748b" }}>
                 {label}
               </span>
-            </Link>
+            </button>
           );
         })}
 
         <Link href="/profile" onClick={() => haptic("light")} style={{
-          width: 68,
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          padding: "8px 2px 6px",
-          textDecoration: "none",
+          width: 68, display: "flex", flexDirection: "column", alignItems: "center",
+          justifyContent: "center", padding: "8px 2px 6px", textDecoration: "none",
           borderLeft: "1px solid rgba(30, 58, 143, 0.35)",
-          opacity: profileActive ? 1 : 0.7,
+          opacity: location === "/profile" ? 1 : 0.7,
         }}>
-          <ProfileIcon active={profileActive} />
-          <span style={{ marginTop: 3, fontSize: 10, fontWeight: 700, color: profileActive ? "#93c5fd" : "#64748b" }}>
+          <ProfileIcon active={location === "/profile"} />
+          <span style={{ marginTop: 3, fontSize: 10, fontWeight: 700, color: location === "/profile" ? "#93c5fd" : "#64748b" }}>
             Профиль
           </span>
         </Link>

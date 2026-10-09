@@ -24,3 +24,5 @@ export * from "./mini_nft_inventory";
 export * from "./mini_user_battle_boosts";
 export * from "./mini_user_boss_keys";
 export * from "./mini_case_opens";
+export * from "./mini_cases_config";
+export * from "./mini_user_inventory";

@@ -234,22 +234,6 @@ export default function HomeScreen() {
                 🚀 Boost
               </button>
             </div>
-            <div className="action-row">
-              <button
-                className="btn btn-ghost"
-                style={{ flex: 1 }}
-                onClick={() => setView("collection")}
-              >
-                🏆 NFT
-              </button>
-              <button
-                className="btn btn-ghost"
-                style={{ flex: 1 }}
-                onClick={() => setView("hero-shop")}
-              >
-                🛒 Магазин
-              </button>
-            </div>
           </div>
         )}
       </div>

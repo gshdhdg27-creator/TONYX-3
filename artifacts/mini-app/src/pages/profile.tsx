@@ -12,6 +12,7 @@ import { useTelegram, haptic, hapticNotify } from "@/lib/telegram";
 import { CountUp } from "@/components/count-up";
 import { useLang } from "@/lib/LanguageContext";
 import type { Lang } from "@/lib/i18n";
+import { inventoryApi, type InventoryItem, type InventoryCollection } from "@/lib/inventoryApi";
 
 const TOPUP_WALLET = "UQBDrAxyWlMMmtSgq5TjQyO1nKacS_nA0_7ZQ88m8eMmU1jO";
 
@@ -112,6 +113,11 @@ export default function ProfilePage() {
   const [addrCopied, setAddrCopied]         = useState(false);
   const [memoCopied, setMemoCopied]         = useState(false);
 
+    const [invItems, setInvItems] = useState<InventoryItem[]>([]);
+  const [invCollections, setInvCollections] = useState<InventoryCollection[]>([]);
+  const [invLoading, setInvLoading] = useState(false);
+  const [sellingId, setSellingId] = useState<number | null>(null);
+
   // Withdraw state
   const [withdrawAmount, setWithdrawAmount]   = useState("");
   const [withdrawAddress, setWithdrawAddress] = useState("");
@@ -138,6 +144,36 @@ export default function ProfilePage() {
   const { data: referrals } = useGetReferrals(telegramId ?? "", { query: { enabled: !!telegramId } as any });
   const { data: history } = useGetMiniHistory(telegramId ?? "", { query: { enabled: !!telegramId, refetchInterval: 30000 } as any });
 
+    useEffect(() => {
+    if (!telegramId) return;
+    setInvLoading(true);
+    inventoryApi
+      .get()
+      .then((d) => {
+        setInvItems(d.inventory ?? []);
+        setInvCollections(d.collections ?? []);
+      })
+      .catch(() => {})
+      .finally(() => setInvLoading(false));
+  }, [telegramId]);
+
+  async function sellItem(id: number) {
+    if (sellingId) return;
+    setSellingId(id);
+    try {
+      const r = await inventoryApi.sell(id);
+      hapticNotify("success");
+      setToast({ msg: `Продано +${r.receivedTon} TON`, type: "success" });
+      setInvItems((prev) => prev.filter((x) => x.id !== id));
+      qc.invalidateQueries({ queryKey: getGetUserProfileQueryKey(telegramId ?? "") });
+    } catch (e) {
+      hapticNotify("error");
+      setToast({ msg: e instanceof Error ? e.message : "Ошибка", type: "error" });
+    } finally {
+      setSellingId(null);
+    }
+  }
+  
   const showToast = (msg: string, type: "success" | "error") => {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 3000);
@@ -942,6 +978,73 @@ export default function ProfilePage() {
         </div>
       </div>
 
+            {/* ─── INVENTORY ─── */}
+      <div data-testid="profile-inventory" style={{ background: "rgba(17,24,39,0.9)", border: "1px solid rgba(168,85,247,0.25)", borderRadius: 18, padding: 16, marginBottom: 14 }}>
+        <div style={{ fontSize: 13, fontWeight: 800, color: "#c084fc", marginBottom: 10 }}>🎒 Инвентарь NFT</div>
+        {invLoading ? (
+          <div style={{ color: "#64748b", fontSize: 12 }}>Загрузка…</div>
+        ) : invItems.length === 0 ? (
+          <div style={{ color: "#64748b", fontSize: 12, lineHeight: 1.5 }}>
+            Пока пусто. Собери пазл в NFT Collection или выиграй NFT из кейса.
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {invItems.map((it) => (
+              <div key={it.id} style={{
+                display: "flex", alignItems: "center", gap: 12,
+                background: "rgba(30,45,69,0.55)", borderRadius: 12, padding: "10px 12px",
+                border: "1px solid rgba(168,85,247,0.2)",
+              }}>
+                <div style={{
+                  width: 44, height: 44, borderRadius: 10, flexShrink: 0,
+                  background: "linear-gradient(135deg,#7c3aed55,#a855f755)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: 20, overflow: "hidden",
+                }}>
+                  {it.imageUrl ? (
+                    <img src={it.imageUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                  ) : "🎁"}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: "#e2e8f0" }}>{it.nameRu}</div>
+                  <div style={{ fontSize: 11, color: "#94a3b8" }}>≈ {it.valueTon} TON</div>
+                </div>
+                <button
+                  type="button"
+                  disabled={sellingId === it.id}
+                  onClick={() => { haptic("light"); sellItem(it.id); }}
+                  style={{
+                    padding: "8px 12px", borderRadius: 10, border: "none", cursor: "pointer",
+                    background: "linear-gradient(135deg,#16a34a,#22c55e)",
+                    color: "#fff", fontSize: 12, fontWeight: 700, fontFamily: "inherit",
+                    opacity: sellingId === it.id ? 0.6 : 1,
+                  }}
+                >
+                  {sellingId === it.id ? "…" : "Продать"}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {invCollections.some((c) => c.owned > 0) && (
+          <div style={{ marginTop: 14 }}>
+            <div style={{ fontSize: 10, color: "#64748b", marginBottom: 8, letterSpacing: "0.1em", fontWeight: 600 }}>ПАЗЛЫ</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              {invCollections.filter((c) => c.owned > 0).map((c) => (
+                <div key={c.id} style={{
+                  fontSize: 11, color: c.canClaim ? "#4ade80" : "#c4b5fd",
+                  background: "rgba(124,58,237,0.15)", borderRadius: 8, padding: "4px 8px",
+                  border: c.canClaim ? "1px solid rgba(74,222,128,0.4)" : "1px solid rgba(168,85,247,0.2)",
+                }}>
+                  {c.nameRu} {c.owned}/9
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+      
       {/* ─── Activity history (always visible) ─── */}
       <div style={{ background: "rgba(17,24,39,0.9)", border: "1px solid rgba(30,58,143,0.3)", borderRadius: 18, padding: 16 }}>
         <div style={{ fontSize: 10, color: "#64748b", marginBottom: 12, letterSpacing: "0.12em", fontWeight: 600 }}>📜 ПОСЛЕДНЯЯ АКТИВНОСТЬ</div>

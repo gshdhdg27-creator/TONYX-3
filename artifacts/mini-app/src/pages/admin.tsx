@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useTelegram } from "@/lib/telegram";
+import { CasesAdminTab } from "@/components/CasesAdminTab";
 
 const OWNER_ID = "7257793582";
 
@@ -125,6 +126,7 @@ const TABS = [
   { id:3, icon:"📋", label:"Задания"  },
   { id:4, icon:"👑", label:"Генерал"  },
   { id:5, icon:"🔍", label:"Игроки"   },
+  { id:6, icon:"📦", label:"Кейсы"    },
 ];
 
 function TabNav({ active, onChange }: { active: number; onChange: (n: number)=>void }) {
@@ -1389,6 +1391,7 @@ export default function AdminPage() {
       {tab===3 && <TasksTab adminId={adminId} isSuperAdmin={isSuperAdmin} />}
       {tab===4 && <GeneralTab adminId={adminId} isSuperAdmin={isSuperAdmin} />}
       {tab===5 && <PlayersTab adminId={adminId} isSuperAdmin={isSuperAdmin} stats={stats} onRefresh={()=>fetchStats(adminId)} />}
+      {tab===6 && <CasesAdminTab adminId={adminId} />}
     </div>
   );
 }

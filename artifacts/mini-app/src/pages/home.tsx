@@ -18,6 +18,23 @@ export default function HomePage() {
   useBossAnimation();
 
   const view = useGameStore((s) => s.view);
+  const setView = useGameStore((s) => s.setView);
+
+useEffect(() => {
+  const apply = () => {
+    const open = sessionStorage.getItem("tonyx-open");
+    if (open !== "bosses" && open !== "cards" && open !== "collection") return;
+    sessionStorage.removeItem("tonyx-open");
+    window.setTimeout(() => {
+      if (open === "bosses") setView("home");
+      if (open === "cards") setView("hero-shop");
+      if (open === "collection") setView("collection");
+    }, 700);
+  };
+  apply();
+  window.addEventListener("tonyx-open", apply);
+  return () => window.removeEventListener("tonyx-open", apply);
+}, [setView]);
   const init = useGameStore((s) => s.init);
   const setTonBalance = useGameStore((s) => s.setTonBalance);
   const setTonyxBalance = useGameStore((s) => s.setTonyxBalance);

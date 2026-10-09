@@ -69,8 +69,8 @@ function writeMenuMode(mode: MenuMode) {
 function nextMode(mode: MenuMode): MenuMode {
   return mode === 1 ? 2 : mode === 2 ? 3 : 1;
 }
-function rotationFor(mode: MenuMode, extra: number) {
-  return -60 - (mode - 1) * 120 + extra;
+function rotationFor(mode: MenuMode) {
+  return -60 - (mode - 1) * 120;
 }
 function openSection(section: Section) {
   sessionStorage.setItem("tonyx-open", section);
@@ -78,9 +78,9 @@ function openSection(section: Section) {
 }
 
 export default function BottomNav() {
-  const [location, setLocation] = useLocation();
+  const [, setLocation] = useLocation();
   const [mode, setMode] = useState<MenuMode>(readMenuMode);
-  const [spinExtra, setSpinExtra] = useState(0);
+  const [rotation, setRotation] = useState(() => rotationFor(readMenuMode()));
   const [busy, setBusy] = useState(false);
   const [flood, setFlood] = useState<{ color: string; phase: "in" | "out" } | null>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -103,7 +103,8 @@ export default function BottomNav() {
     setBusy(true);
     const rect = buttonRef.current?.getBoundingClientRect();
     if (rect) setOrigin({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 });
-    setSpinExtra((n) => n - 120);
+
+    setRotation((value) => value - 120);
 
     timer.current = window.setTimeout(() => {
       setFlood({ color: MODE_COLOR[upcoming], phase: "in" });
@@ -119,9 +120,6 @@ export default function BottomNav() {
       }, 560);
     }, 820);
   }
-
-  const tabs = MODE_TABS[mode];
-  const profileOn = location === "/profile";
 
   return (
     <>
@@ -157,25 +155,24 @@ export default function BottomNav() {
             padding: 0, position: "relative", background: "transparent", cursor: busy ? "default" : "pointer",
           }}>
             <span style={{
-              position: "absolute", left: "50%", top: -7, transform: "translateX(-50%)",
-              width: 0, height: 0, zIndex: 2,
-              borderLeft: "6px solid transparent", borderRight: "6px solid transparent",
-              borderTop: "8px solid #f8fafc",
+              position: "absolute", left: "50%", top: -8, transform: "translateX(-50%)",
+              width: 0, height: 0, zIndex: 3,
+              borderLeft: "6px solid transparent",
+              borderRight: "6px solid transparent",
+              borderTop: "9px solid #f8fafc",
             }} />
             <span style={{
               position: "absolute", inset: 3, borderRadius: "50%",
               background: "conic-gradient(#2563eb 0 120deg, #dc2626 120deg 240deg, #eab308 240deg 360deg)",
-              transform: `rotate(${rotationFor(mode, spinExtra)}deg)`,
-              transition: "transform 0.8s cubic-bezier(.2,.8,.2,1)",
+              transform: `rotate(${rotation}deg)`,
+              transition: "transform 0.8s linear",
             }} />
             <span style={{
-              position: "absolute", inset: 15, borderRadius: "50%", background: "#0b1020",
-              color: MODE_COLOR[mode], fontSize: 12, fontWeight: 800,
-              display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1,
-            }}>{mode}</span>
+              position: "absolute", inset: 15, borderRadius: "50%", background: "#0b1020", zIndex: 1,
+            }} />
           </button>
         </div>
-        {tabs.map(({ section, label, icon }) => (
+        {MODE_TABS[mode].map(({ section, label, icon }) => (
           <button key={section} type="button" onClick={() => { haptic("light"); go(section); }} style={{
             flex: 1, display: "flex", flexDirection: "column", alignItems: "center",
             justifyContent: "center", padding: "8px 2px 6px", background: "transparent",
@@ -187,10 +184,10 @@ export default function BottomNav() {
         ))}
         <button type="button" onClick={() => { haptic("light"); setLocation("/profile"); }} style={{
           width: 68, display: "flex", flexDirection: "column", alignItems: "center",
-          justifyContent: "center", background: "transparent", border: 0, borderLeft: "1px solid rgba(30,58,143,0.35)",
-          opacity: profileOn ? 1 : 0.75, cursor: "pointer",
+          justifyContent: "center", background: "transparent", border: 0,
+          borderLeft: "1px solid rgba(30,58,143,0.35)", cursor: "pointer",
         }}>
-          <ProfileIcon active={profileOn} />
+          <ProfileIcon active={false} />
           <span style={{ marginTop: 3, fontSize: 10, fontWeight: 700, color: "#94a3b8" }}>Профиль</span>
         </button>
       </nav>
@@ -198,34 +195,34 @@ export default function BottomNav() {
   );
 }
 
-function stroke(active: boolean) { return active ? "#e2e8f0" : "#475569"; }
-function MarketIcon(active: boolean) {
-  return <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={stroke(active)} strokeWidth="2"><path d="M3 3h2l2.4 12.2a2 2 0 002 1.6h8.7a2 2 0 002-1.6L22 7H6" /><circle cx="9" cy="21" r="1.5" /><circle cx="18" cy="21" r="1.5" /></svg>;
+function stroke() { return "#475569"; }
+function MarketIcon() {
+  return <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={stroke()} strokeWidth="2"><path d="M3 3h2l2.4 12.2a2 2 0 002 1.6h8.7a2 2 0 002-1.6L22 7H6" /><circle cx="9" cy="21" r="1.5" /><circle cx="18" cy="21" r="1.5" /></svg>;
 }
-function NftIcon(active: boolean) {
-  return <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={stroke(active)} strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="3" /><path d="M3 16l5-5 4 4 3-3 6 6" /></svg>;
+function NftIcon() {
+  return <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={stroke()} strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="3" /><path d="M3 16l5-5 4 4 3-3 6 6" /></svg>;
 }
-function TasksIcon(active: boolean) {
-  return <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={stroke(active)} strokeWidth="2"><path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11" /></svg>;
+function TasksIcon() {
+  return <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={stroke()} strokeWidth="2"><path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11" /></svg>;
 }
-function CasesIcon(active: boolean) {
-  return <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={stroke(active)} strokeWidth="2"><path d="M3 8h18v11a2 2 0 01-2 2H5a2 2 0 01-2-2V8z" /><path d="M3 8l2-4h14l2 4" /></svg>;
+function CasesIcon() {
+  return <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={stroke()} strokeWidth="2"><path d="M3 8h18v11a2 2 0 01-2 2H5a2 2 0 01-2-2V8z" /><path d="M3 8l2-4h14l2 4" /></svg>;
 }
-function PvpIcon(active: boolean) {
-  return <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={stroke(active)} strokeWidth="2"><path d="M14.5 17.5L3 6V3h3l11.5 11.5" /><path d="M16 16l4 4" /></svg>;
+function PvpIcon() {
+  return <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={stroke()} strokeWidth="2"><path d="M14.5 17.5L3 6V3h3l11.5 11.5" /><path d="M16 16l4 4" /></svg>;
 }
-function SoloIcon(active: boolean) {
-  return <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={stroke(active)} strokeWidth="2"><circle cx="12" cy="12" r="9" /><path d="M12 3v18" /></svg>;
+function SoloIcon() {
+  return <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={stroke()} strokeWidth="2"><circle cx="12" cy="12" r="9" /><path d="M12 3v18" /></svg>;
 }
-function BossIcon(active: boolean) {
-  return <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={stroke(active)} strokeWidth="2"><path d="M12 2l2.2 4.8L19 8l-3.5 3.4.8 5.1L12 14.8 7.7 16.5l.8-5.1L5 8l4.8-1.2L12 2z" /></svg>;
+function BossIcon() {
+  return <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={stroke()} strokeWidth="2"><path d="M12 2l2.2 4.8L19 8l-3.5 3.4.8 5.1L12 14.8 7.7 16.5l.8-5.1L5 8l4.8-1.2L12 2z" /></svg>;
 }
-function CardsIcon(active: boolean) {
-  return <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={stroke(active)} strokeWidth="2"><rect x="3" y="5" width="12" height="16" rx="2" /><path d="M9 3h10a2 2 0 012 2v14" /></svg>;
+function CardsIcon() {
+  return <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={stroke()} strokeWidth="2"><rect x="3" y="5" width="12" height="16" rx="2" /><path d="M9 3h10a2 2 0 012 2v14" /></svg>;
 }
-function CollectionIcon(active: boolean) {
-  return <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={stroke(active)} strokeWidth="2"><path d="M4 7h16" /><path d="M4 12h16" /><path d="M4 17h10" /></svg>;
+function CollectionIcon() {
+  return <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={stroke()} strokeWidth="2"><path d="M4 7h16" /><path d="M4 12h16" /><path d="M4 17h10" /></svg>;
 }
-function ProfileIcon(active: boolean) {
-  return <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={stroke(active)} strokeWidth="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>;
+function ProfileIcon({ active }: { active: boolean }) {
+  return <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={active ? "#e2e8f0" : "#475569"} strokeWidth="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>;
 }

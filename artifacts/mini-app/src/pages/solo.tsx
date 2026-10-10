@@ -20,7 +20,7 @@ export default function SoloPage() {
 
   if (tab === "mines") {
     return (
-      <div style={{ minHeight: "100dvh", padding: "12px 12px 110px", background: "#070b14" }}>
+      <div style={{ minHeight: "100dvh", padding: "12px 12px 110px", background: "#0a0612" }}>
         <button type="button" onClick={() => setTab("pick")} style={back}>
           ← Назад
         </button>
@@ -41,8 +41,8 @@ export default function SoloPage() {
           ← Назад
         </button>
         <div style={title}>{tab === "coin" ? "Монетка" : "Рулетка"}</div>
-        <div style={{ color: "#94a3b8", lineHeight: 1.5 }}>
-          Карточка и анимация готовы. Сама игра — следующим шагом.
+        <div style={{ color: "#c4b5fd", lineHeight: 1.5, marginTop: 8 }}>
+          Карточка в стиле TONYX готова. Игровая логика — следующим шагом.
         </div>
       </div>
     );
@@ -50,7 +50,10 @@ export default function SoloPage() {
 
   return (
     <div style={page}>
-      <div style={title}>Соло игры</div>
+      <div style={header}>
+        <div style={title}>Соло игры</div>
+        <div style={sub}>Dogg Style · NFT gifts inside</div>
+      </div>
       <div style={{ display: "grid", gap: 12 }}>
         <GameCard
           wide
@@ -59,29 +62,35 @@ export default function SoloPage() {
           badgeColor="#22c55e"
           online={31}
           lottieSrc={LOTTIE.mines}
-          emoji="💣"
-          gradient="linear-gradient(145deg, #065f46 0%, #10b981 40%, #022c22 100%)"
+          emoji="💎"
+          stickers={["🐶", "🎁"]}
+          gradient="linear-gradient(145deg, #14532d 0%, #7c3aed 45%, #0f172a 100%)"
+          accent="rgba(34,197,94,0.4)"
           onClick={() => setTab("mines")}
         />
         <div style={grid}>
           <GameCard
             name="Монетка"
             badge="Новое"
-            badgeColor="#f59e0b"
+            badgeColor="#eab308"
             online={12}
             lottieSrc={LOTTIE.coin}
             emoji="🪙"
-            gradient="linear-gradient(145deg, #b45309 0%, #fbbf24 45%, #422006 100%)"
+            stickers={["🚬"]}
+            gradient="linear-gradient(145deg, #713f12 0%, #eab308 40%, #4c1d95 100%)"
+            accent="rgba(234,179,8,0.45)"
             onClick={() => setTab("coin")}
           />
           <GameCard
             name="Рулетка"
             badge="Новое"
-            badgeColor="#f59e0b"
+            badgeColor="#eab308"
             online={9}
             lottieSrc={LOTTIE.roulette}
             emoji="🎡"
-            gradient="linear-gradient(145deg, #9f1239 0%, #fb7185 40%, #1f2937 100%)"
+            stickers={["👑"]}
+            gradient="linear-gradient(145deg, #4c0519 0%, #a855f7 40%, #ca8a04 90%)"
+            accent="rgba(192,38,211,0.4)"
             onClick={() => setTab("roulette")}
           />
         </div>
@@ -94,18 +103,20 @@ const page: CSSProperties = {
   minHeight: "100dvh",
   padding: "18px 14px 120px",
   color: "#fff",
-  background: "radial-gradient(circle at 80% 0%, #14532d 0%, #070b14 50%)",
+  background: "radial-gradient(ellipse at 70% -10%, #4c1d95 0%, #0a0612 52%)",
 };
-const title: CSSProperties = { fontSize: 24, fontWeight: 900, marginBottom: 14 };
+const header: CSSProperties = { marginBottom: 16 };
+const title: CSSProperties = { fontSize: 26, fontWeight: 900, letterSpacing: "-0.03em" };
+const sub: CSSProperties = { fontSize: 12, color: "#c4b5fd", marginTop: 4, fontWeight: 600 };
 const grid: CSSProperties = { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 };
 const back: CSSProperties = {
   marginBottom: 12,
   height: 36,
   padding: "0 14px",
   borderRadius: 12,
-  border: "1px solid #334155",
-  background: "#111827",
-  color: "#e2e8f0",
+  border: "1px solid rgba(168,85,247,0.35)",
+  background: "rgba(24,16,40,0.9)",
+  color: "#e9d5ff",
   fontWeight: 700,
   cursor: "pointer",
   fontFamily: "inherit",

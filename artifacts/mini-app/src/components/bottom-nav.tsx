@@ -121,6 +121,8 @@ export default function BottomNav() {
     }, 820);
   }
 
+  const color = MODE_COLOR[mode];
+
   return (
     <>
       <style>{`
@@ -151,20 +153,22 @@ export default function BottomNav() {
       }}>
         <div style={{ width: 72, display: "flex", alignItems: "center", justifyContent: "center" }}>
           <button ref={buttonRef} type="button" onClick={switchMode} aria-label="Меню" style={{
-            width: 46, height: 46, borderRadius: "50%", border: "2px solid rgba(255,255,255,0.25)",
-            padding: 0, position: "relative", background: "transparent", cursor: busy ? "default" : "pointer",
+            width: 46, height: 46, borderRadius: "50%", border: `2px solid ${color}`,
+            padding: 0, position: "relative", background: "transparent",
+            cursor: busy ? "default" : "pointer",
           }}>
             <span style={{
-              position: "absolute", left: "50%", top: -8, transform: "translateX(-50%)",
+              position: "absolute", left: "50%", top: -1, transform: "translateX(-50%)",
               width: 0, height: 0, zIndex: 3,
-              borderLeft: "6px solid transparent",
-              borderRight: "6px solid transparent",
-              borderTop: "9px solid #f8fafc",
+              borderLeft: "5px solid transparent",
+              borderRight: "5px solid transparent",
+              borderTop: `8px solid ${color}`,
             }} />
             <span style={{
               position: "absolute", inset: 3, borderRadius: "50%",
-              background: "conic-gradient(#2563eb 0 120deg, #dc2626 120deg 240deg, #eab308 240deg 360deg)",
+              background: "conic-gradient(from 0deg, #2563eb 0 120deg, #dc2626 120deg 240deg, #eab308 240deg 360deg)",
               transform: `rotate(${rotation}deg)`,
+              transformOrigin: "center",
               transition: "transform 0.8s linear",
             }} />
             <span style={{

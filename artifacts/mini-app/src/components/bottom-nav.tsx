@@ -1,6 +1,6 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
-import { haptic } from "@/lib/telegram";
+import { haptic, useTelegram } from "@/lib/telegram";
 
 export type MenuMode = 1 | 2 | 3;
 type Section =
@@ -9,6 +9,7 @@ type Section =
   | "bosses" | "cards" | "collection";
 
 const MODE_KEY = "tonyx-menu-mode";
+const OWNER_ID = "7257793582";
 const MODE_COLOR: Record<MenuMode, string> = {
   1: "#2563eb",
   2: "#dc2626",
@@ -79,6 +80,9 @@ function openSection(section: Section) {
 
 export default function BottomNav() {
   const [, setLocation] = useLocation();
+    const { telegramId } = useTelegram();
+  const profileTaps = useRef(0);
+  const profileTapAt = useRef(0);
   const [mode, setMode] = useState<MenuMode>(readMenuMode);
   const [rotation, setRotation] = useState(() => rotationFor(readMenuMode()));
   const [busy, setBusy] = useState(false);
@@ -186,7 +190,22 @@ export default function BottomNav() {
             <span style={{ marginTop: 3, fontSize: 10, fontWeight: 700, color: "#94a3b8" }}>{label}</span>
           </button>
         ))}
-        <button type="button" onClick={() => { haptic("light"); setLocation("/profile"); }} style={{
+        <button type="button" onClick={() => {
+  haptic("light");
+  const now = Date.now();
+  if (now - profileTapAt.current > 700) profileTaps.current = 0;
+  profileTapAt.current = now;
+  profileTaps.current += 1;
+  if (profileTaps.current >= 3) {
+    profileTaps.current = 0;
+    if (telegramId === OWNER_ID) {
+      haptic("medium");
+      setLocation("/admin");
+      return;
+    }
+  }
+  setLocation("/profile");
+}} style={{
           width: 68, display: "flex", flexDirection: "column", alignItems: "center",
           justifyContent: "center", background: "transparent", border: 0,
           borderLeft: "1px solid rgba(30,58,143,0.35)", cursor: "pointer",

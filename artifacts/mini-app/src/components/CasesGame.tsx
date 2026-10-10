@@ -10,12 +10,12 @@ type Reward = {
   nftId?: string;
 };
 
-const CASE_ART: Record<string, { emoji: string; gradient: string; glow: string }> = {
-  boss_1: { emoji: "🌑", gradient: "linear-gradient(145deg,#1e1b4b,#312e81 50%,#0f172a)", glow: "rgba(99,102,241,0.45)" },
-  boss_2: { emoji: "🔥", gradient: "linear-gradient(145deg,#7f1d1d,#ea580c 50%,#1c1917)", glow: "rgba(249,115,22,0.5)" },
-  boss_3: { emoji: "🌋", gradient: "linear-gradient(145deg,#7c2d12,#b91c1c 50%,#450a0a)", glow: "rgba(239,68,68,0.5)" },
-  boss_4: { emoji: "⚡", gradient: "linear-gradient(145deg,#0c4a6e,#0369a1 50%,#082f49)", glow: "rgba(56,189,248,0.45)" },
-  boss_5: { emoji: "👑", gradient: "linear-gradient(145deg,#713f12,#eab308 45%,#422006)", glow: "rgba(234,179,8,0.55)" },
+const CASE_ART: Record<string, { emoji: string; gradient: string; glow: string; image?: string }> = {
+  boss_1: { emoji: "🌑", gradient: "linear-gradient(145deg,#1e1b4b,#312e81 50%,#0f172a)", glow: "rgba(99,102,241,0.45)", image: "/cases/boss_1.jpg" },
+  boss_2: { emoji: "🔥", gradient: "linear-gradient(145deg,#7f1d1d,#ea580c 50%,#1c1917)", glow: "rgba(249,115,22,0.5)", image: "/cases/boss_2.jpg" },
+  boss_3: { emoji: "🌋", gradient: "linear-gradient(145deg,#7c2d12,#b91c1c 50%,#450a0a)", glow: "rgba(239,68,68,0.5)", image: "/cases/boss_3.jpg" },
+  boss_4: { emoji: "⚡", gradient: "linear-gradient(145deg,#0c4a6e,#0369a1 50%,#082f49)", glow: "rgba(56,189,248,0.45)", image: "/cases/boss_4.jpg" },
+  boss_5: { emoji: "👑", gradient: "linear-gradient(145deg,#713f12,#eab308 45%,#422006)", glow: "rgba(234,179,8,0.55)", image: "/cases/boss_5.jpg" },
   ton_basic: { emoji: "💎", gradient: "linear-gradient(145deg,#0e7490,#22d3ee 50%,#083344)", glow: "rgba(34,211,238,0.45)" },
   tonyx_basic: { emoji: "🪙", gradient: "linear-gradient(145deg,#3b0764,#a855f7 50%,#1e1b4b)", glow: "rgba(168,85,247,0.5)" },
 };
@@ -26,6 +26,11 @@ function artFor(id: string) {
     gradient: "linear-gradient(145deg,#1e293b,#334155)",
     glow: "rgba(148,163,184,0.35)",
   };
+}
+
+function caseImage(c: { id: string; imageUrl?: string | null }): string | null {
+  if (c.imageUrl) return c.imageUrl;
+  return CASE_ART[c.id]?.image ?? null;
 }
 
 function costLabel(c: CaseListItem, lang: Lang): string {

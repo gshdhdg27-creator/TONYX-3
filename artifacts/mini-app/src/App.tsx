@@ -182,7 +182,7 @@ function AppShell() {
     }}>
       <LanguageModal />
       <Header />
-      <main style={{ flex: 1, overflowY: "auto", overflowX: "hidden", paddingBottom: 74 }}>
+      <main style={{ flex: 1, minHeight: 0, overflowY: "auto", overflowX: "hidden", WebkitOverflowScrolling: "touch", paddingBottom: 90 }}>
         <Switch>
           <Route path="/" component={HomePage} />
           <Route path="/market" component={MarketPage} />

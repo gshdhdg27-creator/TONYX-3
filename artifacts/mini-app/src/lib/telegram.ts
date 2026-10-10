@@ -50,10 +50,11 @@ export function useTelegram() {
 }
 
 export function initTelegram() {
-  const tg = getTg();
+  const tg = getTg() as (TelegramWebApp & { disableVerticalSwipes?: () => void }) | undefined;
   if (tg) {
     tg.ready();
     tg.expand();
+    tg.disableVerticalSwipes?.();
   }
 }
 

@@ -14,7 +14,6 @@ function ensureLottieScript() {
 
 export function LottieIcon({ src, size = 96 }: { src: string; size?: number }) {
   const ref = useRef<HTMLDivElement>(null);
-
   useEffect(() => {
     ensureLottieScript();
     const el = ref.current;
@@ -30,7 +29,6 @@ export function LottieIcon({ src, size = 96 }: { src: string; size?: number }) {
     player.style.height = `${size}px`;
     el.appendChild(player);
   }, [src, size]);
-
   return (
     <div
       ref={ref}
@@ -53,7 +51,9 @@ export type GameCardProps = {
   online?: string | number;
   lottieSrc?: string;
   emoji?: string;
+  stickers?: string[];
   gradient: string;
+  accent?: string;
   wide?: boolean;
   onClick: () => void;
   footer?: ReactNode;
@@ -62,61 +62,115 @@ export type GameCardProps = {
 export function GameCard({
   name,
   badge,
-  badgeColor = "#f97316",
+  badgeColor = "#a855f7",
   online,
   lottieSrc,
-  emoji = "🎮",
+  emoji = "🐶",
+  stickers = [],
   gradient,
+  accent = "rgba(168,85,247,0.5)",
   wide,
   onClick,
   footer,
 }: GameCardProps) {
   return (
-    <button type="button" onClick={onClick} style={{ ...cardBase, height: wide ? 180 : 168 }}>
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        ...cardBase,
+        height: wide ? 190 : 172,
+        boxShadow: `0 12px 32px rgba(0,0,0,0.4), 0 0 0 1px ${accent}`,
+      }}
+    >
       <style>{`
-        @keyframes gameFloat {
-          0%, 100% { transform: translateY(0); }
-          50% { transform: translateY(-6px); }
+        @keyframes gcFloat {
+          0%, 100% { transform: translateY(0) scale(1); }
+          50% { transform: translateY(-8px) scale(1.04); }
         }
-        @keyframes gameShine {
-          0% { transform: translateX(-120%) rotate(12deg); }
-          100% { transform: translateX(120%) rotate(12deg); }
+        @keyframes gcFloat2 {
+          0%, 100% { transform: translate(0,0) rotate(-6deg); }
+          50% { transform: translate(4px,-10px) rotate(6deg); }
         }
-        @keyframes onlinePulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.45; }
+        @keyframes gcShine {
+          0% { transform: translateX(-140%) rotate(18deg); }
+          100% { transform: translateX(200%) rotate(18deg); }
+        }
+        @keyframes gcPulse {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50% { opacity: 0.5; transform: scale(0.85); }
+        }
+        @keyframes gcGlow {
+          0%, 100% { opacity: 0.35; }
+          50% { opacity: 0.7; }
         }
       `}</style>
 
-      <div style={{ ...bg, background: gradient }} />
+      <div style={{ position: "absolute", inset: 0, background: gradient }} />
       <div
         style={{
           position: "absolute",
           inset: 0,
-          opacity: 0.12,
-          backgroundImage:
-            "linear-gradient(rgba(255,255,255,0.35) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.35) 1px, transparent 1px)",
-          backgroundSize: "22px 22px",
+          background:
+            "radial-gradient(circle at 70% 30%, rgba(255,255,255,0.12), transparent 45%), linear-gradient(180deg, transparent 40%, rgba(0,0,0,0.55) 100%)",
         }}
       />
       <div
         style={{
           position: "absolute",
-          top: 0,
+          inset: 0,
+          opacity: 0.1,
+          backgroundImage:
+            "linear-gradient(rgba(255,255,255,0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.5) 1px, transparent 1px)",
+          backgroundSize: "20px 20px",
+        }}
+      />
+      <div
+        style={{
+          position: "absolute",
+          top: "-20%",
           left: 0,
-          width: "40%",
-          height: "100%",
-          background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.18), transparent)",
-          animation: "gameShine 4.5s ease-in-out infinite",
+          width: "35%",
+          height: "140%",
+          background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.22), transparent)",
+          animation: "gcShine 5s ease-in-out infinite",
+          pointerEvents: "none",
+        }}
+      />
+      <div
+        style={{
+          position: "absolute",
+          width: 120,
+          height: 120,
+          borderRadius: "50%",
+          right: -20,
+          top: 10,
+          background: accent,
+          filter: "blur(28px)",
+          animation: "gcGlow 3s ease-in-out infinite",
           pointerEvents: "none",
         }}
       />
 
       <div style={topRow}>
-        {badge ? <span style={{ ...pill, background: badgeColor }}>{badge}</span> : <span />}
+        {badge ? (
+          <span style={{ ...pill, background: badgeColor }}>{badge}</span>
+        ) : (
+          <span />
+        )}
         {online != null && (
           <span style={onlinePill}>
-            <span style={{ color: "#4ade80", animation: "onlinePulse 1.4s ease infinite" }}>●</span>{" "}
+            <span
+              style={{
+                display: "inline-block",
+                width: 7,
+                height: 7,
+                borderRadius: "50%",
+                background: "#4ade80",
+                marginRight: 5,
+                animation: "gcPulse 1.3s ease infinite",
+              }}
+            />
             {online}
           </span>
         )}
@@ -127,18 +181,52 @@ export function GameCard({
           position: "absolute",
           left: 0,
           right: 0,
-          top: wide ? 28 : 36,
+          top: wide ? 30 : 38,
           display: "flex",
           justifyContent: "center",
-          animation: "gameFloat 3s ease-in-out infinite",
+          animation: "gcFloat 3.2s ease-in-out infinite",
+          zIndex: 2,
         }}
       >
         {lottieSrc ? (
-          <LottieIcon src={lottieSrc} size={wide ? 110 : 92} />
+          <LottieIcon src={lottieSrc} size={wide ? 112 : 94} />
         ) : (
-          <span style={{ fontSize: wide ? 64 : 52 }}>{emoji}</span>
+          <span style={{ fontSize: wide ? 68 : 54, filter: "drop-shadow(0 8px 16px rgba(0,0,0,0.35))" }}>
+            {emoji}
+          </span>
         )}
       </div>
+
+      {stickers[0] && (
+        <span
+          style={{
+            position: "absolute",
+            left: 14,
+            top: wide ? 56 : 52,
+            fontSize: 22,
+            animation: "gcFloat2 2.8s ease-in-out infinite",
+            filter: "drop-shadow(0 2px 6px rgba(0,0,0,0.4))",
+            zIndex: 2,
+          }}
+        >
+          {stickers[0]}
+        </span>
+      )}
+      {stickers[1] && (
+        <span
+          style={{
+            position: "absolute",
+            right: 16,
+            top: wide ? 64 : 58,
+            fontSize: 20,
+            animation: "gcFloat2 3.4s ease-in-out 0.4s infinite",
+            filter: "drop-shadow(0 2px 6px rgba(0,0,0,0.4))",
+            zIndex: 2,
+          }}
+        >
+          {stickers[1]}
+        </span>
+      )}
 
       <div style={nameStyle}>{name}</div>
       {footer}
@@ -150,15 +238,14 @@ const cardBase: CSSProperties = {
   position: "relative",
   width: "100%",
   border: 0,
-  borderRadius: 22,
+  borderRadius: 24,
   overflow: "hidden",
   padding: 0,
   cursor: "pointer",
-  boxShadow: "0 10px 28px rgba(0,0,0,0.35)",
   textAlign: "left",
   fontFamily: "inherit",
 };
-const bg: CSSProperties = { position: "absolute", inset: 0 };
+
 const topRow: CSSProperties = {
   position: "absolute",
   top: 10,
@@ -168,30 +255,37 @@ const topRow: CSSProperties = {
   justifyContent: "space-between",
   zIndex: 3,
 };
+
 const pill: CSSProperties = {
   color: "#fff",
   fontSize: 11,
   fontWeight: 800,
   borderRadius: 999,
-  padding: "4px 9px",
-  boxShadow: "0 2px 8px rgba(0,0,0,0.25)",
+  padding: "5px 10px",
+  boxShadow: "0 2px 10px rgba(0,0,0,0.3)",
+  letterSpacing: "0.02em",
 };
+
 const onlinePill: CSSProperties = {
-  color: "#e2e8f0",
-  background: "rgba(0,0,0,0.35)",
+  display: "flex",
+  alignItems: "center",
+  color: "#f1f5f9",
+  background: "rgba(0,0,0,0.4)",
   borderRadius: 999,
-  padding: "4px 8px",
+  padding: "5px 9px",
   fontSize: 11,
   fontWeight: 800,
-  backdropFilter: "blur(6px)",
+  backdropFilter: "blur(8px)",
 };
+
 const nameStyle: CSSProperties = {
   position: "absolute",
   left: 14,
-  bottom: 12,
+  bottom: 14,
   fontSize: 22,
   fontWeight: 900,
   color: "#fff",
-  textShadow: "0 2px 10px rgba(0,0,0,0.55)",
+  textShadow: "0 2px 12px rgba(0,0,0,0.65)",
   zIndex: 3,
+  letterSpacing: "-0.02em",
 };

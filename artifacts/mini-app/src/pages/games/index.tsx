@@ -62,7 +62,7 @@ function multSteps(safeOpened: number, mines: number, count = 5): number[] {
   return arr;
 }
 
-function MinesGame({ telegramId, balance, lang, onBalanceChange }: {
+export function MinesGame({ telegramId, balance, lang, onBalanceChange }: {
   telegramId: string; balance: number; lang: Lang; onBalanceChange: () => void;
 }) {
   const t = translations[lang].games.mines;

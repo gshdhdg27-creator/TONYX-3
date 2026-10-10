@@ -84,83 +84,207 @@ function soundVictory() {
   } catch { /* ignore */ }
 }
 
-/* ═══════════════════════════════════════════════════════════
-   SVG WHEEL COMPONENT
-═══════════════════════════════════════════════════════════ */
-const CX = 130; const CY = 130; const R = 116; const IR = 38;
-
-function arcPath(startDeg: number, endDeg: number): string {
-  const toR = (d: number) => ((d - 90) * Math.PI) / 180;
-  const x1 = CX + R * Math.cos(toR(startDeg));
-  const y1 = CY + R * Math.sin(toR(startDeg));
-  const x2 = CX + R * Math.cos(toR(endDeg));
-  const y2 = CY + R * Math.sin(toR(endDeg));
-  const large = endDeg - startDeg > 180 ? 1 : 0;
-  return `M${CX},${CY} L${x1},${y1} A${R},${R} 0 ${large},1 ${x2},${y2} Z`;
+function initials(name: string | null, id: string): string {
+  const n = (name ?? "").trim();
+  if (n.length >= 2) return n.slice(0, 2).toUpperCase();
+  if (n.length === 1) return n.toUpperCase();
+  return id.slice(-2).toUpperCase();
 }
 
+/** Portals-style square arena with colored sectors + player balls */
 function Wheel({
-  players, spinDeg, spinning,
-}: { players: ArenaPlayer[]; spinDeg: number; spinning: boolean }) {
+  players, spinDeg, spinning, winnerId,
+}: {
+  players: ArenaPlayer[];
+  spinDeg: number;
+  spinning: boolean;
+  winnerId?: string | null;
+}) {
   const total = players.reduce((s, p) => s + p.stake, 0) || 1;
-  const isSolo = players.length === 1;
+  const SIZE = 300;
+  const CX = SIZE / 2;
+  const CY = SIZE / 2;
+  const R = SIZE / 2 - 2;
 
-  let angle = 0;
+  let angle = -90; // start from top
   const sectors = players.map((p, i) => {
     const frac = p.stake / total;
     const start = angle;
-    const span = Math.max(frac * 360, 0.5);
+    const span = Math.max(frac * 360, 0.4);
     const end = start + span;
-    angle = start + frac * 360;
-    const mid = ((start + end) / 2 - 90) * Math.PI / 180;
+    const midDeg = start + span / 2;
+    const midRad = (midDeg * Math.PI) / 180;
+    // ball sits closer to center for large sectors, further for small
+    const ballR = 0.38 + Math.min(frac, 0.35) * 0.25;
+    angle = end;
     return {
-      path: arcPath(start, Math.min(end, start + 359.98)),
+      start,
+      end,
+      midDeg,
+      frac,
+      p,
       color: SECTOR_COLORS[i % SECTOR_COLORS.length],
-      lx: CX + R * 0.6 * Math.cos(mid),
-      ly: CY + R * 0.6 * Math.sin(mid),
-      frac, p,
+      bx: CX + R * ballR * Math.cos(midRad),
+      by: CY + R * ballR * Math.sin(midRad),
+      isWinner: winnerId != null && p.telegramId === winnerId,
     };
   });
 
-  if (players.length === 0) {
-    return (
-      <svg width="260" height="260" viewBox="0 0 260 260">
-        <circle cx={CX} cy={CY} r={R} fill="rgba(30,45,69,0.5)" stroke="rgba(99,102,241,0.3)" strokeWidth="1.5" />
-        <circle cx={CX} cy={CY} r={IR} fill="#0f172a" />
-        <text x={CX} y={CY + 5} textAnchor="middle" fill="#475569" fontSize="11" fontFamily="Inter,sans-serif">Ждём игроков…</text>
-      </svg>
-    );
+  function sectorPath(startDeg: number, endDeg: number): string {
+    const s = (startDeg * Math.PI) / 180;
+    const e = (endDeg * Math.PI) / 180;
+    const x1 = CX + R * Math.cos(s);
+    const y1 = CY + R * Math.sin(s);
+    const x2 = CX + R * Math.cos(e);
+    const y2 = CY + R * Math.sin(e);
+    const large = endDeg - startDeg > 180 ? 1 : 0;
+    return `M ${CX} ${CY} L ${x1} ${y1} A ${R} ${R} 0 ${large} 1 ${x2} ${y2} Z`;
   }
 
   return (
-    <svg
-      width="260" height="260" viewBox="0 0 260 260"
-      style={{
-        display: "block",
-        transform: `rotate(${spinDeg}deg)`,
-        transition: spinning ? "none" : "transform 0.15s ease",
-      }}
-    >
-      {isSolo ? (
-        <>
-          <circle cx={CX} cy={CY} r={R} fill={SECTOR_COLORS[0]} />
-          <text x={CX} y={CY + 5} textAnchor="middle" fill="rgba(255,255,255,0.9)" fontSize="14" fontWeight="700" fontFamily="Inter,sans-serif">100%</text>
-        </>
-      ) : (
-        sectors.map((s, i) => (
-          <g key={i}>
-            <path d={s.path} fill={s.color} stroke="#0f172a" strokeWidth="1.5" />
-            {s.frac > 0.07 && (
-              <text x={s.lx} y={s.ly + 4} textAnchor="middle" fill="rgba(255,255,255,0.9)" fontSize="10" fontWeight="700" fontFamily="Inter,sans-serif">
-                {Math.round(s.frac * 100)}%
-              </text>
-            )}
-          </g>
-        ))
+    <div style={{ position: "relative", width: SIZE, height: SIZE, margin: "0 auto" }}>
+      {/* fixed board frame */}
+      <div style={{
+        position: "absolute", inset: 0, borderRadius: 22,
+        background: "#12151c",
+        boxShadow: "0 0 0 1px rgba(255,255,255,0.06), 0 20px 50px rgba(0,0,0,0.55)",
+        overflow: "hidden",
+      }}>
+        {/* rotating pie + balls */}
+        <div style={{
+          width: "100%", height: "100%",
+          transform: `rotate(${spinDeg}deg)`,
+          transition: spinning ? "none" : "transform 0.12s linear",
+          willChange: "transform",
+        }}>
+          <svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`} style={{ display: "block" }}>
+            <defs>
+              <clipPath id="arenaClip">
+                <rect x="0" y="0" width={SIZE} height={SIZE} rx="22" ry="22" />
+              </clipPath>
+            </defs>
+            <g clipPath="url(#arenaClip)">
+              {players.length === 0 ? (
+                <rect width={SIZE} height={SIZE} fill="#1a2332" />
+              ) : players.length === 1 ? (
+                <rect width={SIZE} height={SIZE} fill={SECTOR_COLORS[0]} />
+              ) : (
+                sectors.map((s, i) => (
+                  <path
+                    key={i}
+                    d={sectorPath(s.start, s.end)}
+                    fill={s.color}
+                    stroke="rgba(0,0,0,0.25)"
+                    strokeWidth="1"
+                  />
+                ))
+              )}
+            </g>
+          </svg>
+
+          {/* player balls (HTML overlay so text stays readable while rotating with pie) */}
+          {players.length === 0 ? null : players.length === 1 ? (
+            <div style={{
+              position: "absolute", left: "50%", top: "50%",
+              transform: "translate(-50%, -50%)",
+              width: 88, height: 88, borderRadius: "50%",
+              background: "linear-gradient(145deg,#93c5fd,#3b82f6)",
+              border: "3px solid rgba(255,255,255,0.85)",
+              boxShadow: "0 8px 24px rgba(0,0,0,0.35), inset 0 2px 8px rgba(255,255,255,0.25)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              color: "#fff", fontWeight: 900, fontSize: 22,
+            }}>
+              {initials(players[0].username, players[0].telegramId)}
+            </div>
+          ) : (
+            sectors.map((s, i) => {
+              const ballSize = s.frac > 0.25 ? 56 : s.frac > 0.12 ? 48 : 40;
+              return (
+                <div
+                  key={i}
+                  style={{
+                    position: "absolute",
+                    left: s.bx,
+                    top: s.by,
+                    width: ballSize,
+                    height: ballSize,
+                    marginLeft: -ballSize / 2,
+                    marginTop: -ballSize / 2,
+                    borderRadius: "50%",
+                    background: `linear-gradient(145deg, ${s.color}, ${s.color}cc)`,
+                    border: s.isWinner ? "3px solid #fbbf24" : "3px solid rgba(255,255,255,0.9)",
+                    boxShadow: s.isWinner
+                      ? "0 0 28px rgba(251,191,36,0.85), 0 6px 16px rgba(0,0,0,0.4)"
+                      : "0 6px 16px rgba(0,0,0,0.4), inset 0 2px 6px rgba(255,255,255,0.25)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    color: "#fff",
+                    fontWeight: 900,
+                    fontSize: ballSize > 50 ? 16 : 13,
+                    transform: s.isWinner ? "scale(1.12)" : "scale(1)",
+                    transition: "transform 0.25s ease",
+                    zIndex: s.isWinner ? 5 : 2,
+                  }}
+                >
+                  {initials(s.p.username, s.p.telegramId)}
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {/* empty state text (not rotating) */}
+        {players.length === 0 && (
+          <div style={{
+            position: "absolute", inset: 0,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            color: "#5eead4", fontSize: 16, fontWeight: 600, letterSpacing: "0.02em",
+            background: "radial-gradient(circle at 50% 50%, rgba(15,23,42,0.2), rgba(15,23,42,0.85))",
+          }}>
+            Waiting for players…
+          </div>
+        )}
+      </div>
+
+      {/* fixed crosshair pointer at top (like Portals) */}
+      <div style={{
+        position: "absolute",
+        left: "50%",
+        top: -6,
+        transform: "translateX(-50%)",
+        zIndex: 10,
+        pointerEvents: "none",
+      }}>
+        <div style={{
+          width: 0, height: 0,
+          borderLeft: "9px solid transparent",
+          borderRight: "9px solid transparent",
+          borderTop: "14px solid #f8fafc",
+          filter: "drop-shadow(0 2px 4px rgba(0,0,0,0.5))",
+        }} />
+      </div>
+
+      {/* spinning crosshair ring on board */}
+      {spinning && (
+        <div style={{
+          position: "absolute",
+          left: "50%", top: "50%",
+          width: 36, height: 36,
+          marginLeft: -18, marginTop: -18,
+          borderRadius: "50%",
+          border: "2px solid rgba(255,255,255,0.55)",
+          boxShadow: "0 0 12px rgba(255,255,255,0.25)",
+          zIndex: 12,
+          pointerEvents: "none",
+        }}>
+          <div style={{ position: "absolute", left: "50%", top: 2, width: 2, height: 8, marginLeft: -1, background: "rgba(255,255,255,0.7)" }} />
+          <div style={{ position: "absolute", left: "50%", bottom: 2, width: 2, height: 8, marginLeft: -1, background: "rgba(255,255,255,0.7)" }} />
+          <div style={{ position: "absolute", top: "50%", left: 2, width: 8, height: 2, marginTop: -1, background: "rgba(255,255,255,0.7)" }} />
+          <div style={{ position: "absolute", top: "50%", right: 2, width: 8, height: 2, marginTop: -1, background: "rgba(255,255,255,0.7)" }} />
+        </div>
       )}
-      <circle cx={CX} cy={CY} r={IR} fill="#0f172a" stroke="rgba(255,255,255,0.06)" strokeWidth="1" />
-      <text x={CX} y={CY + 5} textAnchor="middle" fill="#475569" fontSize="9" fontFamily="Inter,sans-serif">TON</text>
-    </svg>
+    </div>
   );
 }
 
@@ -478,12 +602,18 @@ export default function ArenaGame({ telegramId, tonBalance = 0, onBalanceChange,
             </svg>
           </div>
           <div style={{
-            width: 260, height: 260, borderRadius: "50%",
-            border: `3px solid ${phase === "spinning" ? "#f59e0b" : "rgba(99,102,241,0.35)"}`,
-            boxShadow: phase === "spinning" ? "0 0 32px rgba(245,158,11,0.4)" : "0 0 20px rgba(99,102,241,0.12)",
-            transition: "border-color 0.4s, box-shadow 0.4s",
+            width: 300, height: 300,
+            filter: phase === "spinning"
+              ? "drop-shadow(0 0 28px rgba(245,158,11,0.35))"
+              : "drop-shadow(0 12px 28px rgba(0,0,0,0.45))",
+            transition: "filter 0.4s",
           }}>
-            <Wheel players={arena?.players ?? []} spinDeg={spinDeg} spinning={phase === "spinning"} />
+            <Wheel
+              players={arena?.players ?? []}
+              spinDeg={spinDeg}
+              spinning={phase === "spinning"}
+              winnerId={phase === "winner" ? arena?.winnerId : null}
+            />
           </div>
         </div>
 

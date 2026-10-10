@@ -233,9 +233,9 @@ export default function CasesGame({
 
         {!spinning && !won && (
           <div style={caseHero(art)}>
-            {selected.imageUrl ? (
+            {caseImage(selected) ? (
               <img
-                src={selected.imageUrl}
+                src={caseImage(selected)!}
                 alt=""
                 style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 24 }}
               />
@@ -353,9 +353,9 @@ export default function CasesGame({
               style={cardBtn}
             >
               <div style={thumb(art)}>
-                {c.imageUrl ? (
+                {caseImage(c) ? (
                   <img
-                    src={c.imageUrl}
+                    src={caseImage(c)!}
                     alt=""
                     style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 14 }}
                   />

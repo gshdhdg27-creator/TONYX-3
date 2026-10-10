@@ -39,7 +39,7 @@ const DEFAULT_CASES = [
     nameEn: "Shadow Pup Case",
     costType: "key",
     costValue: "1",
-    imageUrl: null as string | null,
+    imageUrl: "/cases/boss_1.jpg",
     enabled: true,
     sortOrder: 1,
     rewards: [
@@ -54,7 +54,7 @@ const DEFAULT_CASES = [
     nameEn: "Rage Dogg Case",
     costType: "key",
     costValue: "2",
-    imageUrl: null,
+    imageUrl: "/cases/boss_2.jpg",
     enabled: true,
     sortOrder: 2,
     rewards: [
@@ -69,7 +69,7 @@ const DEFAULT_CASES = [
     nameEn: "Inferno Dogg Case",
     costType: "key",
     costValue: "3",
-    imageUrl: null,
+    imageUrl: "/cases/boss_3.jpg",
     enabled: true,
     sortOrder: 3,
     rewards: [
@@ -84,7 +84,7 @@ const DEFAULT_CASES = [
     nameEn: "Storm Dogg Case",
     costType: "key",
     costValue: "4",
-    imageUrl: null,
+    imageUrl: "/cases/boss_4.jpg",
     enabled: true,
     sortOrder: 4,
     rewards: [
@@ -99,7 +99,7 @@ const DEFAULT_CASES = [
     nameEn: "Boss Dogg Prime Case",
     costType: "key",
     costValue: "5",
-    imageUrl: null,
+    imageUrl: "/cases/boss_5.jpg",
     enabled: true,
     sortOrder: 5,
     rewards: [

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useTelegram } from "@/lib/telegram";
 import { useLang } from "@/lib/LanguageContext";
-import MinesGame from "@/components/MinesGame";
+import { MinesGame } from "@/pages/games";
 
 type Tab = "pick" | "mines" | "coin" | "roulette";
 

@@ -73,7 +73,7 @@ export default function CollectionScreen() {
   }
 
   return (
-    <div className="collection-screen" style={{ paddingBottom: 32, minHeight: "100%" }}>
+    <div className="collection-screen" style={{ minHeight: "100%", paddingBottom: 120 }}>
       <style>{`
         @keyframes nftPulse {
           0%, 100% { box-shadow: 0 0 0 0 rgba(34,197,94,0.35); }

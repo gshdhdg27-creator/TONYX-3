@@ -35,7 +35,7 @@ function caseImage(c: { id: string; imageUrl?: string | null }): string | null {
 
 function costLabel(c: CaseListItem, lang: Lang): string {
   if (c.costType === "key") {
-    return lang === "en" ? `🔑 Boss ${c.costValue} · ${c.have}` : `🔑 Босс ${c.costValue} · ${c.have}`;
+    return lang === "en" ? `Boss ${c.costValue} · ${c.have}` : `Босс ${c.costValue} · ${c.have}`;
   }
   if (c.costType === "ton") return `${c.costValue} TON`;
   return `${c.costValue} TONYX`;
@@ -53,7 +53,7 @@ function rewardEmoji(r: Reward): string {
   return "🧩";
 }
 
-const ITEM_W = 88; // 80 + 8 gap
+const ITEM_W = 88;
 
 function buildStrip(winner: Reward): Reward[] {
   const fillers: Reward[] = [
@@ -119,8 +119,6 @@ export default function CasesGame({
     try {
       const res = await casesApi.open(c.id);
       const reward: Reward = res.rewards?.[0] ?? { type: "tonyx", amount: 0 };
-
-      // баланс сразу после ответа сервера (не ждать конца анимации)
       onBalanceChange();
       setCases((prev) =>
         prev.map((x) => {
@@ -150,19 +148,15 @@ export default function CasesGame({
           return { ...s, have: res.balances.tonyx, canOpen: res.balances.tonyx >= s.costValue };
         });
       }
-
       const items = buildStrip(reward);
       setStrip(items);
       setSpinning(true);
       setOffset(0);
-
       const box = stripRef.current;
       const viewW = box?.clientWidth ?? 320;
-      // центр предмета 34 под маркером по центру
       const target = 34 * ITEM_W + 40 - viewW / 2;
       const duration = 4200;
       const start = performance.now();
-
       const tick = (now: number) => {
         const t = Math.min(1, (now - start) / duration);
         const eased = 1 - Math.pow(1 - t, 3);
@@ -197,14 +191,14 @@ export default function CasesGame({
     );
   }
 
-  // ── Экран кейса ──
   if (selected) {
     const art = artFor(selected.id);
     const rewards = selected.possibleRewards ?? [];
-
+    const heroImg = caseImage(selected);
     return (
       <div style={pageStyle}>
         <button
+          type="button"
           onClick={() => {
             if (spinning) return;
             setSelected(null);
@@ -233,14 +227,35 @@ export default function CasesGame({
 
         {!spinning && !won && (
           <div style={caseHero(art)}>
-            {caseImage(selected) ? (
+            <div
+              style={{
+                position: "absolute",
+                left: "50%",
+                top: "60%",
+                width: "70%",
+                height: "40%",
+                transform: "translate(-50%, -50%)",
+                borderRadius: "50%",
+                background: art.glow,
+                filter: "blur(28px)",
+                pointerEvents: "none",
+              }}
+            />
+            {heroImg ? (
               <img
-                src={caseImage(selected)!}
+                src={heroImg}
                 alt=""
-                style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 24 }}
+                style={{
+                  position: "relative",
+                  zIndex: 1,
+                  width: "100%",
+                  height: "100%",
+                  objectFit: "contain",
+                  filter: "drop-shadow(0 16px 28px rgba(0,0,0,0.5))",
+                }}
               />
             ) : (
-              <span style={{ fontSize: 80 }}>{art.emoji}</span>
+              <span style={{ position: "relative", zIndex: 1, fontSize: 80 }}>{art.emoji}</span>
             )}
           </div>
         )}
@@ -286,6 +301,7 @@ export default function CasesGame({
         )}
 
         <button
+          type="button"
           disabled={!selected.canOpen || busy || spinning}
           onClick={() => openCase(selected)}
           style={{
@@ -310,7 +326,6 @@ export default function CasesGame({
                   : "Недостаточно средств"}
         </button>
 
-        {/* Что может выпасть */}
         <div style={{ marginTop: 22 }}>
           <div style={{ fontWeight: 800, fontSize: 14, color: "#E2E8F0", marginBottom: 10 }}>
             🎁 {lang === "en" ? "What's inside?" : "Что в кейсе?"}
@@ -325,10 +340,24 @@ export default function CasesGame({
     );
   }
 
-  // ── Сетка кейсов ──
   return (
     <div style={pageStyle}>
-      <div style={{ fontWeight: 900, fontSize: 20, color: "#F8FAFC", marginBottom: 14 }}>
+      <style>{`
+        @keyframes caseGlowPulse {
+          0%, 100% { opacity: 0.5; transform: scale(1); }
+          50% { opacity: 0.9; transform: scale(1.07); }
+        }
+        .tonyx-case-card {
+          transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1), filter 0.22s ease;
+          transform: scale(1);
+        }
+        .tonyx-case-card:active {
+          transform: scale(1.07);
+          filter: brightness(1.08);
+        }
+      `}</style>
+
+      <div style={{ fontWeight: 900, fontSize: 22, color: "#F8FAFC", marginBottom: 16, letterSpacing: "-0.02em" }}>
         {lang === "en" ? "Cases" : "Кейсы"}
       </div>
 
@@ -338,12 +367,15 @@ export default function CasesGame({
         </div>
       )}
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, rowGap: 18 }}>
         {cases.map((c) => {
           const art = artFor(c.id);
+          const img = caseImage(c);
           return (
             <button
               key={c.id}
+              type="button"
+              className="tonyx-case-card"
               onClick={() => {
                 haptic("light");
                 setSelected(c);
@@ -352,32 +384,87 @@ export default function CasesGame({
               }}
               style={cardBtn}
             >
-              <div style={thumb(art)}>
-                {caseImage(c) ? (
+              <div style={thumbWrap}>
+                <div
+                  style={{
+                    position: "absolute",
+                    left: "50%",
+                    top: "55%",
+                    width: "78%",
+                    height: "48%",
+                    transform: "translate(-50%, -50%)",
+                    borderRadius: "50%",
+                    background: art.glow,
+                    filter: "blur(22px)",
+                    animation: "caseGlowPulse 3.2s ease-in-out infinite",
+                    pointerEvents: "none",
+                  }}
+                />
+                {img ? (
                   <img
-                    src={caseImage(c)!}
+                    src={img}
                     alt=""
-                    style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 14 }}
+                    draggable={false}
+                    style={{
+                      position: "relative",
+                      zIndex: 1,
+                      width: "100%",
+                      height: "100%",
+                      objectFit: "contain",
+                      objectPosition: "center bottom",
+                      filter: "drop-shadow(0 12px 20px rgba(0,0,0,0.45))",
+                      pointerEvents: "none",
+                    }}
                   />
                 ) : (
-                  <span style={{ fontSize: 44 }}>{art.emoji}</span>
+                  <div
+                    style={{
+                      position: "relative",
+                      zIndex: 1,
+                      width: "100%",
+                      height: "100%",
+                      borderRadius: 18,
+                      background: art.gradient,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      boxShadow: `0 0 32px ${art.glow}`,
+                    }}
+                  >
+                    <span style={{ fontSize: 52 }}>{art.emoji}</span>
+                  </div>
                 )}
               </div>
-              <div style={{ fontWeight: 800, fontSize: 13, minHeight: 34, lineHeight: 1.25 }}>
+
+              <div
+                style={{
+                  marginTop: 10,
+                  fontWeight: 800,
+                  fontSize: 14,
+                  lineHeight: 1.25,
+                  color: "#F1F5F9",
+                  minHeight: 36,
+                }}
+              >
                 {lang === "en" ? c.nameEn : c.nameRu}
               </div>
+
               <div
                 style={{
                   marginTop: 8,
-                  display: "inline-block",
-                  padding: "5px 10px",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                  padding: "6px 12px",
                   borderRadius: 999,
-                  background: c.canOpen ? "rgba(34,197,94,0.15)" : "rgba(51,65,85,0.5)",
-                  color: c.canOpen ? "#4ADE80" : "#94A3B8",
-                  fontSize: 12,
-                  fontWeight: 700,
+                  background: "rgba(15,23,42,0.85)",
+                  border: "1px solid rgba(255,255,255,0.08)",
+                  color: c.canOpen ? "#FDE68A" : "#94A3B8",
+                  fontSize: 13,
+                  fontWeight: 800,
                 }}
               >
+                <span>{c.costType === "key" ? "🔑" : c.costType === "ton" ? "💎" : "⭐"}</span>
                 {costLabel(c, lang)}
               </div>
             </button>
@@ -397,7 +484,6 @@ function RewardCard({ r, lang }: { r: CaseRewardPreview; lang: Lang }) {
         (r.type === "nft_fragment" ? `Фрагмент ${r.nftId}` : `${r.minAmount}–${r.maxAmount}`);
   const emoji = r.type === "ton" ? "💎" : r.type === "tonyx" ? "🪙" : "🧩";
   const chance = r.weight;
-
   return (
     <div
       style={{
@@ -507,42 +593,38 @@ const winBox: React.CSSProperties = {
 };
 
 const cardBtn: React.CSSProperties = {
-  background: "rgba(15,23,42,0.9)",
-  border: "1px solid rgba(255,255,255,0.06)",
-  borderRadius: 18,
-  padding: 10,
+  background: "transparent",
+  border: "none",
+  borderRadius: 20,
+  padding: "4px 2px 8px",
   color: "#E2E8F0",
   fontFamily: "inherit",
   cursor: "pointer",
   textAlign: "center",
+  WebkitTapHighlightColor: "transparent",
+};
+
+const thumbWrap: React.CSSProperties = {
+  position: "relative",
+  height: 148,
+  borderRadius: 18,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  overflow: "visible",
 };
 
 function caseHero(art: { gradient: string; glow: string }): React.CSSProperties {
   return {
+    position: "relative",
     margin: "12px auto",
-    width: 200,
-    height: 200,
+    width: 220,
+    height: 220,
     borderRadius: 24,
-    background: art.gradient,
-    boxShadow: `0 0 40px ${art.glow}`,
+    background: "transparent",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    border: "1px solid rgba(255,255,255,0.08)",
-    overflow: "hidden",
-  };
-}
-
-function thumb(art: { gradient: string; glow: string }): React.CSSProperties {
-  return {
-    height: 110,
-    borderRadius: 14,
-    background: art.gradient,
-    boxShadow: `0 8px 24px ${art.glow}`,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 10,
-    overflow: "hidden",
+    overflow: "visible",
   };
 }

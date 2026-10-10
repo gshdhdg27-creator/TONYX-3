@@ -30,7 +30,7 @@ export default function PvpPage() {
   }
   if (tab === "spin") {
     return (
-      <div style={{ minHeight: "100dvh", paddingBottom: 110, background: "#070b14" }}>
+      <div style={{ minHeight: "100dvh", paddingBottom: 110, background: "#0a0612" }}>
         <button type="button" onClick={() => setTab("pick")} style={back}>
           ← Назад
         </button>
@@ -46,26 +46,33 @@ export default function PvpPage() {
 
   return (
     <div style={page}>
-      <div style={title}>PvP игры</div>
+      <div style={header}>
+        <div style={title}>PvP игры</div>
+        <div style={sub}>Snoop Dogg Arena · TONYX</div>
+      </div>
       <div style={grid}>
         <GameCard
           name="Арена"
           badge="PvP"
-          badgeColor="#f97316"
+          badgeColor="#a855f7"
           online={24}
           lottieSrc={LOTTIE.arena}
-          emoji="⚔️"
-          gradient="linear-gradient(145deg, #3b82f6 0%, #eab308 48%, #ef4444 100%)"
+          emoji="🐶"
+          stickers={["👑", "💎"]}
+          gradient="linear-gradient(145deg, #4c1d95 0%, #7c3aed 35%, #c026d3 70%, #1e1b4b 100%)"
+          accent="rgba(168,85,247,0.55)"
           onClick={() => setTab("arena")}
         />
         <GameCard
           name="Барабан"
           badge="PvP"
-          badgeColor="#f97316"
+          badgeColor="#eab308"
           online={18}
           lottieSrc={LOTTIE.spin}
           emoji="🎰"
-          gradient="linear-gradient(145deg, #7c3aed 0%, #ec4899 55%, #0f172a 100%)"
+          stickers={["🚬", "🎁"]}
+          gradient="linear-gradient(145deg, #3b0764 0%, #6d28d9 40%, #ca8a04 85%, #1c1917 100%)"
+          accent="rgba(234,179,8,0.45)"
           onClick={() => setTab("spin")}
         />
       </div>
@@ -77,18 +84,20 @@ const page: CSSProperties = {
   minHeight: "100dvh",
   padding: "18px 14px 120px",
   color: "#fff",
-  background: "radial-gradient(circle at 20% 0%, #1e1b4b 0%, #070b14 55%)",
+  background: "radial-gradient(ellipse at 30% -10%, #3b0764 0%, #0a0612 50%)",
 };
-const title: CSSProperties = { fontSize: 24, fontWeight: 900, marginBottom: 14 };
+const header: CSSProperties = { marginBottom: 16 };
+const title: CSSProperties = { fontSize: 26, fontWeight: 900, letterSpacing: "-0.03em" };
+const sub: CSSProperties = { fontSize: 12, color: "#c4b5fd", marginTop: 4, fontWeight: 600 };
 const grid: CSSProperties = { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 };
 const back: CSSProperties = {
   margin: 12,
   height: 36,
   padding: "0 14px",
   borderRadius: 12,
-  border: "1px solid #334155",
-  background: "#111827",
-  color: "#e2e8f0",
+  border: "1px solid rgba(168,85,247,0.35)",
+  background: "rgba(24,16,40,0.9)",
+  color: "#e9d5ff",
   fontWeight: 700,
   cursor: "pointer",
   fontFamily: "inherit",

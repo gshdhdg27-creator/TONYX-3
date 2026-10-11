@@ -161,6 +161,11 @@ export default function ArenaGame({
     setTimeout(() => setToast(null), 2200);
   };
 
+  const phaseRef = useRef<Phase>("lobby");
+  useEffect(() => { phaseRef.current = phase; }, [phase]);
+  const replayingRef = useRef(false);
+  useEffect(() => { replayingRef.current = replaying; }, [replaying]);
+
   const fetchState = useCallback(async () => {
     try {
       const r = await fetch("/api/mini/games/arena/state");
@@ -171,14 +176,33 @@ export default function ArenaGame({
         d.status === "finished" &&
         d.winnerId &&
         !settledRef.current.has(d.id) &&
-        phase === "lobby" &&
-        !replaying
+        phaseRef.current === "lobby" &&
+        !replayingRef.current
       ) {
         settledRef.current.add(d.id);
         runSpinAnimation(d);
       }
     } catch { /* ignore */ }
-  }, [phase, replaying]);
+  }, []);
+
+  useEffect(() => {
+    fetchState();
+    const t = setInterval(fetchState, 800);
+    return () => {
+      clearInterval(t);
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    };
+  }, [fetchState]);
+
+  // When countdown hits 0 — force immediate resolve check
+  useEffect(() => {
+    if (arena?.status !== "starting" || !arena.startAt) return;
+    const ms = new Date(arena.startAt).getTime() - Date.now();
+    if (ms > 30000) return;
+    const delay = Math.max(0, ms + 50);
+    const t = setTimeout(() => { fetchState(); }, delay);
+    return () => clearTimeout(t);
+  }, [arena?.status, arena?.startAt, fetchState]);
 
   useEffect(() => {
     fetchState();

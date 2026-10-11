@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useGetUserProfile, getGetUserProfileQueryKey } from "@workspace/api-client-react";
 import { useTelegram } from "@/lib/telegram";
 
 /* ═══════════════════════════════════════════════════════════
@@ -92,6 +94,16 @@ export default function ArenaGame({
   onOpenHistory,
 }: Props) {
   const { photoUrl, username } = useTelegram();
+     const qc = useQueryClient();
+  const { data: profile } = useGetUserProfile(telegramId ?? "", {
+    query: { enabled: !!telegramId, refetchInterval: 5000 },
+  } as Parameters<typeof useGetUserProfile>[1]);
+  const balance = Number((profile as { ton?: string | number } | undefined)?.ton ?? tonBalance ?? 0);
+
+  const refreshBalance = useCallback(() => {
+    qc.refetchQueries({ queryKey: getGetUserProfileQueryKey(telegramId ?? "") });
+    onBalanceChange?.();
+  }, [qc, telegramId, onBalanceChange]);
 
   const [arena, setArena] = useState<ArenaState | null>(null);
   const [phase, setPhase] = useState<Phase>("lobby");

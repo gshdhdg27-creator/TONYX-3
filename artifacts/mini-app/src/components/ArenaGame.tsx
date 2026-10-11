@@ -210,12 +210,17 @@ export default function ArenaGame({
   function runSpinAnimation(data: ArenaState) {
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
 
-    const secs = buildSectors(data.players);
+        const secs = buildSectors(data.players);
     const winner = secs.find((s) => s.telegramId === data.winnerId) ?? secs[0];
     if (!winner) return;
 
+    let mid = winner.mid;
+    if (data.winnerSector) {
+      mid = (data.winnerSector.startDeg + data.winnerSector.endDeg) / 2;
+    }
+
     const spins = 5;
-    const targetRot = spins * 360 + (360 - winner.mid);
+    const targetRot = spins * 360 + (360 - (mid % 360));
 
     setPhase("arrow");
     setZoom(1);
@@ -661,7 +666,7 @@ export default function ArenaGame({
           <span>Игроки · {arena?.players.length ?? 0}</span>
           <span>Игра #{arena?.id ?? "—"}</span>
         </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 120, overflowY: "auto" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 150, overflowY: "auto", WebkitOverflowScrolling: "touch" as const }}>
           {sectors
             .slice()
             .sort((a, b) => b.stake - a.stake)

@@ -205,15 +205,6 @@ export default function ArenaGame({
   }, [arena?.status, arena?.startAt, fetchState]);
 
   useEffect(() => {
-    fetchState();
-    const t = setInterval(fetchState, 1500);
-    return () => {
-      clearInterval(t);
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    };
-  }, [fetchState]);
-
-  useEffect(() => {
     if (!autoOn || autoLeft <= 0 || phase !== "lobby" || busy) return;
     const a = arena;
     if (!a || a.status === "finished") return;

@@ -842,4 +842,107 @@ router.post("/loadout", async (req: Request, res: Response) => {
   }
 });
 
+// POST /api/mini/battle/boost/buy  { tier: 1 | 2 }
+// tier 1 = +50% DPS (1.5x) for 24h, cost 1 TON
+// tier 2 = +100% DPS (2.0x) for 24h, cost 10 TON
+const BATTLE_BOOST_TIERS: Record<number, { costTon: number; multiplier: number; label: string }> = {
+  1: { costTon: 1, multiplier: 1.5, label: "+50%" },
+  2: { costTon: 10, multiplier: 2.0, label: "+100%" },
+};
+const BOOST_DURATION_MS = 24 * 60 * 60 * 1000;
+
+router.post("/boost/buy", async (req: Request, res: Response) => {
+  try {
+    const telegramId = getTelegramId(res);
+    if (!telegramId) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+
+    const tier = Number(req.body?.tier);
+    const pkg = BATTLE_BOOST_TIERS[tier];
+    if (!pkg) {
+      res.status(400).json({ error: "Unknown boost tier. Use 1 or 2." });
+      return;
+    }
+
+    await ensureGameProfile(telegramId);
+
+    const user = await db
+      .select()
+      .from(usersTable)
+      .where(eq(usersTable.telegramId, telegramId))
+      .then((r) => r[0] ?? null);
+
+    if (!user) {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
+
+    const userTon = Number(user.ton);
+    if (userTon < pkg.costTon) {
+      res.status(400).json({
+        error: "Not enough TON",
+        need: pkg.costTon,
+        have: userTon,
+      });
+      return;
+    }
+
+    const boostRow = await db
+      .select()
+      .from(miniUserBattleBoostsTable)
+      .where(eq(miniUserBattleBoostsTable.telegramId, telegramId))
+      .then((r) => r[0] ?? null);
+
+    const now = Date.now();
+    const currentMult = Number(boostRow?.tonBoostMultiplier ?? 1);
+    const currentExp = boostRow?.tonBoostExpiresAt?.getTime() ?? 0;
+    const stillActive = currentExp > now;
+
+    if (stillActive && currentMult >= pkg.multiplier) {
+      res.status(400).json({
+        error: "This boost (or stronger) is already active",
+        tonBoostMultiplier: currentMult,
+        tonBoostExpiresAt: currentExp,
+      });
+      return;
+    }
+
+    const newTon = Math.round((userTon - pkg.costTon) * 1e6) / 1e6;
+    const expiresAt = new Date(now + BOOST_DURATION_MS);
+
+    await Promise.all([
+      db
+        .update(usersTable)
+        .set({ ton: String(newTon), updatedAt: new Date() })
+        .where(eq(usersTable.telegramId, telegramId)),
+      db
+        .update(miniUserBattleBoostsTable)
+        .set({
+          tonBoostMultiplier: String(pkg.multiplier),
+          tonBoostExpiresAt: expiresAt,
+          updatedAt: new Date(),
+        })
+        .where(eq(miniUserBattleBoostsTable.telegramId, telegramId)),
+    ]);
+
+    console.log(
+      `[battle/boost/buy] ${telegramId} tier=${tier} mult=${pkg.multiplier} cost=${pkg.costTon} ton=${newTon}`,
+    );
+
+    res.json({
+      ok: true,
+      tier,
+      label: pkg.label,
+      tonBoostMultiplier: pkg.multiplier,
+      tonBoostExpiresAt: expiresAt.getTime(),
+      balances: { ton: newTon },
+    });
+  } catch (err) {
+    console.error("[battle/boost/buy]", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 export default router;

@@ -32,11 +32,15 @@ export default function PvpPage() {
         telegramId={id}
         tonBalance={tonBalance}
         onBalanceChange={refresh}
-        onClose={() => { setTab("pick"); refresh(); }}
+        onClose={() => {
+          setTab("pick");
+          refresh();
+        }}
         onOpenHistory={() => undefined}
       />
     );
   }
+
   if (tab === "spin") {
     return (
       <div style={{ minHeight: "100dvh", paddingBottom: 110, background: "#0a0612" }}>
@@ -52,21 +56,6 @@ export default function PvpPage() {
       </div>
     );
   }
-  if (tab === "spin") {
-    return (
-      <div style={{ minHeight: "100dvh", paddingBottom: 110, background: "#0a0612" }}>
-        <button type="button" onClick={() => setTab("pick")} style={back}>
-          ← Назад
-        </button>
-        <SpinGame
-          telegramId={id}
-          tonBalance={tonBalance}
-          onBalanceChange={setTonBalance}
-          onOpenHistory={() => undefined}
-        />
-      </div>
-    );
-  }
 
   return (
     <div style={page}>
@@ -74,29 +63,20 @@ export default function PvpPage() {
         <div style={title}>PvP игры</div>
         <div style={sub}>Snoop Dogg Arena · TONYX</div>
       </div>
-      <div style={grid}>
+
+      <div style={{ padding: "8px 16px 120px", display: "flex", flexDirection: "column", gap: 14 }}>
         <GameCard
-          name="Арена"
-          badge="PvP"
-          badgeColor="#a855f7"
-          online={24}
-          lottieSrc={LOTTIE.arena}
-          emoji="🐶"
-          stickers={["👑", "💎"]}
-          gradient="linear-gradient(145deg, #4c1d95 0%, #7c3aed 35%, #c026d3 70%, #1e1b4b 100%)"
-          accent="rgba(168,85,247,0.55)"
+          title="Арена"
+          description="PvP рулетка · территории · ставки TON"
+          lottieUrl={LOTTIE.arena}
+          accent="#a855f7"
           onClick={() => setTab("arena")}
         />
         <GameCard
-          name="Барабан"
-          badge="PvP"
-          badgeColor="#eab308"
-          online={18}
-          lottieSrc={LOTTIE.spin}
-          emoji="🎰"
-          stickers={["🚬", "🎁"]}
-          gradient="linear-gradient(145deg, #3b0764 0%, #6d28d9 40%, #ca8a04 85%, #1c1917 100%)"
-          accent="rgba(234,179,8,0.45)"
+          title="Spin"
+          description="Классический спин · множители"
+          lottieUrl={LOTTIE.spin}
+          accent="#22d3ee"
           onClick={() => setTab("spin")}
         />
       </div>
@@ -106,22 +86,34 @@ export default function PvpPage() {
 
 const page: CSSProperties = {
   minHeight: "100dvh",
-  padding: "18px 14px 120px",
-  color: "#fff",
-  background: "radial-gradient(ellipse at 30% -10%, #3b0764 0%, #0a0612 50%)",
+  background: "#0a0612",
+  color: "#e2e8f0",
+  fontFamily: "Inter, system-ui, sans-serif",
 };
-const header: CSSProperties = { marginBottom: 16 };
-const title: CSSProperties = { fontSize: 26, fontWeight: 900, letterSpacing: "-0.03em" };
-const sub: CSSProperties = { fontSize: 12, color: "#c4b5fd", marginTop: 4, fontWeight: 600 };
-const grid: CSSProperties = { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 };
+
+const header: CSSProperties = {
+  padding: "18px 16px 8px",
+};
+
+const title: CSSProperties = {
+  fontSize: 22,
+  fontWeight: 900,
+};
+
+const sub: CSSProperties = {
+  fontSize: 12,
+  color: "#64748b",
+  marginTop: 4,
+};
+
 const back: CSSProperties = {
-  margin: 12,
-  height: 36,
-  padding: "0 14px",
-  borderRadius: 12,
-  border: "1px solid rgba(168,85,247,0.35)",
-  background: "rgba(24,16,40,0.9)",
-  color: "#e9d5ff",
+  margin: "12px 16px",
+  background: "rgba(255,255,255,0.06)",
+  border: "none",
+  borderRadius: 10,
+  padding: "8px 14px",
+  color: "#94a3b8",
+  fontSize: 13,
   fontWeight: 700,
   cursor: "pointer",
   fontFamily: "inherit",

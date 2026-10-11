@@ -66,6 +66,17 @@ function formatArena(room: typeof miniArenaRoomsTable.$inferSelect) {
   };
 }
 
+async function getRecentFinished() {
+  const cutoff = new Date(Date.now() - 20_000);
+  return db
+    .select()
+    .from(miniArenaRoomsTable)
+    .where(and(eq(miniArenaRoomsTable.status, "finished"), gte(miniArenaRoomsTable.finishedAt, cutoff)))
+    .orderBy(desc(miniArenaRoomsTable.id))
+    .limit(1)
+    .then((r) => r[0] ?? null);
+}
+
 async function getActiveArena() {
   const arena = await db
     .select()
@@ -74,17 +85,18 @@ async function getActiveArena() {
     .orderBy(desc(miniArenaRoomsTable.id))
     .limit(1)
     .then((r) => r[0] ?? null);
-  if (arena) return arena;
 
-  // Return recently finished room for up to 18s so the frontend can play animation
-  const cutoff = new Date(Date.now() - 18_000);
-  const recent = await db
-    .select()
-    .from(miniArenaRoomsTable)
-    .where(and(eq(miniArenaRoomsTable.status, "finished"), gte(miniArenaRoomsTable.finishedAt, cutoff)))
-    .orderBy(desc(miniArenaRoomsTable.id))
-    .limit(1)
-    .then((r) => r[0] ?? null);
+  // Prefer recently finished room over empty waiting so client can play win animation
+  if (arena) {
+    const players = (arena.players as ArenaPlayer[]) ?? [];
+    if (arena.status === "waiting" && players.length === 0) {
+      const recent = await getRecentFinished();
+      if (recent) return recent;
+    }
+    return arena;
+  }
+
+  const recent = await getRecentFinished();
   if (recent) return recent;
 
   const seed = generateServerSeed();
@@ -203,17 +215,6 @@ async function resolveArena(arenaId: number) {
     }
   }
 
-  const nextSeed = generateServerSeed();
-  await db.insert(miniArenaRoomsTable).values({
-    entryFee: "0",
-    totalPool: "0",
-    players: [] as ArenaPlayer[],
-    status: "waiting",
-    serverSeed: nextSeed,
-    serverSeedHash: hashServerSeed(nextSeed),
-    clientSeed: "default",
-    nonce: 1,
-  });
 }
 
 /* ── GET /state ── */

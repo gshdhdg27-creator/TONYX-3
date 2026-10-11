@@ -64,19 +64,32 @@ export default function PvpPage() {
         <div style={sub}>Snoop Dogg Arena · TONYX</div>
       </div>
 
-      <div style={{ padding: "8px 16px 120px", display: "flex", flexDirection: "column", gap: 14 }}>
+      <div
+        style={{
+          padding: "8px 16px 120px",
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr",
+          gap: 12,
+        }}
+      >
         <GameCard
-          title="Арена"
-          description="PvP рулетка · территории · ставки TON"
-          lottieUrl={LOTTIE.arena}
-          accent="#a855f7"
+          name="Арена"
+          badge="PvP"
+          badgeColor="#a855f7"
+          lottieSrc={LOTTIE.arena}
+          emoji="⚔"
+          gradient="linear-gradient(160deg, #1a0a2e 0%, #2e1065 45%, #0f172a 100%)"
+          accent="rgba(168,85,247,0.55)"
           onClick={() => setTab("arena")}
         />
         <GameCard
-          title="Spin"
-          description="Классический спин · множители"
-          lottieUrl={LOTTIE.spin}
-          accent="#22d3ee"
+          name="Spin"
+          badge="Solo"
+          badgeColor="#22d3ee"
+          lottieSrc={LOTTIE.spin}
+          emoji="🎡"
+          gradient="linear-gradient(160deg, #042f2e 0%, #0e7490 45%, #0f172a 100%)"
+          accent="rgba(34,211,238,0.5)"
           onClick={() => setTab("spin")}
         />
       </div>

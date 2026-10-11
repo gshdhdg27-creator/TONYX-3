@@ -79,7 +79,7 @@ interface GameActions {
   claimChestRewards: () => Promise<void>;
   watchAd: () => Promise<void>;
   buySpeedBoost: () => void;
-  buyDpsBoost: (multiplier: number, costTon: number) => void;
+  buyDpsBoost: (multiplier: number, costTon: number) => Promise<void>;
   init: () => void;
   /** Load authoritative state from server */
   syncFromServer: () => Promise<void>;
@@ -288,9 +288,37 @@ export const useGameStore = create<GameStore>()(
         // TODO: server endpoint later
       },
 
-      buyDpsBoost: (_multiplier, _costTon) => {
-        // TODO: server endpoint later
+      buyDpsBoost: async (multiplier, _costTon) => {
+  const tier: 1 | 2 = multiplier >= 1.9 ? 2 : 1;
+  try {
+    set({ lastError: null });
+    const data = await battleApi.buyBoost(tier);
+    const { ownedMages, equippedSlots, boost } = get();
+    const adMult =
+      boost.boostExpiresAt && Date.now() < boost.boostExpiresAt
+        ? boost.dpsMultiplier
+        : 1;
+    const tonMult = data.tonBoostMultiplier;
+    const dps = calcTotalDps(ownedMages, equippedSlots, adMult * tonMult);
+    set({
+      balances: {
+        ...get().balances,
+        ton: data.balances.ton,
       },
+      boost: {
+        ...boost,
+        tonBoostMultiplier: data.tonBoostMultiplier,
+        tonBoostExpiresAt: data.tonBoostExpiresAt,
+      },
+      battle: { ...get().battle, totalDps: dps },
+      lastError: null,
+    });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Boost buy failed";
+    set({ lastError: msg });
+    throw e;
+  }
+},
 
       syncFromServer: async () => {
         try {

@@ -253,7 +253,7 @@ export default function ArenaGame({
         setBoardRot(targetRot * t);
         const r = 0.18 + 0.28 * Math.sin(t * Math.PI * 0.92);
         setBallR(r);
-        setBallAngle(winner.mid);
+        setBallAngle(mid);
         setZoom(1 + 0.25 * t);
         rafRef.current = requestAnimationFrame(tick);
         return;
@@ -261,7 +261,7 @@ export default function ArenaGame({
 
       setBoardRot(targetRot);
       setBallR(0.32);
-      setBallAngle(winner.mid);
+      setBallAngle(mid);
       setZoom(1.35);
       setPhase("winner");
 
@@ -507,21 +507,23 @@ export default function ArenaGame({
       </div>
 
       <div
-        style={{
-          flex: 1,
+          style={{
+          flex: "1 1 auto",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          minHeight: 0,
-          padding: 12,
+          minHeight: 200,
+          maxHeight: "min(52vh, 340px)",
+          padding: "8px 12px",
         }}
       >
         <div
           style={{
-            width: BOARD,
-            height: BOARD,
-            maxWidth: "92vw",
-            maxHeight: "92vw",
+            width: "min(100%, 300px)",
+            height: "min(100%, 300px)",
+            aspectRatio: "1 / 1",
+            maxWidth: "min(92vw, 300px)",
+            maxHeight: "min(52vh, 300px)",
             position: "relative",
             borderRadius: 22,
             overflow: "hidden",

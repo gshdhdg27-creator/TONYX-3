@@ -12,7 +12,7 @@ import { isGameEnabled, GAME_DISABLED_MESSAGE } from "../../lib/game-config.js";
 
 const router: IRouter = Router();
 
-const TIMER_SECONDS = 20;
+const TIMER_SECONDS = 15;
 const COMMISSION_RATE = 0.20;
 const MIN_STAKE = 0.1;
 const MIN_PLAYERS = 2;

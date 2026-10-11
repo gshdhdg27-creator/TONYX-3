@@ -148,6 +148,15 @@ export default function ArenaGame({
   const settledRef = useRef<Set<number>>(new Set());
   const myPhoto = photoUrl;
 
+     useEffect(() => {
+    if (phase === "lobby") {
+      setBallR(0);
+      setBallAngle(0);
+      setArrowRot(0);
+      setZoom(1);
+    }
+  }, [phase]);
+
   const flash = (msg: string, type: "ok" | "err" = "ok") => {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 2200);
@@ -313,7 +322,7 @@ export default function ArenaGame({
       flash(`Мин. ${MIN_STAKE} TON`, "err");
       return;
     }
-    if (amount > tonBalance + 1e-9) {
+   if (amount > balance + 1e-9) {
       flash("Недостаточно TON", "err");
       return;
     }
@@ -338,6 +347,7 @@ export default function ArenaGame({
       }
       setArena(d);
       flash(me ? "Ставка увеличена" : "Вы в игре!", "ok");
+      refreshBalance();
       onBalanceChange?.();
     } catch {
       flash("Сеть недоступна", "err");
@@ -489,7 +499,7 @@ export default function ArenaGame({
         <div style={{ textAlign: "right" }}>
           <div style={{ fontSize: 10, color: "#64748b" }}>Баланс</div>
           <div style={{ fontSize: 14, fontWeight: 700, color: "#60a5fa" }}>
-            {tonBalance.toFixed(3)} TON
+          {balance.toFixed(3)} TON
           </div>
         </div>
       </div>
@@ -587,6 +597,7 @@ export default function ArenaGame({
           </div>
 
           <div
+           {(phase === "arrow" || phase === "travel" || phase === "winner") && (
             style={{
               position: "absolute",
               left: "50%",
@@ -604,6 +615,7 @@ export default function ArenaGame({
               justifyContent: "center",
               pointerEvents: "none",
             }}
+          )}
           >
             <div
               style={{
@@ -754,8 +766,8 @@ export default function ArenaGame({
           {!hideAllIn && (
             <button
               type="button"
-              disabled={busy || phase === "arrow" || phase === "travel" || tonBalance < MIN_STAKE}
-              onClick={() => placeBet(Math.floor(tonBalance * 1000) / 1000)}
+              disabled={busy || phase === "arrow" || phase === "travel" || balance < MIN_STAKE}
+              onClick={() => placeBet(Math.floor(balance * 1000) / 1000)}
               style={{ ...betBtn, background: "rgba(239,68,68,0.2)", borderColor: "rgba(239,68,68,0.4)" }}
             >
               Ва-банк

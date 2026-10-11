@@ -217,8 +217,23 @@ async function resolveArena(arenaId: number) {
 }
 
 /* ── GET /state ── */
+/** On Vercel setTimeout is unreliable — resolve when startAt has passed on any request. */
+async function maybeResolveExpired(
+  arena: typeof miniArenaRoomsTable.$inferSelect,
+): Promise<typeof miniArenaRoomsTable.$inferSelect> {
+  if (
+    arena.status === "starting" &&
+    arena.startAt &&
+    arena.startAt.getTime() <= Date.now()
+  ) {
+    await resolveArena(arena.id);
+    return getActiveArena();
+  }
+  return arena;
+}
 router.get("/state", async (_req, res) => {
-  const arena = await getActiveArena();
+  let arena = await getActiveArena();
+  arena = await maybeResolveExpired(arena);
   res.json(formatArena(arena));
 });
 
@@ -345,7 +360,8 @@ router.post("/join", async (req, res) => {
   if (!user) { res.status(404).json({ error: "Пользователь не найден" }); return; }
   if (Number(user.ton) < stake) { res.status(400).json({ error: "Недостаточно TON" }); return; }
 
-  const arena = await getActiveArena();
+    let arena = await getActiveArena();
+  arena = await maybeResolveExpired(arena);
   const players = (arena.players as ArenaPlayer[]) ?? [];
   if (players.some((p) => p.telegramId === telegramId)) {
     res.status(400).json({ error: "Вы уже участвуете в арене" }); return;
@@ -380,7 +396,8 @@ router.post("/increase", async (req, res) => {
   if (!telegramId || typeof additionalStake !== "number" || additionalStake <= 0) {
     res.status(400).json({ error: "telegramId и additionalStake > 0 обязательны" }); return;
   }
-  const arena = await getActiveArena();
+    let arena = await getActiveArena();
+  arena = await maybeResolveExpired(arena);
   if (!["waiting", "starting"].includes(arena.status)) {
     res.status(400).json({ error: "Нельзя изменить ставку — игра уже завершена" }); return;
   }

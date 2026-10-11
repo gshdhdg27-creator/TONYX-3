@@ -109,6 +109,19 @@ export const battleApi = {
       },
     ),
 
+  buyBoost: (tier: 1 | 2) =>
+    api<{
+      ok: boolean;
+      tier: number;
+      label: string;
+      tonBoostMultiplier: number;
+      tonBoostExpiresAt: number;
+      balances: { ton: number };
+    }>("/api/mini/battle/boost/buy", {
+      method: "POST",
+      body: JSON.stringify({ tier }),
+    }),
+
   setLoadout: (equippedSlots: (string | null)[]) =>
     api<{ ok: boolean; equippedSlots: (string | null)[] }>("/api/mini/battle/loadout", {
       method: "POST",

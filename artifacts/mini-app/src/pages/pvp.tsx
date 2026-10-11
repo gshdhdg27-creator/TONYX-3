@@ -1,4 +1,6 @@
 import { useState, type CSSProperties } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useGetUserProfile, getGetUserProfileQueryKey } from "@workspace/api-client-react";
 import { useTelegram } from "@/lib/telegram";
 import ArenaGame from "@/components/ArenaGame";
 import SpinGame from "@/components/SpinGame";
@@ -13,19 +15,41 @@ const LOTTIE = {
 
 export default function PvpPage() {
   const { telegramId } = useTelegram();
-  const [tab, setTab] = useState<Tab>("pick");
-  const [tonBalance, setTonBalance] = useState(0);
+  const qc = useQueryClient();
   const id = telegramId ?? "";
+  const { data: profile } = useGetUserProfile(id, {
+    query: { enabled: !!id, refetchInterval: 10000 },
+  } as Parameters<typeof useGetUserProfile>[1]);
+  const tonBalance = Number((profile as { ton?: string | number } | undefined)?.ton ?? 0);
+  const refresh = () => {
+    qc.refetchQueries({ queryKey: getGetUserProfileQueryKey(id) });
+  };
+  const [tab, setTab] = useState<Tab>("pick");
 
   if (tab === "arena") {
     return (
       <ArenaGame
         telegramId={id}
         tonBalance={tonBalance}
-        onBalanceChange={setTonBalance}
-        onClose={() => setTab("pick")}
+        onBalanceChange={refresh}
+        onClose={() => { setTab("pick"); refresh(); }}
         onOpenHistory={() => undefined}
       />
+    );
+  }
+  if (tab === "spin") {
+    return (
+      <div style={{ minHeight: "100dvh", paddingBottom: 110, background: "#0a0612" }}>
+        <button type="button" onClick={() => setTab("pick")} style={back}>
+          ← Назад
+        </button>
+        <SpinGame
+          telegramId={id}
+          tonBalance={tonBalance}
+          onBalanceChange={refresh}
+          onOpenHistory={() => undefined}
+        />
+      </div>
     );
   }
   if (tab === "spin") {

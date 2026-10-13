@@ -171,7 +171,7 @@ export default function ArenaGame({
     setFreezePool(0);
   }
 
-  function runSpinAnimation(data: ArenaState) {
+    function runSpinAnimation(data: ArenaState) {
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
 
     const secs = buildSectors(data.players);
@@ -186,8 +186,9 @@ export default function ArenaGame({
       mid = (data.winnerSector.startDeg + data.winnerSector.endDeg) / 2;
     }
 
-    const spins = 5;
-    const targetRot = spins * 360 + (360 - (mid % 360));
+    // Поле НЕ крутится. Шайба едет по краю и останавливается на победителе.
+    const laps = 4;
+    const targetPuck = laps * 360 + mid;
 
     setPhase("spin");
     setWheelRot(0);
@@ -201,14 +202,14 @@ export default function ArenaGame({
     const tickFn = (now: number) => {
       const t = Math.min(1, (now - t0) / duration);
       const e = easeOutCubic(t);
-      setWheelRot(targetRot * e);
-      setPuckAngle(targetRot * e);
+      setWheelRot(0);
+      setPuckAngle(targetPuck * e);
       if (t < 1) {
         rafRef.current = requestAnimationFrame(tickFn);
         return;
       }
-      setWheelRot(targetRot);
-      setPuckAngle(targetRot);
+      setWheelRot(0);
+      setPuckAngle(targetPuck);
       setPhase("winner");
       const pay = payoutOf(winner.stake, data.totalPool);
       const mult = winner.stake > 0 ? Math.round((pay / winner.stake) * 100) / 100 : 0;
@@ -229,6 +230,7 @@ export default function ArenaGame({
     };
     rafRef.current = requestAnimationFrame(tickFn);
   }
+
 
   const fetchState = useCallback(async () => {
     try {

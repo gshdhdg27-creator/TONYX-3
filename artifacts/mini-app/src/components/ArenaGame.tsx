@@ -570,9 +570,9 @@ export default function ArenaGame({
     return (
     <div
       style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 200,
+        position: "relative",
+        width: "100%",
+        height: "100%",
         background: "#0a0a0c",
         color: "#e8e8ed",
         display: "flex",
@@ -716,220 +716,225 @@ export default function ArenaGame({
         </div>
       </div>
 
-      {/* ARENA BOARD */}
+          {/* СКРОЛЛ: арена + игроки */}
       <div
         style={{
           flex: "1 1 0",
           minHeight: 0,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          padding: "4px 16px",
-          overflow: "hidden",
+          overflowY: "auto",
+          overflowX: "hidden",
+          WebkitOverflowScrolling: "touch",
         }}
       >
+        {/* ARENA BOARD — фиксированный размер */}
         <div
           style={{
-            width: "min(100%, 340px)",
-            aspectRatio: "1 / 1",
-            maxHeight: "min(56vh, 360px)",
-            position: "relative",
-            borderRadius: 18,
-            overflow: "hidden",
-            background: "#121218",
-            boxShadow:
-              "0 0 0 1px rgba(255,255,255,0.08), 0 16px 40px rgba(0,0,0,0.55)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "8px 16px 12px",
           }}
         >
-          {/* Цветные территории — квадрат НЕ крутится */}
           <div
             style={{
-              position: "absolute",
-              inset: 0,
-              background: conic,
+              width: "min(100%, 320px)",
+              aspectRatio: "1 / 1",
+              maxHeight: 300,
+              position: "relative",
+              borderRadius: 18,
+              overflow: "hidden",
+              background: "#121218",
+              boxShadow:
+                "0 0 0 1px rgba(255,255,255,0.08), 0 16px 40px rgba(0,0,0,0.55)",
+              flexShrink: 0,
             }}
-          />
-
-          {/* Аватарки ВСЕХ игроков */}
-          {sectors.map((s) => {
-            const isWin =
-              phase === "winner" &&
-              (s.telegramId === arena?.winnerId ||
-                (winnerData &&
-                  (s.username === winnerData.name ||
-                    s.telegramId === winnerData.name)));
-            const photo = playerPhoto(s);
-            return (
-              <div
-                key={s.telegramId}
-                style={avatarStyle(s.mid, s.share, !!isWin)}
-              >
-                {photo ? (
-                  <img
-                    src={photo}
-                    alt=""
-                    style={{
-                      width: "100%",
-                      height: "100%",
-                      objectFit: "cover",
-                    }}
-                  />
-                ) : (
-                  initials(s.username, s.telegramId)
-                )}
-              </div>
-            );
-          })}
-
-          {/* Стрелка выбора направления */}
-          {arrowVisible && (
-            <div
-              style={{
-                position: "absolute",
-                left: "50%",
-                top: "50%",
-                width: 0,
-                height: 0,
-                zIndex: 25,
-                pointerEvents: "none",
-                transform: `translate(-50%, -50%) rotate(${arrowAngle}deg)`,
-              }}
-            >
-              <div
-                style={{
-                  position: "absolute",
-                  left: -6,
-                  top: -28,
-                  width: 0,
-                  height: 0,
-                  borderLeft: "6px solid transparent",
-                  borderRight: "6px solid transparent",
-                  borderBottom: "22px solid #fff",
-                  filter: "drop-shadow(0 2px 4px rgba(0,0,0,0.5))",
-                }}
-              />
-            </div>
-          )}
-
-          {/* Шарик */}
-          {puckVisible && (
-            <div
-              style={{
-                position: "absolute",
-                left: `${puckPos.x}%`,
-                top: `${puckPos.y}%`,
-                width: 34,
-                height: 34,
-                marginLeft: -17,
-                marginTop: -17,
-                borderRadius: "50%",
-                background:
-                  "radial-gradient(circle at 35% 30%, #fff 0%, #e8e8e8 45%, #c0c0c0 100%)",
-                boxShadow:
-                  "0 2px 10px rgba(0,0,0,0.5), 0 0 0 2px rgba(255,255,255,0.35), inset 0 -2px 4px rgba(0,0,0,0.15)",
-                zIndex: 20,
-                pointerEvents: "none",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              {/* крестик как в Portals */}
-              <div
-                style={{
-                  position: "absolute",
-                  width: 14,
-                  height: 2,
-                  background: "rgba(0,0,0,0.25)",
-                  borderRadius: 1,
-                }}
-              />
-              <div
-                style={{
-                  position: "absolute",
-                  width: 2,
-                  height: 14,
-                  background: "rgba(0,0,0,0.25)",
-                  borderRadius: 1,
-                }}
-              />
-            </div>
-          )}
-
-          {/* Пустое состояние */}
-          {!sectors.length && (
+          >
             <div
               style={{
                 position: "absolute",
                 inset: 0,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                color: "#666",
-                fontSize: 14,
-                fontWeight: 600,
+                background: conic,
               }}
-            >
-              Ожидание игроков…
-            </div>
-          )}
-        </div>
-      </div>
+            />
 
-      {/* СПИСОК ИГРОКОВ */}
-      <div
-        style={{
-          padding: "0 14px 8px",
-          flexShrink: 0,
-          maxHeight: 120,
-          overflowY: "auto",
-        }}
-      >
-        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          {sectors.map((s) => (
-            <div
-              key={s.telegramId}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-                padding: "6px 10px",
-                borderRadius: 10,
-                background:
-                  s.telegramId === telegramId
-                    ? "rgba(56,189,248,0.1)"
-                    : "rgba(255,255,255,0.04)",
-              }}
-            >
+            {sectors.map((s) => {
+              const isWin =
+                phase === "winner" &&
+                (s.telegramId === arena?.winnerId ||
+                  (winnerData &&
+                    (s.username === winnerData.name ||
+                      s.telegramId === winnerData.name)));
+              const photo = playerPhoto(s);
+              return (
+                <div
+                  key={s.telegramId}
+                  style={avatarStyle(s.mid, s.share, !!isWin)}
+                >
+                  {photo ? (
+                    <img
+                      src={photo}
+                      alt=""
+                      style={{
+                        width: "100%",
+                        height: "100%",
+                        objectFit: "cover",
+                      }}
+                    />
+                  ) : (
+                    initials(s.username, s.telegramId)
+                  )}
+                </div>
+              );
+            })}
+
+            {arrowVisible && (
               <div
                 style={{
-                  width: 9,
-                  height: 9,
-                  borderRadius: "50%",
-                  background: s.color,
-                  flexShrink: 0,
+                  position: "absolute",
+                  left: "50%",
+                  top: "50%",
+                  width: 0,
+                  height: 0,
+                  zIndex: 25,
+                  pointerEvents: "none",
+                  transform: `translate(-50%, -50%) rotate(${arrowAngle}deg)`,
                 }}
-              />
-              <div style={{ flex: 1, fontSize: 13, fontWeight: 600 }}>
-                {s.telegramId === telegramId
-                  ? "Вы"
-                  : `@${s.username || s.telegramId}`}
+              >
+                <div
+                  style={{
+                    position: "absolute",
+                    left: -6,
+                    top: -28,
+                    width: 0,
+                    height: 0,
+                    borderLeft: "6px solid transparent",
+                    borderRight: "6px solid transparent",
+                    borderBottom: "22px solid #fff",
+                    filter: "drop-shadow(0 2px 4px rgba(0,0,0,0.5))",
+                  }}
+                />
               </div>
-              <div style={{ fontSize: 12, color: "#888" }}>
-                {(s.share * 100).toFixed(1)}%
+            )}
+
+            {puckVisible && (
+              <div
+                style={{
+                  position: "absolute",
+                  left: `${puckPos.x}%`,
+                  top: `${puckPos.y}%`,
+                  width: 34,
+                  height: 34,
+                  marginLeft: -17,
+                  marginTop: -17,
+                  borderRadius: "50%",
+                  background:
+                    "radial-gradient(circle at 35% 30%, #fff 0%, #e8e8e8 45%, #c0c0c0 100%)",
+                  boxShadow:
+                    "0 2px 10px rgba(0,0,0,0.5), 0 0 0 2px rgba(255,255,255,0.35), inset 0 -2px 4px rgba(0,0,0,0.15)",
+                  zIndex: 20,
+                  pointerEvents: "none",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <div
+                  style={{
+                    position: "absolute",
+                    width: 14,
+                    height: 2,
+                    background: "rgba(0,0,0,0.25)",
+                    borderRadius: 1,
+                  }}
+                />
+                <div
+                  style={{
+                    position: "absolute",
+                    width: 2,
+                    height: 14,
+                    background: "rgba(0,0,0,0.25)",
+                    borderRadius: 1,
+                  }}
+                />
               </div>
-              <div style={{ fontSize: 13, fontWeight: 700 }}>
-                {s.stake.toFixed(2)} TON
+            )}
+
+            {!sectors.length && (
+              <div
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  color: "#666",
+                  fontSize: 14,
+                  fontWeight: 600,
+                }}
+              >
+                Ожидание игроков…
               </div>
-            </div>
-          ))}
+            )}
+          </div>
+        </div>
+
+        {/* СПИСОК ИГРОКОВ */}
+        <div style={{ padding: "0 14px 16px" }}>
+          <div
+            style={{
+              fontSize: 12,
+              fontWeight: 700,
+              color: "#888",
+              marginBottom: 8,
+            }}
+          >
+            Игроки · {sectors.length}
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            {sectors.map((s) => (
+              <div
+                key={s.telegramId}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  padding: "8px 10px",
+                  borderRadius: 10,
+                  background:
+                    s.telegramId === telegramId
+                      ? "rgba(56,189,248,0.1)"
+                      : "rgba(255,255,255,0.04)",
+                }}
+              >
+                <div
+                  style={{
+                    width: 9,
+                    height: 9,
+                    borderRadius: "50%",
+                    background: s.color,
+                    flexShrink: 0,
+                  }}
+                />
+                <div style={{ flex: 1, fontSize: 13, fontWeight: 600 }}>
+                  {s.telegramId === telegramId
+                    ? "Вы"
+                    : `@${s.username || s.telegramId}`}
+                </div>
+                <div style={{ fontSize: 12, color: "#888" }}>
+                  {(s.share * 100).toFixed(1)}%
+                </div>
+                <div style={{ fontSize: 13, fontWeight: 700 }}>
+                  {s.stake.toFixed(2)} TON
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
-
       {/* КНОПКИ СТАВОК */}
       <div
         style={{
-          padding: "10px 12px 18px",
+          padding: "10px 12px 12px",
           borderTop: "1px solid rgba(255,255,255,0.06)",
           flexShrink: 0,
           background: "#0c0c0e",

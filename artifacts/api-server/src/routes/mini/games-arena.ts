@@ -361,8 +361,29 @@ router.post("/join", async (req, res) => {
   if (!user) { res.status(404).json({ error: "Пользователь не найден" }); return; }
   if (Number(user.ton) < stake) { res.status(400).json({ error: "Недостаточно TON" }); return; }
 
-    let arena = await getActiveArena();
+  let arena = await getActiveArena();
   arena = await maybeResolveExpired(arena);
+  if (arena.status === "finished") {
+    const seed = generateServerSeed();
+    const [created] = await db
+      .insert(miniArenaRoomsTable)
+      .values({
+        entryFee: "0",
+        totalPool: "0",
+        players: [] as ArenaPlayer[],
+        status: "waiting",
+        serverSeed: seed,
+        serverSeedHash: hashServerSeed(seed),
+        clientSeed: "default",
+        nonce: 1,
+      })
+      .returning();
+    arena = created;
+  }
+  if (arena.status !== "waiting" && arena.status !== "starting") {
+    res.status(400).json({ error: "Сейчас нельзя присоединиться" });
+    return;
+  }
   const players = (arena.players as ArenaPlayer[]) ?? [];
   if (players.some((p) => p.telegramId === telegramId)) {
     res.status(400).json({ error: "Вы уже участвуете в арене" }); return;

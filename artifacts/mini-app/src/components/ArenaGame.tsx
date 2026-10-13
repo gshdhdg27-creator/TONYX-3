@@ -188,7 +188,7 @@ export default function ArenaGame({
 
     // Поле НЕ крутится. Шайба едет по краю и останавливается на победителе.
     const laps = 4;
-    const targetPuck = laps * 360 + mid;
+    const targetPuck = laps * 360 + (mid % 360);
 
     setPhase("spin");
     setWheelRot(0);
@@ -321,9 +321,12 @@ export default function ArenaGame({
       flash("Игра завершена, подождите…", "err");
       return;
     }
-    if (arena?.status === "starting") {
-      flash("Игра уже началась", "err");
-      return;
+    if (arena?.status === "starting" && arena.startAt) {
+      const left = new Date(arena.startAt).getTime() - Date.now();
+      if (left <= 0) {
+        flash("Игра уже началась", "err");
+        return;
+      }
     }
     if (!amount || amount < MIN_STAKE) {
       flash(`Мин. ${MIN_STAKE} TON`, "err");
@@ -416,12 +419,15 @@ export default function ArenaGame({
 
   const isSpinning = phase === "spin";
   const isAnimating = phase === "spin" || phase === "winner";
+  const countdownLeftMs =
+    arena?.status === "starting" && arena.startAt
+      ? new Date(arena.startAt).getTime() - Date.now()
+      : null;
   const canBet =
     phase === "lobby" &&
     arena?.status !== "finished" &&
-    arena?.status !== "starting" &&
+    !(arena?.status === "starting" && countdownLeftMs !== null && countdownLeftMs <= 0) &&
     !busy;
-
   function avatarStyle(midDeg: number, share: number, highlight = false): CSSProperties {
     const rad = ((midDeg - 90) * Math.PI) / 180;
     const r = sectors.length === 1 ? 0 : 0.28;
@@ -589,14 +595,13 @@ export default function ArenaGame({
       </div>
 
       <div
-        style={{
-          flex: "1 1 auto",
+          flex: "1 1 0",
+          minHeight: 0,
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          minHeight: 260,
-          maxHeight: "min(56vh, 380px)",
           padding: "4px 16px",
+          overflow: "hidden",
         }}
       >
         <div
@@ -734,7 +739,7 @@ export default function ArenaGame({
             display: "flex",
             flexDirection: "column",
             gap: 5,
-            maxHeight: 120,
+            maxHeight: 88,
             overflowY: "auto",
           }}
         >

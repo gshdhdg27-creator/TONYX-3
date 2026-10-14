@@ -1015,11 +1015,12 @@ function PlayersTab({ adminId, isSuperAdmin, stats, onRefresh }: { adminId: stri
     setLoading(true);
     try {
       const r = await apiCall("twins", { adminId });
+      if (!r.ok) { setGroups([]); return; }
       const d = await r.json();
       setGroups(d.groups ?? []);
-    } catch { flash("Ошибка загрузки","error"); }
+    } catch { setGroups([]); }
     finally { setLoading(false); }
-  }, [adminId, flash]);
+  }, [adminId]);
 
   useEffect(() => { loadTwins(); }, [loadTwins]);
 
@@ -1121,9 +1122,14 @@ function WithdrawalsSection({ adminId }: { adminId: string }) {
 
   const load = useCallback(async (f: string) => {
     setLoading(true);
-    try { const r = await apiCall(`withdrawals?status=${f}`,{ adminId }); const d = await r.json(); setWithdrawals(d.withdrawals??[]); }
-    catch { flash("Ошибка загрузки","error"); } finally { setLoading(false); }
-  }, [adminId, flash]);
+    try { 
+      const r = await apiCall(`withdrawals?status=${f}`,{ adminId }); 
+      if (!r.ok) { setWithdrawals([]); return; }
+      const d = await r.json(); 
+      setWithdrawals(d.withdrawals??[]); 
+    }
+    catch { setWithdrawals([]); } finally { setLoading(false); }
+  }, [adminId]);
 
   useEffect(() => { load(filter); }, [filter, load]);
 

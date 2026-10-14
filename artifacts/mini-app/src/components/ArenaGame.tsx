@@ -606,19 +606,6 @@ export default function ArenaGame({
         style={{
           display: "flex",
           alignItems: "center",
-          justifyContent: "space-between",
-          padding: "12px 14px 8px",
-          flexShrink: 0,
-        }}
-      >
-        <div style={{ fontSize: 17, fontWeight: 800, letterSpacing: 0.2 }}>
-          PvP Arena
-        </div>
-        {/* HEADER */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
           gap: 10,
           padding: "12px 14px 8px",
           flexShrink: 0,
@@ -649,7 +636,6 @@ export default function ArenaGame({
         >
           📋 История
         </button>
-      </div>
       </div>
 
       {/* TOTAL + TIMER */}

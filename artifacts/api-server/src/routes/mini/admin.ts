@@ -377,4 +377,280 @@ router.get("/users", async (req, res) => {
   }
 });
 
+
+/* ══════════════════ AD CONFIG ══════════════════ */
+router.get("/settings/ad-config", async (req, res) => {
+  try {
+    const rows = await db.select().from(systemSettingsTable);
+    const s: Record<string, string> = {};
+    for (const r of rows) s[r.key] = r.value;
+    res.json({
+      rewardTon: parseFloat(s["ad_reward_ton"] ?? "0.0001") || 0.0001,
+      rewardTonyx: parseFloat(s["ad_reward_tonyx"] ?? "0") || 0,
+      dailyLimit: parseInt(s["ad_daily_limit"] ?? "100") || 100,
+      resetHours: parseFloat(s["ad_reset_hours"] ?? "24") || 24,
+    });
+  } catch (e) {
+    res.status(500).json({ error: String(e) });
+  }
+});
+
+router.post("/settings/ad-config", async (req, res) => {
+  const adminId = extractAdminId(req, res);
+  if (!adminId) return;
+  try {
+    const { rewardTon, rewardTonyx, dailyLimit, resetHours } = req.body ?? {};
+    const upsert = async (key: string, value: string) => {
+      await db.insert(systemSettingsTable).values({ key, value }).onConflictDoUpdate({
+        target: systemSettingsTable.key,
+        set: { value, updatedAt: new Date() },
+      });
+    };
+    await Promise.all([
+      upsert("ad_reward_ton", String(rewardTon ?? 0.0001)),
+      upsert("ad_reward_tonyx", String(rewardTonyx ?? 0)),
+      upsert("ad_daily_limit", String(dailyLimit ?? 100)),
+      upsert("ad_reset_hours", String(resetHours ?? 24)),
+    ]);
+    res.json({ message: "✅ Настройки рекламы сохранены" });
+  } catch (e) {
+    res.status(500).json({ error: String(e) });
+  }
+});
+
+/* ══════════════════ TASKS ══════════════════ */
+router.get("/tasks-list", async (req, res) => {
+  try {
+    const tasks = await db.select().from(miniTasksTable).orderBy(desc(miniTasksTable.createdAt));
+    res.json({ tasks });
+  } catch (e) {
+    console.error("[Admin] tasks-list error:", e);
+    res.status(500).json({ error: String(e) });
+  }
+});
+
+router.post("/tasks-create", async (req, res) => {
+  const adminId = extractAdminId(req, res);
+  if (!adminId) return;
+  try {
+    const { title, description, type, link, reward, rewardTon, maxCompletions } = req.body ?? {};
+    if (!title || !String(title).trim()) {
+      res.status(400).json({ error: "Название обязательно" });
+      return;
+    }
+    const [created] = await db.insert(miniTasksTable).values({
+      ownerId: adminId,
+      title: String(title).trim(),
+      description: description ? String(description) : null,
+      type: type || "visit",
+      link: link || null,
+      reward: parseInt(reward) || 0,
+      rewardTon: rewardTon != null ? String(rewardTon) : null,
+      maxCompletions: maxCompletions ? parseInt(maxCompletions) : null,
+      isActive: "true",
+    }).returning();
+    res.json({ message: "✅ Задание создано", task: created });
+  } catch (e) {
+    res.status(500).json({ error: String(e) });
+  }
+});
+
+router.post("/tasks/:id/toggle", async (req, res) => {
+  const adminId = extractAdminId(req, res);
+  if (!adminId) return;
+  try {
+    const id = parseInt(req.params.id);
+    const active = req.body?.active;
+    const newVal = active === true || active === "true" ? "true" : "false";
+    await db.update(miniTasksTable).set({ isActive: newVal }).where(eq(miniTasksTable.id, id));
+    res.json({ message: newVal === "true" ? "✅ Включено" : "⏸ Выключено" });
+  } catch (e) {
+    res.status(500).json({ error: String(e) });
+  }
+});
+
+router.delete("/tasks/:id", async (req, res) => {
+  const adminId = extractAdminId(req, res);
+  if (!adminId) return;
+  try {
+    const id = parseInt(req.params.id);
+    await db.delete(miniTasksTable).where(eq(miniTasksTable.id, id));
+    res.json({ message: "🗑 Удалено" });
+  } catch (e) {
+    res.status(500).json({ error: String(e) });
+  }
+});
+
+/* ══════════════════ QUEUE DEPTH & MARKET CONFIG ══════════════════ */
+router.get("/settings/queue-depth", async (req, res) => {
+  try {
+    const rows = await db.select().from(systemSettingsTable).where(eq(systemSettingsTable.key, "queue_depth"));
+    res.json({ depth: parseInt(rows[0]?.value ?? "1") || 1 });
+  } catch (e) {
+    res.status(500).json({ error: String(e) });
+  }
+});
+
+router.post("/settings/queue-depth", async (req, res) => {
+  const adminId = extractAdminId(req, res);
+  if (!adminId) return;
+  try {
+    const depth = String(req.body?.depth ?? 1);
+    await db.insert(systemSettingsTable).values({ key: "queue_depth", value: depth }).onConflictDoUpdate({
+      target: systemSettingsTable.key,
+      set: { value: depth, updatedAt: new Date() },
+    });
+    res.json({ message: "✅ Глубина очереди сохранена" });
+  } catch (e) {
+    res.status(500).json({ error: String(e) });
+  }
+});
+
+router.get("/settings/market-config", async (req, res) => {
+  try {
+    const rows = await db.select().from(systemSettingsTable);
+    const s: Record<string, string> = {};
+    for (const r of rows) s[r.key] = r.value;
+    res.json({
+      feePct: parseFloat(s["market_fee_pct"] ?? "5") || 5,
+      profitPctStart: parseFloat(s["profit_pct_start"] ?? "10") || 10,
+      profitPctBase: parseFloat(s["profit_pct_base"] ?? "8") || 8,
+      profitPctPro: parseFloat(s["profit_pct_pro"] ?? "6") || 6,
+      profitPctElite: parseFloat(s["profit_pct_elite"] ?? "4") || 4,
+      maxOrdersStart: parseInt(s["max_orders_start"] ?? "3") || 3,
+      maxOrdersPro: parseInt(s["max_orders_pro"] ?? "3") || 3,
+      maxOrdersElite: parseInt(s["max_orders_elite"] ?? "3") || 3,
+    });
+  } catch (e) {
+    res.status(500).json({ error: String(e) });
+  }
+});
+
+router.post("/settings/market-config", async (req, res) => {
+  const adminId = extractAdminId(req, res);
+  if (!adminId) return;
+  try {
+    const b = req.body ?? {};
+    const upsert = async (key: string, value: string) => {
+      await db.insert(systemSettingsTable).values({ key, value }).onConflictDoUpdate({
+        target: systemSettingsTable.key,
+        set: { value, updatedAt: new Date() },
+      });
+    };
+    await Promise.all([
+      upsert("market_fee_pct", String(b.feePct ?? 5)),
+      upsert("profit_pct_start", String(b.profitPctStart ?? 10)),
+      upsert("profit_pct_base", String(b.profitPctBase ?? 8)),
+      upsert("profit_pct_pro", String(b.profitPctPro ?? 6)),
+      upsert("profit_pct_elite", String(b.profitPctElite ?? 4)),
+      upsert("max_orders_start", String(b.maxOrdersStart ?? 3)),
+      upsert("max_orders_pro", String(b.maxOrdersPro ?? 3)),
+      upsert("max_orders_elite", String(b.maxOrdersElite ?? 3)),
+    ]);
+    res.json({ message: "✅ Настройки маркета сохранены" });
+  } catch (e) {
+    res.status(500).json({ error: String(e) });
+  }
+});
+
+/* ══════════════════ USER ACTIONS ══════════════════ */
+router.post("/users/:id/adjust-balance", async (req, res) => {
+  const adminId = extractAdminId(req, res);
+  if (!adminId) return;
+  try {
+    const targetId = req.params.id;
+    const { currency, amount, action } = req.body ?? {};
+    const num = Number(amount);
+    if (!num || num <= 0) { res.status(400).json({ error: "Сумма должна быть > 0" }); return; }
+    const delta = action === "subtract" ? -num : num;
+    if (currency === "ton") {
+      await db.update(usersTable).set({ ton: sql`${usersTable.ton}::numeric + ${delta}` }).where(eq(usersTable.telegramId, targetId));
+    } else if (currency === "tonyx") {
+      await db.update(usersTable).set({ tonyxCoins: sql`${usersTable.tonyxCoins} + ${Math.round(delta)}` }).where(eq(usersTable.telegramId, targetId));
+    } else {
+      await db.update(usersTable).set({ coins: sql`${usersTable.coins} + ${Math.round(delta)}` }).where(eq(usersTable.telegramId, targetId));
+    }
+    res.json({ message: `✅ ${action === "add" ? "Начислено" : "Списано"}` });
+  } catch (e) {
+    res.status(500).json({ error: String(e) });
+  }
+});
+
+router.post("/users/:id/win-rate", async (req, res) => {
+  const adminId = extractAdminId(req, res);
+  if (!adminId) return;
+  try {
+    const targetId = req.params.id;
+    const modifier = req.body?.modifier;
+    await db.update(usersTable).set({ winRateModifier: modifier == null ? null : String(modifier) }).where(eq(usersTable.telegramId, targetId));
+    res.json({ message: "✅ Win-rate обновлён" });
+  } catch (e) {
+    res.status(500).json({ error: String(e) });
+  }
+});
+
+router.post("/users/:id/force-win", async (req, res) => {
+  const adminId = extractAdminId(req, res);
+  if (!adminId) return;
+  try {
+    const targetId = req.params.id;
+    const enable = !!req.body?.enable;
+    await db.update(usersTable).set({ forceWin: enable }).where(eq(usersTable.telegramId, targetId));
+    res.json({ message: enable ? "✅ Force-win включён" : "⏸ Force-win выключен" });
+  } catch (e) {
+    res.status(500).json({ error: String(e) });
+  }
+});
+
+/* ══════════════════ TWINS (stub) ══════════════════ */
+router.get("/twins", async (req, res) => {
+  try {
+    res.json({ groups: [] });
+  } catch (e) {
+    res.status(500).json({ error: String(e) });
+  }
+});
+
+router.post("/twins/ban-group", async (req, res) => {
+  const adminId = extractAdminId(req, res);
+  if (!adminId) return;
+  res.json({ message: "✅ Группа обработана" });
+});
+
+/* ══════════════════ WITHDRAWALS ══════════════════ */
+router.get("/withdrawals", async (req, res) => {
+  try {
+    const status = String(req.query.status ?? "pending");
+    const rows = await db.select().from(miniWithdrawalsTable).where(eq(miniWithdrawalsTable.status, status)).orderBy(desc(miniWithdrawalsTable.createdAt)).limit(50);
+    res.json({ withdrawals: rows });
+  } catch (e) {
+    res.status(500).json({ error: String(e) });
+  }
+});
+
+router.post("/withdrawals/:id/approve", async (req, res) => {
+  const adminId = extractAdminId(req, res);
+  if (!adminId) return;
+  try {
+    const id = parseInt(req.params.id);
+    await db.update(miniWithdrawalsTable).set({ status: "approved", txHash: req.body?.txHash || null }).where(eq(miniWithdrawalsTable.id, id));
+    res.json({ message: "✅ Одобрено" });
+  } catch (e) {
+    res.status(500).json({ error: String(e) });
+  }
+});
+
+router.post("/withdrawals/:id/reject", async (req, res) => {
+  const adminId = extractAdminId(req, res);
+  if (!adminId) return;
+  try {
+    const id = parseInt(req.params.id);
+    await db.update(miniWithdrawalsTable).set({ status: "rejected" }).where(eq(miniWithdrawalsTable.id, id));
+    res.json({ message: "❌ Отклонено" });
+  } catch (e) {
+    res.status(500).json({ error: String(e) });
+  }
+});
+
+
 export default router;

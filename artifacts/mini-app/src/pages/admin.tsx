@@ -577,11 +577,12 @@ function TasksTab({ adminId, isSuperAdmin }: { adminId: string; isSuperAdmin: bo
     setLoading(true);
     try {
       const r = await apiCall("tasks-list", { adminId });
+      if (!r.ok) { setTasks([]); return; }
       const d = await r.json();
       setTasks(d.tasks ?? []);
-    } catch { flash("Ошибка загрузки","error"); }
+    } catch { setTasks([]); }
     finally { setLoading(false); }
-  }, [adminId, flash]);
+  }, [adminId]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -934,13 +935,14 @@ function GeneralTab({ adminId, isSuperAdmin }: { adminId: string; isSuperAdmin: 
       const qs = [`adminId=${adminId}`, `page=${pg}`];
       if (q) qs.push(`search=${encodeURIComponent(q)}`);
       const r = await fetch(`/api/mini/admin/users?${qs.join("&")}`, { headers:{ "X-Admin-Id":adminId } });
+      if (!r.ok) { if (pg===1) setUsers([]); return; }
       const d = await r.json();
       if (pg===1) setUsers(d.users??[]);
       else setUsers(prev=>[...prev,...(d.users??[])]);
       setHasMore(d.hasMore??false); setPage(pg);
-    } catch { flash("Ошибка загрузки","error"); }
+    } catch { if (pg===1) setUsers([]); }
     finally { setLoading(false); }
-  }, [adminId, flash]);
+  }, [adminId]);
 
   useEffect(() => { fetchUsers(); }, [fetchUsers]);
 

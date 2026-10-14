@@ -109,7 +109,7 @@ export const battleApi = {
       },
     ),
 
-  buyBoost: (tier: 1 | 2) =>
+  buyBoost: (tier: 1 | 2 | 3 | 4) =>
     api<{
       ok: boolean;
       tier: number;

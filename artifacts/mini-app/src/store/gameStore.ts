@@ -79,7 +79,7 @@ interface GameActions {
   claimChestRewards: () => Promise<void>;
   watchAd: () => Promise<void>;
   buySpeedBoost: () => void;
-  buyDpsBoost: (multiplier: number, costTon: number) => Promise<void>;
+  buyDpsBoost: (multiplier: number, costTon: number, tier?: 1 | 2 | 3 | 4) => Promise<void>;
   init: () => void;
   /** Load authoritative state from server */
   syncFromServer: () => Promise<void>;
@@ -268,6 +268,7 @@ export const useGameStore = create<GameStore>()(
         const newCount = boost.adWatchedCount + 1;
         let newMultiplier = boost.dpsMultiplier;
         let expiresAt = boost.boostExpiresAt;
+        // 10 ads → +20% (1.2x)
         if (newCount >= 10 && boost.dpsMultiplier < 1.2) {
           newMultiplier = 1.2;
           expiresAt = Date.now() + 24 * 60 * 60 * 1000;
@@ -288,37 +289,44 @@ export const useGameStore = create<GameStore>()(
         // TODO: server endpoint later
       },
 
-      buyDpsBoost: async (multiplier, _costTon) => {
-  const tier: 1 | 2 = multiplier >= 1.9 ? 2 : 1;
-  try {
-    set({ lastError: null });
-    const data = await battleApi.buyBoost(tier);
-    const { ownedMages, equippedSlots, boost } = get();
-    const adMult =
-      boost.boostExpiresAt && Date.now() < boost.boostExpiresAt
-        ? boost.dpsMultiplier
-        : 1;
-    const tonMult = data.tonBoostMultiplier;
-    const dps = calcTotalDps(ownedMages, equippedSlots, adMult * tonMult);
-    set({
-      balances: {
-        ...get().balances,
-        ton: data.balances.ton,
+      buyDpsBoost: async (multiplier, _costTon, tierArg) => {
+        // Map multiplier → tier if tier not provided (back-compat)
+        let tier: 1 | 2 | 3 | 4 = tierArg ?? 1;
+        if (tierArg == null) {
+          if (multiplier >= 5.5) tier = 4;
+          else if (multiplier >= 3.0) tier = 3;
+          else if (multiplier >= 1.9) tier = 2;
+          else tier = 1;
+        }
+        try {
+          set({ lastError: null });
+          const data = await battleApi.buyBoost(tier);
+          const { ownedMages, equippedSlots, boost } = get();
+          const adMult =
+            boost.boostExpiresAt && Date.now() < boost.boostExpiresAt
+              ? boost.dpsMultiplier
+              : 1;
+          const tonMult = data.tonBoostMultiplier;
+          const dps = calcTotalDps(ownedMages, equippedSlots, adMult * tonMult);
+          set({
+            balances: {
+              ...get().balances,
+              ton: data.balances.ton,
+            },
+            boost: {
+              ...boost,
+              tonBoostMultiplier: data.tonBoostMultiplier,
+              tonBoostExpiresAt: data.tonBoostExpiresAt,
+            },
+            battle: { ...get().battle, totalDps: dps },
+            lastError: null,
+          });
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : "Boost buy failed";
+          set({ lastError: msg });
+          throw e;
+        }
       },
-      boost: {
-        ...boost,
-        tonBoostMultiplier: data.tonBoostMultiplier,
-        tonBoostExpiresAt: data.tonBoostExpiresAt,
-      },
-      battle: { ...get().battle, totalDps: dps },
-      lastError: null,
-    });
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : "Boost buy failed";
-    set({ lastError: msg });
-    throw e;
-  }
-},
 
       syncFromServer: async () => {
         try {

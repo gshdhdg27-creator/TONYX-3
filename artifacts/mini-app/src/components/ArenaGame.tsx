@@ -203,133 +203,111 @@ export default function ArenaGame({
    * 2) шарик летит в эту сторону, отскакивает от стен
    * 3) замедляется и останавливается на территории победителя (заранее известен)
    */
-  function runSpinAnimation(data: ArenaState) {
-    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+function runSpinAnimation(data: ArenaState) {
+  if (rafRef.current) {
+    cancelAnimationFrame(rafRef.current);
+    rafRef.current = null;
+  }
 
-    const secs = buildSectors(data.players);
-    const winner = secs.find((s) => s.telegramId === data.winnerId) ?? secs[0];
-    if (!winner) return;
+  const players = buildSectors(data.players);
+  const winner = players.find(
+    (p) => p.telegramId === data.winnerId
+  );
 
-    setFreezeSectors(secs);
-    setFreezePool(data.totalPool);
+  if (!winner) return;
 
-    let mid = winner.mid;
-    if (data.winnerSector) {
-      mid = (data.winnerSector.startDeg + data.winnerSector.endDeg) / 2;
+  setFreezeSectors(players);
+  setFreezePool(data.totalPool);
+  setPhase("spin");
+  setPuckVisible(true);
+  setArrowVisible(false);
+  setWinnerData(null);
+
+  // Шар всегда появляется в центре.
+  let x = 50;
+  let y = 50;
+
+  // Случайное направление движения.
+  const angle = Math.random() * Math.PI * 2;
+  let speed = 1.05;
+
+  let vx = Math.cos(angle) * speed;
+  let vy = Math.sin(angle) * speed;
+
+  const radius = 5;
+  const startTime = performance.now();
+  const duration = 5000;
+
+  const tickFn = (now: number) => {
+    const elapsed = now - startTime;
+    const progress = Math.min(1, elapsed / duration);
+
+    // Постепенное замедление без притягивания к победителю.
+    speed = 1.05 - progress * 0.35;
+
+    const currentSpeed = Math.sqrt(vx * vx + vy * vy) || 1;
+    vx = (vx / currentSpeed) * speed;
+    vy = (vy / currentSpeed) * speed;
+
+    x += vx;
+    y += vy;
+
+    // Отскок от левой и правой стен.
+    if (x <= radius) {
+      x = radius;
+      vx = Math.abs(vx);
+    } else if (x >= 100 - radius) {
+      x = 100 - radius;
+      vx = -Math.abs(vx);
     }
 
-    // Целевая точка остановки — середина сектора победителя (ближе к краю)
-    const targetRad = ((mid - 90) * Math.PI) / 180;
-    const targetR = 0.36;
-    const targetX = 50 + Math.cos(targetRad) * targetR * 100;
-    const targetY = 50 + Math.sin(targetRad) * targetR * 100;
+    // Отскок от верхней и нижней стен.
+    if (y <= radius) {
+      y = radius;
+      vy = Math.abs(vy);
+    } else if (y >= 100 - radius) {
+      y = 100 - radius;
+      vy = -Math.abs(vy);
+    }
 
-    // Начальное направление — в сторону победителя + небольшой разброс
-    const startDir = mid + (Math.random() * 40 - 20);
-    const startRad = ((startDir - 90) * Math.PI) / 180;
+    setPuckPos({ x, y });
 
-    setPhase("spin");
-    setPuckVisible(true);
-    setArrowVisible(true);
-    setArrowAngle(startDir);
-    setPuckPos({ x: 50, y: 50 });
-    setWinnerData(null);
+    if (elapsed < duration) {
+      rafRef.current = requestAnimationFrame(tickFn);
+      return;
+    }
 
-    const ARROW_MS = 900;
-    const MOVE_MS = 4800;
-    const t0 = performance.now();
+    rafRef.current = null;
+    setPhase("winner");
 
-    // Физика внутри квадрата (0..100)
-    let x = 50;
-    let y = 50;
-    let vx = Math.cos(startRad) * 2.8;
-    let vy = Math.sin(startRad) * 2.8;
-    const pad = 6; // отступ от краёв
-    const friction = 0.992;
+    const payout = payoutOf(winner.stake, data.totalPool);
+    const mult =
+      winner.stake > 0
+        ? Math.round((payout / winner.stake) * 100) / 100
+        : 0;
 
-    const tickFn = (now: number) => {
-      const elapsed = now - t0;
+    setWinnerData({
+      name:
+        data.winnerUsername ||
+        winner.username ||
+        winner.telegramId,
+      payout,
+      mult,
+      photo: winner.photoUrl,
+    });
 
-      // Фаза 1: стрелка крутится
-      if (elapsed < ARROW_MS) {
-        const t = elapsed / ARROW_MS;
-        const spin = startDir + 720 * easeOutCubic(t);
-        setArrowAngle(spin);
-        setPuckPos({ x: 50, y: 50 });
-        rafRef.current = requestAnimationFrame(tickFn);
-        return;
-      }
+    if (!replayingRef.current) {
+      setTimeout(() => {
+        setPhase("lobby");
+        resetAnim();
+        fetchState();
+        refreshBalance();
+      }, 3200);
+    }
+  };
 
-      setArrowVisible(false);
-
-      const moveT = Math.min(1, (elapsed - ARROW_MS) / MOVE_MS);
-
-      // Физика отскоков
-      x += vx;
-      y += vy;
-
-      if (x < pad) {
-        x = pad;
-        vx = Math.abs(vx);
-      }
-      if (x > 100 - pad) {
-        x = 100 - pad;
-        vx = -Math.abs(vx);
-      }
-      if (y < pad) {
-        y = pad;
-        vy = Math.abs(vy);
-      }
-      if (y > 100 - pad) {
-        y = 100 - pad;
-        vy = -Math.abs(vy);
-      }
-
-      vx *= friction;
-      vy *= friction;
-
-      // Чем ближе к концу — тем сильнее тянем к точке победителя
-      const pull = easeOutCubic(moveT) * 0.18;
-      x += (targetX - x) * pull;
-      y += (targetY - y) * pull;
-
-      // В самом конце жёстко садим на победителя
-      if (moveT > 0.92) {
-        const k = (moveT - 0.92) / 0.08;
-        x = x + (targetX - x) * k;
-        y = y + (targetY - y) * k;
-      }
-
-      setPuckPos({ x: clamp(x, pad, 100 - pad), y: clamp(y, pad, 100 - pad) });
-
-      if (moveT < 1) {
-        rafRef.current = requestAnimationFrame(tickFn);
-        return;
-      }
-
-      setPuckPos({ x: targetX, y: targetY });
-      setPhase("winner");
-      const pay = payoutOf(winner.stake, data.totalPool);
-      const mult = winner.stake > 0 ? Math.round((pay / winner.stake) * 100) / 100 : 0;
-      setWinnerData({
-        name: data.winnerUsername || winner.username || winner.telegramId,
-        payout: pay,
-        mult,
-        photo: winner.photoUrl,
-      });
-
-      if (!replayingRef.current) {
-        setTimeout(() => {
-          setPhase("lobby");
-          resetAnim();
-          fetchState();
-          refreshBalance();
-        }, 3200);
-      }
-    };
-
-    rafRef.current = requestAnimationFrame(tickFn);
-  }
+  rafRef.current = requestAnimationFrame(tickFn);
+}
 
   const fetchState = useCallback(async () => {
     try {

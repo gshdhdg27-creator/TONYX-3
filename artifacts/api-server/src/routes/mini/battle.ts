@@ -1,1 +1,1 @@
-// PLACEHOLDER - will use bash to get full content via another method
+SEE_LOCAL_FILE

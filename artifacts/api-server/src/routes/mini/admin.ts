@@ -429,10 +429,12 @@ router.post("/settings/ad-config", async (req, res) => {
   try {
     const { rewardTon, rewardTonyx, dailyLimit, resetHours } = req.body ?? {};
     const upsert = async (key: string, value: string) => {
-      await db.insert(systemSettingsTable).values({ key, value }).onConflictDoUpdate({
-        target: systemSettingsTable.key,
-        set: { value, updatedAt: new Date() },
-      });
+      const existing = await db.select().from(systemSettingsTable).where(eq(systemSettingsTable.key, key));
+      if (existing.length > 0) {
+        await db.update(systemSettingsTable).set({ value, updatedAt: new Date() }).where(eq(systemSettingsTable.key, key));
+      } else {
+        await db.insert(systemSettingsTable).values({ key, value });
+      }
     };
     await Promise.all([
       upsert("ad_reward_ton", String(rewardTon ?? 0.0001)),
@@ -524,10 +526,12 @@ router.post("/settings/queue-depth", async (req, res) => {
   if (!adminId) return;
   try {
     const depth = String(req.body?.depth ?? 1);
-    await db.insert(systemSettingsTable).values({ key: "queue_depth", value: depth }).onConflictDoUpdate({
-      target: systemSettingsTable.key,
-      set: { value: depth, updatedAt: new Date() },
-    });
+    const existing = await db.select().from(systemSettingsTable).where(eq(systemSettingsTable.key, "queue_depth"));
+    if (existing.length > 0) {
+      await db.update(systemSettingsTable).set({ value: depth, updatedAt: new Date() }).where(eq(systemSettingsTable.key, "queue_depth"));
+    } else {
+      await db.insert(systemSettingsTable).values({ key: "queue_depth", value: depth });
+    }
     res.json({ message: "✅ Глубина очереди сохранена" });
   } catch (e) {
     res.status(500).json({ error: String(e) });
@@ -560,10 +564,12 @@ router.post("/settings/market-config", async (req, res) => {
   try {
     const b = req.body ?? {};
     const upsert = async (key: string, value: string) => {
-      await db.insert(systemSettingsTable).values({ key, value }).onConflictDoUpdate({
-        target: systemSettingsTable.key,
-        set: { value, updatedAt: new Date() },
-      });
+      const existing = await db.select().from(systemSettingsTable).where(eq(systemSettingsTable.key, key));
+      if (existing.length > 0) {
+        await db.update(systemSettingsTable).set({ value, updatedAt: new Date() }).where(eq(systemSettingsTable.key, key));
+      } else {
+        await db.insert(systemSettingsTable).values({ key, value });
+      }
     };
     await Promise.all([
       upsert("market_fee_pct", String(b.feePct ?? 5)),

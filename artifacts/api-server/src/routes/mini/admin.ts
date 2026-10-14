@@ -303,17 +303,12 @@ router.get("/users", async (req, res) => {
     const offset = (page - 1) * limit;
     const search = String(req.query.search ?? "").trim();
 
-    let where = undefined;
-    if (search) {
-      where = or(
-        ilike(usersTable.telegramId, `%${search}%`),
-        ilike(usersTable.username, `%${search}%`),
-        ilike(usersTable.firstName, `%${search}%`)
-      );
-    }
+    let users;
+    let total = 0;
 
-    const [users, totalRow] = await Promise.all([
-      db
+    if (search) {
+      const pattern = `%${search}%`;
+      users = await db
         .select({
           id: usersTable.id,
           telegramId: usersTable.telegramId,
@@ -323,38 +318,67 @@ router.get("/users", async (req, res) => {
           coins: usersTable.coins,
           ton: usersTable.ton,
           tonyxCoins: usersTable.tonyxCoins,
-          boostRate: usersTable.boostRate,
-          totalTonDeposited: usersTable.totalTonDeposited,
-          totalAdsWatched: usersTable.totalAdsWatched,
-          totalGamesPlayed: usersTable.totalGamesPlayed,
-          wins: usersTable.wins,
-          losses: usersTable.losses,
           isBlocked: usersTable.isBlocked,
           isAdmin: usersTable.isAdmin,
           forceWin: usersTable.forceWin,
           lastIp: usersTable.lastIp,
           lastLoginAt: usersTable.lastLoginAt,
           createdAt: usersTable.createdAt,
-          dailyOrdersStart: usersTable.dailyOrdersStart,
-          dailyOrdersPro: usersTable.dailyOrdersPro,
-          dailyOrdersElite: usersTable.dailyOrdersElite,
           userStatus: usersTable.userStatus,
           bannedReason: usersTable.bannedReason,
           winRateModifier: usersTable.winRateModifier,
           warningCount: usersTable.warningCount,
           referralEarnings: usersTable.referralEarnings,
+          totalAdsWatched: usersTable.totalAdsWatched,
+          totalGamesPlayed: usersTable.totalGamesPlayed,
+          wins: usersTable.wins,
+          losses: usersTable.losses,
         })
         .from(usersTable)
-        .where(where)
+        .where(or(
+          ilike(usersTable.telegramId, pattern),
+          ilike(usersTable.username, pattern),
+          ilike(usersTable.firstName, pattern)
+        ))
         .orderBy(desc(usersTable.createdAt))
         .limit(limit)
-        .offset(offset),
-      db.execute<{ cnt: number }>(
-        sql`SELECT COUNT(*)::int AS cnt FROM users ${search ? sql`WHERE telegram_id ILIKE ${'%' + search + '%'} OR username ILIKE ${'%' + search + '%'} OR first_name ILIKE ${'%' + search + '%'}` : sql``}`
-      ),
-    ]);
-
-    const total = totalRow.rows[0]?.cnt ?? 0;
+        .offset(offset);
+      const countResult = await db.execute(sql`SELECT COUNT(*)::int AS cnt FROM users WHERE telegram_id ILIKE ${pattern} OR username ILIKE ${pattern} OR first_name ILIKE ${pattern}`);
+      total = (countResult.rows[0] as any)?.cnt ?? 0;
+    } else {
+      users = await db
+        .select({
+          id: usersTable.id,
+          telegramId: usersTable.telegramId,
+          username: usersTable.username,
+          firstName: usersTable.firstName,
+          lastName: usersTable.lastName,
+          coins: usersTable.coins,
+          ton: usersTable.ton,
+          tonyxCoins: usersTable.tonyxCoins,
+          isBlocked: usersTable.isBlocked,
+          isAdmin: usersTable.isAdmin,
+          forceWin: usersTable.forceWin,
+          lastIp: usersTable.lastIp,
+          lastLoginAt: usersTable.lastLoginAt,
+          createdAt: usersTable.createdAt,
+          userStatus: usersTable.userStatus,
+          bannedReason: usersTable.bannedReason,
+          winRateModifier: usersTable.winRateModifier,
+          warningCount: usersTable.warningCount,
+          referralEarnings: usersTable.referralEarnings,
+          totalAdsWatched: usersTable.totalAdsWatched,
+          totalGamesPlayed: usersTable.totalGamesPlayed,
+          wins: usersTable.wins,
+          losses: usersTable.losses,
+        })
+        .from(usersTable)
+        .orderBy(desc(usersTable.createdAt))
+        .limit(limit)
+        .offset(offset);
+      const countResult = await db.execute(sql`SELECT COUNT(*)::int AS cnt FROM users`);
+      total = (countResult.rows[0] as any)?.cnt ?? 0;
+    }
 
     const mapped = users.map(u => ({
       ...u,
@@ -363,7 +387,13 @@ router.get("/users", async (req, res) => {
       twinCount: u.warningCount ?? 0,
       isMainAccount: true,
       totalOrders: 0,
+      boostRate: "0",
+      totalTonDeposited: "0",
+      dailyOrdersStart: 0,
+      dailyOrdersPro: 0,
+      dailyOrdersElite: 0,
     }));
+
     res.json({
       users: mapped,
       page,
@@ -377,8 +407,6 @@ router.get("/users", async (req, res) => {
   }
 });
 
-
-/* ══════════════════ AD CONFIG ══════════════════ */
 router.get("/settings/ad-config", async (req, res) => {
   try {
     const rows = await db.select().from(systemSettingsTable);
@@ -419,7 +447,7 @@ router.post("/settings/ad-config", async (req, res) => {
 });
 
 /* ══════════════════ TASKS ══════════════════ */
-router.get("/tasks-list", async (req, res) => {
+router.get("/tasks-list", async (_req, res) => {
   try {
     const tasks = await db.select().from(miniTasksTable).orderBy(desc(miniTasksTable.createdAt));
     res.json({ tasks });

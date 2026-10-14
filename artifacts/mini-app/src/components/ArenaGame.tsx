@@ -30,6 +30,7 @@ interface ArenaState {
   winnerUsername: string | null;
   winnerSector: { startDeg: number; endDeg: number } | null;
   startAt: string | null;
+  finishedAt?: string | null;
 }
 
 type Phase = "lobby" | "spin" | "winner";

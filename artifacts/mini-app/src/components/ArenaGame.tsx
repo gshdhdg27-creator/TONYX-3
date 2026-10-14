@@ -68,40 +68,46 @@ function colorFor(i: number) {
   return COLORS[i % COLORS.length];
 }
 
-function hashId(id: string) {
-  let h = 2166136261;
-  for (let i = 0; i < id.length; i++) {
-    h ^= id.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return h >>> 0;
-}
-
 function buildSectors(players: ArenaPlayer[]) {
   const total = players.reduce((s, p) => s + p.stake, 0) || 1;
-  const slots = [
-    [24, 26], [76, 24], [22, 74], [78, 72],
-    [50, 18], [16, 48], [84, 50], [50, 84],
-    [36, 48], [64, 56],
-  ];
-  const ordered = [...players].sort((a, b) => hashId(a.telegramId) - hashId(b.telegramId));
-  return ordered.map((p, i) => {
+  let acc = 0;
+  return players.map((p, i) => {
     const share = p.stake / total;
-    const [cx, cy] = slots[i % slots.length];
-    const size = 22 + Math.sqrt(share) * 46;
-    return {
-      ...p,
-      share,
-      start: 0,
-      end: 0,
-      mid: 0,
-      color: colorFor(i),
-      index: i,
-      cx,
-      cy,
-      size,
-    };
+    const start = acc * 360;
+    acc += share;
+    const end = acc * 360;
+    const mid = (start + end) / 2;
+    const span = Math.max(8, end - start);
+    const radius = players.length === 1 ? 0 : Math.max(18, Math.min(38, 16 + span * 0.08));
+    const angle = ((mid - 90) * Math.PI) / 180;
+    const cx = 50 + Math.cos(angle) * radius;
+    const cy = 50 + Math.sin(angle) * radius;
+    const size = Math.max(34, Math.min(96, 28 + Math.sqrt(share) * 78));
+    return { ...p, share, start, end, mid, color: colorFor(i), index: i, cx, cy, size, radius };
   });
+}
+
+function pointInSector(x: number, y: number, start: number, end: number) {
+  const dx = x - 50;
+  const dy = y - 50;
+  if (Math.hypot(dx, dy) < 1) return true;
+  const ang = (Math.atan2(dy, dx) * 180) / Math.PI;
+  const deg = (ang + 90 + 360) % 360;
+  if (end - start >= 359) return true;
+  return deg >= start && deg < end;
+}
+
+function randomPointInSector(start: number, end: number) {
+  const pad = Math.min(4, (end - start) * 0.12);
+  const a0 = start + pad;
+  const a1 = Math.max(a0 + 0.5, end - pad);
+  const deg = a0 + Math.random() * (a1 - a0);
+  const radius = 16 + Math.random() * 22;
+  const angle = ((deg - 90) * Math.PI) / 180;
+  return {
+    x: Math.max(8, Math.min(92, 50 + Math.cos(angle) * radius)),
+    y: Math.max(8, Math.min(92, 50 + Math.sin(angle) * radius)),
+  };
 }
 
 function payoutOf(stake: number, pool: number) {
@@ -246,41 +252,35 @@ function runSpinAnimation(data: ArenaState) {
     if (!winner) return;
     setFreezeSectors(secs);
     setFreezePool(data.totalPool);
-    setPhase("spin");
+    setPhase('spin');
     setPuckVisible(true);
     setArrowVisible(false);
     setWinnerData(null);
     setBoardZoom({ scale: 1, x: 50, y: 50 });
 
-    const zoneR = Math.max(8, winner.size * 0.28);
-    const jitterA = Math.random() * Math.PI * 2;
-    const jitterD = Math.random() * zoneR * 0.65;
-    const targetX = Math.max(8, Math.min(92, winner.cx + Math.cos(jitterA) * jitterD));
-    const targetY = Math.max(8, Math.min(92, winner.cy + Math.sin(jitterA) * jitterD));
-
-    let x = 50;
-    let y = 50;
-    const angle = Math.random() * Math.PI * 2;
-    let vx = Math.cos(angle) * 2.6;
-    let vy = Math.sin(angle) * 2.6;
-    const pad = 7;
+    const target = randomPointInSector(winner.start, winner.end);
+    let x = 12 + Math.random() * 20;
+    let y = 12 + Math.random() * 20;
+    let ang = Math.random() * Math.PI * 2;
+    let vx = Math.cos(ang) * 3.1;
+    let vy = Math.sin(ang) * 3.1;
+    const pad = 6;
     const startTime = performance.now();
-    const duration = 6200;
-    paintPuck(50, 50);
+    const duration = 6800;
+    paintPuck(x, y);
 
     const tickFn = (now: number) => {
-      const elapsed = now - startTime;
-      const progress = Math.min(1, elapsed / duration);
-      const speedScale = Math.max(0.04, 1 - progress * progress * 0.9);
-      const length = Math.hypot(vx, vy) || 1;
-      const speed = 2.6 * speedScale;
-      vx = (vx / length) * speed;
-      vy = (vy / length) * speed;
+      const progress = Math.min(1, (now - startTime) / duration);
+      const speedScale = Math.max(0.035, 1 - Math.pow(progress, 1.35) * 0.96);
+      const len = Math.hypot(vx, vy) || 1;
+      const speed = 3.1 * speedScale;
+      vx = (vx / len) * speed;
+      vy = (vy / len) * speed;
 
-      if (progress > 0.72) {
-        const pull = (progress - 0.72) / 0.28;
-        vx += (targetX - x) * 0.045 * pull;
-        vy += (targetY - y) * 0.045 * pull;
+      if (progress > 0.68) {
+        const pull = (progress - 0.68) / 0.32;
+        vx += (target.x - x) * 0.055 * pull;
+        vy += (target.y - y) * 0.055 * pull;
       }
 
       x += vx;
@@ -290,12 +290,11 @@ function runSpinAnimation(data: ArenaState) {
       if (y <= pad) { y = pad; vy = Math.abs(vy); }
       if (y >= 100 - pad) { y = 100 - pad; vy = -Math.abs(vy); }
 
-      if (progress > 0.9) {
-        const k = (progress - 0.9) / 0.1;
-        x += (targetX - x) * k * 0.35;
-        y += (targetY - y) * k * 0.35;
-        const zoom = 1 + k * 0.55;
-        setBoardZoom({ scale: zoom, x: targetX, y: targetY });
+      if (progress > 0.88) {
+        const k = (progress - 0.88) / 0.12;
+        x += (target.x - x) * k * 0.42;
+        y += (target.y - y) * k * 0.42;
+        setBoardZoom({ scale: 1 + k * 1.35, x: target.x, y: target.y });
       }
 
       paintPuck(x, y);
@@ -303,10 +302,10 @@ function runSpinAnimation(data: ArenaState) {
         rafRef.current = requestAnimationFrame(tickFn);
         return;
       }
-      paintPuck(targetX, targetY);
-      setBoardZoom({ scale: 1.55, x: targetX, y: targetY });
+      paintPuck(target.x, target.y);
+      setBoardZoom({ scale: 2.35, x: target.x, y: target.y });
       rafRef.current = null;
-      setPhase("winner");
+      setPhase('winner');
       const payout = payoutOf(winner.stake, data.totalPool);
       const mult = winner.stake > 0 ? Math.round((payout / winner.stake) * 100) / 100 : 0;
       setWinnerData({
@@ -317,7 +316,7 @@ function runSpinAnimation(data: ArenaState) {
       });
       if (!replayingRef.current) {
         setTimeout(() => {
-          setPhase("lobby");
+          setPhase('lobby');
           resetAnim();
           fetchState();
           refreshBalance();
@@ -395,6 +394,17 @@ function runSpinAnimation(data: ArenaState) {
   );
   const sectors = freezeSectors ?? liveSectors;
   const pool = freezeSectors ? freezePool : (arena?.totalPool ?? 0);
+
+  const conic = useMemo(() => {
+    if (!sectors.length) return '#121218';
+    let acc = 0;
+    const parts = sectors.map((s) => {
+      const a = acc;
+      acc += s.share * 360;
+      return `${s.color} ${a}deg ${acc}deg`;
+    });
+    return `conic-gradient(from -90deg, ${parts.join(', ')})`;
+  }, [sectors]);
 
   async function placeBet(amount: number) {
     if (!telegramId) {
@@ -518,7 +528,7 @@ function runSpinAnimation(data: ArenaState) {
 
 
 function avatarStyle(s: { cx: number; cy: number; size: number; color: string }, highlight = false): CSSProperties {
-    const size = Math.max(30, Math.min(72, s.size * 0.62));
+    const size = s.size;
     return {
       position: "absolute",
       left: `${s.cx}%`,
@@ -529,19 +539,17 @@ function avatarStyle(s: { cx: number; cy: number; size: number; color: string },
       marginTop: -size / 2,
       borderRadius: "50%",
       overflow: "hidden",
-      border: `3px solid ${highlight ? "#ffffff" : s.color}`,
-      boxShadow: highlight
-        ? "0 0 0 3px rgba(74,222,128,0.65), 0 8px 24px rgba(0,0,0,0.5)"
-        : "0 6px 18px rgba(0,0,0,0.45)",
-      background: "#111",
+      border: highlight ? "3px solid #fff" : "0",
+      boxShadow: "0 6px 18px rgba(0,0,0,0.35)",
+      background: s.color,
       zIndex: 6,
       display: "flex",
       alignItems: "center",
       justifyContent: "center",
-      fontSize: size * 0.28,
+      fontSize: size * 0.32,
       fontWeight: 800,
-      color: "#e2e8f0",
-      transition: "left 700ms cubic-bezier(0.22,1,0.36,1), top 700ms cubic-bezier(0.22,1,0.36,1), width 700ms ease, height 700ms ease",
+      color: "#fff",
+      transition: "left 800ms cubic-bezier(0.22,1,0.36,1), top 800ms cubic-bezier(0.22,1,0.36,1), width 800ms ease, height 800ms ease",
     };
   }
 
@@ -709,27 +717,10 @@ function avatarStyle(s: { cx: number; cy: number; size: number; color: string },
                 inset: 0,
                 transform: `scale(${boardZoom.scale})`,
                 transformOrigin: `${boardZoom.x}% ${boardZoom.y}%`,
-                transition: "transform 700ms ease",
+                transition: "transform 650ms ease",
               }}
             >
-            {sectors.map((s) => (
-              <div
-                key={`zone-${s.telegramId}`}
-                style={{
-                  position: "absolute",
-                  left: `${s.cx}%`,
-                  top: `${s.cy}%`,
-                  width: s.size * 1.7,
-                  height: s.size * 1.35,
-                  marginLeft: -(s.size * 1.7) / 2,
-                  marginTop: -(s.size * 1.35) / 2,
-                  borderRadius: 28,
-                  background: s.color,
-                  opacity: 0.92,
-                  boxShadow: "inset 0 0 0 2px rgba(255,255,255,0.12)",
-                }}
-              />
-            ))}
+            <div style={{ position: "absolute", inset: 0, background: conic }} />
 
             {sectors.map((s) => {
               const isWin =
@@ -797,17 +788,42 @@ function avatarStyle(s: { cx: number; cy: number; size: number; color: string },
                   position: "absolute",
                   left: `${puckPos.x}%`,
                   top: `${puckPos.y}%`,
-                  width: 28,
-                  height: 28,
-                  marginLeft: -14,
-                  marginTop: -14,
+                  width: 34,
+                  height: 34,
+                  marginLeft: -17,
+                  marginTop: -17,
                   borderRadius: "50%",
-                  background: "radial-gradient(circle at 32% 30%, #ffffff 0%, #f4f4f5 42%, #d4d4d8 100%)",
-                  boxShadow: "0 3px 12px rgba(0,0,0,0.55), 0 0 0 2px rgba(255,255,255,0.45)",
-                  zIndex: 20,
+                  background: "radial-gradient(circle at 35% 30%, #ffffff 0%, #f3f4f6 55%, #d1d5db 100%)",
+                  boxShadow: "0 4px 14px rgba(0,0,0,0.45), 0 0 0 2px rgba(255,255,255,0.55)",
+                  zIndex: 30,
+                  pointerEvents: "none",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <div style={{ position: "absolute", width: 16, height: 2, background: "rgba(0,0,0,0.28)", borderRadius: 1 }} />
+                <div style={{ position: "absolute", width: 2, height: 16, background: "rgba(0,0,0,0.28)", borderRadius: 1 }} />
+              </div>
+            )}
+            {phase === "winner" && winnerData && (
+              <div
+                style={{
+                  position: "absolute",
+                  left: `${puckPos.x}%`,
+                  top: `${puckPos.y}%`,
+                  transform: "translate(-50%, -42px)",
+                  color: "#fff",
+                  fontWeight: 800,
+                  fontSize: 16,
+                  textShadow: "0 2px 8px rgba(0,0,0,0.7)",
+                  zIndex: 31,
+                  whiteSpace: "nowrap",
                   pointerEvents: "none",
                 }}
-              />
+              >
+                {winnerData.name}
+              </div>
             )}
             </div>
 

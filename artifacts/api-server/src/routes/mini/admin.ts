@@ -288,4 +288,88 @@ router.post("/users/:id/restore", async (req, res) => {
   res.json({ success: true, message: `♻️ Пользователь ${id} восстановлен` });
 });
 
+
+/* GET /admin/users — list users with pagination and search */
+router.get("/users", async (req, res) => {
+  try {
+    const adminId = extractAdminId(req, res);
+    if (!adminId) {
+      res.status(401).json({ error: "Admin ID required" });
+      return;
+    }
+
+    const page = Math.max(1, parseInt(String(req.query.page ?? "1")) || 1);
+    const limit = 20;
+    const offset = (page - 1) * limit;
+    const search = String(req.query.search ?? "").trim();
+
+    let where = undefined;
+    if (search) {
+      where = or(
+        ilike(usersTable.telegramId, `%${search}%`),
+        ilike(usersTable.username, `%${search}%`),
+        ilike(usersTable.firstName, `%${search}%`)
+      );
+    }
+
+    const [users, totalRow] = await Promise.all([
+      db
+        .select({
+          id: usersTable.id,
+          telegramId: usersTable.telegramId,
+          username: usersTable.username,
+          firstName: usersTable.firstName,
+          lastName: usersTable.lastName,
+          coins: usersTable.coins,
+          ton: usersTable.ton,
+          tonyxCoins: usersTable.tonyxCoins,
+          boostRate: usersTable.boostRate,
+          totalTonDeposited: usersTable.totalTonDeposited,
+          totalAdsWatched: usersTable.totalAdsWatched,
+          totalGamesPlayed: usersTable.totalGamesPlayed,
+          wins: usersTable.wins,
+          losses: usersTable.losses,
+          totalOrders: usersTable.totalOrders,
+          referrals: usersTable.referrals,
+          isBlocked: usersTable.isBlocked,
+          isAdmin: usersTable.isAdmin,
+          isOnline: usersTable.isOnline,
+          forceWin: usersTable.forceWin,
+          lastIp: usersTable.lastIp,
+          twinCount: usersTable.twinCount,
+          isMainAccount: usersTable.isMainAccount,
+          lastLoginAt: usersTable.lastLoginAt,
+          createdAt: usersTable.createdAt,
+          dailyOrdersStart: usersTable.dailyOrdersStart,
+          dailyOrdersPro: usersTable.dailyOrdersPro,
+          dailyOrdersElite: usersTable.dailyOrdersElite,
+          userStatus: usersTable.userStatus,
+          bannedReason: usersTable.bannedReason,
+          winRateModifier: usersTable.winRateModifier,
+        })
+        .from(usersTable)
+        .where(where)
+        .orderBy(desc(usersTable.createdAt))
+        .limit(limit)
+        .offset(offset),
+      db.execute<{ cnt: number }>(
+        sql`SELECT COUNT(*)::int AS cnt FROM users ${search ? sql`WHERE telegram_id ILIKE ${'%' + search + '%'} OR username ILIKE ${'%' + search + '%'} OR first_name ILIKE ${'%' + search + '%'}` : sql``}`
+      ),
+    ]);
+
+    const total = totalRow.rows[0]?.cnt ?? 0;
+
+    res.json({
+      users,
+      page,
+      hasMore: offset + users.length < total,
+      total,
+    });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error("[Admin] GET /users FAILED:", msg);
+    res.status(500).json({ error: `DB error: ${msg}` });
+  }
+});
+
 export default router;

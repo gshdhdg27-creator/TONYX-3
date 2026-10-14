@@ -62,6 +62,7 @@ function colorFor(i: number) {
 }
 
 function buildSectors(players: ArenaPlayer[]) {
+  // Portals-style: territory = stake / totalPool as pie slices from center
   const total = players.reduce((s, p) => s + p.stake, 0) || 1;
   let acc = 0;
   return players.map((p, i) => {
@@ -70,18 +71,46 @@ function buildSectors(players: ArenaPlayer[]) {
     acc += share;
     const end = acc * 360;
     const mid = (start + end) / 2;
-    // Avatar on own color territory (by share)
-    const radius =
-      players.length === 1 ? 0
-      : share >= 0.5 ? 26
-      : share >= 0.33 ? 30
-      : share >= 0.2 ? 34
-      : 38;
+    const span = end - start;
+
+    // Avatar size scales with share, never spills into neighbor
+    const size =
+      players.length === 1 ? 64
+      : Math.max(34, Math.min(52, 30 + share * 36));
+
+    // Distance from center: geometric middle of the slice
+    let radius: number;
+    if (players.length === 1) radius = 0;
+    else if (span >= 180) radius = 22;
+    else if (span >= 120) radius = 26;
+    else if (span >= 90) radius = 29;
+    else if (span >= 60) radius = 32;
+    else if (span >= 30) radius = 35;
+    else radius = 38;
+
+    // CSS conic from -90deg (top); same origin for avatar angle
     const angle = ((mid - 90) * Math.PI) / 180;
-    const cx = 50 + Math.cos(angle) * radius;
-    const cy = 50 + Math.sin(angle) * radius;
-    const size = Math.max(32, Math.min(68, 28 + Math.sqrt(share) * 52));
-    return { ...p, share, start, end, mid, color: colorFor(i), index: i, cx, cy, size, radius };
+    let cx = 50 + Math.cos(angle) * radius;
+    let cy = 50 + Math.sin(angle) * radius;
+
+    // Keep whole avatar inside the board
+    const pad = 11;
+    cx = Math.max(pad, Math.min(100 - pad, cx));
+    cy = Math.max(pad, Math.min(100 - pad, cy));
+
+    return {
+      ...p,
+      share,
+      start,
+      end,
+      mid,
+      color: colorFor(i),
+      index: i,
+      cx,
+      cy,
+      size,
+      radius,
+    };
   });
 }
 
@@ -265,12 +294,22 @@ export default function ArenaGame({
 
   const conic = useMemo(() => {
     if (!sectors.length) return "#121218";
+    // Portals: proportional pie from top (-90deg), tiny gap lines between sectors
+    const parts: string[] = [];
     let acc = 0;
-    const parts = sectors.map((s) => {
+    const gap = sectors.length > 1 ? 0.6 : 0;
+    for (const s of sectors) {
       const a = acc;
-      acc += s.share * 360;
-      return `${s.color} ${a}deg ${acc}deg`;
-    });
+      const b = acc + s.share * 360;
+      if (gap > 0) {
+        parts.push(`#0a0a12 ${a}deg ${a + gap}deg`);
+        parts.push(`${s.color} ${a + gap}deg ${b - gap}deg`);
+        parts.push(`#0a0a12 ${b - gap}deg ${b}deg`);
+      } else {
+        parts.push(`${s.color} ${a}deg ${b}deg`);
+      }
+      acc = b;
+    }
     return `conic-gradient(from -90deg, ${parts.join(", ")})`;
   }, [sectors]);
 
@@ -316,7 +355,7 @@ export default function ArenaGame({
       width: s.size, height: s.size,
       marginLeft: -s.size / 2, marginTop: -s.size / 2,
       borderRadius: "50%", background: s.color,
-      border: isWin ? "3px solid #fff" : "2px solid rgba(255,255,255,0.35)",
+      border: isWin ? "3px solid #fff" : "2px solid rgba(255,255,255,0.55)",
       boxShadow: isWin
         ? "0 0 0 3px rgba(251,191,36,0.8), 0 4px 16px rgba(0,0,0,0.5)"
         : "0 2px 8px rgba(0,0,0,0.4)",

@@ -148,6 +148,8 @@ export default function BottomNav() {
   const color = MODE_COLOR[mode];
   const profileActive = location === "/profile" || location.startsWith("/profile/");
 
+  const bottomOffset = "calc(14px + env(safe-area-inset-bottom, 0px))";
+
   return (
     <>
       <style>{`
@@ -170,15 +172,59 @@ export default function BottomNav() {
         }} />
       )}
 
-      {/* Floating pill menu — design like reference */}
+      {/* ===== LEFT: separate Mode switcher button ===== */}
+      <button
+        ref={buttonRef}
+        type="button"
+        onClick={switchMode}
+        aria-label="Меню режимов"
+        style={{
+          position: "fixed",
+          bottom: bottomOffset,
+          left: "max(12px, calc(50% - 210px))",
+          width: 52,
+          height: 52,
+          borderRadius: "50%",
+          border: `2.5px solid ${color}`,
+          padding: 0,
+          background: "rgba(12, 14, 24, 0.85)",
+          backdropFilter: "blur(16px)",
+          WebkitBackdropFilter: "blur(16px)",
+          boxShadow: `0 6px 20px rgba(0,0,0,0.4), 0 0 16px ${color}44`,
+          cursor: busy ? "default" : "pointer",
+          zIndex: 110,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <span style={{
+          position: "absolute", left: "50%", top: -3, transform: "translateX(-50%)",
+          width: 0, height: 0, zIndex: 3,
+          borderLeft: "6px solid transparent",
+          borderRight: "6px solid transparent",
+          borderTop: `8px solid ${color}`,
+        }} />
+        <span style={{
+          position: "absolute", inset: 4, borderRadius: "50%",
+          background: "conic-gradient(from 0deg, #2563eb 0 120deg, #dc2626 120deg 240deg, #eab308 240deg 360deg)",
+          transform: `rotate(${rotation}deg)`,
+          transformOrigin: "center",
+          transition: "transform 0.8s linear",
+        }} />
+        <span style={{
+          position: "absolute", inset: 14, borderRadius: "50%", background: "#0b1020", zIndex: 1,
+        }} />
+      </button>
+
+      {/* ===== CENTER: main floating pill with only tabs ===== */}
       <nav style={{
         position: "fixed",
-        bottom: "calc(12px + env(safe-area-inset-bottom, 0px))",
+        bottom: bottomOffset,
         left: "50%",
         transform: "translateX(-50%)",
-        width: "calc(100% - 24px)",
-        maxWidth: 420,
-        height: 64,
+        width: "min(260px, calc(100% - 140px))",
+        height: 58,
         borderRadius: 999,
         background: "rgba(12, 14, 24, 0.78)",
         backdropFilter: "blur(24px)",
@@ -187,39 +233,10 @@ export default function BottomNav() {
         boxShadow: "0 8px 32px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.06)",
         display: "flex",
         alignItems: "center",
-        padding: "0 6px",
+        padding: "0 8px",
         zIndex: 100,
-        gap: 2,
+        gap: 4,
       }}>
-        {/* Mode switcher (mechanics unchanged) */}
-        <div style={{ width: 56, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-          <button ref={buttonRef} type="button" onClick={switchMode} aria-label="Меню" style={{
-            width: 42, height: 42, borderRadius: "50%", border: `2px solid ${color}`,
-            padding: 0, position: "relative", background: "rgba(0,0,0,0.35)",
-            cursor: busy ? "default" : "pointer",
-            boxShadow: `0 0 12px ${color}55`,
-          }}>
-            <span style={{
-              position: "absolute", left: "50%", top: -2, transform: "translateX(-50%)",
-              width: 0, height: 0, zIndex: 3,
-              borderLeft: "5px solid transparent",
-              borderRight: "5px solid transparent",
-              borderTop: `7px solid ${color}`,
-            }} />
-            <span style={{
-              position: "absolute", inset: 3, borderRadius: "50%",
-              background: "conic-gradient(from 0deg, #2563eb 0 120deg, #dc2626 120deg 240deg, #eab308 240deg 360deg)",
-              transform: `rotate(${rotation}deg)`,
-              transformOrigin: "center",
-              transition: "transform 0.8s linear",
-            }} />
-            <span style={{
-              position: "absolute", inset: 13, borderRadius: "50%", background: "#0b1020", zIndex: 1,
-            }} />
-          </button>
-        </div>
-
-        {/* Tabs */}
         {MODE_TABS[mode].map(({ section, label, icon }) => {
           const active = activeSection === section && !profileActive;
           return (
@@ -234,18 +251,17 @@ export default function BottomNav() {
                 alignItems: "center",
                 justifyContent: "center",
                 gap: 2,
-                padding: "6px 2px",
+                padding: "4px 2px",
                 background: active ? `${color}22` : "transparent",
                 border: 0,
                 borderRadius: 999,
                 cursor: "pointer",
                 transition: "background 0.2s ease",
-                position: "relative",
               }}
             >
               <div style={{
-                width: active ? 36 : 28,
-                height: active ? 36 : 28,
+                width: active ? 34 : 26,
+                height: active ? 34 : 26,
                 borderRadius: "50%",
                 display: "flex",
                 alignItems: "center",
@@ -268,9 +284,12 @@ export default function BottomNav() {
             </button>
           );
         })}
+      </nav>
 
-        {/* Profile */}
-        <button type="button" onClick={() => {
+      {/* ===== RIGHT: separate Profile button ===== */}
+      <button
+        type="button"
+        onClick={() => {
           haptic("light");
           const now = Date.now();
           if (now - profileTapAt.current > 700) profileTaps.current = 0;
@@ -284,76 +303,66 @@ export default function BottomNav() {
               return;
             }
           }
-          setActiveSection("bosses"); // keep section state consistent
+          setActiveSection("bosses");
           setLocation("/profile");
-        }} style={{
-          width: 56,
+        }}
+        style={{
+          position: "fixed",
+          bottom: bottomOffset,
+          right: "max(12px, calc(50% - 210px))",
+          width: 52,
+          height: 52,
+          borderRadius: "50%",
+          border: profileActive ? "2.5px solid #e2e8f0" : "2.5px solid rgba(255,255,255,0.15)",
+          padding: 0,
+          background: profileActive ? "#e2e8f0" : "rgba(12, 14, 24, 0.85)",
+          backdropFilter: "blur(16px)",
+          WebkitBackdropFilter: "blur(16px)",
+          boxShadow: profileActive
+            ? "0 6px 20px rgba(0,0,0,0.4), 0 0 16px rgba(226,232,240,0.35)"
+            : "0 6px 20px rgba(0,0,0,0.4)",
+          cursor: "pointer",
+          zIndex: 110,
           display: "flex",
-          flexDirection: "column",
           alignItems: "center",
           justifyContent: "center",
-          gap: 2,
-          background: profileActive ? "rgba(255,255,255,0.08)" : "transparent",
-          border: 0,
-          borderRadius: 999,
-          cursor: "pointer",
-          flexShrink: 0,
-          padding: "6px 2px",
-        }}>
-          <div style={{
-            width: profileActive ? 36 : 28,
-            height: profileActive ? 36 : 28,
-            borderRadius: "50%",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            background: profileActive ? "#e2e8f0" : "rgba(255,255,255,0.06)",
-            boxShadow: profileActive ? "0 0 12px rgba(226,232,240,0.4)" : "none",
-            transition: "all 0.2s ease",
-          }}>
-            <ProfileIcon active={profileActive} />
-          </div>
-          <span style={{
-            fontSize: 9,
-            fontWeight: 700,
-            color: profileActive ? "#e2e8f0" : "#94a3b8",
-          }}>
-            Профиль
-          </span>
-        </button>
-      </nav>
+          transition: "all 0.2s ease",
+        }}
+      >
+        <ProfileIcon active={profileActive} />
+      </button>
     </>
   );
 }
 
 function MarketIcon(active: boolean, c: string) {
-  return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2.2"><path d="M3 3h2l2.4 12.2a2 2 0 002 1.6h8.7a2 2 0 002-1.6L22 7H6" /><circle cx="9" cy="21" r="1.5" /><circle cx="18" cy="21" r="1.5" /></svg>;
+  return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2.2"><path d="M3 3h2l2.4 12.2a2 2 0 002 1.6h8.7a2 2 0 002-1.6L22 7H6" /><circle cx="9" cy="21" r="1.5" /><circle cx="18" cy="21" r="1.5" /></svg>;
 }
 function NftIcon(active: boolean, c: string) {
-  return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2.2"><rect x="3" y="3" width="18" height="18" rx="3" /><path d="M3 16l5-5 4 4 3-3 6 6" /></svg>;
+  return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2.2"><rect x="3" y="3" width="18" height="18" rx="3" /><path d="M3 16l5-5 4 4 3-3 6 6" /></svg>;
 }
 function TasksIcon(active: boolean, c: string) {
-  return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2.2"><path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11" /></svg>;
+  return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2.2"><path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11" /></svg>;
 }
 function CasesIcon(active: boolean, c: string) {
-  return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2.2"><path d="M3 8h18v11a2 2 0 01-2 2H5a2 2 0 01-2-2V8z" /><path d="M3 8l2-4h14l2 4" /></svg>;
+  return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2.2"><path d="M3 8h18v11a2 2 0 01-2 2H5a2 2 0 01-2-2V8z" /><path d="M3 8l2-4h14l2 4" /></svg>;
 }
 function PvpIcon(active: boolean, c: string) {
-  return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2.2"><path d="M14.5 17.5L3 6V3h3l11.5 11.5" /><path d="M16 16l4 4" /></svg>;
+  return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2.2"><path d="M14.5 17.5L3 6V3h3l11.5 11.5" /><path d="M16 16l4 4" /></svg>;
 }
 function SoloIcon(active: boolean, c: string) {
-  return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2.2"><circle cx="12" cy="12" r="9" /><path d="M12 3v18" /></svg>;
+  return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2.2"><circle cx="12" cy="12" r="9" /><path d="M12 3v18" /></svg>;
 }
 function BossIcon(active: boolean, c: string) {
-  return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2.2"><path d="M12 2l2.2 4.8L19 8l-3.5 3.4.8 5.1L12 14.8 7.7 16.5l.8-5.1L5 8l4.8-1.2L12 2z" /></svg>;
+  return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2.2"><path d="M12 2l2.2 4.8L19 8l-3.5 3.4.8 5.1L12 14.8 7.7 16.5l.8-5.1L5 8l4.8-1.2L12 2z" /></svg>;
 }
 function CardsIcon(active: boolean, c: string) {
-  return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2.2"><rect x="3" y="5" width="12" height="16" rx="2" /><path d="M9 3h10a2 2 0 012 2v14" /></svg>;
+  return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2.2"><rect x="3" y="5" width="12" height="16" rx="2" /><path d="M9 3h10a2 2 0 012 2v14" /></svg>;
 }
 function CollectionIcon(active: boolean, c: string) {
-  return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2.2"><path d="M4 7h16" /><path d="M4 12h16" /><path d="M4 17h10" /></svg>;
+  return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2.2"><path d="M4 7h16" /><path d="M4 12h16" /><path d="M4 17h10" /></svg>;
 }
 function ProfileIcon({ active }: { active: boolean }) {
   const c = active ? "#0b1020" : "#94a3b8";
-  return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2.2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>;
+  return <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>;
 }

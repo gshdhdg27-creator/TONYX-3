@@ -12,7 +12,15 @@ import {
   getGetUserProfileQueryKey,
 } from "@workspace/api-client-react";
 import { useTelegram } from "@/lib/telegram";
-import { runPortalsSpin } from "./arenaSpin";
+
+/* Portals square-arena geometry v2 — force rebuild */
+const SQ = 300;
+const CX = SQ / 2;
+const CY = SQ / 2;
+const HW = SQ / 2;
+const HH = SQ / 2;
+const BALL_R = 9;
+const INNER_R = 40;
 
 interface ArenaPlayer {
   telegramId: string;
@@ -44,8 +52,9 @@ interface Props {
 }
 
 const COLORS = [
-  "#3b82f6", "#a855f7", "#22d3ee", "#eab308", "#ef4444",
-  "#10b981", "#ec4899", "#6366f1", "#14b8a6", "#f97316",
+  "#5BE12C", "#FF4136", "#FF9F00", "#00C0FF",
+  "#B044FF", "#FFEB3B", "#FF69B4", "#00FFB2",
+  "#FF6E40", "#39CCCC",
 ];
 
 const COMMISSION = 0.2;
@@ -53,51 +62,73 @@ const MIN_STAKE = 0.1;
 const DEFAULT_BETS = [0.1, 0.5, 1, 5, 10];
 
 function initials(name: string | null | undefined, id: string) {
-  const s = (name || id || "?").replace(/^@/, "");
-  return s.slice(0, 2).toUpperCase();
+  return (name || id || "?").replace(/^@/, "").slice(0, 2).toUpperCase();
 }
-
 function colorFor(i: number) {
   return COLORS[i % COLORS.length];
 }
 
+function squarePoint(deg: number): [number, number] {
+  const rad = (deg * Math.PI) / 180;
+  const dx = Math.sin(rad);
+  const dy = -Math.cos(rad);
+  const ax = Math.abs(dx);
+  const ay = Math.abs(dy);
+  const t =
+    ax < 1e-9 ? HH / ay :
+    ay < 1e-9 ? HW / ax :
+    Math.min(HW / ax, HH / ay);
+  return [CX + t * dx, CY + t * dy];
+}
+
+function squareSectorPoints(startDeg: number, endDeg: number, steps = 40): string {
+  const pts: [number, number][] = [[CX, CY]];
+  for (let i = 0; i <= steps; i++) {
+    const a = startDeg + ((endDeg - startDeg) * i) / steps;
+    pts.push(squarePoint(a));
+  }
+  return pts.map(([x, y]) => `${x.toFixed(2)},${y.toFixed(2)}`).join(" ");
+}
+
+function sectorCentroid(startDeg: number, endDeg: number): [number, number] {
+  const N = 28;
+  let sx = CX, sy = CY, count = 1;
+  for (let i = 0; i <= N; i++) {
+    const a = startDeg + ((endDeg - startDeg) * i) / N;
+    const [px, py] = squarePoint(a);
+    sx += px; sy += py; count++;
+  }
+  return [sx / count, sy / count];
+}
+
 function buildSectors(players: ArenaPlayer[]) {
-  // Portals-style areas: vertical strips, width = stake share.
-  // Small bets = thin strips on the side; large bets = wide territory.
-  // NOT pie/clock wedges from center.
   const total = players.reduce((s, p) => s + p.stake, 0) || 1;
-  const ordered = [...players].sort((a, b) => b.stake - a.stake);
   let acc = 0;
-  return ordered.map((p, i) => {
+  return players.map((p, i) => {
     const share = p.stake / total;
-    const left = acc * 100;
+    const startDeg = acc * 360;
     acc += share;
-    const right = acc * 100;
-    const width = right - left;
-    const cx = left + width / 2;
-    const cy = 50;
-    const size = Math.max(
-      28,
-      Math.min(56, Math.min(width * 2.2, 30 + share * 40)),
-    );
-    const start = (left / 100) * 360;
-    const end = (right / 100) * 360;
-    const mid = (start + end) / 2;
+    const endDeg = acc * 360;
+    const midDeg = (startDeg + endDeg) / 2;
+    const [edgeX, edgeY] = squarePoint(midDeg);
+    const ax = CX + (edgeX - CX) * 0.58;
+    const ay = CY + (edgeY - CY) * 0.58;
+    const [centX, centY] = sectorCentroid(startDeg, endDeg);
+    const size = Math.max(30, Math.min(48, 28 + share * 36));
     return {
       ...p,
       share,
-      start,
-      end,
-      mid,
-      color: colorFor(Math.max(0, players.findIndex((x) => x.telegramId === p.telegramId))),
+      startDeg,
+      endDeg,
+      midDeg,
+      color: colorFor(i),
       index: i,
-      cx,
-      cy,
+      ax,
+      ay,
+      centX,
+      centY,
       size,
-      radius: width / 2,
-      left,
-      right,
-      width,
+      points: squareSectorPoints(startDeg, endDeg),
     };
   });
 }
@@ -136,29 +167,26 @@ export default function ArenaGame({
   const [phase, setPhase] = useState<Phase>("lobby");
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<{ msg: string; type: "ok" | "err" } | null>(null);
-  const [puckPos, setPuckPos] = useState({ x: 50, y: 50 });
-  const [puckVisible, setPuckVisible] = useState(false);
-  const [boardZoom, setBoardZoom] = useState({ scale: 1, x: 50, y: 50 });
-  const puckRef = useRef<HTMLDivElement | null>(null);
-  const [arrowAngle, setArrowAngle] = useState(0);
-  const [arrowVisible, setArrowVisible] = useState(false);
   const [winnerData, setWinnerData] = useState<{
     name: string; payout: number; mult: number; photo?: string | null;
   } | null>(null);
   const [freezeSectors, setFreezeSectors] = useState<ReturnType<typeof buildSectors> | null>(null);
   const [freezePool, setFreezePool] = useState(0);
-  const [tick, setTick] = useState(0);
   const [countdown, setCountdown] = useState(0);
   const [customBet, setCustomBet] = useState("");
   const [autoPlay, setAutoPlay] = useState(false);
   const [autoStake, setAutoStake] = useState(0.1);
+  const [boardZoom, setBoardZoom] = useState(1);
   const autoPlayRef = useRef(false);
   const autoStakeRef = useRef(0.1);
 
+  const ballRef = useRef<SVGCircleElement | null>(null);
+  const glowRef = useRef<SVGCircleElement | null>(null);
+  const posRef = useRef({ x: CX, y: CY });
+  const velRef = useRef({ vx: 0, vy: 0 });
   const rafRef = useRef<number | null>(null);
   const settledRef = useRef<Set<number>>(new Set());
   const phaseRef = useRef<Phase>("lobby");
-  const replayingRef = useRef(false);
   const arenaIdRef = useRef<number | null>(null);
   const myPhoto = photoUrl;
 
@@ -175,7 +203,6 @@ export default function ArenaGame({
     const update = () => {
       const ms = new Date(arena.startAt!).getTime() - Date.now();
       setCountdown(Math.max(0, Math.ceil(ms / 1000)));
-      setTick((n) => n + 1);
     };
     update();
     const id = setInterval(update, 200);
@@ -187,57 +214,107 @@ export default function ArenaGame({
     setTimeout(() => setToast(null), 2200);
   };
 
+  function placeBall(nx: number, ny: number) {
+    posRef.current = { x: nx, y: ny };
+    ballRef.current?.setAttribute("cx", nx.toFixed(2));
+    ballRef.current?.setAttribute("cy", ny.toFixed(2));
+    glowRef.current?.setAttribute("cx", nx.toFixed(2));
+    glowRef.current?.setAttribute("cy", ny.toFixed(2));
+  }
+
   function resetAnim() {
-    setPuckPos({ x: 50, y: 50 });
-    setPuckVisible(false);
-    setArrowVisible(false);
-    setArrowAngle(0);
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    rafRef.current = null;
+    placeBall(CX, CY);
     setWinnerData(null);
     setFreezeSectors(null);
     setFreezePool(0);
-    setBoardZoom({ scale: 1, x: 50, y: 50 });
-  }
-
-  function paintPuck(x: number, y: number) {
-    setPuckPos({ x, y });
-    const el = puckRef.current;
-    if (el) {
-      el.style.left = `${x}%`;
-      el.style.top = `${y}%`;
-    }
+    setBoardZoom(1);
   }
 
   function runSpinAnimation(data: ArenaState) {
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
     const secs = buildSectors(data.players);
-    runPortalsSpin({
-      sectors: secs as any,
-      winnerId: data.winnerId,
-      totalPool: data.totalPool,
-      winnerUsername: data.winnerUsername,
-      payoutOf,
-      rafRef,
-      replayingRef,
-      cb: {
-        setArrowAngle,
-        setArrowVisible,
-        setPuckVisible,
-        paintPuck,
-        setBoardZoom,
-        setPhase,
-        setFreezeSectors: setFreezeSectors as any,
-        setFreezePool,
-        setWinnerData,
-        onDone: () => {
-          setPhase("lobby");
-          resetAnim();
-          fetchState();
-          refreshBalance();
-          if (autoPlayRef.current && autoStakeRef.current > 0) {
-            setTimeout(() => placeBet(autoStakeRef.current), 700);
-          }
-        },
-      },
-    });
+    const winner = secs.find((s) => s.telegramId === data.winnerId) ?? secs[0];
+    if (!winner) return;
+
+    setFreezeSectors(secs);
+    setFreezePool(data.totalPool);
+    setPhase("spin");
+    setWinnerData(null);
+    setBoardZoom(1);
+
+    const target = { x: winner.centX, y: winner.centY };
+    const angle = Math.random() * Math.PI * 2;
+    const speed = 4.2 + Math.random() * 2;
+    placeBall(CX, CY);
+    velRef.current = { vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed };
+
+    const startTime = performance.now();
+    const ATTRACT_MS = 3400;
+    const EDGE = 3;
+    let stopped = false;
+
+    const step = () => {
+      if (stopped) return;
+      const elapsed = performance.now() - startTime;
+      const pos = posRef.current;
+      let { vx, vy } = velRef.current;
+
+      if (elapsed >= ATTRACT_MS) {
+        const dx = target.x - pos.x;
+        const dy = target.y - pos.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < 2) {
+          stopped = true;
+          placeBall(target.x, target.y);
+          setBoardZoom(1.25);
+          setPhase("winner");
+          const payout = payoutOf(winner.stake, data.totalPool);
+          const mult =
+            winner.stake > 0 ? Math.round((payout / winner.stake) * 100) / 100 : 0;
+          setWinnerData({
+            name: data.winnerUsername || winner.username || winner.telegramId,
+            payout,
+            mult,
+            photo: winner.photoUrl,
+          });
+          rafRef.current = null;
+          setTimeout(() => {
+            setPhase("lobby");
+            resetAnim();
+            fetchState();
+            refreshBalance();
+            if (autoPlayRef.current && autoStakeRef.current > 0) {
+              setTimeout(() => placeBet(autoStakeRef.current), 700);
+            }
+          }, 3200);
+          return;
+        }
+        vx = dx * 0.12;
+        vy = dy * 0.12;
+        velRef.current = { vx, vy };
+        placeBall(pos.x + vx, pos.y + vy);
+        const k = Math.min(1, (elapsed - ATTRACT_MS) / 800);
+        setBoardZoom(1 + k * 0.25);
+        rafRef.current = requestAnimationFrame(step);
+        return;
+      }
+
+      vx *= 0.996;
+      vy *= 0.996;
+      let nx = pos.x + vx;
+      let ny = pos.y + vy;
+      if (nx - BALL_R <= EDGE) { nx = BALL_R + EDGE; vx = Math.abs(vx); }
+      if (nx + BALL_R >= SQ - EDGE) { nx = SQ - BALL_R - EDGE; vx = -Math.abs(vx); }
+      if (ny - BALL_R <= EDGE) { ny = BALL_R + EDGE; vy = Math.abs(vy); }
+      if (ny + BALL_R >= SQ - EDGE) { ny = SQ - BALL_R - EDGE; vy = -Math.abs(vy); }
+      velRef.current = { vx, vy };
+      placeBall(nx, ny);
+      rafRef.current = requestAnimationFrame(step);
+    };
+
+    rafRef.current = requestAnimationFrame(step);
   }
 
   const fetchState = useCallback(async () => {
@@ -250,7 +327,7 @@ export default function ArenaGame({
       if (
         d.status === "finished" && d.winnerId &&
         !settledRef.current.has(d.id) &&
-        phaseRef.current === "lobby" && !replayingRef.current
+        phaseRef.current === "lobby"
       ) {
         settledRef.current.add(d.id);
         setArena(d);
@@ -276,11 +353,12 @@ export default function ArenaGame({
     return () => clearTimeout(t);
   }, [arena?.status, arena?.startAt, fetchState]);
 
-  const liveSectors = useMemo(() => buildSectors(arena?.players ?? []), [arena?.players]);
+  const liveSectors = useMemo(
+    () => buildSectors(arena?.players ?? []),
+    [arena?.players],
+  );
   const sectors = freezeSectors ?? liveSectors;
   const pool = freezeSectors ? freezePool : (arena?.totalPool ?? 0);
-
-  void tick;
 
   async function placeBet(amount: number) {
     if (!telegramId) { flash("Откройте в Telegram", "err"); return; }
@@ -315,23 +393,6 @@ export default function ArenaGame({
   function playerPhoto(s: ReturnType<typeof buildSectors>[0]) {
     if (s.telegramId === telegramId && myPhoto) return myPhoto;
     return s.photoUrl ?? null;
-  }
-
-  function avatarStyle(s: ReturnType<typeof buildSectors>[0], isWin: boolean): CSSProperties {
-    return {
-      position: "absolute",
-      left: `${s.cx}%`, top: `${s.cy}%`,
-      width: s.size, height: s.size,
-      marginLeft: -s.size / 2, marginTop: -s.size / 2,
-      borderRadius: "50%", background: s.color,
-      border: isWin ? "3px solid #fff" : "2px solid rgba(255,255,255,0.55)",
-      boxShadow: isWin
-        ? "0 0 0 3px rgba(251,191,36,0.8), 0 4px 16px rgba(0,0,0,0.5)"
-        : "0 2px 8px rgba(0,0,0,0.4)",
-      display: "flex", alignItems: "center", justifyContent: "center",
-      fontSize: Math.max(10, s.size * 0.32), fontWeight: 800, color: "#fff",
-      overflow: "hidden", zIndex: isWin ? 20 : 10,
-    };
   }
 
   return (
@@ -410,77 +471,90 @@ export default function ArenaGame({
       </div>
 
       <div style={{ flex: 1, overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "12px 16px" }}>
+        <div style={{ display: "flex", justifyContent: "center", padding: "8px 16px" }}>
           <div style={{
-            width: "min(100%, 320px)", aspectRatio: "1 / 1", maxHeight: 300,
-            position: "relative", borderRadius: 22, overflow: "hidden", background: "#121218",
+            width: SQ, height: SQ, maxWidth: "100%",
+            position: "relative", borderRadius: 16, overflow: "hidden",
+            transform: `scale(${boardZoom})`,
+            transformOrigin: "center center",
+            transition: phase === "spin" ? "none" : "transform 400ms ease",
             boxShadow: phase === "spin"
               ? "0 0 0 2px rgba(251,191,36,0.45), 0 16px 40px rgba(0,0,0,0.55)"
-              : "0 0 0 1px rgba(255,255,255,0.08), 0 16px 40px rgba(0,0,0,0.55)",
+              : "0 0 0 1px #1F2937, 0 16px 40px rgba(0,0,0,0.55)",
           }}>
-            <div style={{
-              position: "absolute", inset: 0,
-              transform: `scale(${boardZoom.scale})`,
-              transformOrigin: `${boardZoom.x}% ${boardZoom.y}%`,
-              transition: "transform 650ms ease",
-            }}>
-              {/* Vertical strip territories — NOT pie */}
+            <svg width={SQ} height={SQ} style={{ display: "block" }}>
+              <rect x={0} y={0} width={SQ} height={SQ} fill="#111827" />
               {sectors.map((s) => (
-                <div
-                  key={`strip-${s.telegramId}`}
-                  style={{
-                    position: "absolute",
-                    left: `${(s as { left?: number }).left ?? 0}%`,
-                    top: 0,
-                    width: `${(s as { width?: number }).width ?? 100}%`,
-                    height: "100%",
-                    background: s.color,
-                    borderRight: sectors.length > 1 ? "2px solid rgba(10,10,18,0.85)" : "none",
-                    boxSizing: "border-box",
-                  }}
-                />
+                <polygon key={s.telegramId} points={s.points} fill={s.color} opacity={0.92} />
               ))}
-              {sectors.length === 0 && (
-                <div style={{ position: "absolute", inset: 0, background: "#121218" }} />
-              )}
-
-              {sectors.map((s) => {
-                const isWin = phase === "winner" && (
-                  s.telegramId === arena?.winnerId ||
-                  (winnerData && (s.username === winnerData.name || s.telegramId === winnerData.name))
-                );
-                const photo = playerPhoto(s);
+              {sectors.length >= 2 && sectors.map((s) => {
+                const [ex, ey] = squarePoint(s.startDeg);
                 return (
-                  <div key={s.telegramId} style={avatarStyle(s, !!isWin)}>
-                    {photo ? (
-                      <img src={photo} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                    ) : initials(s.username, s.telegramId)}
-                  </div>
+                  <line key={`ln-${s.telegramId}`}
+                    x1={CX} y1={CY} x2={ex} y2={ey}
+                    stroke="#111827" strokeWidth={2.5}
+                  />
                 );
               })}
+              <circle cx={CX} cy={CY} r={INNER_R} fill="#0d1117" />
+              <circle ref={glowRef} cx={CX} cy={CY} r={BALL_R + 6} fill="white" opacity={0.14} />
+              <circle
+                ref={ballRef}
+                cx={CX} cy={CY} r={BALL_R}
+                fill="white"
+                stroke="rgba(0,0,0,0.25)"
+                strokeWidth={1}
+                style={{ filter: "drop-shadow(0 2px 10px rgba(255,255,255,0.75))" }}
+              />
+            </svg>
 
-              {puckVisible && (
-                <div ref={puckRef} style={{
-                  position: "absolute", left: `${puckPos.x}%`, top: `${puckPos.y}%`,
-                  width: 36, height: 36, marginLeft: -18, marginTop: -18, borderRadius: "50%",
-                  background: "radial-gradient(circle at 32% 28%, #ffffff 0%, #f8fafc 40%, #e2e8f0 70%, #94a3b8 100%)",
-                  boxShadow: "0 6px 16px rgba(0,0,0,0.5), inset 0 -3px 6px rgba(0,0,0,0.12), 0 0 0 1.5px rgba(255,255,255,0.7)",
-                  zIndex: 30, pointerEvents: "none",
-                }} />
-              )}
-
-              {phase === "winner" && winnerData && (
-                <div style={{
-                  position: "absolute", left: "50%", top: "50%", transform: "translate(-50%, -50%)",
-                  zIndex: 35, textAlign: "center", pointerEvents: "none",
-                  background: "rgba(0,0,0,0.75)", borderRadius: 14, padding: "10px 16px",
-                  border: "1px solid rgba(251,191,36,0.45)",
-                }}>
-                  <div style={{ fontWeight: 900, fontSize: 15, color: "#fbbf24" }}>🏆 {winnerData.name}</div>
-                  <div style={{ fontSize: 13, color: "#e2e8f0", marginTop: 2 }}>+{winnerData.payout} · ×{winnerData.mult}</div>
+            {sectors.map((s) => {
+              const isWin = phase === "winner" && s.telegramId === arena?.winnerId;
+              const photo = playerPhoto(s);
+              return (
+                <div
+                  key={s.telegramId}
+                  style={{
+                    position: "absolute",
+                    left: s.ax - s.size / 2,
+                    top: s.ay - s.size / 2,
+                    width: s.size,
+                    height: s.size,
+                    borderRadius: "50%",
+                    background: s.color,
+                    border: isWin ? "3px solid #fff" : "2px solid rgba(255,255,255,0.5)",
+                    boxShadow: isWin
+                      ? `0 0 0 3px ${s.color}, 0 4px 14px rgba(0,0,0,0.5)`
+                      : "0 2px 8px rgba(0,0,0,0.4)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: Math.max(10, s.size * 0.3),
+                    fontWeight: 800,
+                    color: "#fff",
+                    overflow: "hidden",
+                    zIndex: isWin ? 20 : 10,
+                  }}
+                >
+                  {photo ? (
+                    <img src={photo} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                  ) : initials(s.username, s.telegramId)}
                 </div>
-              )}
-            </div>
+              );
+            })}
+
+            {phase === "winner" && winnerData && (
+              <div style={{
+                position: "absolute", left: "50%", top: "50%", transform: "translate(-50%, -50%)",
+                zIndex: 30, textAlign: "center", pointerEvents: "none",
+                background: "rgba(0,0,0,0.8)", borderRadius: 14, padding: "10px 16px",
+                border: "1px solid rgba(251,191,36,0.45)",
+              }}>
+                <div style={{ fontWeight: 900, fontSize: 15, color: "#fbbf24" }}>🏆 {winnerData.name}</div>
+                <div style={{ fontSize: 13, color: "#e2e8f0", marginTop: 2 }}>+{winnerData.payout} · ×{winnerData.mult}</div>
+              </div>
+            )}
+
             {!sectors.length && (
               <div style={{
                 position: "absolute", inset: 0, display: "flex", alignItems: "center",

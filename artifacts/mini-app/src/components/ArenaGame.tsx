@@ -503,11 +503,15 @@ function avatarStyle(
   share: number,
   highlight = false,
 ): CSSProperties {
-  const angle = ((midDeg - 90) * Math.PI) / 180;
   const sector = sectors.find((s) => Math.abs(s.mid - midDeg) < 0.001);
-  // Keep each avatar centered on its own sector and scale it with its stake.
-  const radius = sectors.length === 1 ? 0 : 29;
-  const size = Math.max(18, Math.min(82, 18 + share * 125));
+  // CSS conic-gradient starts at the top; keep the avatar on the same
+  // angular midpoint as its own sector and move it inward for narrow sectors.
+  const sectorDegrees = sector ? sector.end - sector.start : 360;
+  const angle = ((midDeg - 90) * Math.PI) / 180;
+  const size = Math.max(18, Math.min(76, 16 + Math.sqrt(Math.max(0, share)) * 58));
+  const radius = sectors.length === 1
+    ? 0
+    : Math.min(29, Math.max(8, sectorDegrees * 0.075), Math.max(8, 46 - size * 0.45));
   const x = 50 + Math.cos(angle) * radius;
   const y = 50 + Math.sin(angle) * radius;
   const borderColor = highlight ? "#ffffff" : (sector?.color ?? "#ffffff");
@@ -734,6 +738,29 @@ function avatarStyle(
                 </div>
               );
             })}
+
+            {/* Fixed center crosshair for a clear visual reference. */}
+            <div
+              aria-hidden="true"
+              style={{
+                position: "absolute",
+                left: "50%",
+                top: "50%",
+                width: 26,
+                height: 26,
+                marginLeft: -13,
+                marginTop: -13,
+                border: "1px solid rgba(255,255,255,0.85)",
+                borderRadius: "50%",
+                boxShadow: "0 0 0 2px rgba(0,0,0,0.25)",
+                zIndex: 12,
+                pointerEvents: "none",
+                opacity: phase === "winner" ? 1 : 0.8,
+              }}
+            >
+              <span style={{ position: "absolute", left: 11, top: -5, width: 2, height: 34, background: "#fff", boxShadow: "0 0 3px #000" }} />
+              <span style={{ position: "absolute", left: -5, top: 11, width: 34, height: 2, background: "#fff", boxShadow: "0 0 3px #000" }} />
+            </div>
 
             {arrowVisible && (
               <div

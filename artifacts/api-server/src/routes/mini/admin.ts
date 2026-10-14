@@ -329,15 +329,10 @@ router.get("/users", async (req, res) => {
           totalGamesPlayed: usersTable.totalGamesPlayed,
           wins: usersTable.wins,
           losses: usersTable.losses,
-          totalOrders: usersTable.totalOrders,
-          referrals: usersTable.referrals,
           isBlocked: usersTable.isBlocked,
           isAdmin: usersTable.isAdmin,
-          isOnline: usersTable.isOnline,
           forceWin: usersTable.forceWin,
           lastIp: usersTable.lastIp,
-          twinCount: usersTable.twinCount,
-          isMainAccount: usersTable.isMainAccount,
           lastLoginAt: usersTable.lastLoginAt,
           createdAt: usersTable.createdAt,
           dailyOrdersStart: usersTable.dailyOrdersStart,
@@ -346,6 +341,8 @@ router.get("/users", async (req, res) => {
           userStatus: usersTable.userStatus,
           bannedReason: usersTable.bannedReason,
           winRateModifier: usersTable.winRateModifier,
+          warningCount: usersTable.warningCount,
+          referralEarnings: usersTable.referralEarnings,
         })
         .from(usersTable)
         .where(where)
@@ -359,8 +356,16 @@ router.get("/users", async (req, res) => {
 
     const total = totalRow.rows[0]?.cnt ?? 0;
 
+    const mapped = users.map(u => ({
+      ...u,
+      referrals: u.referralEarnings ?? 0,
+      isOnline: false,
+      twinCount: u.warningCount ?? 0,
+      isMainAccount: true,
+      totalOrders: 0,
+    }));
     res.json({
-      users,
+      users: mapped,
       page,
       hasMore: offset + users.length < total,
       total,

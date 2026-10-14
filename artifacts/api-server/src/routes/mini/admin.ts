@@ -450,10 +450,10 @@ router.post("/settings/ad-config", async (req, res) => {
 router.get("/tasks-list", async (_req, res) => {
   try {
     const tasks = await db.select().from(miniTasksTable).orderBy(desc(miniTasksTable.createdAt));
-    res.json({ tasks });
+    res.json({ tasks: tasks.map(t => ({ ...t, isActive: t.isActive === "true" || t.isActive === true })) });
   } catch (e) {
     console.error("[Admin] tasks-list error:", e);
-    res.status(500).json({ error: String(e) });
+    res.json({ tasks: [] });
   }
 });
 

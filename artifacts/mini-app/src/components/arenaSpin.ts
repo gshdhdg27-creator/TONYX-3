@@ -40,8 +40,16 @@ const MARGIN = 10;
 const BALL_R = 4;
 
 function sectorTarget(s: Sector): { x: number; y: number } {
+  // Same placement as avatar centroid — land ball on winner territory
+  const span = s.end - s.start;
+  let r: number;
+  if (span >= 180) r = 22;
+  else if (span >= 120) r = 26;
+  else if (span >= 90) r = 29;
+  else if (span >= 60) r = 32;
+  else if (span >= 30) r = 35;
+  else r = 38;
   const rad = ((s.mid - 90) * Math.PI) / 180;
-  const r = s.share >= 0.45 ? 28 : s.share >= 0.25 ? 32 : 36;
   return {
     x: 50 + Math.cos(rad) * r,
     y: 50 + Math.sin(rad) * r,

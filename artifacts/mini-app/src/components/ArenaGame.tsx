@@ -68,16 +68,39 @@ function colorFor(i: number) {
   return COLORS[i % COLORS.length];
 }
 
+function hashId(id: string) {
+  let h = 2166136261;
+  for (let i = 0; i < id.length; i++) {
+    h ^= id.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
 function buildSectors(players: ArenaPlayer[]) {
   const total = players.reduce((s, p) => s + p.stake, 0) || 1;
-  let acc = 0;
-  return players.map((p, i) => {
+  const slots = [
+    [24, 26], [76, 24], [22, 74], [78, 72],
+    [50, 18], [16, 48], [84, 50], [50, 84],
+    [36, 48], [64, 56],
+  ];
+  const ordered = [...players].sort((a, b) => hashId(a.telegramId) - hashId(b.telegramId));
+  return ordered.map((p, i) => {
     const share = p.stake / total;
-    const start = acc * 360;
-    acc += share;
-    const end = acc * 360;
-    const mid = (start + end) / 2;
-    return { ...p, share, start, end, mid, color: colorFor(i), index: i };
+    const [cx, cy] = slots[i % slots.length];
+    const size = 22 + Math.sqrt(share) * 46;
+    return {
+      ...p,
+      share,
+      start: 0,
+      end: 0,
+      mid: 0,
+      color: colorFor(i),
+      index: i,
+      cx,
+      cy,
+      size,
+    };
   });
 }
 
@@ -126,6 +149,8 @@ export default function ArenaGame({
   const [toast, setToast] = useState<{ msg: string; type: "ok" | "err" } | null>(null);
   const [puckPos, setPuckPos] = useState({ x: 50, y: 50 });
   const [puckVisible, setPuckVisible] = useState(false);
+  const [boardZoom, setBoardZoom] = useState({ scale: 1, x: 50, y: 50 });
+  const puckRef = useRef<HTMLDivElement | null>(null);
   const [arrowAngle, setArrowAngle] = useState(0);
   const [arrowVisible, setArrowVisible] = useState(false);
   const [winnerData, setWinnerData] = useState<{
@@ -195,6 +220,16 @@ export default function ArenaGame({
     setWinnerData(null);
     setFreezeSectors(null);
     setFreezePool(0);
+    setBoardZoom({ scale: 1, x: 50, y: 50 });
+  }
+
+  function paintPuck(x: number, y: number) {
+    setPuckPos({ x, y });
+    const el = puckRef.current;
+    if (el) {
+      el.style.left = `${x}%`;
+      el.style.top = `${y}%`;
+    }
   }
 
   /**
@@ -205,98 +240,92 @@ export default function ArenaGame({
    */
 
 function runSpinAnimation(data: ArenaState) {
-  if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    const secs = buildSectors(data.players);
+    const winner = secs.find((s) => s.telegramId === data.winnerId) ?? secs[0];
+    if (!winner) return;
+    setFreezeSectors(secs);
+    setFreezePool(data.totalPool);
+    setPhase("spin");
+    setPuckVisible(true);
+    setArrowVisible(false);
+    setWinnerData(null);
+    setBoardZoom({ scale: 1, x: 50, y: 50 });
 
-  const secs = buildSectors(data.players);
-  const winner = secs.find(s => s.telegramId === data.winnerId) ?? secs[0];
-  if (!winner) return;
+    const zoneR = Math.max(8, winner.size * 0.28);
+    const jitterA = Math.random() * Math.PI * 2;
+    const jitterD = Math.random() * zoneR * 0.65;
+    const targetX = Math.max(8, Math.min(92, winner.cx + Math.cos(jitterA) * jitterD));
+    const targetY = Math.max(8, Math.min(92, winner.cy + Math.sin(jitterA) * jitterD));
 
-  setFreezeSectors(secs);
-  setFreezePool(data.totalPool);
-  setPhase("spin");
-  setPuckVisible(true);
-  setArrowVisible(false);
-  setWinnerData(null);
+    let x = 50;
+    let y = 50;
+    const angle = Math.random() * Math.PI * 2;
+    let vx = Math.cos(angle) * 2.6;
+    let vy = Math.sin(angle) * 2.6;
+    const pad = 7;
+    const startTime = performance.now();
+    const duration = 6200;
+    paintPuck(50, 50);
 
-  let x = 50;
-  let y = 50;
+    const tickFn = (now: number) => {
+      const elapsed = now - startTime;
+      const progress = Math.min(1, elapsed / duration);
+      const speedScale = Math.max(0.04, 1 - progress * progress * 0.9);
+      const length = Math.hypot(vx, vy) || 1;
+      const speed = 2.6 * speedScale;
+      vx = (vx / length) * speed;
+      vy = (vy / length) * speed;
 
-  const angle = Math.random() * Math.PI * 2;
-  let vx = Math.cos(angle) * 2.4;
-  let vy = Math.sin(angle) * 2.4;
+      if (progress > 0.72) {
+        const pull = (progress - 0.72) / 0.28;
+        vx += (targetX - x) * 0.045 * pull;
+        vy += (targetY - y) * 0.045 * pull;
+      }
 
-  const pad = 6;
-  const start = performance.now();
-  const duration = 6500;
+      x += vx;
+      y += vy;
+      if (x <= pad) { x = pad; vx = Math.abs(vx); }
+      if (x >= 100 - pad) { x = 100 - pad; vx = -Math.abs(vx); }
+      if (y <= pad) { y = pad; vy = Math.abs(vy); }
+      if (y >= 100 - pad) { y = 100 - pad; vy = -Math.abs(vy); }
 
-  const tickFn = (now: number) => {
-    const progress = Math.min(1, (now - start) / duration);
+      if (progress > 0.9) {
+        const k = (progress - 0.9) / 0.1;
+        x += (targetX - x) * k * 0.35;
+        y += (targetY - y) * k * 0.35;
+        const zoom = 1 + k * 0.55;
+        setBoardZoom({ scale: zoom, x: targetX, y: targetY });
+      }
 
-    // Плавное торможение к концу анимации.
-    const speedScale = Math.max(0.025, 1 - progress * progress * 0.975);
-
-    const length = Math.hypot(vx, vy) || 1;
-    const speed = 2.4 * speedScale;
-
-    vx = (vx / length) * speed;
-    vy = (vy / length) * speed;
-
-    x += vx;
-    y += vy;
-
-    if (x <= pad) {
-      x = pad;
-      vx = Math.abs(vx);
-    }
-    if (x >= 100 - pad) {
-      x = 100 - pad;
-      vx = -Math.abs(vx);
-    }
-    if (y <= pad) {
-      y = pad;
-      vy = Math.abs(vy);
-    }
-    if (y >= 100 - pad) {
-      y = 100 - pad;
-      vy = -Math.abs(vy);
-    }
-
-    setPuckPos({ x, y });
-
-    if (progress < 1) {
-      rafRef.current = requestAnimationFrame(tickFn);
-      return;
-    }
-
-    rafRef.current = null;
-    setPhase("winner");
-
-    const payout = payoutOf(winner.stake, data.totalPool);
-    const mult = winner.stake > 0
-      ? Math.round((payout / winner.stake) * 100) / 100
-      : 0;
-
-    setWinnerData({
-      name: data.winnerUsername || winner.username || winner.telegramId,
-      payout,
-      mult,
-      photo: winner.photoUrl,
-    });
-
-    if (!replayingRef.current) {
-      setTimeout(() => {
-        setPhase("lobby");
-        resetAnim();
-        fetchState();
-        refreshBalance();
-      }, 3200);
-    }
-  };
-
-  setPuckPos({ x: 50, y: 50 });
-  rafRef.current = requestAnimationFrame(tickFn);
-}
-
+      paintPuck(x, y);
+      if (progress < 1) {
+        rafRef.current = requestAnimationFrame(tickFn);
+        return;
+      }
+      paintPuck(targetX, targetY);
+      setBoardZoom({ scale: 1.55, x: targetX, y: targetY });
+      rafRef.current = null;
+      setPhase("winner");
+      const payout = payoutOf(winner.stake, data.totalPool);
+      const mult = winner.stake > 0 ? Math.round((payout / winner.stake) * 100) / 100 : 0;
+      setWinnerData({
+        name: data.winnerUsername || winner.username || winner.telegramId,
+        payout,
+        mult,
+        photo: winner.photoUrl,
+      });
+      if (!replayingRef.current) {
+        setTimeout(() => {
+          setPhase("lobby");
+          resetAnim();
+          fetchState();
+          refreshBalance();
+        }, 3200);
+      }
+    };
+    rafRef.current = requestAnimationFrame(tickFn);
+  }
 
   const fetchState = useCallback(async () => {
     try {
@@ -366,17 +395,6 @@ function runSpinAnimation(data: ArenaState) {
   );
   const sectors = freezeSectors ?? liveSectors;
   const pool = freezeSectors ? freezePool : (arena?.totalPool ?? 0);
-
-  const conic = useMemo(() => {
-    if (!sectors.length) return "conic-gradient(from -90deg, #1a1a22 0deg 360deg)";
-    let acc = 0;
-    const parts = sectors.map((s) => {
-      const a = acc;
-      acc += s.share * 360;
-      return `${s.color} ${a}deg ${acc}deg`;
-    });
-    return `conic-gradient(from -90deg, ${parts.join(", ")})`;
-  }, [sectors]);
 
   async function placeBet(amount: number) {
     if (!telegramId) {
@@ -499,49 +517,33 @@ function runSpinAnimation(data: ArenaState) {
     !busy;
 
 
-function avatarStyle(
-  midDeg: number,
-  share: number,
-  highlight = false,
-): CSSProperties {
-  const angle = ((midDeg - 90) * Math.PI) / 180;
-
-  // Чем больше ставка, тем дальше аватар от центра,
-  // чтобы он оставался внутри своей цветной зоны.
-  const radius = sectors.length === 1
-    ? 0
-    : 0.12 + share * 0.25;
-
-  const size = Math.max(28, Math.min(82, 24 + share * 180));
-  const x = 50 + Math.cos(angle) * radius * 100;
-  const y = 50 + Math.sin(angle) * radius * 100;
-
-  return {
-    position: "absolute",
-    left: `${x}%`,
-    top: `${y}%`,
-    width: size,
-    height: size,
-    marginLeft: -size / 2,
-    marginTop: -size / 2,
-    borderRadius: "50%",
-    overflow: "hidden",
-    border: `3px solid ${highlight ? "#ffffff" : colorFor(sectors.findIndex(s => s.mid === midDeg))}`,
-    boxShadow: highlight
-      ? "0 0 0 3px rgba(74,222,128,0.65), 0 8px 24px rgba(0,0,0,0.5)"
-      : "0 6px 18px rgba(0,0,0,0.45)",
-    background: "#111",
-    zIndex: 6,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    fontSize: size * 0.28,
-    fontWeight: 800,
-    color: "#e2e8f0",
-    transition:
-      "left 900ms cubic-bezier(0.22,1,0.36,1), top 900ms cubic-bezier(0.22,1,0.36,1), width 900ms ease, height 900ms ease",
-  };
-}
+function avatarStyle(s: { cx: number; cy: number; size: number; color: string }, highlight = false): CSSProperties {
+    const size = Math.max(30, Math.min(72, s.size * 0.62));
+    return {
+      position: "absolute",
+      left: `${s.cx}%`,
+      top: `${s.cy}%`,
+      width: size,
+      height: size,
+      marginLeft: -size / 2,
+      marginTop: -size / 2,
+      borderRadius: "50%",
+      overflow: "hidden",
+      border: `3px solid ${highlight ? "#ffffff" : s.color}`,
+      boxShadow: highlight
+        ? "0 0 0 3px rgba(74,222,128,0.65), 0 8px 24px rgba(0,0,0,0.5)"
+        : "0 6px 18px rgba(0,0,0,0.45)",
+      background: "#111",
+      zIndex: 6,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      fontSize: size * 0.28,
+      fontWeight: 800,
+      color: "#e2e8f0",
+      transition: "left 700ms cubic-bezier(0.22,1,0.36,1), top 700ms cubic-bezier(0.22,1,0.36,1), width 700ms ease, height 700ms ease",
+    };
+  }
 
 
   const fmtCountdown = (s: number) => {
@@ -705,9 +707,29 @@ function avatarStyle(
               style={{
                 position: "absolute",
                 inset: 0,
-                background: conic,
+                transform: `scale(${boardZoom.scale})`,
+                transformOrigin: `${boardZoom.x}% ${boardZoom.y}%`,
+                transition: "transform 700ms ease",
               }}
-            />
+            >
+            {sectors.map((s) => (
+              <div
+                key={`zone-${s.telegramId}`}
+                style={{
+                  position: "absolute",
+                  left: `${s.cx}%`,
+                  top: `${s.cy}%`,
+                  width: s.size * 1.7,
+                  height: s.size * 1.35,
+                  marginLeft: -(s.size * 1.7) / 2,
+                  marginTop: -(s.size * 1.35) / 2,
+                  borderRadius: 28,
+                  background: s.color,
+                  opacity: 0.92,
+                  boxShadow: "inset 0 0 0 2px rgba(255,255,255,0.12)",
+                }}
+              />
+            ))}
 
             {sectors.map((s) => {
               const isWin =
@@ -720,7 +742,7 @@ function avatarStyle(
               return (
                 <div
                   key={s.telegramId}
-                  style={avatarStyle(s.mid, s.share, !!isWin)}
+                  style={avatarStyle(s, !!isWin)}
                 >
                   {photo ? (
                     <img
@@ -770,46 +792,24 @@ function avatarStyle(
 
             {puckVisible && (
               <div
+                ref={puckRef}
                 style={{
                   position: "absolute",
                   left: `${puckPos.x}%`,
                   top: `${puckPos.y}%`,
-                  width: 34,
-                  height: 34,
-                  marginLeft: -17,
-                  marginTop: -17,
+                  width: 28,
+                  height: 28,
+                  marginLeft: -14,
+                  marginTop: -14,
                   borderRadius: "50%",
-                  background:
-                    "radial-gradient(circle at 35% 30%, #fff 0%, #e8e8e8 45%, #c0c0c0 100%)",
-                  boxShadow:
-                    "0 2px 10px rgba(0,0,0,0.5), 0 0 0 2px rgba(255,255,255,0.35), inset 0 -2px 4px rgba(0,0,0,0.15)",
+                  background: "radial-gradient(circle at 32% 30%, #ffffff 0%, #f4f4f5 42%, #d4d4d8 100%)",
+                  boxShadow: "0 3px 12px rgba(0,0,0,0.55), 0 0 0 2px rgba(255,255,255,0.45)",
                   zIndex: 20,
                   pointerEvents: "none",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
                 }}
-              >
-                <div
-                  style={{
-                    position: "absolute",
-                    width: 14,
-                    height: 2,
-                    background: "rgba(0,0,0,0.25)",
-                    borderRadius: 1,
-                  }}
-                />
-                <div
-                  style={{
-                    position: "absolute",
-                    width: 2,
-                    height: 14,
-                    background: "rgba(0,0,0,0.25)",
-                    borderRadius: 1,
-                  }}
-                />
-              </div>
+              />
             )}
+            </div>
 
             {!sectors.length && (
               <div

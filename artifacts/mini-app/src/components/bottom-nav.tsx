@@ -56,14 +56,8 @@ const MODE_TABS: Record<MenuMode, TabDef[]> = {
   ],
 };
 
+/** Always start in yellow Bosses mode on every app entry */
 function readMenuMode(): MenuMode {
-  try {
-    const raw = localStorage.getItem(MODE_KEY);
-    if (raw === "1") return 1;
-    if (raw === "2") return 2;
-    if (raw === "3") return 3;
-  } catch { /* ignore */ }
-  // Always default to yellow Bosses mode when entering
   return 3;
 }
 function writeMenuMode(mode: MenuMode) {
@@ -85,30 +79,35 @@ export default function BottomNav() {
   const { telegramId } = useTelegram();
   const profileTaps = useRef(0);
   const profileTapAt = useRef(0);
-  const [mode, setMode] = useState<MenuMode>(readMenuMode);
-  const [rotation, setRotation] = useState(() => rotationFor(readMenuMode()));
+  // Force yellow Bosses mode every time the app opens
+  const [mode, setMode] = useState<MenuMode>(3);
+  const [rotation, setRotation] = useState(() => rotationFor(3));
   const [busy, setBusy] = useState(false);
   const [flood, setFlood] = useState<{ color: string; phase: "in" | "out" } | null>(null);
-  const [activeSection, setActiveSection] = useState<Section>(() => {
-    try {
-      const s = sessionStorage.getItem("tonyx-open") as Section | null;
-      if (s && ["market","nft","tasks","cases","pvp","solo","bosses","cards","collection"].includes(s)) return s;
-    } catch { /* ignore */ }
-    return FIRST[readMenuMode()];
-  });
+  const [activeSection, setActiveSection] = useState<Section>("bosses");
   const buttonRef = useRef<HTMLButtonElement>(null);
   const [origin, setOrigin] = useState({ x: 36, y: 40 });
   const timer = useRef<number | null>(null);
+  const didInit = useRef(false);
 
   useEffect(() => () => {
     if (timer.current) window.clearTimeout(timer.current);
   }, []);
 
-  // On first mount always land on bosses if we are in yellow mode
+  // On every mount: force Bosses + yellow mode and clear stale session state
   useEffect(() => {
-    if (mode === 3 && activeSection === "bosses") {
-      openSection("bosses");
-      if (location !== "/") setLocation("/");
+    if (didInit.current) return;
+    didInit.current = true;
+    try {
+      localStorage.setItem(MODE_KEY, "3");
+      sessionStorage.setItem("tonyx-open", "bosses");
+    } catch { /* ignore */ }
+    setMode(3);
+    setRotation(rotationFor(3));
+    setActiveSection("bosses");
+    openSection("bosses");
+    if (location !== "/" && location !== "/profile" && !location.startsWith("/profile/")) {
+      setLocation("/");
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -303,7 +302,6 @@ export default function BottomNav() {
               return;
             }
           }
-          setActiveSection("bosses");
           setLocation("/profile");
         }}
         style={{

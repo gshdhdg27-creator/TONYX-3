@@ -104,10 +104,17 @@ export default function ArenaGame({
   const { data: profile } = useGetUserProfile(telegramId ?? "", {
     query: { enabled: !!telegramId, refetchInterval: 5000 },
   } as Parameters<typeof useGetUserProfile>[1]);
-  const balance = Number(
+  const balanceTon = Number(
     (profile as { ton?: string | number } | undefined)?.ton ?? tonBalance ?? 0,
   );
-
+  const balanceTonyx = Number(
+    (profile as { tonyxCoins?: string | number; tonyx?: string | number } | undefined)
+      ?.tonyxCoins ??
+      (profile as { tonyx?: string | number } | undefined)?.tonyx ??
+      0,
+  );
+  const [betCurrency, setBetCurrency] = useState<"ton" | "tonyx">("ton");
+  const balance = betCurrency === "ton" ? balanceTon : balanceTonyx;
   const refreshBalance = useCallback(() => {
     qc.refetchQueries({ queryKey: getGetUserProfileQueryKey(telegramId ?? "") });
     onBalanceChange?.();
@@ -425,11 +432,11 @@ export default function ArenaGame({
       }
     }
     if (!amount || amount < MIN_STAKE) {
-      flash(`Мин. ${MIN_STAKE} TON`, "err");
+      flash(`Мин. ${MIN_STAKE} ${betCurrency === "ton" ? "TON" : "TONYX"}`, "err");
       return;
     }
     if (amount > balance + 1e-9) {
-      flash("Недостаточно TON", "err");
+      flash(`Недостаточно ${betCurrency === "ton" ? "TON" : "TONYX"}`, "err");
       return;
     }
     setBusy(true);
@@ -437,8 +444,8 @@ export default function ArenaGame({
       const me = arena?.players.find((p) => p.telegramId === telegramId);
       const url = me ? "/api/mini/games/arena/increase" : "/api/mini/games/arena/join";
       const body = me
-        ? { telegramId, additionalStake: amount }
-        : { telegramId, stake: amount };
+        ? { telegramId, additionalStake: amount, currency: betCurrency }
+        : { telegramId, stake: amount, currency: betCurrency };
       const r = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -524,11 +531,12 @@ export default function ArenaGame({
     !(arena?.status === "starting" && countdownLeftMs !== null && countdownLeftMs <= 0) &&
     !busy;
 
-  function avatarStyle(midDeg: number, share: number, highlight = false): CSSProperties {
+   function avatarStyle(midDeg: number, share: number, highlight = false): CSSProperties {
     const rad = ((midDeg - 90) * Math.PI) / 180;
-    // один игрок — в центре, иначе на своей территории
-    const r = sectors.length === 1 ? 0 : 0.30;
-    const size = Math.max(44, Math.min(110, 40 + share * 130));
+    // один игрок — центр; иначе ближе к центру сектора, чтобы не вылезать
+    const r = sectors.length === 1 ? 0 : Math.min(0.28, 0.12 + share * 0.22);
+    // размер зависит от доли — маленькая территория = маленький аватар
+    const size = Math.max(36, Math.min(88, 32 + share * 100));
     const x = 50 + Math.cos(rad) * r * 100;
     const y = 50 + Math.sin(rad) * r * 100;
     return {
@@ -606,6 +614,19 @@ export default function ArenaGame({
         <div style={{ fontSize: 17, fontWeight: 800, letterSpacing: 0.2 }}>
           PvP Arena
         </div>
+        {/* HEADER */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+          padding: "12px 14px 8px",
+          flexShrink: 0,
+        }}
+      >
+        <div style={{ fontSize: 17, fontWeight: 800, letterSpacing: 0.2 }}>
+          PvP Arena
+        </div>
         <button
           type="button"
           onClick={() => {
@@ -623,47 +644,12 @@ export default function ArenaGame({
             fontSize: 12,
             fontWeight: 700,
             cursor: "pointer",
+            marginLeft: 4,
           }}
         >
           📋 История
         </button>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-            background: "rgba(255,255,255,0.06)",
-            border: "1px solid rgba(255,255,255,0.1)",
-            borderRadius: 20,
-            padding: "5px 10px 5px 6px",
-          }}
-        >
-          <div
-            style={{
-              width: 22,
-              height: 22,
-              borderRadius: "50%",
-              background: "linear-gradient(135deg,#0098ea,#00d4ff)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontSize: 11,
-              fontWeight: 900,
-              color: "#fff",
-            }}
-          >
-            ◆
-          </div>
-          <span
-            style={{
-              fontSize: 13,
-              fontWeight: 800,
-              fontVariantNumeric: "tabular-nums",
-            }}
-          >
-            {balance.toFixed(3)}
-          </span>
-        </div>
+      </div>
       </div>
 
       {/* TOTAL + TIMER */}
@@ -934,12 +920,67 @@ export default function ArenaGame({
       {/* КНОПКИ СТАВОК */}
       <div
         style={{
-          padding: "10px 12px 12px",
+          padding: "14px 12px 20px",
           borderTop: "1px solid rgba(255,255,255,0.06)",
           flexShrink: 0,
           background: "#0c0c0e",
         }}
       >
+        <div
+          style={{
+            display: "flex",
+            gap: 6,
+            marginBottom: 10,
+            justifyContent: "center",
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => setBetCurrency("ton")}
+            style={{
+              padding: "6px 16px",
+              borderRadius: 10,
+              border:
+                betCurrency === "ton"
+                  ? "1px solid rgba(56,189,248,0.6)"
+                  : "1px solid rgba(255,255,255,0.1)",
+              background:
+                betCurrency === "ton"
+                  ? "rgba(56,189,248,0.18)"
+                  : "rgba(255,255,255,0.05)",
+              color: betCurrency === "ton" ? "#38bdf8" : "#888",
+              fontSize: 12,
+              fontWeight: 800,
+              cursor: "pointer",
+              fontFamily: "inherit",
+            }}
+          >
+            TON
+          </button>
+          <button
+            type="button"
+            onClick={() => setBetCurrency("tonyx")}
+            style={{
+              padding: "6px 16px",
+              borderRadius: 10,
+              border:
+                betCurrency === "tonyx"
+                  ? "1px solid rgba(168,85,247,0.6)"
+                  : "1px solid rgba(255,255,255,0.1)",
+              background:
+                betCurrency === "tonyx"
+                  ? "rgba(168,85,247,0.18)"
+                  : "rgba(255,255,255,0.05)",
+              color: betCurrency === "tonyx" ? "#c084fc" : "#888",
+              fontSize: 12,
+              fontWeight: 800,
+              cursor: "pointer",
+              fontFamily: "inherit",
+            }}
+          >
+            TONYX
+          </button>
+        </div>
         <div style={{ display: "flex", gap: 7, alignItems: "center" }}>
           <button
             type="button"
@@ -987,6 +1028,7 @@ export default function ArenaGame({
             ↻
           </button>
         </div>
+ 
         {autoOn && (
           <div
             style={{

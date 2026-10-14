@@ -203,76 +203,67 @@ export default function ArenaGame({
    * 2) шарик летит в эту сторону, отскакивает от стен
    * 3) замедляется и останавливается на территории победителя (заранее известен)
    */
+
 function runSpinAnimation(data: ArenaState) {
-  if (rafRef.current) {
-    cancelAnimationFrame(rafRef.current);
-    rafRef.current = null;
-  }
+  if (rafRef.current) cancelAnimationFrame(rafRef.current);
 
-  const players = buildSectors(data.players);
-  const winner = players.find(
-    (p) => p.telegramId === data.winnerId
-  );
-
+  const secs = buildSectors(data.players);
+  const winner = secs.find(s => s.telegramId === data.winnerId) ?? secs[0];
   if (!winner) return;
 
-  setFreezeSectors(players);
+  setFreezeSectors(secs);
   setFreezePool(data.totalPool);
   setPhase("spin");
   setPuckVisible(true);
   setArrowVisible(false);
   setWinnerData(null);
 
-  // Шар всегда появляется в центре.
   let x = 50;
   let y = 50;
 
-  // Случайное направление движения.
   const angle = Math.random() * Math.PI * 2;
-  let speed = 1.05;
+  let vx = Math.cos(angle) * 2.4;
+  let vy = Math.sin(angle) * 2.4;
 
-  let vx = Math.cos(angle) * speed;
-  let vy = Math.sin(angle) * speed;
-
-  const radius = 5;
-  const startTime = performance.now();
-  const duration = 5000;
+  const pad = 6;
+  const start = performance.now();
+  const duration = 6500;
 
   const tickFn = (now: number) => {
-    const elapsed = now - startTime;
-    const progress = Math.min(1, elapsed / duration);
+    const progress = Math.min(1, (now - start) / duration);
 
-    // Постепенное замедление без притягивания к победителю.
-    speed = 1.05 - progress * 0.35;
+    // Плавное торможение к концу анимации.
+    const speedScale = Math.max(0.025, 1 - progress * progress * 0.975);
 
-    const currentSpeed = Math.sqrt(vx * vx + vy * vy) || 1;
-    vx = (vx / currentSpeed) * speed;
-    vy = (vy / currentSpeed) * speed;
+    const length = Math.hypot(vx, vy) || 1;
+    const speed = 2.4 * speedScale;
+
+    vx = (vx / length) * speed;
+    vy = (vy / length) * speed;
 
     x += vx;
     y += vy;
 
-    // Отскок от левой и правой стен.
-    if (x <= radius) {
-      x = radius;
+    if (x <= pad) {
+      x = pad;
       vx = Math.abs(vx);
-    } else if (x >= 100 - radius) {
-      x = 100 - radius;
+    }
+    if (x >= 100 - pad) {
+      x = 100 - pad;
       vx = -Math.abs(vx);
     }
-
-    // Отскок от верхней и нижней стен.
-    if (y <= radius) {
-      y = radius;
+    if (y <= pad) {
+      y = pad;
       vy = Math.abs(vy);
-    } else if (y >= 100 - radius) {
-      y = 100 - radius;
+    }
+    if (y >= 100 - pad) {
+      y = 100 - pad;
       vy = -Math.abs(vy);
     }
 
     setPuckPos({ x, y });
 
-    if (elapsed < duration) {
+    if (progress < 1) {
       rafRef.current = requestAnimationFrame(tickFn);
       return;
     }
@@ -281,16 +272,12 @@ function runSpinAnimation(data: ArenaState) {
     setPhase("winner");
 
     const payout = payoutOf(winner.stake, data.totalPool);
-    const mult =
-      winner.stake > 0
-        ? Math.round((payout / winner.stake) * 100) / 100
-        : 0;
+    const mult = winner.stake > 0
+      ? Math.round((payout / winner.stake) * 100) / 100
+      : 0;
 
     setWinnerData({
-      name:
-        data.winnerUsername ||
-        winner.username ||
-        winner.telegramId,
+      name: data.winnerUsername || winner.username || winner.telegramId,
       payout,
       mult,
       photo: winner.photoUrl,
@@ -306,8 +293,10 @@ function runSpinAnimation(data: ArenaState) {
     }
   };
 
+  setPuckPos({ x: 50, y: 50 });
   rafRef.current = requestAnimationFrame(tickFn);
 }
+
 
   const fetchState = useCallback(async () => {
     try {
@@ -509,38 +498,51 @@ function runSpinAnimation(data: ArenaState) {
     !(arena?.status === "starting" && countdownLeftMs !== null && countdownLeftMs <= 0) &&
     !busy;
 
-   function avatarStyle(midDeg: number, share: number, highlight = false): CSSProperties {
-    const rad = ((midDeg - 90) * Math.PI) / 180;
-    // один игрок — центр; иначе ближе к центру сектора, чтобы не вылезать
-    const r = sectors.length === 1 ? 0 : Math.min(0.28, 0.12 + share * 0.22);
-    // размер зависит от доли — маленькая территория = маленький аватар
-    const size = Math.max(36, Math.min(88, 32 + share * 100));
-    const x = 50 + Math.cos(rad) * r * 100;
-    const y = 50 + Math.sin(rad) * r * 100;
-    return {
-      position: "absolute",
-      left: `${x}%`,
-      top: `${y}%`,
-      width: size,
-      height: size,
-      marginLeft: -size / 2,
-      marginTop: -size / 2,
-      borderRadius: "50%",
-      overflow: "hidden",
-      border: highlight ? "3px solid #fff" : "3px solid rgba(255,255,255,0.9)",
-      boxShadow: highlight
-        ? "0 0 0 3px rgba(74,222,128,0.65), 0 8px 24px rgba(0,0,0,0.5)"
-        : "0 6px 18px rgba(0,0,0,0.45)",
-      background: "#111",
-      zIndex: 6,
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      fontSize: size * 0.28,
-      fontWeight: 800,
-      color: "#e2e8f0",
-    };
-  }
+
+function avatarStyle(
+  midDeg: number,
+  share: number,
+  highlight = false,
+): CSSProperties {
+  const angle = ((midDeg - 90) * Math.PI) / 180;
+
+  // Чем больше ставка, тем дальше аватар от центра,
+  // чтобы он оставался внутри своей цветной зоны.
+  const radius = sectors.length === 1
+    ? 0
+    : 0.12 + share * 0.25;
+
+  const size = Math.max(28, Math.min(82, 24 + share * 180));
+  const x = 50 + Math.cos(angle) * radius * 100;
+  const y = 50 + Math.sin(angle) * radius * 100;
+
+  return {
+    position: "absolute",
+    left: `${x}%`,
+    top: `${y}%`,
+    width: size,
+    height: size,
+    marginLeft: -size / 2,
+    marginTop: -size / 2,
+    borderRadius: "50%",
+    overflow: "hidden",
+    border: `3px solid ${highlight ? "#ffffff" : colorFor(sectors.findIndex(s => s.mid === midDeg))}`,
+    boxShadow: highlight
+      ? "0 0 0 3px rgba(74,222,128,0.65), 0 8px 24px rgba(0,0,0,0.5)"
+      : "0 6px 18px rgba(0,0,0,0.45)",
+    background: "#111",
+    zIndex: 6,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: size * 0.28,
+    fontWeight: 800,
+    color: "#e2e8f0",
+    transition:
+      "left 900ms cubic-bezier(0.22,1,0.36,1), top 900ms cubic-bezier(0.22,1,0.36,1), width 900ms ease, height 900ms ease",
+  };
+}
+
 
   const fmtCountdown = (s: number) => {
     const m = Math.floor(s / 60);

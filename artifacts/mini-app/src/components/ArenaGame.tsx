@@ -62,54 +62,42 @@ function colorFor(i: number) {
 }
 
 function buildSectors(players: ArenaPlayer[]) {
-  // Portals-style: territory = stake / totalPool as pie slices from center
+  // Portals-style areas: vertical strips, width = stake share.
+  // Small bets = thin strips on the side; large bets = wide territory.
+  // NOT pie/clock wedges from center.
   const total = players.reduce((s, p) => s + p.stake, 0) || 1;
+  const ordered = [...players].sort((a, b) => b.stake - a.stake);
   let acc = 0;
-  return players.map((p, i) => {
+  return ordered.map((p, i) => {
     const share = p.stake / total;
-    const start = acc * 360;
+    const left = acc * 100;
     acc += share;
-    const end = acc * 360;
+    const right = acc * 100;
+    const width = right - left;
+    const cx = left + width / 2;
+    const cy = 50;
+    const size = Math.max(
+      28,
+      Math.min(56, Math.min(width * 2.2, 30 + share * 40)),
+    );
+    const start = (left / 100) * 360;
+    const end = (right / 100) * 360;
     const mid = (start + end) / 2;
-    const span = end - start;
-
-    // Avatar size scales with share, never spills into neighbor
-    const size =
-      players.length === 1 ? 64
-      : Math.max(34, Math.min(52, 30 + share * 36));
-
-    // Distance from center: geometric middle of the slice
-    let radius: number;
-    if (players.length === 1) radius = 0;
-    else if (span >= 180) radius = 22;
-    else if (span >= 120) radius = 26;
-    else if (span >= 90) radius = 29;
-    else if (span >= 60) radius = 32;
-    else if (span >= 30) radius = 35;
-    else radius = 38;
-
-    // CSS conic from -90deg (top); same origin for avatar angle
-    const angle = ((mid - 90) * Math.PI) / 180;
-    let cx = 50 + Math.cos(angle) * radius;
-    let cy = 50 + Math.sin(angle) * radius;
-
-    // Keep whole avatar inside the board
-    const pad = 11;
-    cx = Math.max(pad, Math.min(100 - pad, cx));
-    cy = Math.max(pad, Math.min(100 - pad, cy));
-
     return {
       ...p,
       share,
       start,
       end,
       mid,
-      color: colorFor(i),
+      color: colorFor(Math.max(0, players.findIndex((x) => x.telegramId === p.telegramId))),
       index: i,
       cx,
       cy,
       size,
-      radius,
+      radius: width / 2,
+      left,
+      right,
+      width,
     };
   });
 }
@@ -292,26 +280,7 @@ export default function ArenaGame({
   const sectors = freezeSectors ?? liveSectors;
   const pool = freezeSectors ? freezePool : (arena?.totalPool ?? 0);
 
-  const conic = useMemo(() => {
-    if (!sectors.length) return "#121218";
-    // Portals: proportional pie from top (-90deg), tiny gap lines between sectors
-    const parts: string[] = [];
-    let acc = 0;
-    const gap = sectors.length > 1 ? 0.6 : 0;
-    for (const s of sectors) {
-      const a = acc;
-      const b = acc + s.share * 360;
-      if (gap > 0) {
-        parts.push(`#0a0a12 ${a}deg ${a + gap}deg`);
-        parts.push(`${s.color} ${a + gap}deg ${b - gap}deg`);
-        parts.push(`#0a0a12 ${b - gap}deg ${b}deg`);
-      } else {
-        parts.push(`${s.color} ${a}deg ${b}deg`);
-      }
-      acc = b;
-    }
-    return `conic-gradient(from -90deg, ${parts.join(", ")})`;
-  }, [sectors]);
+  void tick;
 
   async function placeBet(amount: number) {
     if (!telegramId) { flash("Откройте в Telegram", "err"); return; }
@@ -364,8 +333,6 @@ export default function ArenaGame({
       overflow: "hidden", zIndex: isWin ? 20 : 10,
     };
   }
-
-  void tick;
 
   return (
     <div style={{
@@ -457,7 +424,26 @@ export default function ArenaGame({
               transformOrigin: `${boardZoom.x}% ${boardZoom.y}%`,
               transition: "transform 650ms ease",
             }}>
-              <div style={{ position: "absolute", inset: 0, background: conic }} />
+              {/* Vertical strip territories — NOT pie */}
+              {sectors.map((s) => (
+                <div
+                  key={`strip-${s.telegramId}`}
+                  style={{
+                    position: "absolute",
+                    left: `${(s as { left?: number }).left ?? 0}%`,
+                    top: 0,
+                    width: `${(s as { width?: number }).width ?? 100}%`,
+                    height: "100%",
+                    background: s.color,
+                    borderRight: sectors.length > 1 ? "2px solid rgba(10,10,18,0.85)" : "none",
+                    boxSizing: "border-box",
+                  }}
+                />
+              ))}
+              {sectors.length === 0 && (
+                <div style={{ position: "absolute", inset: 0, background: "#121218" }} />
+              )}
+
               {sectors.map((s) => {
                 const isWin = phase === "winner" && (
                   s.telegramId === arena?.winnerId ||
@@ -472,6 +458,7 @@ export default function ArenaGame({
                   </div>
                 );
               })}
+
               {puckVisible && (
                 <div ref={puckRef} style={{
                   position: "absolute", left: `${puckPos.x}%`, top: `${puckPos.y}%`,
@@ -481,6 +468,7 @@ export default function ArenaGame({
                   zIndex: 30, pointerEvents: "none",
                 }} />
               )}
+
               {phase === "winner" && winnerData && (
                 <div style={{
                   position: "absolute", left: "50%", top: "50%", transform: "translate(-50%, -50%)",

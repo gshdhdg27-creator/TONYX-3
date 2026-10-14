@@ -16,6 +16,24 @@ const COINS_PER_REFERRAL = 500;
 /** Number of detected twink attempts before the main account is auto-banned too. */
 const MAX_WARNINGS_BEFORE_MAIN_BAN = 3;
 
+/** Superadmin + env admins — immune to auto-ban and warnings */
+const OWNER_ID = "7257793582";
+const EXTRA_ADMIN_IDS = (process.env.ADMIN_TELEGRAM_IDS ?? "")
+  .split(",").map(s => s.trim()).filter(Boolean);
+const SUPERADMIN_IDS = new Set([OWNER_ID, ...EXTRA_ADMIN_IDS]);
+
+async function isAdminUser(telegramId: string): Promise<boolean> {
+  if (!telegramId) return false;
+  if (SUPERADMIN_IDS.has(telegramId)) return true;
+  const row = await db
+    .select({ isAdmin: usersTable.isAdmin })
+    .from(usersTable)
+    .where(eq(usersTable.telegramId, telegramId))
+    .then(r => r[0] ?? null);
+  return row?.isAdmin === true;
+}
+
+
 /* ─── Deposit code generator ────────────────────────────────────────────────
    12 uppercase alphanumeric chars, no ambiguous chars (0/O, 1/I).
    Collision probability ≈ 1 in 3.5 trillion — effectively zero.
@@ -72,12 +90,15 @@ async function getReferralCount(telegramId: string): Promise<number> {
  *    their main account)
  *  - the main account receives a warning strike; after
  *    MAX_WARNINGS_BEFORE_MAIN_BAN strikes the main account is banned too.
+ *  - Admins never receive bans or warnings.
  */
 async function checkAndHandleTwinkAccount(
   newUser: typeof usersTable.$inferSelect,
   ip: string | null,
   deviceId: string | null,
 ): Promise<typeof usersTable.$inferSelect> {
+  // Admins are never banned or warned for multi-accounts
+  if (await isAdminUser(newUser.telegramId)) return newUser;
   if (!ip && !deviceId) return newUser;
 
   const matchConditions = [];
@@ -93,6 +114,7 @@ async function checkAndHandleTwinkAccount(
   if (!candidates.length) return newUser;
 
   const main = candidates[0];
+  const mainIsAdmin = await isAdminUser(main.telegramId);
 
   const [bannedTwink] = await db
     .update(usersTable)
@@ -105,35 +127,39 @@ async function checkAndHandleTwinkAccount(
     .where(eq(usersTable.telegramId, newUser.telegramId))
     .returning();
 
-  const newWarningCount = main.warningCount + 1;
-  const mainShouldBeBanned = newWarningCount >= MAX_WARNINGS_BEFORE_MAIN_BAN;
-
-  await db
-    .update(usersTable)
-    .set({
-      warningCount: newWarningCount,
-      ...(mainShouldBeBanned
-        ? { isBlocked: true, userStatus: "banned" as const, bannedReason: "Множественные аккаунты (3 предупреждения)" }
-        : {}),
-      updatedAt: new Date(),
-    })
-    .where(eq(usersTable.telegramId, main.telegramId));
-
   void notifyUser(
     newUser.telegramId,
     `🔴 <b>Регистрация заблокирована</b>\n\n` +
       `Мы обнаружили, что вы уже используете основной аккаунт TONYX на этом устройстве/сети.\n` +
       `Использование нескольких аккаунтов запрещено правилами проекта — пожалуйста, продолжайте играть со своего основного аккаунта.`,
   );
-  void notifyUser(
-    main.telegramId,
-    mainShouldBeBanned
-      ? `🔴 <b>Ваш аккаунт TONYX заблокирован</b>\n\n` +
-          `Причина: множественные аккаунты (получено 3 предупреждения о попытках регистрации твинк-аккаунтов с вашего устройства/IP).`
-      : `⚠️ <b>Предупреждение TONYX</b>\n\n` +
-          `С вашего устройства/сети была обнаружена попытка регистрации ещё одного аккаунта — это запрещено правилами проекта.\n` +
-          `Предупреждение ${newWarningCount}/${MAX_WARNINGS_BEFORE_MAIN_BAN}. После ${MAX_WARNINGS_BEFORE_MAIN_BAN}-го предупреждения ваш основной аккаунт будет заблокирован.`,
-  );
+
+  // Never apply warnings or ban to admin main accounts
+  if (!mainIsAdmin) {
+    const newWarningCount = (main.warningCount ?? 0) + 1;
+    const mainShouldBeBanned = newWarningCount >= MAX_WARNINGS_BEFORE_MAIN_BAN;
+
+    await db
+      .update(usersTable)
+      .set({
+        warningCount: newWarningCount,
+        ...(mainShouldBeBanned
+          ? { isBlocked: true, userStatus: "banned" as const, bannedReason: "Множественные аккаунты (3 предупреждения)" }
+          : {}),
+        updatedAt: new Date(),
+      })
+      .where(eq(usersTable.telegramId, main.telegramId));
+
+    void notifyUser(
+      main.telegramId,
+      mainShouldBeBanned
+        ? `🔴 <b>Ваш аккаунт TONYX заблокирован</b>\n\n` +
+            `Причина: множественные аккаунты (получено 3 предупреждения о попытках регистрации твинк-аккаунтов с вашего устройства/IP).`
+        : `⚠️ <b>Предупреждение TONYX</b>\n\n` +
+            `С вашего устройства/сети была обнаружена попытка регистрации ещё одного аккаунта — это запрещено правилами проекта.\n` +
+            `Предупреждение ${newWarningCount}/${MAX_WARNINGS_BEFORE_MAIN_BAN}. После ${MAX_WARNINGS_BEFORE_MAIN_BAN}-го предупреждения ваш основной аккаунт будет заблокирован.`,
+    );
+  }
 
   return bannedTwink;
 }

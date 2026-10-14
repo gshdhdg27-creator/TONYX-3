@@ -92,6 +92,24 @@ function easeOutCubic(t: number) {
 function clamp(v: number, a: number, b: number) {
   return Math.max(a, Math.min(b, v));
 }
+
+function seededRandom(seed: number) {
+  let state = seed >>> 0;
+  return () => {
+    state = (state + 0x6D2B79F5) | 0;
+    let t = state;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function reflectPosition(start: number, distance: number, velocity: number, min: number, max: number) {
+  const span = max - min;
+  const raw = start + distance * velocity;
+  const folded = ((raw - min) % (span * 2) + span * 2) % (span * 2);
+  return min + (folded <= span ? folded : span * 2 - folded);
+}
 export default function ArenaGame({
   telegramId,
   tonBalance,
@@ -205,10 +223,10 @@ export default function ArenaGame({
    */
 
 function runSpinAnimation(data: ArenaState) {
-  if (rafRef.current) cancelAnimationFrame(rafRef.current);
+  if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
 
   const secs = buildSectors(data.players);
-  const winner = secs.find(s => s.telegramId === data.winnerId) ?? secs[0];
+  const winner = secs.find((s) => s.telegramId === data.winnerId) ?? secs[0];
   if (!winner) return;
 
   setFreezeSectors(secs);
@@ -218,48 +236,28 @@ function runSpinAnimation(data: ArenaState) {
   setArrowVisible(false);
   setWinnerData(null);
 
-  let x = 50;
-  let y = 50;
+  // Seed by room ID: every client gets the same direction for this round.
+  const random = seededRandom(data.id);
+  const angle = random() * Math.PI * 2;
+  const vx = Math.cos(angle);
+  const vy = Math.sin(angle);
 
-  const angle = Math.random() * Math.PI * 2;
-  let vx = Math.cos(angle) * 2.4;
-  let vy = Math.sin(angle) * 2.4;
-
-  const pad = 6;
-  const start = performance.now();
   const duration = 6500;
+  const pad = 6;
+  const startWallTime = data.finishedAt
+    ? new Date(data.finishedAt).getTime() + 250
+    : Date.now();
+  const startPerfTime = performance.now() - Math.max(0, Date.now() - startWallTime);
 
   const tickFn = (now: number) => {
-    const progress = Math.min(1, (now - start) / duration);
-
-    // Плавное торможение к концу анимации.
-    const speedScale = Math.max(0.025, 1 - progress * progress * 0.975);
-
-    const length = Math.hypot(vx, vy) || 1;
-    const speed = 2.4 * speedScale;
-
-    vx = (vx / length) * speed;
-    vy = (vy / length) * speed;
-
-    x += vx;
-    y += vy;
-
-    if (x <= pad) {
-      x = pad;
-      vx = Math.abs(vx);
-    }
-    if (x >= 100 - pad) {
-      x = 100 - pad;
-      vx = -Math.abs(vx);
-    }
-    if (y <= pad) {
-      y = pad;
-      vy = Math.abs(vy);
-    }
-    if (y >= 100 - pad) {
-      y = 100 - pad;
-      vy = -Math.abs(vy);
-    }
+    const elapsed = Math.max(0, now - startPerfTime);
+    const progress = clamp(elapsed / duration, 0, 1);
+    // Time-based distance + mathematical wall reflection means frame rate
+    // differences do not change the path at the same elapsed time.
+    const easedDistance = 1 - Math.pow(1 - progress, 3);
+    const totalDistance = 520 * easedDistance;
+    const x = reflectPosition(50, totalDistance, vx, pad, 100 - pad);
+    const y = reflectPosition(50, totalDistance, vy, pad, 100 - pad);
 
     setPuckPos({ x, y });
 
@@ -505,16 +503,13 @@ function avatarStyle(
   highlight = false,
 ): CSSProperties {
   const angle = ((midDeg - 90) * Math.PI) / 180;
-
-  // Чем больше ставка, тем дальше аватар от центра,
-  // чтобы он оставался внутри своей цветной зоны.
-  const radius = sectors.length === 1
-    ? 0
-    : 0.12 + share * 0.25;
-
-  const size = Math.max(28, Math.min(82, 24 + share * 180));
-  const x = 50 + Math.cos(angle) * radius * 100;
-  const y = 50 + Math.sin(angle) * radius * 100;
+  const sector = sectors.find((s) => Math.abs(s.mid - midDeg) < 0.001);
+  // Keep each avatar centered on its own sector and scale it with its stake.
+  const radius = sectors.length === 1 ? 0 : 29;
+  const size = Math.max(18, Math.min(82, 18 + share * 125));
+  const x = 50 + Math.cos(angle) * radius;
+  const y = 50 + Math.sin(angle) * radius;
+  const borderColor = highlight ? "#ffffff" : (sector?.color ?? "#ffffff");
 
   return {
     position: "absolute",
@@ -526,7 +521,7 @@ function avatarStyle(
     marginTop: -size / 2,
     borderRadius: "50%",
     overflow: "hidden",
-    border: `3px solid ${highlight ? "#ffffff" : colorFor(sectors.findIndex(s => s.mid === midDeg))}`,
+    border: `3px solid ${borderColor}`,
     boxShadow: highlight
       ? "0 0 0 3px rgba(74,222,128,0.65), 0 8px 24px rgba(0,0,0,0.5)"
       : "0 6px 18px rgba(0,0,0,0.45)",
@@ -539,7 +534,7 @@ function avatarStyle(
     fontWeight: 800,
     color: "#e2e8f0",
     transition:
-      "left 900ms cubic-bezier(0.22,1,0.36,1), top 900ms cubic-bezier(0.22,1,0.36,1), width 900ms ease, height 900ms ease",
+      "left 500ms cubic-bezier(0.22,1,0.36,1), top 500ms cubic-bezier(0.22,1,0.36,1), width 500ms ease, height 500ms ease",
   };
 }
 

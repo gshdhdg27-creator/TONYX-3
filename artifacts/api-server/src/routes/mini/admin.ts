@@ -31,6 +31,7 @@ function extractAdminId(req: import("express").Request, res: import("express").R
   return fallback;
 }
 
+/** Owner + env admins + anyone with isAdmin=true in DB (granted via admin panel) */
 async function checkAdmin(id: string): Promise<boolean> {
   if (!id) return false;
   if (SUPERADMIN_IDS.has(id)) return true;
@@ -53,7 +54,7 @@ router.get("/check", async (req, res) => {
   res.json({ isAdmin, isSuperAdmin: false });
 });
 
-/* GET /admin/user-status — admins always active, auto-clear ban */
+/* Admins (including granted) never see ban screen */
 router.get("/user-status", async (req, res) => {
   const id = normalizeId(req.query.telegramId);
   if (!id) { res.json({ status: "active", bannedReason: null }); return; }
@@ -139,6 +140,88 @@ router.use(async (req, res, next) => {
   next();
 });
 
+/* GET /admin/stats */
+router.get("/stats", async (req, res) => {
+  const adminId = extractAdminId(req, res);
+  const isSuperAdmin = adminId === OWNER_ID;
+  try {
+    const [usersCount, soldRow, activeOrders, settingsRows, adminRows] = await Promise.all([
+      db.execute<{ cnt: number }>(sql`SELECT COUNT(*)::int AS cnt FROM users`),
+      db.execute<{ sold: number; total_ton: number }>(
+        sql`SELECT COALESCE(SUM(amount),0)::int AS sold, COALESCE(SUM(total_ton::float),0) AS total_ton FROM mini_market_orders WHERE status = 'sold'`,
+      ),
+      db.execute<{ cnt: number }>(sql`SELECT COUNT(*)::int AS cnt FROM mini_market_orders WHERE status = 'open'`),
+      db.select().from(systemSettingsTable),
+      db.execute<{ telegram_id: string; username: string | null; is_admin: boolean }>(
+        sql`SELECT telegram_id, username, is_admin FROM users WHERE is_admin = TRUE ORDER BY created_at`,
+      ),
+    ]);
+    const settings: Record<string, string> = {};
+    for (const s of settingsRows) settings[s.key] = s.value;
+    const tonyxSoldFromSettings = parseInt(settings["total_tonyx_sold"] ?? "0") || 0;
+    const totalCoinsSold = Math.max(soldRow.rows[0]?.sold ?? 0, tonyxSoldFromSettings);
+    res.json({
+      totalUsers: usersCount.rows[0]?.cnt ?? 0,
+      totalCoinsSold,
+      totalTonVolume: Number(soldRow.rows[0]?.total_ton ?? 0),
+      activeOrders: activeOrders.rows[0]?.cnt ?? 0,
+      isMarketActive: settings["is_market_active"] === "true",
+      canActivate: totalCoinsSold >= 1_000_000,
+      poolProgress: Math.min(100, (totalCoinsSold / 1_000_000) * 100).toFixed(2),
+      settings,
+      isSuperAdmin,
+      admins: adminRows.rows.map(a => ({ telegramId: a.telegram_id, username: a.username })),
+    });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error("[Admin] GET /stats FAILED:", msg);
+    res.status(500).json({ error: `DB error: ${msg}` });
+  }
+});
+
+/* POST /admin/team/grant — owner grants isAdmin; that user gets ban immunity */
+router.post("/team/grant", async (req, res) => {
+  const adminId = extractAdminId(req, res);
+  const targetId = normalizeId(req.body?.targetId);
+  if (!targetId) { res.status(400).json({ error: "targetId required" }); return; }
+  if (adminId !== OWNER_ID) {
+    res.status(403).json({ error: "Только главный администратор может назначать администраторов" }); return;
+  }
+  if (targetId === OWNER_ID) {
+    res.status(400).json({ error: "Нельзя изменить права главного администратора" }); return;
+  }
+  const target = await db.select().from(usersTable).where(eq(usersTable.telegramId, targetId)).then(r => r[0] ?? null);
+  if (!target) { res.status(404).json({ error: "Пользователь не найден" }); return; }
+  await db.update(usersTable).set({
+    isAdmin: true,
+    userStatus: "active",
+    isBlocked: false,
+    bannedReason: null,
+    warningCount: 0,
+    updatedAt: new Date(),
+  }).where(eq(usersTable.telegramId, targetId));
+  console.log(`[Admin] ${adminId} GRANTED admin to ${targetId}`);
+  res.json({ success: true, message: `✅ Роль администратора выдана @${target.username ?? targetId}` });
+});
+
+/* POST /admin/team/revoke */
+router.post("/team/revoke", async (req, res) => {
+  const adminId = extractAdminId(req, res);
+  const targetId = normalizeId(req.body?.targetId);
+  if (!targetId) { res.status(400).json({ error: "targetId required" }); return; }
+  if (adminId !== OWNER_ID) {
+    res.status(403).json({ error: "Только главный администратор может снимать администраторов" }); return;
+  }
+  if (targetId === OWNER_ID) {
+    res.status(400).json({ error: "Нельзя снять права у главного администратора" }); return;
+  }
+  const target = await db.select().from(usersTable).where(eq(usersTable.telegramId, targetId)).then(r => r[0] ?? null);
+  if (!target) { res.status(404).json({ error: "Пользователь не найден" }); return; }
+  await db.update(usersTable).set({ isAdmin: false, updatedAt: new Date() }).where(eq(usersTable.telegramId, targetId));
+  console.log(`[Admin] ${adminId} REVOKED admin from ${targetId}`);
+  res.json({ success: true, message: `✅ Роль администратора снята с @${target.username ?? targetId}` });
+});
+
 router.post("/users/:id/ban", async (req, res) => {
   const { id } = req.params;
   if (id === OWNER_ID || await checkAdmin(id)) {
@@ -170,7 +253,7 @@ router.post("/users/:id/unban", async (req, res) => {
   }).where(eq(usersTable.telegramId, id));
   void notifyUser(id,
     `✅ <b>Ваш аккаунт TONYX разблокирован</b>\n\n` +
-    `Добро пожаловать обратно! Вы снова можете пользоваться всеми функциями приложения.`
+    `Добро пожаловать обратно!`
   );
   res.json({ success: true, message: `✅ Пользователь ${id} разблокирован` });
 });

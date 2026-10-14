@@ -1,4 +1,4 @@
-/** Portals-style arena: ball bounces off walls, slows down, lands on winner sector */
+/** Portals-style arena: puck bounces off walls, slows, lands on winner strip */
 
 export type Sector = {
   telegramId: string;
@@ -36,24 +36,14 @@ export type SpinCallbacks = {
   onDone?: () => void;
 };
 
-const MARGIN = 10;
+const MARGIN = 8;
 const BALL_R = 4;
 
 function sectorTarget(s: Sector): { x: number; y: number } {
-  // Same placement as avatar centroid — land ball on winner territory
-  const span = s.end - s.start;
-  let r: number;
-  if (span >= 180) r = 22;
-  else if (span >= 120) r = 26;
-  else if (span >= 90) r = 29;
-  else if (span >= 60) r = 32;
-  else if (span >= 30) r = 35;
-  else r = 38;
-  const rad = ((s.mid - 90) * Math.PI) / 180;
-  return {
-    x: 50 + Math.cos(rad) * r,
-    y: 50 + Math.sin(rad) * r,
-  };
+  // Center of winner vertical strip
+  const left = (s.start / 360) * 100;
+  const right = (s.end / 360) * 100;
+  return { x: (left + right) / 2, y: 50 };
 }
 
 export function runPortalsSpin(opts: {
@@ -85,15 +75,14 @@ export function runPortalsSpin(opts: {
   const lo = MARGIN + BALL_R;
   const hi = 100 - MARGIN - BALL_R;
 
+  // Random start, random direction — like Portals puck
   let x = lo + Math.random() * (hi - lo);
   let y = lo + Math.random() * (hi - lo);
-
   const dir = Math.random() * Math.PI * 2;
-  let speed = 95 + Math.random() * 55;
-  let vx = Math.cos(dir) * speed;
-  let vy = Math.sin(dir) * speed;
+  let vx = Math.cos(dir) * (110 + Math.random() * 50);
+  let vy = Math.sin(dir) * (110 + Math.random() * 50);
 
-  const duration = 6200;
+  const duration = 6500;
   const startTime = performance.now();
   let last = startTime;
 
@@ -104,20 +93,20 @@ export function runPortalsSpin(opts: {
     last = now;
 
     const friction =
-      raw < 0.55 ? 0.985 :
-      raw < 0.75 ? 0.96 :
-      raw < 0.9 ? 0.9 :
-      0.82;
+      raw < 0.5 ? 0.988 :
+      raw < 0.7 ? 0.965 :
+      raw < 0.88 ? 0.91 :
+      0.8;
 
-    speed = Math.hypot(vx, vy);
-    if (speed > 0.1) {
+    if (Math.hypot(vx, vy) > 0.15) {
       vx *= Math.pow(friction, dt * 60);
       vy *= Math.pow(friction, dt * 60);
     }
 
-    if (raw > 0.55) {
-      const pull = (raw - 0.55) / 0.45;
-      const k = 18 + pull * 90;
+    // Late phase: pull into winner strip center
+    if (raw > 0.52) {
+      const pull = (raw - 0.52) / 0.48;
+      const k = 22 + pull * 100;
       vx += (target.x - x) * k * dt;
       vy += (target.y - y) * k * dt;
     }
@@ -125,20 +114,20 @@ export function runPortalsSpin(opts: {
     x += vx * dt;
     y += vy * dt;
 
-    if (x < lo) { x = lo; vx = Math.abs(vx) * 0.92; }
-    if (x > hi) { x = hi; vx = -Math.abs(vx) * 0.92; }
-    if (y < lo) { y = lo; vy = Math.abs(vy) * 0.92; }
-    if (y > hi) { y = hi; vy = -Math.abs(vy) * 0.92; }
+    if (x < lo) { x = lo; vx = Math.abs(vx) * 0.9; }
+    if (x > hi) { x = hi; vx = -Math.abs(vx) * 0.9; }
+    if (y < lo) { y = lo; vy = Math.abs(vy) * 0.9; }
+    if (y > hi) { y = hi; vy = -Math.abs(vy) * 0.9; }
 
     cb.paintPuck(x, y);
 
-    if (raw > 0.78) {
-      const k = (raw - 0.78) / 0.22;
+    if (raw > 0.8) {
+      const k = (raw - 0.8) / 0.2;
       const ease = 1 - Math.pow(1 - k, 2);
-      cb.setBoardZoom({ scale: 1 + ease * 0.42, x, y });
+      cb.setBoardZoom({ scale: 1 + ease * 0.38, x, y });
     }
 
-    if (raw < 1 && Math.hypot(vx, vy) > 0.4) {
+    if (raw < 1 && Math.hypot(vx, vy) > 0.35) {
       rafRef.current = requestAnimationFrame(tickFn);
       return;
     }
@@ -146,7 +135,7 @@ export function runPortalsSpin(opts: {
     x = target.x;
     y = target.y;
     cb.paintPuck(x, y);
-    cb.setBoardZoom({ scale: 1.42, x, y });
+    cb.setBoardZoom({ scale: 1.38, x, y });
     rafRef.current = null;
     cb.setPhase("winner");
 

@@ -73,6 +73,7 @@ export function runPortalsSpin(opts: {
 
   const tickFn = (now: number) => {
     const raw = Math.min(1, (now - startTime) / duration);
+    // easeOutQuart — same feel as Portals spinner
     const t = 1 - Math.pow(1 - raw, 4);
 
     const angle = startAngle + (finalAngle - startAngle) * t;

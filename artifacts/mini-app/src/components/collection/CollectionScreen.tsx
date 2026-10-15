@@ -10,13 +10,20 @@ import { haptic, hapticNotify } from "@/lib/telegram";
 const TG_PHOTOS =
   "https://raw.githubusercontent.com/ssamy2/TG_Photos/main/webp/by_name/";
 
-/** Prefer admin TG gift photos; local /nft as fallback */
+/** Prefer admin TG gift photos; local /nft as fallback.
+ *  Some collection ids map to a different TG_Photos short name. */
+const PHOTO_ALIAS: Record<string, string> = {
+  telegram_premium: "telegram_pin",
+};
+
 function nftFallbacks(id: string, imageUrl?: string | null): string[] {
   const list: string[] = [];
   if (imageUrl && imageUrl.startsWith("http") && !imageUrl.includes("jsdelivr")) {
     list.push(imageUrl);
   }
-  list.push(`${TG_PHOTOS}${id}.webp`);
+  const short = PHOTO_ALIAS[id] ?? id;
+  list.push(`${TG_PHOTOS}${short}.webp`);
+  if (short !== id) list.push(`${TG_PHOTOS}${id}.webp`);
   list.push(`/nft/${id}.jpg`);
   return list;
 }
@@ -26,7 +33,7 @@ const DESC: Record<string, string> = {
   liberty_figure: "Факел свободы. Классический коллекционный подарок.",
   bday_candle: "Праздничный торт. Собери пазл и забери NFT.",
   moon_pendant: "Кулон луны и звезды. Стильный редкий дроп.",
-  telegram_premium: "Символ Premium. Ценный коллекционный NFT.",
+  telegram_premium: "Официальный Telegram Pin. Коллекционный подарок.",
   snoop_cigar: "Легендарная сигара. Культовый Telegram Gift.",
   royal_dogg: "Королевский пёс TONYX. Эксклюзив проекта.",
   electric_skull: "Электрический череп. Эпический дроп.",
@@ -58,7 +65,8 @@ function saveSeen(map: SeenMap) {
 }
 
 function useNftSrc(id: string, imageUrl?: string | null) {
-  const [src, setSrc] = useState(() => `${TG_PHOTOS}${id}.webp`);
+  const short = PHOTO_ALIAS[id] ?? id;
+  const [src, setSrc] = useState(() => `${TG_PHOTOS}${short}.webp`);
   useEffect(() => {
     const list = nftFallbacks(id, imageUrl);
     let cancelled = false;
@@ -149,7 +157,6 @@ function PuzzleBoard({
                 transition: "filter 0.45s ease, opacity 0.45s ease",
               }}
             />
-            {/* locked dim overlay — no numbers */}
             {!lit && (
               <div
                 style={{

@@ -79,16 +79,46 @@ function squarePoint(deg: number, pad = 1.5): [number, number] {
   return [CX + t * dx, CY + t * dy];
 }
 
-function squareSectorPoints(startDeg: number, endDeg: number, steps = 64): string {
-  const overlap = 0.35;
-  const a0 = startDeg - overlap;
-  const a1 = endDeg + overlap;
-  const pts: [number, number][] = [[CX, CY]];
-  for (let i = 0; i <= steps; i++) {
-    const a = a0 + ((a1 - a0) * i) / steps;
-    pts.push(squarePoint(a, 2));
+type Point = [number, number];
+
+function clipPolygon(poly: Point[], a: number, b: number, c: number): Point[] {
+  if (!poly.length) return [];
+  const out: Point[] = [];
+  for (let i = 0; i < poly.length; i++) {
+    const cur = poly[i];
+    const prev = poly[(i + poly.length - 1) % poly.length];
+    const curIn = a * cur[0] + b * cur[1] <= c + 1e-7;
+    const prevIn = a * prev[0] + b * prev[1] <= c + 1e-7;
+    if (curIn !== prevIn) {
+      const dx = cur[0] - prev[0];
+      const dy = cur[1] - prev[1];
+      const den = a * dx + b * dy;
+      if (Math.abs(den) > 1e-9) {
+        const t = (c - a * prev[0] - b * prev[1]) / den;
+        out.push([prev[0] + t * dx, prev[1] + t * dy]);
+      }
+    }
+    if (curIn) out.push(cur);
   }
-  return pts.map(([x, y]) => `${x.toFixed(2)},${y.toFixed(2)}`).join(" ");
+  return out;
+}
+
+function polygonCenter(poly: Point[]): Point {
+  if (!poly.length) return [CX, CY];
+  return [
+    poly.reduce((sum, p) => sum + p[0], 0) / poly.length,
+    poly.reduce((sum, p) => sum + p[1], 0) / poly.length,
+  ];
+}
+
+function polygonContains(poly: Point[], x: number, y: number) {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, yi] = poly[i];
+    const [xj, yj] = poly[j];
+    if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
 }
 
 function createSeededRandom(seedText: string) {
@@ -107,34 +137,57 @@ function createSeededRandom(seedText: string) {
   };
 }
 
-function randomInSector(startDeg: number, endDeg: number, random: () => number): { x: number; y: number } {
-  const span = Math.max(0.5, endDeg - startDeg);
-  const a = startDeg + random() * span;
-  const t = 0.35 + random() * 0.43;
-  const [ex, ey] = squarePoint(a, 0);
-  return { x: CX + (ex - CX) * t, y: CY + (ey - CY) * t };
+function randomInZone(zone: ReturnType<typeof buildSectors>[number], random: () => number) {
+  const poly = zone.polygon;
+  if (!poly?.length) return { x: zone.ax, y: zone.ay };
+  const xs = poly.map((p) => p[0]);
+  const ys = poly.map((p) => p[1]);
+  const minX = Math.min(...xs), maxX = Math.max(...xs);
+  const minY = Math.min(...ys), maxY = Math.max(...ys);
+  for (let i = 0; i < 1200; i++) {
+    const x = minX + random() * (maxX - minX);
+    const y = minY + random() * (maxY - minY);
+    if (polygonContains(poly, x, y)) return { x, y };
+  }
+  return { x: zone.ax, y: zone.ay };
 }
 
 function buildSectors(players: ArenaPlayer[], roundId = 0) {
   const total = players.reduce((s, p) => s + p.stake, 0) || 1;
-  // Rotate the whole layout per round: all clients get the same non-fixed arrangement.
-  const rotation = createSeededRandom(`zones:${roundId}`)() * 360;
-  let acc = 0;
-  const n = players.length;
+  const sites = players.map((p, i) => {
+    const random = createSeededRandom(`zone:${roundId}:${p.telegramId}`);
+    return {
+      x: 22 + random() * (SQ - 44),
+      y: 22 + random() * (SQ - 44),
+      // Power-diagram weights give larger bets a tendency toward larger areas.
+      weight: (p.stake / total) * 1800,
+      random: createSeededRandom(`zone-jitter:${roundId}:${p.telegramId}`),
+      index: i,
+    };
+  });
   return players.map((p, i) => {
+    const site = sites[i];
+    let polygon: Point[] = [[0, 0], [SQ, 0], [SQ, SQ], [0, SQ]];
+    for (let j = 0; j < sites.length && polygon.length; j++) {
+      if (j === i) continue;
+      const other = sites[j];
+      // Cell i contains points closer to its site after stake-based power weighting.
+      const a = 2 * (other.x - site.x);
+      const b = 2 * (other.y - site.y);
+      const limit = other.x * other.x + other.y * other.y -
+        site.x * site.x - site.y * site.y + site.weight - other.weight;
+      polygon = clipPolygon(polygon, a, b, limit);
+    }
+    if (!polygon.length) polygon = [[site.x, site.y]];
+    const [ax, ay] = polygonCenter(polygon);
     const share = p.stake / total;
-    const startDeg = rotation + acc * 360;
-    acc += share;
-    const endDeg = rotation + (i === n - 1 ? 1 : acc) * 360;
-    const midDeg = (startDeg + endDeg) / 2;
-    const [edgeX, edgeY] = squarePoint(midDeg, 0);
-    const ax = CX + (edgeX - CX) * 0.58;
-    const ay = CY + (edgeY - CY) * 0.58;
+    const startDeg = 0;
+    const endDeg = 360;
     const size = Math.max(30, Math.min(48, 28 + share * 36));
     return {
-      ...p, share, startDeg, endDeg, midDeg,
-      color: colorFor(i), index: i, ax, ay, size,
-      points: squareSectorPoints(startDeg, endDeg),
+      ...p, share, startDeg, endDeg, midDeg: 0,
+      color: colorFor(i), index: i, ax, ay, size, polygon,
+      points: polygon.map(([x, y]) => `${x.toFixed(2)},${y.toFixed(2)}`).join(" "),
     };
   });
 }
@@ -248,7 +301,7 @@ export default function ArenaGame({
     setArrowOn(true);
 
     const random = createSeededRandom(`${data.id}:${data.winnerId ?? winner.telegramId}`);
-    const target = randomInSector(winner.startDeg, winner.endDeg, random);
+    const target = randomInZone(winner, random);
     const startAng = random() * Math.PI * 2;
     const startR = 8 + random() * 18;
     const sx = CX + Math.cos(startAng) * startR;
@@ -267,9 +320,40 @@ export default function ArenaGame({
     const step = (now: number) => {
       if (stopped) return;
       const elapsed = now - startTime;
-      const dt = Math.min(0.032, (now - last) / 1000);
+      // Hard deadline: stop the physics before another movement frame can run.
+      if (elapsed >= TOTAL_MS) {
+        stopped = true;
+        const from = { ...posRef.current };
+        const settleStart = now;
+        const settleMs = 520;
+        const settle = (time: number) => {
+          const t = Math.min(1, Math.max(0, (time - settleStart) / settleMs));
+          const ease = t * t * (3 - 2 * t);
+          placeBall(from.x + (target.x - from.x) * ease, from.y + (target.y - from.y) * ease);
+          velRef.current = { vx: 0, vy: 0 };
+          if (t < 1) { rafRef.current = requestAnimationFrame(settle); return; }
+          placeBall(target.x, target.y);
+          setArrowOn(false);
+          setBoardZoom(1.22);
+          setPhase("winner");
+          const payout = payoutOf(winner.stake, data.totalPool);
+          const mult = winner.stake > 0 ? Math.round((payout / winner.stake) * 100) / 100 : 0;
+          setWinnerData({ name: data.winnerUsername || winner.username || winner.telegramId, payout, mult, photo: winner.photoUrl });
+          rafRef.current = null;
+          setTimeout(() => {
+            setPhase("lobby");
+            resetAnim();
+            fetchState();
+            refreshBalance();
+            if (autoPlayRef.current && autoStakeRef.current > 0) setTimeout(() => placeBet(autoStakeRef.current), 700);
+          }, 3200);
+        };
+        rafRef.current = requestAnimationFrame(settle);
+        return;
+      }
+      const dt = Math.min(0.032, Math.max(0.001, (now - last) / 1000));
       last = now;
-      const raw = Math.min(1, elapsed / TOTAL_MS);
+      const raw = elapsed / TOTAL_MS;
       const pos = posRef.current;
       let { vx, vy } = velRef.current;
 
@@ -471,12 +555,8 @@ export default function ArenaGame({
             <svg width={SQ} height={SQ} style={{ display: "block" }}>
               <rect x={0} y={0} width={SQ} height={SQ} fill={sectors[0]?.color ?? "#111827"} />
               {sectors.map((s) => (
-                <polygon key={s.telegramId} points={s.points} fill={s.color} />
+                <polygon key={s.telegramId} points={s.points} fill={s.color} stroke="#0a0a12" strokeWidth={1.5} strokeLinejoin="round" />
               ))}
-              {sectors.length >= 2 && sectors.map((s) => {
-                const [ex, ey] = squarePoint(s.startDeg, 0);
-                return <line key={`ln-${s.telegramId}`} x1={CX} y1={CY} x2={ex} y2={ey} stroke="rgba(0,0,0,0.35)" strokeWidth={1.5} />;
-              })}
               <circle ref={glowRef} cx={CX} cy={CY} r={BALL_R + 6} fill="white" opacity={0.12} />
               <circle ref={ballRef} cx={CX} cy={CY} r={BALL_R} fill="white" stroke="rgba(0,0,0,0.25)" strokeWidth={1} style={{ filter: "drop-shadow(0 2px 10px rgba(255,255,255,0.75))" }} />
               {arrowOn && (

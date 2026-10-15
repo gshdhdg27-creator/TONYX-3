@@ -6,18 +6,19 @@ import {
 } from "@/lib/inventoryApi";
 import { haptic, hapticNotify } from "@/lib/telegram";
 
-/** Working sources: local public/nft first, then GitHub raw (jsDelivr is 503) */
-const GH_RAW =
+/** Same photos as admin panel (TG_Photos). jsDelivr is often 503 — use GitHub raw. */
+const TG_PHOTOS =
   "https://raw.githubusercontent.com/ssamy2/TG_Photos/main/webp/by_name/";
 
-function nftPhoto(id: string, _imageUrl?: string | null) {
-  // Always prefer local assets shipped with the mini-app (reliable on ton2)
-  return `/nft/${id}.jpg`;
-}
-
-/** Fallback chain used by <img> if local missing */
-function nftFallbacks(id: string): string[] {
-  return [`/nft/${id}.jpg`, `${GH_RAW}${id}.webp`];
+/** Prefer admin TG gift photos; local /nft as fallback */
+function nftFallbacks(id: string, imageUrl?: string | null): string[] {
+  const list: string[] = [];
+  if (imageUrl && imageUrl.startsWith("http") && !imageUrl.includes("jsdelivr")) {
+    list.push(imageUrl);
+  }
+  list.push(`${TG_PHOTOS}${id}.webp`);
+  list.push(`/nft/${id}.jpg`);
+  return list;
 }
 
 const DESC: Record<string, string> = {
@@ -56,11 +57,10 @@ function saveSeen(map: SeenMap) {
   }
 }
 
-/** Preload image with fallbacks so puzzle always has a real photo */
-function useNftSrc(id: string) {
-  const [src, setSrc] = useState(() => nftPhoto(id));
+function useNftSrc(id: string, imageUrl?: string | null) {
+  const [src, setSrc] = useState(() => `${TG_PHOTOS}${id}.webp`);
   useEffect(() => {
-    const list = nftFallbacks(id);
+    const list = nftFallbacks(id, imageUrl);
     let cancelled = false;
     let i = 0;
     const tryNext = () => {
@@ -77,21 +77,23 @@ function useNftSrc(id: string) {
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, imageUrl]);
   return src;
 }
 
-/** 3×3 puzzle — photo is always visible; locked cells are grayed, not empty */
+/** 3×3 puzzle — no numbers; locked cells are muted gray photo */
 function PuzzleBoard({
   nftId,
+  imageUrl,
   pieces,
   animateIdx,
 }: {
   nftId: string;
+  imageUrl?: string | null;
   pieces: number[];
   animateIdx: Set<number>;
 }) {
-  const src = useNftSrc(nftId);
+  const src = useNftSrc(nftId, imageUrl);
 
   return (
     <div
@@ -140,37 +142,23 @@ function PuzzleBoard({
                 backgroundSize: "300% 300%",
                 backgroundPosition: `${posX}% ${posY}%`,
                 backgroundRepeat: "no-repeat",
-                // Locked: still readable photo, just muted gray
                 filter: lit
                   ? "none"
-                  : "grayscale(0.85) brightness(0.55) saturate(0.4)",
-                opacity: lit ? 1 : 0.72,
-                transform: lit ? "scale(1)" : "scale(1)",
+                  : "grayscale(0.9) brightness(0.5) saturate(0.35)",
+                opacity: lit ? 1 : 0.75,
                 transition: "filter 0.45s ease, opacity 0.45s ease",
               }}
             />
+            {/* locked dim overlay — no numbers */}
             {!lit && (
               <div
                 style={{
                   position: "absolute",
                   inset: 0,
-                  background: "rgba(15,23,42,0.28)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
+                  background: "rgba(15,23,42,0.32)",
+                  pointerEvents: "none",
                 }}
-              >
-                <span
-                  style={{
-                    fontSize: 11,
-                    fontWeight: 800,
-                    color: "rgba(226,232,240,0.55)",
-                    textShadow: "0 1px 2px rgba(0,0,0,0.8)",
-                  }}
-                >
-                  {i + 1}
-                </span>
-              </div>
+              />
             )}
             {isNew && (
               <>
@@ -390,7 +378,12 @@ export default function CollectionScreen() {
                     : "0 8px 24px rgba(0,0,0,0.25)",
                 }}
               >
-                <PuzzleBoard nftId={c.id} pieces={c.pieces ?? []} animateIdx={animIdx} />
+                <PuzzleBoard
+                  nftId={c.id}
+                  imageUrl={c.imageUrl}
+                  pieces={c.pieces ?? []}
+                  animateIdx={animIdx}
+                />
 
                 <div
                   style={{

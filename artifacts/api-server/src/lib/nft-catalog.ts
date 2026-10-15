@@ -11,9 +11,12 @@ export interface NftCollection {
   pieceImages?: (string | null)[];
 }
 
-/** Local mini-app public assets (reliable). Admin CDN jsDelivr often 503. */
+/** Admin TG_Photos (raw GitHub — jsDelivr often 503) */
+const TG_PHOTOS =
+  "https://raw.githubusercontent.com/ssamy2/TG_Photos/main/webp/by_name/";
+
 function img(id: string) {
-  return `/nft/${id}.jpg`;
+  return `${TG_PHOTOS}${id}.webp`;
 }
 
 export const NFT_COLLECTIONS: NftCollection[] = [

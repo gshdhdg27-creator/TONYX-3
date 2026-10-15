@@ -16,8 +16,6 @@ import { useTelegram } from "@/lib/telegram";
 const SQ = 300;
 const CX = SQ / 2;
 const CY = SQ / 2;
-const HW = SQ / 2;
-const HH = SQ / 2;
 const BALL_R = 10;
 
 interface ArenaPlayer {
@@ -66,18 +64,6 @@ function colorFor(i: number) {
   return COLORS[i % COLORS.length];
 }
 
-function squarePoint(deg: number, pad = 1.5): [number, number] {
-  const rad = (deg * Math.PI) / 180;
-  const dx = Math.sin(rad);
-  const dy = -Math.cos(rad);
-  const ax = Math.abs(dx);
-  const ay = Math.abs(dy);
-  const t =
-    ax < 1e-9 ? (HH + pad) / ay :
-    ay < 1e-9 ? (HW + pad) / ax :
-    Math.min((HW + pad) / ax, (HH + pad) / ay);
-  return [CX + t * dx, CY + t * dy];
-}
 
 type Point = [number, number];
 
@@ -406,50 +392,6 @@ export default function ArenaGame({
 
       if (raw > 0.78) setBoardZoom(1 + ((raw - 0.78) / 0.22) * 0.22);
 
-      if (raw >= 1) {
-        // Always finish on schedule. Previously this branch required low speed or
-        // near-zero distance, but the steering force could keep the puck orbiting
-        // forever, so the winner screen never appeared on some trajectories.
-        stopped = true;
-        const from = { ...posRef.current };
-        const settleStart = now;
-        const settleMs = 520;
-        const settle = (time: number) => {
-          const t = Math.min(1, Math.max(0, (time - settleStart) / settleMs));
-          const ease = t * t * (3 - 2 * t);
-          const x = from.x + (target.x - from.x) * ease;
-          const y = from.y + (target.y - from.y) * ease;
-          const angle = Math.atan2(target.y - from.y, target.x - from.x) * 180 / Math.PI;
-          placeBall(x, y, angle);
-          velRef.current = { vx: 0, vy: 0 };
-          if (t < 1) {
-            rafRef.current = requestAnimationFrame(settle);
-            return;
-          }
-          placeBall(target.x, target.y, angle);
-          setArrowOn(false);
-          setBoardZoom(1.22);
-          setPhase("winner");
-          const payout = payoutOf(winner.stake, data.totalPool);
-          const mult = winner.stake > 0 ? Math.round((payout / winner.stake) * 100) / 100 : 0;
-          setWinnerData({
-            name: data.winnerUsername || winner.username || winner.telegramId,
-            payout, mult, photo: winner.photoUrl,
-          });
-          rafRef.current = null;
-          setTimeout(() => {
-            setPhase("lobby");
-            resetAnim();
-            fetchState();
-            refreshBalance();
-            if (autoPlayRef.current && autoStakeRef.current > 0) {
-              setTimeout(() => placeBet(autoStakeRef.current), 700);
-            }
-          }, 3200);
-        };
-        rafRef.current = requestAnimationFrame(settle);
-        return;
-      }
       rafRef.current = requestAnimationFrame(step);
     };
     rafRef.current = requestAnimationFrame(step);

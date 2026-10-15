@@ -151,9 +151,23 @@ async function createNewRound() {
   });
 }
 
+/** Vercel kills setTimeout after the request ends — resolve overdue rounds on any poll. */
+async function ensureSpinResolved(round: typeof miniSpinRoomsTable.$inferSelect) {
+  if (
+    round.status === "starting" &&
+    round.startAt &&
+    round.startAt.getTime() <= Date.now()
+  ) {
+    await resolveRound(round.id);
+    return getActiveRound();
+  }
+  return round;
+}
+
 /* ── GET /state ── */
 router.get("/state", async (_req, res) => {
-  const round = await getActiveRound();
+  let round = await getActiveRound();
+  round = await ensureSpinResolved(round);
   res.json(formatRound(round));
 });
 
@@ -245,7 +259,10 @@ router.get("/lucky-players", async (_req, res) => {
 /* ── GET /last-winner ── */
 router.get("/last-winner", async (_req, res) => {
   const room = await db.select().from(miniSpinRoomsTable).where(eq(miniSpinRoomsTable.status, "finished")).orderBy(desc(miniSpinRoomsTable.finishedAt)).limit(1).then((r) => r[0] ?? null);
-  if (!room?.winnerId) { res.json({ winner: null }); return; }
+  if (!room || !room.winnerId) {
+    res.json({ winner: null });
+    return;
+  }
   const players = (room.players as SpinPlayer[]) ?? [];
   const totalPool = players.reduce((s, p) => s + p.stake, 0);
   const wp = players.find((p) => p.telegramId === room.winnerId);
@@ -268,7 +285,8 @@ router.post("/join", async (req, res) => {
   if (!user) { res.status(404).json({ error: "Пользователь не найден" }); return; }
   if (Number(user.ton) < stake) { res.status(400).json({ error: "Недостаточно TON" }); return; }
 
-  const round = await getActiveRound();
+  let round = await getActiveRound();
+  round = await ensureSpinResolved(round);
   if (round.status === "finished") { res.status(400).json({ error: "Раунд завершён, подожди новый" }); return; }
 
   const players = (round.players as SpinPlayer[]) ?? [];
@@ -307,7 +325,8 @@ router.post("/increase", async (req, res) => {
   if (!telegramId || typeof additionalStake !== "number" || additionalStake <= 0) {
     res.status(400).json({ error: "telegramId и additionalStake > 0 обязательны" }); return;
   }
-  const round = await getActiveRound();
+  let round = await getActiveRound();
+  round = await ensureSpinResolved(round);
   if (round.status !== "starting" && round.status !== "waiting") {
     res.status(400).json({ error: "Увеличить ставку можно только пока раунд активен" }); return;
   }

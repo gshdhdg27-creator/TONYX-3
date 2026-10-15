@@ -24,7 +24,8 @@ export const NFT_COLLECTIONS: NftCollection[] = [
   { id: "liberty_figure", nameRu: "Liberty Figure", nameEn: "Liberty Figure", valueTon: 5, rarity: "common", piecesCount: 9, imageUrl: img("liberty_figure") },
   { id: "bday_candle", nameRu: "B-Day Candle", nameEn: "B-Day Candle", valueTon: 5, rarity: "common", piecesCount: 9, imageUrl: img("bday_candle") },
   { id: "moon_pendant", nameRu: "Moon Pendant", nameEn: "Moon Pendant", valueTon: 7, rarity: "common", piecesCount: 9, imageUrl: img("moon_pendant") },
-  { id: "telegram_premium", nameRu: "Telegram Premium", nameEn: "Telegram Premium", valueTon: 10, rarity: "rare", piecesCount: 9, imageUrl: img("telegram_premium") },
+  // id kept as telegram_premium for inventory compatibility; display + photo = Telegram Pin
+  { id: "telegram_premium", nameRu: "Telegram Pin", nameEn: "Telegram Pin", valueTon: 10, rarity: "rare", piecesCount: 9, imageUrl: img("telegram_pin") },
   { id: "snoop_cigar", nameRu: "Snoop Cigar", nameEn: "Snoop Cigar", valueTon: 18, rarity: "rare", piecesCount: 9, imageUrl: img("snoop_cigar") },
   { id: "royal_dogg", nameRu: "Royal Dogg", nameEn: "Royal Dogg", valueTon: 25, rarity: "rare", piecesCount: 9, imageUrl: img("royal_dogg") },
   { id: "electric_skull", nameRu: "Electric Skull", nameEn: "Electric Skull", valueTon: 35, rarity: "epic", piecesCount: 9, imageUrl: img("electric_skull") },

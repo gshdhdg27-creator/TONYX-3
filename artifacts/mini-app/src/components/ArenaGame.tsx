@@ -115,15 +115,17 @@ function randomInSector(startDeg: number, endDeg: number, random: () => number):
   return { x: CX + (ex - CX) * t, y: CY + (ey - CY) * t };
 }
 
-function buildSectors(players: ArenaPlayer[]) {
+function buildSectors(players: ArenaPlayer[], roundId = 0) {
   const total = players.reduce((s, p) => s + p.stake, 0) || 1;
+  // Rotate the whole layout per round: all clients get the same non-fixed arrangement.
+  const rotation = createSeededRandom(`zones:${roundId}`)() * 360;
   let acc = 0;
   const n = players.length;
   return players.map((p, i) => {
     const share = p.stake / total;
-    const startDeg = acc * 360;
+    const startDeg = rotation + acc * 360;
     acc += share;
-    const endDeg = i === n - 1 ? 360 : acc * 360;
+    const endDeg = rotation + (i === n - 1 ? 1 : acc) * 360;
     const midDeg = (startDeg + endDeg) / 2;
     const [edgeX, edgeY] = squarePoint(midDeg, 0);
     const ax = CX + (edgeX - CX) * 0.58;
@@ -234,7 +236,7 @@ export default function ArenaGame({
 
   function runSpinAnimation(data: ArenaState) {
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    const secs = buildSectors(data.players);
+    const secs = buildSectors(data.players, data.id);
     const winner = secs.find((s) => s.telegramId === data.winnerId) ?? secs[0];
     if (!winner) return;
 
@@ -323,38 +325,46 @@ export default function ArenaGame({
       const dist = Math.hypot(target.x - nx, target.y - ny);
       const curSpd = Math.hypot(vx, vy);
 
-      if ((raw >= 1 && curSpd < 0.8) || (raw > 0.9 && dist < 3 && curSpd < 1.2)) {
+      if (raw >= 1) {
+        // Always finish on schedule. Previously this branch required low speed or
+        // near-zero distance, but the steering force could keep the puck orbiting
+        // forever, so the winner screen never appeared on some trajectories.
         stopped = true;
-        const settle = () => {
-          const p = posRef.current;
-          const dx = target.x - p.x;
-          const dy = target.y - p.y;
-          const d = Math.hypot(dx, dy);
-          if (d < 0.8) {
-            placeBall(target.x, target.y, ang);
-            setArrowOn(false);
-            setBoardZoom(1.22);
-            setPhase("winner");
-            const payout = payoutOf(winner.stake, data.totalPool);
-            const mult = winner.stake > 0 ? Math.round((payout / winner.stake) * 100) / 100 : 0;
-            setWinnerData({
-              name: data.winnerUsername || winner.username || winner.telegramId,
-              payout, mult, photo: winner.photoUrl,
-            });
-            rafRef.current = null;
-            setTimeout(() => {
-              setPhase("lobby");
-              resetAnim();
-              fetchState();
-              refreshBalance();
-              if (autoPlayRef.current && autoStakeRef.current > 0) {
-                setTimeout(() => placeBet(autoStakeRef.current), 700);
-              }
-            }, 3200);
+        const from = { ...posRef.current };
+        const settleStart = now;
+        const settleMs = 520;
+        const settle = (time: number) => {
+          const t = Math.min(1, Math.max(0, (time - settleStart) / settleMs));
+          const ease = t * t * (3 - 2 * t);
+          const x = from.x + (target.x - from.x) * ease;
+          const y = from.y + (target.y - from.y) * ease;
+          const angle = Math.atan2(target.y - from.y, target.x - from.x) * 180 / Math.PI;
+          placeBall(x, y, angle);
+          velRef.current = { vx: 0, vy: 0 };
+          if (t < 1) {
+            rafRef.current = requestAnimationFrame(settle);
             return;
           }
-          placeBall(p.x + dx * 0.18, p.y + dy * 0.18, ang);
-          rafRef.current = requestAnimationFrame(settle);
+          placeBall(target.x, target.y, angle);
+          setArrowOn(false);
+          setBoardZoom(1.22);
+          setPhase("winner");
+          const payout = payoutOf(winner.stake, data.totalPool);
+          const mult = winner.stake > 0 ? Math.round((payout / winner.stake) * 100) / 100 : 0;
+          setWinnerData({
+            name: data.winnerUsername || winner.username || winner.telegramId,
+            payout, mult, photo: winner.photoUrl,
+          });
+          rafRef.current = null;
+          setTimeout(() => {
+            setPhase("lobby");
+            resetAnim();
+            fetchState();
+            refreshBalance();
+            if (autoPlayRef.current && autoStakeRef.current > 0) {
+              setTimeout(() => placeBet(autoStakeRef.current), 700);
+            }
+          }, 3200);
         };
         rafRef.current = requestAnimationFrame(settle);
         return;
@@ -393,7 +403,7 @@ export default function ArenaGame({
     return () => clearTimeout(t);
   }, [arena?.status, arena?.startAt, fetchState]);
 
-  const liveSectors = useMemo(() => buildSectors(arena?.players ?? []), [arena?.players]);
+  const liveSectors = useMemo(() => buildSectors(arena?.players ?? [], arena?.id ?? 0), [arena?.players, arena?.id]);
   const sectors = freezeSectors ?? liveSectors;
   const pool = freezeSectors ? freezePool : (arena?.totalPool ?? 0);
 

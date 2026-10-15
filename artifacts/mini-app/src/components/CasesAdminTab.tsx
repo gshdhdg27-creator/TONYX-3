@@ -253,10 +253,21 @@ export function CasesAdminTab({ adminId }: { adminId: string }) {
   }
 
   const filteredGifts = useMemo(() => {
+
     const q = nftSearch.toLowerCase().trim();
+
     if (!q) return TG_GIFTS;
+
     return TG_GIFTS.filter((g) => g.name.toLowerCase().includes(q) || g.short.includes(q));
+
   }, [nftSearch]);
+
+  const totalWeight = useMemo(() => {
+    if (!editing) return 0;
+    return editing.rewards.reduce((sum, r) => sum + (r.weight || 0), 0);
+  }, [editing]);
+
+
 
   if (loading) {
     return <div style={{ color: "#94a3b8", padding: 20 }}>Загрузка...</div>;
@@ -403,13 +414,18 @@ export function CasesAdminTab({ adminId }: { adminId: string }) {
                   </select>
                 </div>
                 <div>
-                  <label style={lab}>Вес %</label>
-                  <input
-                    type="number"
-                    value={r.weight}
-                    onChange={(e) => updateReward(ri, { weight: Number(e.target.value) })}
-                    style={inp}
-                  />
+                  <label style={lab}>Шанс (вес)</label>
+                  <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                    <input
+                      type="number"
+                      value={r.weight}
+                      onChange={(e) => updateReward(ri, { weight: Number(e.target.value) })}
+                      style={{ ...inp, flex: 1 }}
+                    />
+                    <span style={{ fontSize: 12, fontWeight: 700, color: "#4ade80", minWidth: 48, textAlign: "right" }}>
+                      {totalWeight > 0 ? Math.round((r.weight / totalWeight) * 100) : 0}%
+                    </span>
+                  </div>
                 </div>
               </div>
 

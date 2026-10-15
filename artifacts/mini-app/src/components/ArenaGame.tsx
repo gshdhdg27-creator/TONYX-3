@@ -322,9 +322,6 @@ export default function ArenaGame({
 
       if (raw > 0.78) setBoardZoom(1 + ((raw - 0.78) / 0.22) * 0.22);
 
-      const dist = Math.hypot(target.x - nx, target.y - ny);
-      const curSpd = Math.hypot(vx, vy);
-
       if (raw >= 1) {
         // Always finish on schedule. Previously this branch required low speed or
         // near-zero distance, but the steering force could keep the puck orbiting

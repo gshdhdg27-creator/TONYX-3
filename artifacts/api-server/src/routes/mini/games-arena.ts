@@ -450,7 +450,7 @@ router.post("/increase", async (req, res) => {
     .where(eq(miniArenaRoomsTable.id, arena.id))
     .returning();
 
-  res.json(formatArena(updated));
+  res.json(await formatArena(updated));
 });
 
 /* ── POST /client-seed ── */

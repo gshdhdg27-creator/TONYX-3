@@ -138,35 +138,69 @@ function randomInZone(zone: ReturnType<typeof buildSectors>[number], random: () 
   return { x: zone.ax, y: zone.ay };
 }
 
+function polygonArea(poly: Point[]): number {
+  if (poly.length < 3) return 0;
+  let area = 0;
+  for (let i = 0; i < poly.length; i++) {
+    const [x1, y1] = poly[i];
+    const [x2, y2] = poly[(i + 1) % poly.length];
+    area += x1 * y2 - x2 * y1;
+  }
+  return Math.abs(area) / 2;
+}
+
 function buildSectors(players: ArenaPlayer[], roundId = 0) {
-  const total = players.reduce((s, p) => s + p.stake, 0) || 1;
+  const total = players.reduce((s, p) => s + Math.max(0, p.stake), 0) || 1;
   const sites = players.map((p, i) => {
     const random = createSeededRandom(`zone:${roundId}:${p.telegramId}`);
     return {
       x: 22 + random() * (SQ - 44),
       y: 22 + random() * (SQ - 44),
-      // Power-diagram weights give larger bets a tendency toward larger areas.
-      weight: (p.stake / total) * 1800,
-      random: createSeededRandom(`zone-jitter:${roundId}:${p.telegramId}`),
+      weight: 0,
       index: i,
     };
   });
-  return players.map((p, i) => {
-    const site = sites[i];
+
+  // Iteratively tune power-diagram weights until each cell's area tracks
+  // its share of the pool. Fixed sites keep zones stable while bets change.
+  const makePolygons = () => sites.map((site, i) => {
     let polygon: Point[] = [[0, 0], [SQ, 0], [SQ, SQ], [0, SQ]];
     for (let j = 0; j < sites.length && polygon.length; j++) {
       if (j === i) continue;
       const other = sites[j];
-      // Cell i contains points closer to its site after stake-based power weighting.
       const a = 2 * (other.x - site.x);
       const b = 2 * (other.y - site.y);
       const limit = other.x * other.x + other.y * other.y -
         site.x * site.x - site.y * site.y + site.weight - other.weight;
       polygon = clipPolygon(polygon, a, b, limit);
     }
-    if (!polygon.length) polygon = [[site.x, site.y]];
+    return polygon;
+  };
+
+  for (let iteration = 0; iteration < 32 && players.length > 1; iteration++) {
+    const polygons = makePolygons();
+    const areas = polygons.map(polygonArea);
+    const areaTotal = areas.reduce((sum, area) => sum + area, 0) || 1;
+    for (let i = 0; i < sites.length; i++) {
+      const targetShare = Math.max(0, players[i].stake) / total;
+      const actualShare = areas[i] / areaTotal;
+      sites[i].weight += (targetShare - actualShare) * 24000;
+    }
+    // Keep the weights centered to avoid unbounded drift; only differences matter.
+    const mean = sites.reduce((sum, site) => sum + site.weight, 0) / sites.length;
+    for (const site of sites) site.weight -= mean;
+  }
+
+  const polygons = makePolygons();
+  return players.map((p, i) => {
+    const site = sites[i];
+    let polygon = polygons[i];
+    if (polygon.length < 3 || polygonArea(polygon) < 1) {
+      // Keep a visible fallback for degenerate cells rather than emitting invalid SVG.
+      polygon = [[site.x - 1, site.y - 1], [site.x + 1, site.y - 1], [site.x, site.y + 1]];
+    }
     const [ax, ay] = polygonCenter(polygon);
-    const share = p.stake / total;
+    const share = Math.max(0, p.stake) / total;
     const startDeg = 0;
     const endDeg = 360;
     const size = Math.max(30, Math.min(48, 28 + share * 36));
@@ -177,7 +211,6 @@ function buildSectors(players: ArenaPlayer[], roundId = 0) {
     };
   });
 }
-
 function payoutOf(stake: number, pool: number) {
   return Math.round((stake + (pool - stake) * (1 - COMMISSION)) * 1000) / 1000;
 }
@@ -308,33 +341,25 @@ export default function ArenaGame({
       const elapsed = now - startTime;
       // Hard deadline: stop the physics before another movement frame can run.
       if (elapsed >= TOTAL_MS) {
+        // Stop in one frame: do not tween from the current point to the target,
+        // because that late correction visibly slows down and reverses the ball.
         stopped = true;
-        const from = { ...posRef.current };
-        const settleStart = now;
-        const settleMs = 520;
-        const settle = (time: number) => {
-          const t = Math.min(1, Math.max(0, (time - settleStart) / settleMs));
-          const ease = t * t * (3 - 2 * t);
-          placeBall(from.x + (target.x - from.x) * ease, from.y + (target.y - from.y) * ease);
-          velRef.current = { vx: 0, vy: 0 };
-          if (t < 1) { rafRef.current = requestAnimationFrame(settle); return; }
-          placeBall(target.x, target.y);
-          setArrowOn(false);
-          setBoardZoom(1.22);
-          setPhase("winner");
-          const payout = payoutOf(winner.stake, data.totalPool);
-          const mult = winner.stake > 0 ? Math.round((payout / winner.stake) * 100) / 100 : 0;
-          setWinnerData({ name: data.winnerUsername || winner.username || winner.telegramId, payout, mult, photo: winner.photoUrl });
-          rafRef.current = null;
-          setTimeout(() => {
-            setPhase("lobby");
-            resetAnim();
-            fetchState();
-            refreshBalance();
-            if (autoPlayRef.current && autoStakeRef.current > 0) setTimeout(() => placeBet(autoStakeRef.current), 700);
-          }, 3200);
-        };
-        rafRef.current = requestAnimationFrame(settle);
+        placeBall(target.x, target.y);
+        velRef.current = { vx: 0, vy: 0 };
+        setArrowOn(false);
+        setBoardZoom(1.22);
+        setPhase("winner");
+        const payout = payoutOf(winner.stake, data.totalPool);
+        const mult = winner.stake > 0 ? Math.round((payout / winner.stake) * 100) / 100 : 0;
+        setWinnerData({ name: data.winnerUsername || winner.username || winner.telegramId, payout, mult, photo: winner.photoUrl });
+        rafRef.current = null;
+        setTimeout(() => {
+          setPhase("lobby");
+          resetAnim();
+          fetchState();
+          refreshBalance();
+          if (autoPlayRef.current && autoStakeRef.current > 0) setTimeout(() => placeBet(autoStakeRef.current), 700);
+        }, 3200);
         return;
       }
       const dt = Math.min(0.032, Math.max(0.001, (now - last) / 1000));

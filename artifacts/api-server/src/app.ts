@@ -1,8 +1,12 @@
 import express, { type Express, type Request, type Response, type NextFunction } from "express";
 import cors from "cors";
 import pinoHttp from "pino-http";
+import path from "path";
+import { fileURLToPath } from "url";
 import router from "./routes";
 import { logger } from "./lib/logger";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app: Express = express();
 
@@ -30,6 +34,16 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 app.use("/api", router);
+
+// Serve static frontend files
+const staticPath = path.resolve(__dirname, "../../../mini-app/dist/public");
+app.use(express.static(staticPath));
+
+// SPA fallback - serve index.html for non-API routes
+app.get("*", (req, res, next) => {
+  if (req.path.startsWith("/api")) return next();
+  res.sendFile(path.join(staticPath, "index.html"));
+});
 
 app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
   const status =

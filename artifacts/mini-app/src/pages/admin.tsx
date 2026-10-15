@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { NftGiftsTab } from "@/components/NftGiftsTab";
 import { useTelegram } from "@/lib/telegram";
 import { CasesAdminTab } from "@/components/CasesAdminTab";
 
@@ -127,6 +128,7 @@ const TABS = [
   { id:4, icon:"👑", label:"Генерал"  },
   { id:5, icon:"🔍", label:"Игроки"   },
   { id:6, icon:"📦", label:"Кейсы"    },
+  { id:7, icon:"🖼️", label:"NFT"      },
 ];
 
 function TabNav({ active, onChange }: { active: number; onChange: (n: number)=>void }) {
@@ -1400,6 +1402,7 @@ export default function AdminPage() {
       {tab===4 && <GeneralTab adminId={adminId} isSuperAdmin={isSuperAdmin} />}
       {tab===5 && <PlayersTab adminId={adminId} isSuperAdmin={isSuperAdmin} stats={stats} onRefresh={()=>fetchStats(adminId)} />}
       {tab===6 && <CasesAdminTab adminId={adminId} />}
+      {tab===7 && <NftGiftsTab />}
     </div>
   );
 }

@@ -10,10 +10,10 @@ import { haptic, hapticNotify } from "@/lib/telegram";
 const TG_PHOTOS =
   "https://raw.githubusercontent.com/ssamy2/TG_Photos/main/webp/by_name/";
 
-/** Prefer admin TG gift photos; local /nft as fallback.
- *  Some collection ids map to a different TG_Photos short name. */
+/** Collection id → TG_Photos short name when they differ */
 const PHOTO_ALIAS: Record<string, string> = {
-  telegram_premium: "telegram_pin",
+  telegram_premium: "input_key", // keyboard key gift
+  royal_dogg: "snoop_dogg",
 };
 
 function nftFallbacks(id: string, imageUrl?: string | null): string[] {
@@ -29,11 +29,11 @@ function nftFallbacks(id: string, imageUrl?: string | null): string[] {
 }
 
 const DESC: Record<string, string> = {
-  hypno_lollipop: "Гипнотический леденец. Редкий Telegram Gift.",
-  liberty_figure: "Факел свободы. Классический коллекционный подарок.",
+  hypno_lollipop: "Гипнотический леденец. Официальный Telegram Gift.",
+  liberty_figure: "Статуя Свободы. Классический коллекционный подарок.",
   bday_candle: "Праздничный торт. Собери пазл и забери NFT.",
   moon_pendant: "Кулон луны и звезды. Стильный редкий дроп.",
-  telegram_premium: "Официальный Telegram Pin. Коллекционный подарок.",
+  telegram_premium: "Кнопка клавиатуры Input Key. Официальный Telegram Gift.",
   snoop_cigar: "Легендарная сигара. Культовый Telegram Gift.",
   royal_dogg: "Королевский пёс TONYX. Эксклюзив проекта.",
   electric_skull: "Электрический череп. Эпический дроп.",
@@ -89,7 +89,6 @@ function useNftSrc(id: string, imageUrl?: string | null) {
   return src;
 }
 
-/** 3×3 puzzle — no numbers; locked cells are muted gray photo */
 function PuzzleBoard({
   nftId,
   imageUrl,

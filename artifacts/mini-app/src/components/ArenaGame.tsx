@@ -175,7 +175,7 @@ function buildSectors(players: ArenaPlayer[], roundId = 0) {
       polygon = clipPolygon(polygon, a, b, limit);
     }
     return polygon;
-  };
+  });
 
   for (let iteration = 0; iteration < 32 && players.length > 1; iteration++) {
     const polygons = makePolygons();

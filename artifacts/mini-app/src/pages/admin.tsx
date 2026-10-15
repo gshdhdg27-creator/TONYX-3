@@ -128,12 +128,12 @@ const TABS = [
   { id:4, icon:"👑", label:"Генерал"  },
   { id:5, icon:"🔍", label:"Игроки"   },
   { id:6, icon:"📦", label:"Кейсы"    },
-  { id:7, icon:"🖼️", label:"NFT"      },
+  { id:7, icon:"🎁", label:"NFT"      },
 ];
 
 function TabNav({ active, onChange }: { active: number; onChange: (n: number)=>void }) {
   return (
-    <div style={{ display:"flex", gap:4, marginBottom:16, overflowX:"auto", scrollbarWidth:"none", paddingBottom:2 }}>
+    <div style={{ display:"flex", gap:4, marginBottom:16, flexWrap:"wrap", paddingBottom:2 }}>
       {TABS.map(t => (
         <button key={t.id} onClick={()=>onChange(t.id)} style={{
           flexShrink:0, display:"flex", flexDirection:"column", alignItems:"center", gap:2,

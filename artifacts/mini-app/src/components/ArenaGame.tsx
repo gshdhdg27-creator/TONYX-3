@@ -91,10 +91,26 @@ function squareSectorPoints(startDeg: number, endDeg: number, steps = 64): strin
   return pts.map(([x, y]) => `${x.toFixed(2)},${y.toFixed(2)}`).join(" ");
 }
 
-function randomInSector(startDeg: number, endDeg: number): { x: number; y: number } {
+function createSeededRandom(seedText: string) {
+  // A stable PRNG means every client derives the same spin parameters for this round.
+  let seed = 2166136261;
+  for (let i = 0; i < seedText.length; i++) {
+    seed ^= seedText.charCodeAt(i);
+    seed = Math.imul(seed, 16777619);
+  }
+  return () => {
+    seed += 0x6D2B79F5;
+    let t = seed;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function randomInSector(startDeg: number, endDeg: number, random: () => number): { x: number; y: number } {
   const span = Math.max(0.5, endDeg - startDeg);
-  const a = startDeg + Math.random() * span;
-  const t = 0.35 + Math.random() * 0.43;
+  const a = startDeg + random() * span;
+  const t = 0.35 + random() * 0.43;
   const [ex, ey] = squarePoint(a, 0);
   return { x: CX + (ex - CX) * t, y: CY + (ey - CY) * t };
 }
@@ -229,13 +245,14 @@ export default function ArenaGame({
     setBoardZoom(1);
     setArrowOn(true);
 
-    const target = randomInSector(winner.startDeg, winner.endDeg);
-    const startAng = Math.random() * Math.PI * 2;
-    const startR = 8 + Math.random() * 18;
+    const random = createSeededRandom(`${data.id}:${data.winnerId ?? winner.telegramId}`);
+    const target = randomInSector(winner.startDeg, winner.endDeg, random);
+    const startAng = random() * Math.PI * 2;
+    const startR = 8 + random() * 18;
     const sx = CX + Math.cos(startAng) * startR;
     const sy = CY + Math.sin(startAng) * startR;
-    const dir = Math.random() * Math.PI * 2;
-    const speed = 9.5 + Math.random() * 3.5;
+    const dir = random() * Math.PI * 2;
+    const speed = 9.5 + random() * 3.5;
     placeBall(sx, sy, (dir * 180) / Math.PI);
     velRef.current = { vx: Math.cos(dir) * speed, vy: Math.sin(dir) * speed };
 
@@ -265,10 +282,27 @@ export default function ArenaGame({
       vy *= Math.pow(friction, dt * 60);
 
       if (raw > 0.42) {
-        const pull = Math.pow((raw - 0.42) / 0.58, 1.4);
-        const k = 6 + pull * 28;
-        vx += (target.x - pos.x) * k * dt;
-        vy += (target.y - pos.y) * k * dt;
+        // Apply a bounded steering acceleration instead of a growing spring force.
+        // The old spring could overshoot the target, reverse direction, then accelerate
+        // back again, which looked like a sudden chaotic change of direction.
+        const pull = Math.min(1, Math.max(0, (raw - 0.42) / 0.58));
+        const dx = target.x - pos.x;
+        const dy = target.y - pos.y;
+        const distance = Math.hypot(dx, dy);
+        const desiredSpeed = 2.2 + (1 - pull) * 2.8;
+        const desiredVx = distance > 0.001 ? (dx / distance) * desiredSpeed : 0;
+        const desiredVy = distance > 0.001 ? (dy / distance) * desiredSpeed : 0;
+        const steerLimit = (2.5 + pull * 4) * dt;
+        const steerX = desiredVx - vx;
+        const steerY = desiredVy - vy;
+        const steerLength = Math.hypot(steerX, steerY);
+        if (steerLength > steerLimit && steerLength > 0) {
+          vx += (steerX / steerLength) * steerLimit;
+          vy += (steerY / steerLength) * steerLimit;
+        } else {
+          vx = desiredVx;
+          vy = desiredVy;
+        }
       }
 
       let nx = pos.x + vx * dt * 60;

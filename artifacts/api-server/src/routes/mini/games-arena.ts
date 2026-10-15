@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import { usersTable, miniArenaRoomsTable } from "@workspace/db/schema";
-import { eq, desc, or, and, gte } from "drizzle-orm";
+import { eq, desc, or, and, gte, inArray } from "drizzle-orm";
 import {
   generateServerSeed,
   hashServerSeed,
@@ -19,8 +19,14 @@ const MIN_PLAYERS = 2;
 
 type ArenaPlayer = { telegramId: string; username: string | null; stake: number };
 
-function formatArena(room: typeof miniArenaRoomsTable.$inferSelect) {
+async function formatArena(room: typeof miniArenaRoomsTable.$inferSelect) {
   const players = (room.players as ArenaPlayer[]) ?? [];
+  const photos = players.length
+    ? await db.select({ telegramId: usersTable.telegramId, photoUrl: usersTable.photoUrl })
+        .from(usersTable)
+        .where(inArray(usersTable.telegramId, players.map((p) => p.telegramId)))
+    : [];
+  const photoById = new Map(photos.map((u) => [u.telegramId, u.photoUrl]));
   const totalPool = Number(room.totalPool);
   const isFinished = room.status === "finished";
 
@@ -50,6 +56,7 @@ function formatArena(room: typeof miniArenaRoomsTable.$inferSelect) {
       username: p.username,
       stake: p.stake,
       chance: totalPool > 0 ? Math.round((p.stake / totalPool) * 10000) / 100 : 0,
+      photoUrl: photoById.get(p.telegramId) ?? null,
     })),
     winnerId: room.winnerId ?? null,
     winnerUsername: room.winnerUsername ?? null,
@@ -235,7 +242,7 @@ async function maybeResolveExpired(
 router.get("/state", async (_req, res) => {
   let arena = await getActiveArena();
   arena = await maybeResolveExpired(arena);
-  res.json(formatArena(arena));
+  res.json(await formatArena(arena));
 });
 
 /* ── GET /history ── */
@@ -409,7 +416,7 @@ router.post("/join", async (req, res) => {
     .where(eq(miniArenaRoomsTable.id, arena.id))
     .returning();
 
-  res.json(formatArena(updated));
+  res.json(await formatArena(updated));
 });
 
 /* ── POST /increase ── */

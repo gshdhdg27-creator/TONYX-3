@@ -6,15 +6,18 @@ import {
 } from "@/lib/inventoryApi";
 import { haptic, hapticNotify } from "@/lib/telegram";
 
-/** Same CDN as admin panel (CasesAdminTab IMG_BASE) */
-const IMG_BASE =
-  "https://cdn.jsdelivr.net/gh/ssamy2/TG_Photos@main/webp/by_name/";
+/** Working sources: local public/nft first, then GitHub raw (jsDelivr is 503) */
+const GH_RAW =
+  "https://raw.githubusercontent.com/ssamy2/TG_Photos/main/webp/by_name/";
 
-function nftPhoto(id: string, imageUrl?: string | null) {
-  if (imageUrl && (imageUrl.startsWith("http") || imageUrl.includes("TG_Photos"))) {
-    return imageUrl;
-  }
-  return `${IMG_BASE}${id}.webp`;
+function nftPhoto(id: string, _imageUrl?: string | null) {
+  // Always prefer local assets shipped with the mini-app (reliable on ton2)
+  return `/nft/${id}.jpg`;
+}
+
+/** Fallback chain used by <img> if local missing */
+function nftFallbacks(id: string): string[] {
+  return [`/nft/${id}.jpg`, `${GH_RAW}${id}.webp`];
 }
 
 const DESC: Record<string, string> = {
@@ -30,7 +33,7 @@ const DESC: Record<string, string> = {
   heroic_helmet: "Героический шлем. Один из самых дорогих подарков.",
 };
 
-const PUZZLE_SIZE = 148;
+const PUZZLE_SIZE = 152;
 const SEEN_KEY = "tonyx_collection_seen_v1";
 
 type SeenMap = Record<string, number[]>;
@@ -53,16 +56,43 @@ function saveSeen(map: SeenMap) {
   }
 }
 
-/** 3×3 puzzle board — each cell shows its crop of the full NFT photo */
+/** Preload image with fallbacks so puzzle always has a real photo */
+function useNftSrc(id: string) {
+  const [src, setSrc] = useState(() => nftPhoto(id));
+  useEffect(() => {
+    const list = nftFallbacks(id);
+    let cancelled = false;
+    let i = 0;
+    const tryNext = () => {
+      if (cancelled || i >= list.length) return;
+      const url = list[i++];
+      const img = new Image();
+      img.onload = () => {
+        if (!cancelled) setSrc(url);
+      };
+      img.onerror = () => tryNext();
+      img.src = url;
+    };
+    tryNext();
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+  return src;
+}
+
+/** 3×3 puzzle — photo is always visible; locked cells are grayed, not empty */
 function PuzzleBoard({
-  src,
+  nftId,
   pieces,
   animateIdx,
 }: {
-  src: string;
+  nftId: string;
   pieces: number[];
   animateIdx: Set<number>;
 }) {
+  const src = useNftSrc(nftId);
+
   return (
     <div
       style={{
@@ -75,8 +105,8 @@ function PuzzleBoard({
         gap: 2,
         borderRadius: 18,
         overflow: "hidden",
-        background: "#060a12",
-        border: "1px solid rgba(148,163,184,0.18)",
+        background: "#0b1220",
+        border: "1px solid rgba(148,163,184,0.22)",
         boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.35), 0 10px 28px rgba(0,0,0,0.35)",
         position: "relative",
       }}
@@ -96,37 +126,35 @@ function PuzzleBoard({
               position: "relative",
               overflow: "hidden",
               borderRadius: 3,
-              background: "#0b1220",
+              background: "#111827",
               animation: isNew
                 ? `pieceInsert 0.65s cubic-bezier(0.22,1,0.36,1) ${i * 0.05}s both`
                 : undefined,
             }}
           >
-            {/* photo crop */}
             <div
               style={{
                 position: "absolute",
                 inset: 0,
-                backgroundImage: src ? `url(${src})` : "none",
+                backgroundImage: src ? `url("${src}")` : "none",
                 backgroundSize: "300% 300%",
                 backgroundPosition: `${posX}% ${posY}%`,
                 backgroundRepeat: "no-repeat",
+                // Locked: still readable photo, just muted gray
                 filter: lit
                   ? "none"
-                  : "grayscale(1) brightness(0.28) contrast(0.9)",
-                opacity: lit ? 1 : 0.55,
-                transform: lit ? "scale(1)" : "scale(0.96)",
-                transition: "filter 0.45s ease, opacity 0.45s ease, transform 0.45s ease",
+                  : "grayscale(0.85) brightness(0.55) saturate(0.4)",
+                opacity: lit ? 1 : 0.72,
+                transform: lit ? "scale(1)" : "scale(1)",
+                transition: "filter 0.45s ease, opacity 0.45s ease",
               }}
             />
-            {/* empty slot frosted glass */}
             {!lit && (
               <div
                 style={{
                   position: "absolute",
                   inset: 0,
-                  background:
-                    "linear-gradient(145deg, rgba(30,41,59,0.55), rgba(15,23,42,0.75))",
+                  background: "rgba(15,23,42,0.28)",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
@@ -134,16 +162,16 @@ function PuzzleBoard({
               >
                 <span
                   style={{
-                    fontSize: 10,
+                    fontSize: 11,
                     fontWeight: 800,
-                    color: "rgba(148,163,184,0.45)",
+                    color: "rgba(226,232,240,0.55)",
+                    textShadow: "0 1px 2px rgba(0,0,0,0.8)",
                   }}
                 >
                   {i + 1}
                 </span>
               </div>
             )}
-            {/* insert shimmer */}
             {isNew && (
               <>
                 <div
@@ -171,7 +199,6 @@ function PuzzleBoard({
           </div>
         );
       })}
-      {/* side spark lines when any new piece */}
       {animateIdx.size > 0 && (
         <>
           <div className="puzzle-side-fx left" />
@@ -188,7 +215,6 @@ export default function CollectionScreen() {
   const [loading, setLoading] = useState(true);
   const [claimingId, setClaimingId] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
-  /** pieces that should play insert animation this visit */
   const [animMap, setAnimMap] = useState<Record<string, number[]>>({});
   const seenRef = useRef<SeenMap>(loadSeen());
 
@@ -199,7 +225,6 @@ export default function CollectionScreen() {
       const cols = d.collections ?? [];
       setList(cols);
 
-      // detect newly owned pieces vs last visit
       const nextSeen: SeenMap = { ...seenRef.current };
       const nextAnim: Record<string, number[]> = {};
       for (const c of cols) {
@@ -218,7 +243,6 @@ export default function CollectionScreen() {
       saveSeen(nextSeen);
       setAnimMap(nextAnim);
 
-      // clear animation flags after they play
       if (Object.keys(nextAnim).length) {
         setTimeout(() => setAnimMap({}), 1600);
       }
@@ -257,21 +281,9 @@ export default function CollectionScreen() {
         50% { box-shadow: 0 0 0 6px rgba(34,197,94,0); }
       }
       @keyframes pieceInsert {
-        0% {
-          transform: scale(0.55) translateY(10px);
-          opacity: 0;
-          filter: brightness(2);
-        }
-        55% {
-          transform: scale(1.06) translateY(-2px);
-          opacity: 1;
-          filter: brightness(1.25);
-        }
-        100% {
-          transform: scale(1) translateY(0);
-          opacity: 1;
-          filter: brightness(1);
-        }
+        0% { transform: scale(0.55) translateY(10px); opacity: 0; filter: brightness(2); }
+        55% { transform: scale(1.06) translateY(-2px); opacity: 1; filter: brightness(1.25); }
+        100% { transform: scale(1) translateY(0); opacity: 1; filter: brightness(1); }
       }
       @keyframes pieceShine {
         0% { transform: translateX(-120%); opacity: 0; }
@@ -288,20 +300,9 @@ export default function CollectionScreen() {
         100% { opacity: 0; transform: scaleY(0.6); }
       }
       .puzzle-side-fx {
-        position: absolute;
-        top: 8%;
-        bottom: 8%;
-        width: 3px;
-        border-radius: 4px;
+        position: absolute; top: 8%; bottom: 8%; width: 3px; border-radius: 4px;
         pointer-events: none;
-        background: linear-gradient(
-          180deg,
-          transparent,
-          rgba(168,85,247,0.9),
-          rgba(251,191,36,0.85),
-          rgba(168,85,247,0.9),
-          transparent
-        );
+        background: linear-gradient(180deg, transparent, rgba(168,85,247,0.9), rgba(251,191,36,0.85), rgba(168,85,247,0.9), transparent);
         box-shadow: 0 0 12px rgba(168,85,247,0.7);
         animation: sideSpark 1s ease-out both;
       }
@@ -340,11 +341,7 @@ export default function CollectionScreen() {
         <span style={{ fontWeight: 800, fontSize: 17, color: "#f1f5f9" }}>
           🏆 NFT Collection
         </span>
-        <button
-          type="button"
-          className="btn btn-ghost btn-sm"
-          onClick={() => setView("home")}
-        >
+        <button type="button" className="btn btn-ghost btn-sm" onClick={() => setView("home")}>
           ← Назад
         </button>
       </div>
@@ -366,20 +363,10 @@ export default function CollectionScreen() {
       )}
 
       {loading ? (
-        <div style={{ padding: 40, color: "#64748b", textAlign: "center" }}>
-          Загрузка…
-        </div>
+        <div style={{ padding: 40, color: "#64748b", textAlign: "center" }}>Загрузка…</div>
       ) : (
-        <div
-          style={{
-            padding: "4px 14px 20px",
-            display: "flex",
-            flexDirection: "column",
-            gap: 16,
-          }}
-        >
+        <div style={{ padding: "4px 14px 20px", display: "flex", flexDirection: "column", gap: 16 }}>
           {list.map((c) => {
-            const src = nftPhoto(c.id, c.imageUrl);
             const can = c.canClaim;
             const busy = claimingId === c.id;
             const progress = Math.round((c.owned / 9) * 100);
@@ -391,24 +378,19 @@ export default function CollectionScreen() {
                 style={{
                   display: "flex",
                   gap: 14,
-                  background:
-                    "linear-gradient(145deg, rgba(17,24,39,0.98), rgba(15,23,42,0.95))",
+                  background: "linear-gradient(145deg, rgba(17,24,39,0.98), rgba(15,23,42,0.95))",
                   border: can
                     ? "1px solid rgba(34,197,94,0.55)"
                     : "1px solid rgba(168,85,247,0.28)",
                   borderRadius: 22,
                   padding: 14,
-                  minHeight: 168,
+                  minHeight: 172,
                   boxShadow: can
                     ? "0 0 24px rgba(34,197,94,0.12)"
                     : "0 8px 24px rgba(0,0,0,0.25)",
                 }}
               >
-                <PuzzleBoard
-                  src={src}
-                  pieces={c.pieces ?? []}
-                  animateIdx={animIdx}
-                />
+                <PuzzleBoard nftId={c.id} pieces={c.pieces ?? []} animateIdx={animIdx} />
 
                 <div
                   style={{
@@ -420,35 +402,13 @@ export default function CollectionScreen() {
                   }}
                 >
                   <div>
-                    <div
-                      style={{
-                        fontSize: 15,
-                        fontWeight: 800,
-                        color: "#f8fafc",
-                        marginBottom: 4,
-                        lineHeight: 1.25,
-                      }}
-                    >
+                    <div style={{ fontSize: 15, fontWeight: 800, color: "#f8fafc", marginBottom: 4, lineHeight: 1.25 }}>
                       {c.nameRu}
                     </div>
-                    <div
-                      style={{
-                        fontSize: 11,
-                        color: "#94a3b8",
-                        lineHeight: 1.4,
-                        marginBottom: 8,
-                      }}
-                    >
+                    <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.4, marginBottom: 8 }}>
                       {DESC[c.id] ?? "Коллекционный NFT. Собери 9 частей."}
                     </div>
-                    <div
-                      style={{
-                        display: "flex",
-                        flexWrap: "wrap",
-                        gap: 8,
-                        alignItems: "center",
-                      }}
-                    >
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
                       <span
                         style={{
                           fontSize: 12,
@@ -462,27 +422,14 @@ export default function CollectionScreen() {
                       >
                         ≈ {c.valueTon} TON
                       </span>
-                      <span
-                        style={{
-                          fontSize: 12,
-                          fontWeight: 700,
-                          color: "#c4b5fd",
-                        }}
-                      >
+                      <span style={{ fontSize: 12, fontWeight: 700, color: "#c4b5fd" }}>
                         Собрано {c.owned}/9
                       </span>
                     </div>
                   </div>
 
                   <div style={{ marginTop: 8, marginBottom: 8 }}>
-                    <div
-                      style={{
-                        height: 6,
-                        borderRadius: 99,
-                        background: "rgba(51,65,85,0.6)",
-                        overflow: "hidden",
-                      }}
-                    >
+                    <div style={{ height: 6, borderRadius: 99, background: "rgba(51,65,85,0.6)", overflow: "hidden" }}>
                       <div
                         style={{
                           width: `${progress}%`,

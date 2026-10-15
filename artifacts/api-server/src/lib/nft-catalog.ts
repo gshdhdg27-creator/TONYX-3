@@ -1,9 +1,5 @@
 export type NftRarity = "common" | "rare" | "epic" | "legendary";
 
-/** Same CDN as admin panel CasesAdminTab */
-const IMG_BASE =
-  "https://cdn.jsdelivr.net/gh/ssamy2/TG_Photos@main/webp/by_name/";
-
 export interface NftCollection {
   id: string;
   nameRu: string;
@@ -15,8 +11,9 @@ export interface NftCollection {
   pieceImages?: (string | null)[];
 }
 
+/** Local mini-app public assets (reliable). Admin CDN jsDelivr often 503. */
 function img(id: string) {
-  return `${IMG_BASE}${id}.webp`;
+  return `/nft/${id}.jpg`;
 }
 
 export const NFT_COLLECTIONS: NftCollection[] = [

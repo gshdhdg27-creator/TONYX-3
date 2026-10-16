@@ -3,6 +3,8 @@ import { useTelegram } from "@/lib/telegram";
 import { useLang } from "@/lib/LanguageContext";
 import MinesGame from "@/components/MinesGame";
 import { GameCard } from "@/components/GameCard";
+import { useGetUserProfile, getGetUserProfileQueryKey } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
 
 type Tab = "pick" | "mines" | "coin" | "roulette";
 
@@ -16,24 +18,25 @@ export default function SoloPage() {
   const { telegramId } = useTelegram();
   const { lang } = useLang();
   const [tab, setTab] = useState<Tab>("pick");
-  const [tonBalance, setTonBalance] = useState(0);
+  const queryClient = useQueryClient();
+
+  const { data: profile, refetch } = useGetUserProfile(telegramId ?? "", {
+    query: {
+      enabled: !!telegramId,
+      refetchOnWindowFocus: true,
+    },
+  } as Parameters<typeof useGetUserProfile>[1]);
+
+  const tonBalance = profile ? Number((profile as { ton?: string | number }).ton ?? 0) : 0;
 
   const refreshBalance = async () => {
     if (!telegramId) return;
-    try {
-      // Same source as the rest of the app — real TON balance
-      const r = await fetch(`/api/users/${encodeURIComponent(telegramId)}`);
-      if (!r.ok) return;
-      const d = await r.json();
-      const ton = Number(d?.ton ?? d?.user?.ton ?? 0);
-      if (!Number.isNaN(ton)) setTonBalance(ton);
-    } catch {
-      /* ignore */
-    }
+    await refetch();
+    void queryClient.invalidateQueries({ queryKey: getGetUserProfileQueryKey(telegramId) });
   };
 
   useEffect(() => {
-    refreshBalance();
+    if (telegramId) void refetch();
   }, [telegramId]);
 
   if (tab === "mines") {

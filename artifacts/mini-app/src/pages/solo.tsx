@@ -21,7 +21,8 @@ export default function SoloPage() {
   const refreshBalance = async () => {
     if (!telegramId) return;
     try {
-      const r = await fetch(`/api/mini/wallet/profile?telegramId=${encodeURIComponent(telegramId)}`);
+      // Same source as the rest of the app — real TON balance
+      const r = await fetch(`/api/users/${encodeURIComponent(telegramId)}`);
       if (!r.ok) return;
       const d = await r.json();
       const ton = Number(d?.ton ?? d?.user?.ton ?? 0);

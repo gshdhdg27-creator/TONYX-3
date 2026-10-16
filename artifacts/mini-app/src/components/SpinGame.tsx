@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import FairnessModal, { type FairData } from "@/components/FairnessModal";
+import SpinHistoryModal from "@/components/SpinHistoryModal";
 import { haptic, hapticNotify, useTelegram } from "@/lib/telegram";
 
 interface SpinPlayer {
@@ -19,6 +20,7 @@ interface SpinRound {
   winnerUsername: string | null;
   startAt: string | null;
   finishedAt: string | null;
+  stopFrac?: number | null;
   fair?: FairData;
 }
 
@@ -156,18 +158,6 @@ function buildSectors(players: SpinPlayer[]) {
       path: arcPath(startDeg, endDeg, OUTER_R, INNER_R),
     };
   });
-}
-
-function getSectorAt(angleDeg: number, players: SpinPlayer[]): number {
-  if (!players.length) return -1;
-  const total = players.reduce((s, p) => s + p.stake, 0) || 1;
-  let acc = 0;
-  const a = ((angleDeg % 360) + 360) % 360;
-  for (let i = 0; i < players.length; i++) {
-    acc += (players[i].stake / total) * 360;
-    if (a < acc) return i;
-  }
-  return players.length - 1;
 }
 
 function useCountdown(startAt: string | null): number | null {
@@ -339,7 +329,6 @@ export default function SpinGame({
   telegramId,
   tonBalance,
   onBalanceChange,
-  onOpenHistory,
 }: Props) {
   const { photoUrl } = useTelegram();
   const [round, setRound] = useState<SpinRound | null>(null);
@@ -351,11 +340,11 @@ export default function SpinGame({
   const [rotateDeg, setRotateDeg] = useState(0);
   const [winnerBanner, setWinnerBanner] = useState<{ name: string; payout: number; mult: number; chance: number } | null>(null);
   const [showFairness, setShowFairness] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
   const [lastWinner, setLastWinner] = useState<LastWinner | null>(null);
 
   const rafRef = useRef<number | null>(null);
   const rotateDegRef = useRef(0);
-  const lastSectorRef = useRef(-1);
   const seenFinishedId = useRef<number | null>(null);
   const prevStatusRef = useRef<string | null>(null);
   const spinningRef = useRef(false);
@@ -420,12 +409,13 @@ export default function SpinGame({
       return;
     }
 
-    const turns = 6 + Math.floor(Math.random() * 3);
+    const turns = 6 + Math.floor(Math.random() * 2);
     const from = rotateDegRef.current;
-    // Random point inside winner sector
+    // Same stop for ALL clients (stopFrac from server fairness hash)
     const span = Math.max(0.01, winner.endDeg - winner.startDeg);
-    const pad = Math.min(span * 0.12, 4);
-    const stopDeg = winner.startDeg + pad + Math.random() * Math.max(0.01, span - pad * 2);
+    const pad = Math.min(span * 0.1, 3);
+    const frac = typeof data.stopFrac === "number" ? Math.min(1, Math.max(0, data.stopFrac)) : 0.5;
+    const stopDeg = winner.startDeg + pad + frac * Math.max(0.01, span - pad * 2);
     const adj = (((-stopDeg - from) % 360) + 360) % 360;
     const endAngle = from + turns * 360 + adj;
 
@@ -472,7 +462,6 @@ export default function SpinGame({
         watchedIdsRef.current.add(data.id);
       }
 
-      // Animate any unseen finished round with players (server holds finished ~12s)
       const isFreshFinished =
         data.status === "finished" &&
         !!data.winnerId &&
@@ -606,9 +595,7 @@ export default function SpinGame({
         <div style={{ fontSize: 12, fontWeight: 800, color: "#c4b5fd", letterSpacing: 0.3 }}>PvP Spin</div>
         <div style={{ display: "flex", gap: 8 }}>
           <button type="button" onClick={() => setShowFairness(true)} style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, padding: "7px 10px", color: "#94a3b8", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>🔐</button>
-          {onOpenHistory && (
-            <button type="button" onClick={onOpenHistory} style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, padding: "7px 10px", color: "#94a3b8", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>🕐</button>
-          )}
+          <button type="button" onClick={() => setShowHistory(true)} style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, padding: "7px 10px", color: "#94a3b8", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>🕐</button>
         </div>
       </div>
 
@@ -696,6 +683,28 @@ export default function SpinGame({
         <div style={{ margin: "14px 16px 0", padding: "10px 14px", borderRadius: 12, background: "rgba(15,23,42,0.6)", fontSize: 12, color: "#94a3b8" }}>
           Последний: <span style={{ color: "#e2e8f0", fontWeight: 700 }}>@{lastWinner.username ?? lastWinner.telegramId}</span> · +{lastWinner.payout.toFixed(2)} TON
         </div>
+      )}
+
+      {showHistory && (
+        <SpinHistoryModal
+          onClose={() => setShowHistory(false)}
+          onReplay={(item) => {
+            setShowHistory(false);
+            if (spinningRef.current) return;
+            startSpin({
+              id: item.id,
+              status: "finished",
+              totalPool: item.totalPool,
+              players: item.players,
+              winnerId: item.winnerId,
+              winnerUsername: item.winnerUsername,
+              startAt: null,
+              finishedAt: item.finishedAt,
+              stopFrac: item.stopFrac ?? 0.5,
+              fair: item.fair,
+            });
+          }}
+        />
       )}
 
       {showFairness && round?.fair && (

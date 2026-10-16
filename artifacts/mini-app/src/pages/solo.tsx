@@ -1,7 +1,7 @@
 import { useState, type CSSProperties } from "react";
 import { useTelegram } from "@/lib/telegram";
 import { useLang } from "@/lib/LanguageContext";
-import { MinesGame } from "@/pages/games";
+import MinesGame from "@/components/MinesGame";
 import { GameCard } from "@/components/GameCard";
 
 type Tab = "pick" | "mines" | "coin" | "roulette";
@@ -28,7 +28,7 @@ export default function SoloPage() {
           telegramId={telegramId ?? ""}
           balance={tonBalance}
           lang={lang}
-          onBalanceChange={setTonBalance}
+          onBalanceChange={() => setTonBalance((b) => b)}
         />
       </div>
     );

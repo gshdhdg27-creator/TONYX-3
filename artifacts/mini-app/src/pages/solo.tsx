@@ -2,6 +2,7 @@ import { useState, useEffect, type CSSProperties } from "react";
 import { useTelegram } from "@/lib/telegram";
 import { useLang } from "@/lib/LanguageContext";
 import MinesGame from "@/components/MinesGame";
+import CoinFlipGame from "@/components/CoinFlipGame";
 import { GameCard } from "@/components/GameCard";
 import { useGetUserProfile, getGetUserProfileQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -55,13 +56,28 @@ export default function SoloPage() {
     );
   }
 
-  if (tab === "coin" || tab === "roulette") {
+  if (tab === "coin") {
+    return (
+      <div style={{ minHeight: "100dvh", padding: "12px 12px 110px", background: "#0a0612" }}>
+        <button type="button" onClick={() => setTab("pick")} style={back}>
+          ← Назад
+        </button>
+        <CoinFlipGame
+          telegramId={telegramId ?? ""}
+          balance={tonBalance}
+          onBalanceChange={refreshBalance}
+        />
+      </div>
+    );
+  }
+
+  if (tab === "roulette") {
     return (
       <div style={page}>
         <button type="button" onClick={() => setTab("pick")} style={back}>
           ← Назад
         </button>
-        <div style={title}>{tab === "coin" ? "Монетка" : "Рулетка"}</div>
+        <div style={title}>Рулетка</div>
         <div style={{ color: "#c4b5fd", lineHeight: 1.5, marginTop: 8 }}>
           Карточка в стиле TONYX готова. Игровая логика — следующим шагом.
         </div>
@@ -91,13 +107,13 @@ export default function SoloPage() {
         />
         <div style={grid}>
           <GameCard
-            name="Монетка"
-            badge="Новое"
-            badgeColor="#eab308"
-            online={12}
+            name="Coin Flip"
+            badge="Live"
+            badgeColor="#22c55e"
+            online={18}
             lottieSrc={LOTTIE.coin}
             emoji="🪙"
-            stickers={["🚬"]}
+            stickers={["🦅", "⚪"]}
             gradient="linear-gradient(145deg, #713f12 0%, #eab308 40%, #4c1d95 100%)"
             accent="rgba(234,179,8,0.45)"
             onClick={() => setTab("coin")}

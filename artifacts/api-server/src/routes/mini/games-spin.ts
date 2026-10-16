@@ -151,14 +151,26 @@ async function createNewRound() {
   });
 }
 
-/** Vercel kills setTimeout after the request ends — resolve overdue rounds on any poll. */
+/** Vercel kills setTimeout after the request ends — resolve overdue rounds on any poll.
+ *  CRITICAL: return the finished round (not the new waiting room) so clients can run spin animation.
+ */
 async function ensureSpinResolved(round: typeof miniSpinRoomsTable.$inferSelect) {
   if (
     round.status === "starting" &&
     round.startAt &&
     round.startAt.getTime() <= Date.now()
   ) {
-    await resolveRound(round.id);
+    const finishedId = round.id;
+    await resolveRound(finishedId);
+    const finished = await db
+      .select()
+      .from(miniSpinRoomsTable)
+      .where(eq(miniSpinRoomsTable.id, finishedId))
+      .then((r) => r[0] ?? null);
+    // Return finished room so clients can play the wheel animation
+    if (finished && finished.status === "finished" && finished.winnerId) {
+      return finished;
+    }
     return getActiveRound();
   }
   return round;
@@ -167,6 +179,7 @@ async function ensureSpinResolved(round: typeof miniSpinRoomsTable.$inferSelect)
 /* ── GET /state ── */
 router.get("/state", async (_req, res) => {
   let round = await getActiveRound();
+  // Prefer resolving overdue starting rounds and returning the finished payload so the wheel can spin.
   round = await ensureSpinResolved(round);
   res.json(formatRound(round));
 });
@@ -287,7 +300,15 @@ router.post("/join", async (req, res) => {
 
   let round = await getActiveRound();
   round = await ensureSpinResolved(round);
-  if (round.status === "finished") { res.status(400).json({ error: "Раунд завершён, подожди новый" }); return; }
+  // After resolve, ensureSpinResolved returns the finished room for animation —
+  // join must attach to the NEW waiting room instead.
+  if (round.status === "finished") {
+    round = await getActiveRound();
+  }
+  if (round.status === "finished") {
+    res.status(400).json({ error: "Раунд завершён, подожди новый" });
+    return;
+  }
 
   const players = (round.players as SpinPlayer[]) ?? [];
   if (players.some((p) => p.telegramId === telegramId)) {
@@ -327,6 +348,9 @@ router.post("/increase", async (req, res) => {
   }
   let round = await getActiveRound();
   round = await ensureSpinResolved(round);
+  if (round.status === "finished") {
+    round = await getActiveRound();
+  }
   if (round.status !== "starting" && round.status !== "waiting") {
     res.status(400).json({ error: "Увеличить ставку можно только пока раунд активен" }); return;
   }

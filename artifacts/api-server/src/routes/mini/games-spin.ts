@@ -16,6 +16,14 @@ const MIN_STAKE = 0.1;
 const TIMER_SECONDS = 20;
 const COMMISSION_RATE = 0.20;
 
+/** Deterministic 0..1 offset inside winner sector — same for every client. */
+function computeStopFrac(hash: string | null | undefined): number {
+  if (!hash || hash.length < 16) return 0.5;
+  const n = parseInt(hash.slice(8, 16), 16);
+  if (Number.isNaN(n)) return 0.5;
+  return n / 0xffffffff;
+}
+
 type SpinPlayer = { telegramId: string; username: string | null; stake: number; chance: number };
 
 function recalcChances(players: SpinPlayer[]): SpinPlayer[] {
@@ -54,6 +62,7 @@ async function formatRound(room: typeof miniSpinRoomsTable.$inferSelect) {
     winnerUsername: room.winnerUsername ?? null,
     startAt: room.startAt?.toISOString() ?? null,
     finishedAt: room.finishedAt?.toISOString() ?? null,
+    stopFrac: isFinished ? computeStopFrac(room.fairnessHash) : null,
     fair: {
       serverSeedHash: room.serverSeedHash,
       serverSeed: isFinished ? (room.serverSeed ?? null) : null,
@@ -187,7 +196,6 @@ async function ensureSpinResolved(round: typeof miniSpinRoomsTable.$inferSelect)
   return round;
 }
 
-/** Keep returning a just-finished round for ~12s so ALL clients can play the spin animation. */
 const ANIMATION_WINDOW_MS = 12_000;
 async function getRecentFinishedForAnimation() {
   const room = await db
@@ -205,12 +213,10 @@ async function getRecentFinishedForAnimation() {
   return room;
 }
 
-/* ── GET /state ── */
 router.get("/state", async (_req, res) => {
   let round = await getActiveRound();
   round = await ensureSpinResolved(round);
 
-  // Animation window: if active is a fresh empty waiting room, prefer recent finished
   if (round.status === "waiting") {
     const players = (round.players as SpinPlayer[]) ?? [];
     if (players.length === 0) {
@@ -225,7 +231,6 @@ router.get("/state", async (_req, res) => {
   res.json(await formatRound(round));
 });
 
-/* ── GET /history ── */
 router.get("/history", async (req, res) => {
   const limit = Math.min(parseInt(String(req.query.limit ?? "20")), 50);
   const finished = await db
@@ -250,6 +255,7 @@ router.get("/history", async (req, res) => {
       playerCount: players.length,
       players,
       finishedAt: r.finishedAt?.toISOString() ?? null,
+      stopFrac: computeStopFrac(r.fairnessHash),
       fair: {
         serverSeed: r.serverSeed ?? null,
         serverSeedHash: r.serverSeedHash,
@@ -274,7 +280,6 @@ router.get("/history", async (req, res) => {
   });
 });
 
-/* ── GET /biggest-winner ── */
 router.get("/biggest-winner", async (_req, res) => {
   const finished = await db.select().from(miniSpinRoomsTable).where(eq(miniSpinRoomsTable.status, "finished")).orderBy(desc(miniSpinRoomsTable.finishedAt)).limit(200);
   let best: { telegramId: string | null; username: string | null; payout: number; totalPool: number; finishedAt: string | null } | null = null;
@@ -290,7 +295,6 @@ router.get("/biggest-winner", async (_req, res) => {
   res.json({ winner: best });
 });
 
-/* ── GET /lucky-players ── */
 router.get("/lucky-players", async (_req, res) => {
   const finished = await db.select().from(miniSpinRoomsTable).where(eq(miniSpinRoomsTable.status, "finished")).orderBy(desc(miniSpinRoomsTable.finishedAt)).limit(500);
   const map = new Map<string, { telegramId: string; username: string | null; wins: number; totalWon: number }>();
@@ -310,7 +314,6 @@ router.get("/lucky-players", async (_req, res) => {
   res.json({ players: sorted });
 });
 
-/* ── GET /last-winner ── */
 router.get("/last-winner", async (_req, res) => {
   const room = await db.select().from(miniSpinRoomsTable).where(eq(miniSpinRoomsTable.status, "finished")).orderBy(desc(miniSpinRoomsTable.finishedAt)).limit(1).then((r) => r[0] ?? null);
   if (!room || !room.winnerId) {
@@ -325,7 +328,6 @@ router.get("/last-winner", async (_req, res) => {
   res.json({ winner: { telegramId: room.winnerId, username: room.winnerUsername, payout, totalPool: Math.round(totalPool * 1000) / 1000, finishedAt: room.finishedAt?.toISOString() ?? null } });
 });
 
-/* ── POST /join ── */
 router.post("/join", async (req, res) => {
   if (!(await isGameEnabled("spin"))) {
     res.status(403).json({ error: GAME_DISABLED_MESSAGE });
@@ -379,7 +381,6 @@ router.post("/join", async (req, res) => {
   res.json(await formatRound(updated));
 });
 
-/* ── POST /increase ── */
 router.post("/increase", async (req, res) => {
   const { telegramId, additionalStake } = req.body as { telegramId?: string; additionalStake?: number };
   if (!telegramId || typeof additionalStake !== "number" || additionalStake <= 0) {
@@ -417,7 +418,6 @@ router.post("/increase", async (req, res) => {
   res.json(await formatRound(updated));
 });
 
-/* ── POST /client-seed ── */
 router.post("/client-seed", async (req, res) => {
   const { clientSeed } = req.body as { clientSeed?: string };
   if (!clientSeed || typeof clientSeed !== "string" || clientSeed.trim().length === 0) {
@@ -435,7 +435,6 @@ router.post("/client-seed", async (req, res) => {
   res.json({ ok: true, clientSeed: updated.clientSeed, serverSeedHash: updated.serverSeedHash, nonce: updated.nonce });
 });
 
-/* ── GET /fair/:id ── */
 router.get("/fair/:id", async (req, res) => {
   const id = parseInt(req.params.id);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
@@ -454,7 +453,6 @@ router.get("/fair/:id", async (req, res) => {
   });
 });
 
-/* ── Legacy room endpoints ── */
 router.get("/rooms", async (_req, res) => { res.json({ rooms: [] }); });
 router.get("/rooms/:id", async (req, res) => {
   const id = parseInt(req.params.id);

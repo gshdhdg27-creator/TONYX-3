@@ -12,13 +12,11 @@ import {
 } from "@workspace/api-client-react";
 import { useTelegram } from "@/lib/telegram";
 
-/** Circular PvP drum — style inspired by rollsgame_bot */
-const SIZE = 300;
-const CX = SIZE / 2;
-const CY = SIZE / 2;
-const OUTER_R = 138;
-const INNER_R = 52;
-const AVATAR_R = (OUTER_R + INNER_R) / 2;
+/* Portals arena v3 — full paint, no center hole, smooth 6s puck */
+const SQ = 300;
+const CX = SQ / 2;
+const CY = SQ / 2;
+const BALL_R = 10;
 
 interface ArenaPlayer {
   telegramId: string;
@@ -50,22 +48,14 @@ interface Props {
 }
 
 const COLORS = [
-  "#7c5cff",
-  "#f59e0b",
-  "#22c55e",
-  "#ef4444",
-  "#06b6d4",
-  "#ec4899",
-  "#eab308",
-  "#8b5cf6",
-  "#14b8a6",
-  "#f97316",
+  "#5BE12C", "#FF4136", "#FF9F00", "#00C0FF",
+  "#B044FF", "#FFEB3B", "#FF69B4", "#00FFB2",
+  "#FF6E40", "#39CCCC",
 ];
 
-const COMMISSION = 0.05;
+const COMMISSION = 0.2;
 const MIN_STAKE = 0.1;
 const DEFAULT_BETS = [0.1, 0.5, 1, 5, 10];
-const SPIN_MS = 6200;
 
 function initials(name: string | null | undefined, id: string) {
   return (name || id || "?").replace(/^@/, "").slice(0, 2).toUpperCase();
@@ -74,89 +64,161 @@ function colorFor(i: number) {
   return COLORS[i % COLORS.length];
 }
 
-/** Degrees: 0 at top, clockwise (matches pointer at top) */
-function polar(deg: number, r: number): [number, number] {
-  const rad = ((deg - 90) * Math.PI) / 180;
-  return [CX + r * Math.cos(rad), CY + r * Math.sin(rad)];
-}
+type Point = [number, number];
 
-function arcPath(startDeg: number, endDeg: number, rOut: number, rIn: number) {
-  const sweep = endDeg - startDeg;
-  if (sweep <= 0.05) return "";
-  // Full circle special-case
-  if (sweep >= 359.9) {
-    return [
-      `M ${CX} ${CY - rOut}`,
-      `A ${rOut} ${rOut} 0 1 1 ${CX - 0.01} ${CY - rOut}`,
-      `L ${CX - 0.01} ${CY - rIn}`,
-      `A ${rIn} ${rIn} 0 1 0 ${CX} ${CY - rIn}`,
-      "Z",
-    ].join(" ");
+function clipPolygon(poly: Point[], a: number, b: number, c: number): Point[] {
+  if (!poly.length) return [];
+  const out: Point[] = [];
+  for (let i = 0; i < poly.length; i++) {
+    const cur = poly[i];
+    const prev = poly[(i + poly.length - 1) % poly.length];
+    const curIn = a * cur[0] + b * cur[1] <= c + 1e-7;
+    const prevIn = a * prev[0] + b * prev[1] <= c + 1e-7;
+    if (curIn !== prevIn) {
+      const dx = cur[0] - prev[0];
+      const dy = cur[1] - prev[1];
+      const den = a * dx + b * dy;
+      if (Math.abs(den) > 1e-9) {
+        const t = (c - a * prev[0] - b * prev[1]) / den;
+        out.push([prev[0] + t * dx, prev[1] + t * dy]);
+      }
+    }
+    if (curIn) out.push(cur);
   }
-  const large = sweep > 180 ? 1 : 0;
-  const [x1, y1] = polar(startDeg, rOut);
-  const [x2, y2] = polar(endDeg, rOut);
-  const [x3, y3] = polar(endDeg, rIn);
-  const [x4, y4] = polar(startDeg, rIn);
-  return [
-    `M ${x1} ${y1}`,
-    `A ${rOut} ${rOut} 0 ${large} 1 ${x2} ${y2}`,
-    `L ${x3} ${y3}`,
-    `A ${rIn} ${rIn} 0 ${large} 0 ${x4} ${y4}`,
-    "Z",
-  ].join(" ");
+  return out;
 }
 
-function buildSectors(players: ArenaPlayer[]) {
+function polygonCenter(poly: Point[]): Point {
+  if (!poly.length) return [CX, CY];
+  return [
+    poly.reduce((sum, p) => sum + p[0], 0) / poly.length,
+    poly.reduce((sum, p) => sum + p[1], 0) / poly.length,
+  ];
+}
+
+function polygonContains(poly: Point[], x: number, y: number) {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, yi] = poly[i];
+    const [xj, yj] = poly[j];
+    if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
+function createSeededRandom(seedText: string) {
+  let seed = 2166136261;
+  for (let i = 0; i < seedText.length; i++) {
+    seed ^= seedText.charCodeAt(i);
+    seed = Math.imul(seed, 16777619);
+  }
+  return () => {
+    seed += 0x6D2B79F5;
+    let t = seed;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function randomInZone(zone: ReturnType<typeof buildSectors>[number], random: () => number) {
+  const poly = zone.polygon;
+  if (!poly?.length) return { x: zone.ax, y: zone.ay };
+  const xs = poly.map((p) => p[0]);
+  const ys = poly.map((p) => p[1]);
+  const minX = Math.min(...xs), maxX = Math.max(...xs);
+  const minY = Math.min(...ys), maxY = Math.max(...ys);
+  for (let i = 0; i < 1200; i++) {
+    const x = minX + random() * (maxX - minX);
+    const y = minY + random() * (maxY - minY);
+    if (polygonContains(poly, x, y)) return { x, y };
+  }
+  return { x: zone.ax, y: zone.ay };
+}
+
+function polygonArea(poly: Point[]): number {
+  if (poly.length < 3) return 0;
+  let area = 0;
+  for (let i = 0; i < poly.length; i++) {
+    const [x1, y1] = poly[i];
+    const [x2, y2] = poly[(i + 1) % poly.length];
+    area += x1 * y2 - x2 * y1;
+  }
+  return Math.abs(area) / 2;
+}
+
+function buildSectors(players: ArenaPlayer[], roundId = 0) {
   const total = players.reduce((s, p) => s + Math.max(0, p.stake), 0) || 1;
-  let angle = 0;
-  return players.map((p, i) => {
-    const share = Math.max(0, p.stake) / total;
-    const sweep = share * 360;
-    const startDeg = angle;
-    const endDeg = angle + sweep;
-    const midDeg = startDeg + sweep / 2;
-    angle = endDeg;
-    const [ax, ay] = polar(midDeg, AVATAR_R);
+  const sites = players.map((p, i) => {
+    const random = createSeededRandom(`zone:${roundId}:${p.telegramId}`);
     return {
-      ...p,
-      share,
-      startDeg,
-      endDeg,
-      midDeg,
-      color: colorFor(i),
+      x: 22 + random() * (SQ - 44),
+      y: 22 + random() * (SQ - 44),
+      weight: 0,
       index: i,
-      ax,
-      ay,
-      path: arcPath(startDeg, endDeg, OUTER_R, INNER_R),
+    };
+  });
+
+  const makePolygons = () => sites.map((site, i) => {
+    let polygon: Point[] = [[0, 0], [SQ, 0], [SQ, SQ], [0, SQ]];
+    for (let j = 0; j < sites.length && polygon.length; j++) {
+      if (j === i) continue;
+      const other = sites[j];
+      const a = 2 * (other.x - site.x);
+      const b = 2 * (other.y - site.y);
+      const limit = other.x * other.x + other.y * other.y -
+        site.x * site.x - site.y * site.y + site.weight - other.weight;
+      polygon = clipPolygon(polygon, a, b, limit);
+    }
+    return polygon;
+  });
+
+  for (let iteration = 0; iteration < 32 && players.length > 1; iteration++) {
+    const polygons = makePolygons();
+    const areas = polygons.map(polygonArea);
+    const areaTotal = areas.reduce((sum, area) => sum + area, 0) || 1;
+    for (let i = 0; i < sites.length; i++) {
+      const targetShare = Math.max(0, players[i].stake) / total;
+      const actualShare = areas[i] / areaTotal;
+      sites[i].weight += (targetShare - actualShare) * 24000;
+    }
+    const mean = sites.reduce((sum, site) => sum + site.weight, 0) / sites.length;
+    for (const site of sites) site.weight -= mean;
+  }
+
+  const polygons = makePolygons();
+  return players.map((p, i) => {
+    const site = sites[i];
+    let polygon = polygons[i];
+    if (polygon.length < 3 || polygonArea(polygon) < 1) {
+      polygon = [[site.x - 1, site.y - 1], [site.x + 1, site.y - 1], [site.x, site.y + 1]];
+    }
+    const [ax, ay] = polygonCenter(polygon);
+    const share = Math.max(0, p.stake) / total;
+    const size = Math.max(30, Math.min(48, 28 + share * 36));
+    return {
+      ...p, share, startDeg: 0, endDeg: 360, midDeg: 0,
+      color: colorFor(i), index: i, ax, ay, size, polygon,
+      points: polygon.map(([x, y]) => `${x.toFixed(2)},${y.toFixed(2)}`).join(" "),
     };
   });
 }
-
 function payoutOf(stake: number, pool: number) {
-  return stake > 0 && pool > 0 ? (pool * (1 - COMMISSION) * stake) / stake : 0;
+  return Math.round((stake + (pool - stake) * (1 - COMMISSION)) * 1000) / 1000;
 }
 
 export default function ArenaGame({
-  telegramId,
-  tonBalance,
-  onBalanceChange,
-  onClose,
-  onOpenHistory,
+  telegramId, tonBalance, onBalanceChange, onClose, onOpenHistory,
 }: Props) {
   const { photoUrl } = useTelegram();
   const qc = useQueryClient();
   const { data: profile } = useGetUserProfile(telegramId ?? "", {
     query: { enabled: !!telegramId, refetchInterval: 5000 },
   } as Parameters<typeof useGetUserProfile>[1]);
-  const balanceTon = Number(
-    (profile as { ton?: string | number } | undefined)?.ton ?? tonBalance ?? 0,
-  );
+  const balanceTon = Number((profile as { ton?: string | number } | undefined)?.ton ?? tonBalance ?? 0);
   const balanceTonyx = Number(
-    (profile as { tonyxCoins?: string | number; tonyx?: string | number } | undefined)
-      ?.tonyxCoins ??
-      (profile as { tonyx?: string | number } | undefined)?.tonyx ??
-      0,
+    (profile as { tonyxCoins?: string | number; tonyx?: string | number } | undefined)?.tonyxCoins ??
+      (profile as { tonyx?: string | number } | undefined)?.tonyx ?? 0,
   );
   const [betCurrency, setBetCurrency] = useState<"ton" | "tonyx">("ton");
   const balance = betCurrency === "ton" ? balanceTon : balanceTonyx;
@@ -169,101 +231,179 @@ export default function ArenaGame({
   const [phase, setPhase] = useState<Phase>("lobby");
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<{ msg: string; type: "ok" | "err" } | null>(null);
-  const [winnerData, setWinnerData] = useState<{
-    name: string;
-    payout: number;
-    mult: number;
-    photo?: string | null;
-    chance: number;
-  } | null>(null);
+  const [winnerData, setWinnerData] = useState<{ name: string; payout: number; mult: number; photo?: string | null } | null>(null);
   const [freezeSectors, setFreezeSectors] = useState<ReturnType<typeof buildSectors> | null>(null);
   const [freezePool, setFreezePool] = useState(0);
+  const [countdown, setCountdown] = useState(0);
   const [customBet, setCustomBet] = useState("");
   const [autoPlay, setAutoPlay] = useState(false);
   const [autoStake, setAutoStake] = useState(0.1);
-  const [wheelRot, setWheelRot] = useState(0);
-  const [countdown, setCountdown] = useState(0);
-
+  const [boardZoom, setBoardZoom] = useState(1);
+  const [arrowAngle, setArrowAngle] = useState(0);
+  const [arrowOn, setArrowOn] = useState(false);
   const autoPlayRef = useRef(false);
   const autoStakeRef = useRef(0.1);
+
+  const ballRef = useRef<SVGCircleElement | null>(null);
+  const glowRef = useRef<SVGCircleElement | null>(null);
+  const arrowRef = useRef<SVGGElement | null>(null);
+  const posRef = useRef({ x: CX, y: CY });
+  const velRef = useRef({ vx: 0, vy: 0 });
+  const rafRef = useRef<number | null>(null);
+  const settledRef = useRef<Set<number>>(new Set());
   const phaseRef = useRef<Phase>("lobby");
   const arenaIdRef = useRef<number | null>(null);
-  const settledRef = useRef<Set<number>>(new Set());
-  const rafRef = useRef<number | null>(null);
-  const wheelBaseRef = useRef(0);
+  const myPhoto = photoUrl;
+
+  useEffect(() => { phaseRef.current = phase; }, [phase]);
+  useEffect(() => { arenaIdRef.current = arena?.id ?? null; }, [arena?.id]);
+  useEffect(() => { autoPlayRef.current = autoPlay; }, [autoPlay]);
+  useEffect(() => { autoStakeRef.current = autoStake; }, [autoStake]);
 
   useEffect(() => {
-    phaseRef.current = phase;
-  }, [phase]);
-  useEffect(() => {
-    autoPlayRef.current = autoPlay;
-  }, [autoPlay]);
-  useEffect(() => {
-    autoStakeRef.current = autoStake;
-  }, [autoStake]);
+    if (arena?.status !== "starting" || !arena.startAt) { setCountdown(0); return; }
+    const update = () => {
+      const ms = new Date(arena.startAt!).getTime() - Date.now();
+      setCountdown(Math.max(0, Math.ceil(ms / 1000)));
+    };
+    update();
+    const id = setInterval(update, 200);
+    return () => clearInterval(id);
+  }, [arena?.status, arena?.startAt]);
 
-  function flash(msg: string, type: "ok" | "err" = "ok") {
+  const flash = (msg: string, type: "ok" | "err" = "ok") => {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 2200);
+  };
+
+  function placeBall(nx: number, ny: number, ang?: number) {
+    posRef.current = { x: nx, y: ny };
+    ballRef.current?.setAttribute("cx", nx.toFixed(2));
+    ballRef.current?.setAttribute("cy", ny.toFixed(2));
+    glowRef.current?.setAttribute("cx", nx.toFixed(2));
+    glowRef.current?.setAttribute("cy", ny.toFixed(2));
+    if (ang !== undefined && arrowRef.current) {
+      arrowRef.current.setAttribute("transform", `translate(${nx.toFixed(2)},${ny.toFixed(2)}) rotate(${ang.toFixed(1)})`);
+    }
+  }
+
+  function resetAnim() {
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    rafRef.current = null;
+    placeBall(CX, CY);
+    setWinnerData(null);
+    setFreezeSectors(null);
+    setFreezePool(0);
+    setBoardZoom(1);
+    setArrowOn(false);
   }
 
   function runSpinAnimation(data: ArenaState) {
-    const sectors = buildSectors(data.players);
-    setFreezeSectors(sectors);
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    const secs = buildSectors(data.players, data.id);
+    const winner = secs.find((s) => s.telegramId === data.winnerId) ?? secs[0];
+    if (!winner) return;
+
+    setFreezeSectors(secs);
     setFreezePool(data.totalPool);
     setPhase("spin");
-    arenaIdRef.current = data.id;
+    setWinnerData(null);
+    setBoardZoom(1);
+    setArrowOn(true);
 
-    const winner = sectors.find((s) => s.telegramId === data.winnerId) ?? sectors[0];
-    if (!winner) {
-      setPhase("lobby");
-      return;
-    }
+    const random = createSeededRandom(`${data.id}:${data.winnerId ?? winner.telegramId}`);
+    const target = randomInZone(winner, random);
+    const startAng = random() * Math.PI * 2;
+    const startR = 8 + random() * 18;
+    const sx = CX + Math.cos(startAng) * startR;
+    const sy = CY + Math.sin(startAng) * startR;
+    const dir = random() * Math.PI * 2;
+    const speed = 9.5 + random() * 3.5;
+    placeBall(sx, sy, (dir * 180) / Math.PI);
+    velRef.current = { vx: Math.cos(dir) * speed, vy: Math.sin(dir) * speed };
 
-    // Align winner mid under fixed pointer at top (0°)
-    const turns = 5 + Math.floor(Math.random() * 3);
-    const target =
-      wheelBaseRef.current - turns * 360 - winner.midDeg;
-
-    const start = performance.now();
-    const from = wheelBaseRef.current;
-    const delta = target - from;
-
-    const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
+    const startTime = performance.now();
+    const TOTAL_MS = 6200;
+    const EDGE = 4;
+    let last = startTime;
+    let stopped = false;
 
     const step = (now: number) => {
-      const t = Math.min(1, (now - start) / SPIN_MS);
-      const e = easeOutCubic(t);
-      const rot = from + delta * e;
-      setWheelRot(rot);
-      if (t < 1) {
-        rafRef.current = requestAnimationFrame(step);
-      } else {
-        wheelBaseRef.current = rot;
-        const stake = winner.stake;
-        const pool = data.totalPool;
-        const net = pool * (1 - COMMISSION);
-        const payout = stake > 0 ? (net * stake) / stake : 0;
-        // actual: winner takes whole pool minus commission
-        const winAmount = net;
-        const mult = stake > 0 ? winAmount / stake : 1;
-        setWinnerData({
-          name: winner.username || winner.telegramId,
-          payout: winAmount,
-          mult,
-          photo: winner.photoUrl,
-          chance: winner.share * 100,
-        });
+      if (stopped) return;
+      const elapsed = now - startTime;
+      if (elapsed >= TOTAL_MS) {
+        stopped = true;
+        placeBall(target.x, target.y);
+        velRef.current = { vx: 0, vy: 0 };
+        setArrowOn(false);
+        setBoardZoom(1.22);
         setPhase("winner");
+        const payout = payoutOf(winner.stake, data.totalPool);
+        const mult = winner.stake > 0 ? Math.round((payout / winner.stake) * 100) / 100 : 0;
+        setWinnerData({ name: data.winnerUsername || winner.username || winner.telegramId, payout, mult, photo: winner.photoUrl });
+        rafRef.current = null;
         setTimeout(() => {
           setPhase("lobby");
-          setWinnerData(null);
-          setFreezeSectors(null);
-          setArena(null);
+          resetAnim();
           fetchState();
           refreshBalance();
-        }, 4500);
+          if (autoPlayRef.current && autoStakeRef.current > 0) setTimeout(() => placeBet(autoStakeRef.current), 700);
+        }, 3200);
+        return;
       }
+      const dt = Math.min(0.032, Math.max(0.001, (now - last) / 1000));
+      last = now;
+      const raw = elapsed / TOTAL_MS;
+      const pos = posRef.current;
+      let { vx, vy } = velRef.current;
+
+      let friction: number;
+      if (raw < 0.35) friction = 0.997;
+      else if (raw < 0.55) friction = 0.988;
+      else if (raw < 0.72) friction = 0.97;
+      else if (raw < 0.88) friction = 0.94;
+      else friction = 0.88;
+
+      vx *= Math.pow(friction, dt * 60);
+      vy *= Math.pow(friction, dt * 60);
+
+      if (raw > 0.42) {
+        const pull = Math.min(1, Math.max(0, (raw - 0.42) / 0.58));
+        const dx = target.x - pos.x;
+        const dy = target.y - pos.y;
+        const distance = Math.hypot(dx, dy);
+        const desiredSpeed = 2.2 + (1 - pull) * 2.8;
+        const desiredVx = distance > 0.001 ? (dx / distance) * desiredSpeed : 0;
+        const desiredVy = distance > 0.001 ? (dy / distance) * desiredSpeed : 0;
+        const steerLimit = (2.5 + pull * 4) * dt;
+        const steerX = desiredVx - vx;
+        const steerY = desiredVy - vy;
+        const steerLength = Math.hypot(steerX, steerY);
+        if (steerLength > steerLimit && steerLength > 0) {
+          vx += (steerX / steerLength) * steerLimit;
+          vy += (steerY / steerLength) * steerLimit;
+        } else {
+          vx = desiredVx;
+          vy = desiredVy;
+        }
+      }
+
+      let nx = pos.x + vx * dt * 60;
+      let ny = pos.y + vy * dt * 60;
+
+      if (nx - BALL_R <= EDGE) { nx = BALL_R + EDGE; vx = Math.abs(vx) * 0.92; }
+      if (nx + BALL_R >= SQ - EDGE) { nx = SQ - BALL_R - EDGE; vx = -Math.abs(vx) * 0.92; }
+      if (ny - BALL_R <= EDGE) { ny = BALL_R + EDGE; vy = Math.abs(vy) * 0.92; }
+      if (ny + BALL_R >= SQ - EDGE) { ny = SQ - BALL_R - EDGE; vy = -Math.abs(vy) * 0.92; }
+
+      velRef.current = { vx, vy };
+      const ang = (Math.atan2(vy, vx) * 180) / Math.PI;
+      placeBall(nx, ny, ang);
+      setArrowAngle(ang);
+
+      if (raw > 0.78) setBoardZoom(1 + ((raw - 0.78) / 0.22) * 0.22);
+
+      rafRef.current = requestAnimationFrame(step);
     };
     rafRef.current = requestAnimationFrame(step);
   }
@@ -275,44 +415,19 @@ export default function ArenaGame({
       const d = (await r.json()) as ArenaState;
       if (phaseRef.current === "lobby") setArena(d);
       else if (d.status === "finished" && d.id === arenaIdRef.current) setArena(d);
-      if (
-        d.status === "finished" &&
-        d.winnerId &&
-        !settledRef.current.has(d.id) &&
-        phaseRef.current === "lobby"
-      ) {
+      if (d.status === "finished" && d.winnerId && !settledRef.current.has(d.id) && phaseRef.current === "lobby") {
         settledRef.current.add(d.id);
         setArena(d);
         runSpinAnimation(d);
       }
-    } catch {
-      /* ignore */
-    }
+    } catch { /* ignore */ }
   }, []);
 
   useEffect(() => {
     fetchState();
     const t = setInterval(fetchState, 700);
-    return () => {
-      clearInterval(t);
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    };
+    return () => { clearInterval(t); if (rafRef.current) cancelAnimationFrame(rafRef.current); };
   }, [fetchState]);
-
-  // Countdown from startAt
-  useEffect(() => {
-    if (phase !== "lobby" || !arena?.startAt || arena.status !== "starting") {
-      setCountdown(0);
-      return;
-    }
-    const tick = () => {
-      const ms = new Date(arena.startAt!).getTime() - Date.now();
-      setCountdown(Math.max(0, Math.ceil(ms / 1000)));
-    };
-    tick();
-    const id = setInterval(tick, 200);
-    return () => clearInterval(id);
-  }, [arena?.startAt, arena?.status, phase]);
 
   useEffect(() => {
     if (arena?.status !== "starting" || !arena.startAt) return;
@@ -322,45 +437,16 @@ export default function ArenaGame({
     return () => clearTimeout(t);
   }, [arena?.status, arena?.startAt, fetchState]);
 
-  // Auto-play
-  useEffect(() => {
-    if (!autoPlay || phase !== "lobby" || busy) return;
-    if (arena?.status === "finished") return;
-    const id = setInterval(() => {
-      if (!autoPlayRef.current || phaseRef.current !== "lobby") return;
-      placeBet(autoStakeRef.current);
-    }, 4000);
-    return () => clearInterval(id);
-  }, [autoPlay, phase, busy, arena?.status]);
-
-  const liveSectors = useMemo(
-    () => buildSectors(arena?.players ?? []),
-    [arena?.players],
-  );
+  const liveSectors = useMemo(() => buildSectors(arena?.players ?? [], arena?.id ?? 0), [arena?.players, arena?.id]);
   const sectors = freezeSectors ?? liveSectors;
-  const pool = freezeSectors ? freezePool : arena?.totalPool ?? 0;
+  const pool = freezeSectors ? freezePool : (arena?.totalPool ?? 0);
 
   async function placeBet(amount: number) {
-    if (!telegramId) {
-      flash("Откройте в Telegram", "err");
-      return;
-    }
-    if (phase !== "lobby") {
-      flash("Дождитесь окончания игры", "err");
-      return;
-    }
-    if (arena?.status === "finished") {
-      flash("Игра завершена, подождите…", "err");
-      return;
-    }
-    if (!amount || amount < MIN_STAKE) {
-      flash(`Мин. ${MIN_STAKE}`, "err");
-      return;
-    }
-    if (amount > balance + 1e-9) {
-      flash("Недостаточно средств", "err");
-      return;
-    }
+    if (!telegramId) { flash("Откройте в Telegram", "err"); return; }
+    if (phase !== "lobby") { flash("Дождитесь окончания игры", "err"); return; }
+    if (arena?.status === "finished") { flash("Игра завершена, подождите…", "err"); return; }
+    if (!amount || amount < MIN_STAKE) { flash(`Мин. ${MIN_STAKE}`, "err"); return; }
+    if (amount > balance + 1e-9) { flash("Недостаточно средств", "err"); return; }
     setBusy(true);
     try {
       const me = arena?.players.find((p) => p.telegramId === telegramId);
@@ -368,579 +454,213 @@ export default function ArenaGame({
       const body = me
         ? { telegramId, additionalStake: amount, currency: betCurrency }
         : { telegramId, stake: amount, currency: betCurrency };
-      const r = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
+      const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const d = await r.json();
-      if (!r.ok) {
-        flash(d.error ?? "Ошибка", "err");
-        return;
-      }
+      if (!r.ok) { flash(d.error ?? "Ошибка", "err"); return; }
       setArena(d);
       flash(me ? "Ставка увеличена" : "Вы в игре!", "ok");
       refreshBalance();
-    } catch {
-      flash("Сеть недоступна", "err");
-    } finally {
-      setBusy(false);
-    }
+    } catch { flash("Сеть недоступна", "err"); }
+    finally { setBusy(false); }
   }
 
-  const centerLabel = (() => {
-    if (phase === "spin") return "ИГРА";
-    if (phase === "winner") return "ИГРА";
-    if (arena?.status === "starting" && countdown > 0)
-      return String(countdown).padStart(2, "0");
-    if (sectors.length === 0) return "Ожидание";
-    if (arena?.status === "waiting") return "Ожидание";
-    return "Ожидание";
-  })();
-
-  const centerSub =
-    phase === "spin" || phase === "winner"
-      ? null
-      : arena?.status === "starting" && countdown > 0
-        ? `00:${String(countdown).padStart(2, "0")}`
-        : null;
+  function playerPhoto(s: ReturnType<typeof buildSectors>[0]) {
+    if (s.telegramId === telegramId && myPhoto) return myPhoto;
+    return s.photoUrl ?? null;
+  }
 
   return (
-    <div
-      style={{
-        minHeight: "100dvh",
-        background: "radial-gradient(ellipse at 50% 20%, #1a0a2e 0%, #0a0612 55%, #050308 100%)",
-        color: "#e2e8f0",
-        paddingBottom: 120,
-        fontFamily: "inherit",
-      }}
-    >
-      {/* top bar */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          padding: "12px 14px",
-        }}
-      >
-        <button
-          type="button"
-          onClick={onClose}
-          style={{
-            background: "rgba(255,255,255,0.06)",
-            border: "none",
-            color: "#cbd5e1",
-            borderRadius: 10,
-            padding: "8px 12px",
-            fontWeight: 700,
-            fontSize: 13,
-            cursor: "pointer",
-          }}
-        >
-          ✕ Закрыть
-        </button>
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <span
-            style={{
-              fontSize: 12,
-              fontWeight: 800,
-              color: "#fbbf24",
-              background: "rgba(251,191,36,0.12)",
-              border: "1px solid rgba(251,191,36,0.25)",
-              borderRadius: 999,
-              padding: "5px 10px",
-            }}
-          >
-            {balanceTon.toFixed(3)} TON
-          </span>
-          {onOpenHistory && (
-            <button
-              type="button"
-              onClick={onOpenHistory}
-              style={{
-                background: "rgba(255,255,255,0.06)",
-                border: "none",
-                color: "#94a3b8",
-                borderRadius: 10,
-                padding: "8px 10px",
-                cursor: "pointer",
-              }}
-            >
-              🕐
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* bank */}
-      <div style={{ textAlign: "center", marginBottom: 6 }}>
-        <div
-          style={{
-            display: "inline-block",
-            background: "rgba(124,92,255,0.18)",
-            border: "1px solid rgba(124,92,255,0.35)",
-            borderRadius: 999,
-            padding: "8px 18px",
-            fontWeight: 800,
-            fontSize: 14,
-            color: "#e9d5ff",
-          }}
-        >
-          ВСЕГО {pool.toFixed(2)} TON
-        </div>
-      </div>
-
-      {/* WHEEL */}
-      <div
-        style={{
-          position: "relative",
-          width: SIZE,
-          height: SIZE,
-          margin: "8px auto 12px",
-        }}
-      >
-        {/* fixed pointer */}
-        <div
-          style={{
-            position: "absolute",
-            left: "50%",
-            top: 2,
-            transform: "translateX(-50%)",
-            zIndex: 5,
-            width: 0,
-            height: 0,
-            borderLeft: "12px solid transparent",
-            borderRight: "12px solid transparent",
-            borderTop: "18px solid #0f0a1a",
-            filter: "drop-shadow(0 2px 4px rgba(0,0,0,0.5))",
-          }}
-        />
-        <div
-          style={{
-            position: "absolute",
-            left: "50%",
-            top: 4,
-            transform: "translateX(-50%)",
-            zIndex: 6,
-            width: 0,
-            height: 0,
-            borderLeft: "9px solid transparent",
-            borderRight: "9px solid transparent",
-            borderTop: "14px solid #e2e8f0",
-          }}
-        />
-
-        {/* rotating disk */}
-        <div
-          style={{
-            width: SIZE,
-            height: SIZE,
-            borderRadius: "50%",
-            transform: `rotate(${wheelRot}deg)`,
-            willChange: "transform",
-            boxShadow:
-              "0 0 0 3px rgba(124,92,255,0.25), 0 20px 50px rgba(0,0,0,0.55)",
-            background: "#12081f",
-            position: "relative",
-          }}
-        >
-          <svg width={SIZE} height={SIZE} style={{ display: "block" }}>
-            {/* empty ring when no players */}
-            {!sectors.length && (
-              <circle
-                cx={CX}
-                cy={CY}
-                r={OUTER_R}
-                fill="#1e1233"
-                stroke="rgba(124,92,255,0.2)"
-                strokeWidth={2}
-              />
-            )}
-            {sectors.map((s) => (
-              <path
-                key={s.telegramId}
-                d={s.path}
-                fill={s.color}
-                stroke="rgba(0,0,0,0.25)"
-                strokeWidth={1}
-                opacity={0.95}
-              />
-            ))}
-            {/* inner hole */}
-            <circle cx={CX} cy={CY} r={INNER_R} fill="#0a0612" />
-          </svg>
-
-          {/* avatars on sectors */}
-          {sectors.map((s) => {
-            const size = Math.max(28, Math.min(40, 26 + s.share * 40));
-            return (
-              <div
-                key={`av-${s.telegramId}`}
-                style={{
-                  position: "absolute",
-                  left: s.ax,
-                  top: s.ay,
-                  width: size,
-                  height: size,
-                  marginLeft: -size / 2,
-                  marginTop: -size / 2,
-                  borderRadius: "50%",
-                  overflow: "hidden",
-                  border: `2px solid ${s.color}`,
-                  boxShadow: "0 2px 8px rgba(0,0,0,0.45)",
-                  background: "#1e1233",
-                  // counter-rotate so face stays upright
-                  transform: `rotate(${-wheelRot}deg)`,
-                }}
-              >
-                {s.photoUrl || (s.telegramId === telegramId ? photoUrl : null) ? (
-                  <img
-                    src={
-                      s.photoUrl ||
-                      (s.telegramId === telegramId ? photoUrl! : "")
-                    }
-                    alt=""
-                    style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                  />
-                ) : (
-                  <div
-                    style={{
-                      width: "100%",
-                      height: "100%",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      fontSize: 11,
-                      fontWeight: 800,
-                      color: "#fff",
-                      background: s.color,
-                    }}
-                  >
-                    {initials(s.username, s.telegramId)}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-
-        {/* center hub (fixed, not rotating) */}
-        <div
-          style={{
-            position: "absolute",
-            left: "50%",
-            top: "50%",
-            transform: "translate(-50%, -50%)",
-            width: INNER_R * 2 - 4,
-            height: INNER_R * 2 - 4,
-            borderRadius: "50%",
-            background: "#0a0612",
-            border: "2px solid rgba(255,255,255,0.08)",
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 4,
-            boxShadow: "inset 0 0 20px rgba(0,0,0,0.6)",
-          }}
-        >
-          {centerSub ? (
-            <span
-              style={{
-                fontSize: 22,
-                fontWeight: 900,
-                color: "#f8fafc",
-                fontVariantNumeric: "tabular-nums",
-              }}
-            >
-              {centerSub}
-            </span>
-          ) : (
-            <span
-              style={{
-                fontSize: phase === "spin" || phase === "winner" ? 16 : 13,
-                fontWeight: 900,
-                color:
-                  phase === "spin" || phase === "winner" ? "#4ade80" : "#e2e8f0",
-                letterSpacing: 0.5,
-              }}
-            >
-              {centerLabel}
-            </span>
-          )}
-        </div>
-      </div>
-
-      {/* winner banner */}
-      {phase === "winner" && winnerData && (
-        <div
-          style={{
-            margin: "0 16px 12px",
-            padding: 14,
-            borderRadius: 16,
-            background: "linear-gradient(135deg, rgba(34,197,94,0.2), rgba(124,92,255,0.15))",
-            border: "1px solid rgba(34,197,94,0.4)",
-            textAlign: "center",
-          }}
-        >
-          <div style={{ fontSize: 12, color: "#86efac", fontWeight: 700 }}>
-            Победитель
-          </div>
-          <div style={{ fontSize: 16, fontWeight: 900, marginTop: 4 }}>
-            @{winnerData.name.replace(/^@/, "")}
-          </div>
-          <div style={{ fontSize: 13, color: "#fbbf24", fontWeight: 800, marginTop: 4 }}>
-            +{winnerData.payout.toFixed(2)} TON · x{winnerData.mult.toFixed(2)} ·{" "}
-            {winnerData.chance.toFixed(1)}%
-          </div>
-        </div>
-      )}
-
+    <div style={{ position: "fixed", inset: 0, zIndex: 400, background: "#0a0a12", color: "#f1f1f8", display: "flex", flexDirection: "column", fontFamily: "Inter, system-ui, sans-serif" }}>
       {toast && (
-        <div
-          style={{
-            margin: "0 16px 10px",
-            padding: "10px 14px",
-            borderRadius: 12,
-            background:
-              toast.type === "ok"
-                ? "rgba(34,197,94,0.18)"
-                : "rgba(239,68,68,0.18)",
-            color: toast.type === "ok" ? "#4ade80" : "#f87171",
-            fontSize: 13,
-            fontWeight: 700,
-            textAlign: "center",
-          }}
-        >
-          {toast.msg}
+        <div style={{
+          position: "fixed", top: 16, left: "50%", transform: "translateX(-50%)", zIndex: 9999,
+          background: toast.type === "ok" ? "rgba(5,150,105,0.95)" : "rgba(220,38,38,0.95)",
+          color: "#fff", borderRadius: 12, padding: "10px 16px", fontSize: 13, fontWeight: 700,
+        }}>{toast.msg}</div>
+      )}
+
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 14px" }}>
+        <button type="button" onClick={onClose} style={{
+          background: "rgba(255,255,255,0.06)", border: "none", color: "#cbd5e1",
+          borderRadius: 10, padding: "8px 12px", fontWeight: 700, fontSize: 13, cursor: "pointer",
+        }}>✕ Закрыть</button>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <span style={{
+            fontSize: 12, fontWeight: 800, color: "#fbbf24",
+            background: "rgba(251,191,36,0.12)", border: "1px solid rgba(251,191,36,0.25)",
+            borderRadius: 999, padding: "5px 10px",
+          }}>{balanceTon.toFixed(3)} TON</span>
+          {onOpenHistory && (
+            <button type="button" onClick={onOpenHistory} style={{
+              background: "rgba(255,255,255,0.06)", border: "none", color: "#94a3b8",
+              borderRadius: 10, padding: "8px 10px", cursor: "pointer",
+            }}>🕐</button>
+          )}
+        </div>
+      </div>
+
+      <div style={{ textAlign: "center", marginBottom: 8 }}>
+        <div style={{
+          display: "inline-block", background: "rgba(91,225,44,0.12)", border: "1px solid rgba(91,225,44,0.35)",
+          borderRadius: 999, padding: "8px 18px", fontWeight: 800, fontSize: 14, color: "#b8f5a0",
+        }}>Банк {pool.toFixed(3)} TON</div>
+        {arena?.status === "starting" && countdown > 0 && (
+          <div style={{ marginTop: 6, fontSize: 18, fontWeight: 900, color: "#fbbf24" }}>00:{String(countdown).padStart(2, "0")}</div>
+        )}
+      </div>
+
+      <div style={{
+        width: SQ, height: SQ, margin: "0 auto", borderRadius: 18, overflow: "hidden",
+        transform: `scale(${boardZoom})`, transition: "transform 0.35s ease",
+        boxShadow: "0 12px 40px rgba(0,0,0,0.55)", border: "2px solid rgba(255,255,255,0.08)",
+        background: "#12121c", position: "relative",
+      }}>
+        <svg width={SQ} height={SQ} style={{ display: "block" }}>
+          {sectors.map((s) => (
+            <polygon key={s.telegramId} points={s.points} fill={s.color} opacity={0.88} stroke="rgba(0,0,0,0.35)" strokeWidth={1.5} />
+          ))}
+          {!sectors.length && (
+            <rect x={0} y={0} width={SQ} height={SQ} fill="#1a1a28" />
+          )}
+          <circle ref={glowRef} cx={CX} cy={CY} r={BALL_R + 6} fill="rgba(255,255,255,0.12)" />
+          <circle ref={ballRef} cx={CX} cy={CY} r={BALL_R} fill="url(#ballGrad)" stroke="rgba(255,255,255,0.5)" strokeWidth={1.5} />
+          <defs>
+            <radialGradient id="ballGrad" cx="35%" cy="30%">
+              <stop offset="0%" stopColor="#ffffff" />
+              <stop offset="55%" stopColor="#e2e8f0" />
+              <stop offset="100%" stopColor="#94a3b8" />
+            </radialGradient>
+          </defs>
+          {arrowOn && (
+            <g ref={arrowRef} transform={`translate(${CX},${CY})`}>
+              <polygon points="14,0 -6,-5 -6,5" fill="#fbbf24" opacity={0.9} />
+            </g>
+          )}
+        </svg>
+        {sectors.map((s) => {
+          const photo = playerPhoto(s);
+          return (
+            <div key={`av-${s.telegramId}`} style={{
+              position: "absolute", left: s.ax, top: s.ay,
+              width: s.size, height: s.size, marginLeft: -s.size / 2, marginTop: -s.size / 2,
+              borderRadius: "50%", overflow: "hidden", border: `2.5px solid ${s.color}`,
+              boxShadow: "0 2px 10px rgba(0,0,0,0.5)", background: s.color, pointerEvents: "none",
+            }}>
+              {photo ? (
+                <img src={photo} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+              ) : (
+                <div style={{
+                  width: "100%", height: "100%", display: "flex", alignItems: "center",
+                  justifyContent: "center", fontSize: 11, fontWeight: 900, color: "#fff",
+                }}>{initials(s.username, s.telegramId)}</div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {winnerData && (
+        <div style={{
+          margin: "14px 16px 0", padding: 16, borderRadius: 16, textAlign: "center",
+          background: "linear-gradient(135deg, rgba(91,225,44,0.2), rgba(0,192,255,0.12))",
+          border: "1px solid rgba(91,225,44,0.45)",
+        }}>
+          <div style={{ fontSize: 12, color: "#86efac", fontWeight: 800 }}>Победитель</div>
+          <div style={{ fontSize: 17, fontWeight: 900, marginTop: 4 }}>@{winnerData.name.replace(/^@/, "")}</div>
+          <div style={{ fontSize: 14, color: "#fbbf24", fontWeight: 900, marginTop: 6 }}>
+            +{winnerData.payout.toFixed(3)} TON · x{winnerData.mult}
+          </div>
         </div>
       )}
 
-      {/* betting controls */}
       {phase === "lobby" && (
-        <div style={{ padding: "0 16px" }}>
-          <div
-            style={{
-              display: "flex",
-              gap: 8,
-              marginBottom: 10,
-              justifyContent: "center",
-            }}
-          >
+        <div style={{ padding: "16px 16px 0" }}>
+          <div style={{ display: "flex", gap: 8, marginBottom: 10, justifyContent: "center" }}>
             {DEFAULT_BETS.map((v) => (
-              <button
-                key={v}
-                type="button"
-                disabled={busy}
-                onClick={() => placeBet(v)}
-                style={{
-                  flex: 1,
-                  maxWidth: 64,
-                  padding: "10px 0",
-                  borderRadius: 12,
-                  border: "1px solid rgba(148,163,184,0.2)",
-                  background: "rgba(30,18,51,0.9)",
-                  color: "#e2e8f0",
-                  fontWeight: 800,
-                  fontSize: 13,
-                  cursor: "pointer",
-                }}
-              >
-                {v}
-              </button>
+              <button key={v} type="button" disabled={busy} onClick={() => placeBet(v)} style={{
+                flex: 1, maxWidth: 64, padding: "12px 0", borderRadius: 14,
+                border: "1px solid rgba(148,163,184,0.2)", background: "rgba(30,30,45,0.95)",
+                color: "#e2e8f0", fontWeight: 900, fontSize: 13, cursor: "pointer",
+              }}>{v}</button>
             ))}
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => placeBet(Math.max(MIN_STAKE, Math.floor(balance * 1000) / 1000))}
-              style={{
-                flex: 1.2,
-                maxWidth: 80,
-                padding: "10px 0",
-                borderRadius: 12,
-                border: "none",
-                background: "linear-gradient(135deg,#7c5cff,#a855f7)",
-                color: "#fff",
-                fontWeight: 900,
-                fontSize: 13,
-                cursor: "pointer",
-              }}
-            >
-              All In
-            </button>
+            <button type="button" disabled={busy} onClick={() => placeBet(Math.max(MIN_STAKE, Math.floor(balance * 1000) / 1000))} style={{
+              flex: 1.2, maxWidth: 80, padding: "12px 0", borderRadius: 14, border: "none",
+              background: "linear-gradient(135deg,#5BE12C,#00C0FF)", color: "#0a0a12",
+              fontWeight: 900, fontSize: 13, cursor: "pointer",
+            }}>All</button>
           </div>
-
-          <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-            <input
-              value={customBet}
-              onChange={(e) => setCustomBet(e.target.value.replace(/[^0-9.]/g, ""))}
-              placeholder="Своя ставка"
-              style={{
-                flex: 1,
-                padding: "12px 14px",
-                borderRadius: 12,
-                border: "1px solid rgba(148,163,184,0.2)",
-                background: "rgba(15,10,25,0.9)",
-                color: "#f1f5f9",
-                fontSize: 14,
-                fontWeight: 700,
-                outline: "none",
-              }}
-            />
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => placeBet(Number(customBet))}
-              style={{
-                padding: "12px 16px",
-                borderRadius: 12,
-                border: "none",
-                background: "linear-gradient(135deg,#f59e0b,#fbbf24)",
-                color: "#1a0a00",
-                fontWeight: 900,
-                fontSize: 13,
-                cursor: "pointer",
-                whiteSpace: "nowrap",
-              }}
-            >
-              + В PvP
-            </button>
+          <div style={{ display: "flex", gap: 8 }}>
+            <input value={customBet} onChange={(e) => setCustomBet(e.target.value.replace(/[^0-9.]/g, ""))}
+              placeholder="Своя ставка" style={{
+                flex: 1, padding: "12px 14px", borderRadius: 14,
+                border: "1px solid rgba(148,163,184,0.2)", background: "rgba(15,15,25,0.95)",
+                color: "#f1f5f9", fontSize: 14, fontWeight: 700, outline: "none",
+              }} />
+            <button type="button" disabled={busy} onClick={() => placeBet(Number(customBet) || 0)} style={{
+              padding: "12px 16px", borderRadius: 14, border: "none",
+              background: "linear-gradient(135deg,#f59e0b,#fbbf24)", color: "#1a0a00",
+              fontWeight: 900, fontSize: 13, cursor: "pointer", whiteSpace: "nowrap",
+            }}>+ Ставка</button>
           </div>
-
-          <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-            <button
-              type="button"
-              onClick={() => setBetCurrency((c) => (c === "ton" ? "tonyx" : "ton"))}
-              style={{
-                flex: 1,
-                padding: "10px",
-                borderRadius: 12,
-                border: "1px solid rgba(148,163,184,0.2)",
-                background: "rgba(30,18,51,0.7)",
-                color: "#cbd5e1",
-                fontWeight: 700,
-                fontSize: 12,
-                cursor: "pointer",
-              }}
-            >
-              {betCurrency === "ton" ? "💎 TON" : "🪙 TONYX"}
-            </button>
-            <button
-              type="button"
-              onClick={() => setAutoPlay((v) => !v)}
-              style={{
-                flex: 1,
-                padding: "10px",
-                borderRadius: 12,
-                border: autoPlay
-                  ? "1px solid rgba(34,197,94,0.5)"
-                  : "1px solid rgba(148,163,184,0.2)",
-                background: autoPlay
-                  ? "rgba(34,197,94,0.15)"
-                  : "rgba(30,18,51,0.7)",
-                color: autoPlay ? "#4ade80" : "#cbd5e1",
-                fontWeight: 700,
-                fontSize: 12,
-                cursor: "pointer",
-              }}
-            >
-              {autoPlay ? "● Автоплей" : "+ Автоплей"}
-            </button>
+          <div style={{ marginTop: 10, display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
+            <button type="button" onClick={() => setAutoPlay((v) => !v)} style={{
+              padding: "8px 14px", borderRadius: 12, border: "1px solid rgba(148,163,184,0.25)",
+              background: autoPlay ? "rgba(91,225,44,0.2)" : "rgba(30,30,45,0.8)",
+              color: autoPlay ? "#5BE12C" : "#94a3b8", fontWeight: 800, fontSize: 12, cursor: "pointer",
+            }}>{autoPlay ? "Авто: ON" : "Авто: OFF"}</button>
+            <span style={{ fontSize: 11, color: "#64748b" }}>баланс {balance.toFixed(3)}</span>
           </div>
+        </div>
+      )}
 
-          {/* players list */}
-          <div style={{ fontSize: 12, color: "#64748b", marginBottom: 6 }}>
+      {sectors.length > 0 && (
+        <div style={{ padding: "14px 16px 24px", overflowY: "auto", flex: 1 }}>
+          <div style={{ fontSize: 11, color: "#64748b", fontWeight: 800, marginBottom: 8 }}>
             {sectors.length} игрок{sectors.length === 1 ? "" : sectors.length < 5 ? "а" : "ов"}
-            {arena?.id ? ` · Игра #${arena.id}` : ""}
+            {arena?.id ? ` · #${arena.id}` : ""}
           </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {sectors.map((s) => (
-              <div
-                key={s.telegramId}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 10,
-                  padding: "10px 12px",
-                  borderRadius: 14,
-                  background: "rgba(30,18,51,0.75)",
-                  border: `1px solid ${s.color}44`,
-                }}
-              >
-                <div
-                  style={{
-                    width: 36,
-                    height: 36,
-                    borderRadius: "50%",
-                    overflow: "hidden",
-                    border: `2px solid ${s.color}`,
-                    background: s.color,
-                    flexShrink: 0,
-                  }}
-                >
-                  {(s.photoUrl || (s.telegramId === telegramId ? photoUrl : null)) ? (
-                    <img
-                      src={
-                        s.photoUrl ||
-                        (s.telegramId === telegramId ? photoUrl! : "")
-                      }
-                      alt=""
-                      style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                    />
+          {sectors.map((s) => {
+            const isMe = s.telegramId === telegramId;
+            const isWin = phase === "winner" && arena?.winnerId === s.telegramId;
+            const photo = playerPhoto(s);
+            return (
+              <div key={s.telegramId} style={{
+                display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 14,
+                marginBottom: 6, background: isMe ? "rgba(91,225,44,0.1)" : "rgba(20,20,32,0.9)",
+                border: `1px solid ${isWin ? "rgba(91,225,44,0.5)" : isMe ? "rgba(91,225,44,0.35)" : "rgba(255,255,255,0.06)"}`,
+              }}>
+                <div style={{
+                  width: 36, height: 36, borderRadius: "50%", overflow: "hidden",
+                  border: `2px solid ${s.color}`, background: s.color, flexShrink: 0,
+                }}>
+                  {photo ? (
+                    <img src={photo} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                   ) : (
-                    <div
-                      style={{
-                        width: "100%",
-                        height: "100%",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        fontSize: 11,
-                        fontWeight: 800,
-                      }}
-                    >
-                      {initials(s.username, s.telegramId)}
-                    </div>
+                    <div style={{
+                      width: "100%", height: "100%", display: "flex", alignItems: "center",
+                      justifyContent: "center", fontSize: 11, fontWeight: 900, color: "#fff",
+                    }}>{initials(s.username, s.telegramId)}</div>
                   )}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div
-                    style={{
-                      fontWeight: 800,
-                      fontSize: 13,
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    @{(s.username || s.telegramId).replace(/^@/, "")}
-                    {s.telegramId === telegramId ? " · вы" : ""}
+                  <div style={{
+                    fontWeight: 800, fontSize: 13, overflow: "hidden", textOverflow: "ellipsis",
+                    whiteSpace: "nowrap", color: isWin ? "#5BE12C" : "#f1f5f9",
+                  }}>
+                    {isWin ? "🏆 " : ""}@{(s.username || s.telegramId).replace(/^@/, "")}
+                    {isMe ? " · вы" : ""}
                   </div>
-                  <div style={{ fontSize: 11, color: "#94a3b8" }}>
-                    {(s.share * 100).toFixed(1)}%
+                  <div style={{ height: 4, marginTop: 5, borderRadius: 99, background: "rgba(51,65,85,0.5)", overflow: "hidden" }}>
+                    <div style={{ width: `${Math.max(s.share * 100, 1)}%`, height: "100%", background: s.color, borderRadius: 99 }} />
                   </div>
                 </div>
-                <div style={{ fontWeight: 900, fontSize: 13, color: "#fbbf24" }}>
-                  {s.stake.toFixed(2)}
+                <div style={{ textAlign: "right", flexShrink: 0 }}>
+                  <div style={{ fontWeight: 900, fontSize: 13, color: "#fbbf24" }}>{s.stake.toFixed(2)}</div>
+                  <div style={{ fontSize: 10, color: "#94a3b8" }}>{(s.share * 100).toFixed(1)}%</div>
                 </div>
               </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {phase === "spin" && (
-        <div
-          style={{
-            textAlign: "center",
-            color: "#a78bfa",
-            fontWeight: 700,
-            fontSize: 14,
-            marginTop: 8,
-          }}
-        >
-          PvP начался
+            );
+          })}
         </div>
       )}
     </div>

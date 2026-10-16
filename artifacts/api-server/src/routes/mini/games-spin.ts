@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import { usersTable, miniSpinRoomsTable } from "@workspace/db/schema";
-import { eq, desc, or } from "drizzle-orm";
+import { eq, desc, or, inArray } from "drizzle-orm";
 import {
   generateServerSeed,
   hashServerSeed,
@@ -26,10 +26,25 @@ function recalcChances(players: SpinPlayer[]): SpinPlayer[] {
   }));
 }
 
-function formatRound(room: typeof miniSpinRoomsTable.$inferSelect) {
-  const players = (room.players as SpinPlayer[]) ?? [];
-  const totalPool = players.reduce((s, p) => s + p.stake, 0);
+async function formatRound(room: typeof miniSpinRoomsTable.$inferSelect) {
+  const rawPlayers = (room.players as SpinPlayer[]) ?? [];
+  const totalPool = rawPlayers.reduce((s, p) => s + p.stake, 0);
   const isFinished = room.status === "finished";
+
+  const photos = rawPlayers.length
+    ? await db
+        .select({ telegramId: usersTable.telegramId, photoUrl: usersTable.photoUrl })
+        .from(usersTable)
+        .where(inArray(usersTable.telegramId, rawPlayers.map((p) => p.telegramId)))
+    : [];
+  const photoById = new Map(photos.map((u) => [u.telegramId, u.photoUrl]));
+
+  const players = rawPlayers.map((p) => ({
+    ...p,
+    chance: totalPool > 0 ? Math.round((p.stake / totalPool) * 10000) / 100 : 0,
+    photoUrl: photoById.get(p.telegramId) ?? null,
+  }));
+
   return {
     id: room.id,
     status: room.status,
@@ -151,9 +166,6 @@ async function createNewRound() {
   });
 }
 
-/** Vercel kills setTimeout after the request ends — resolve overdue rounds on any poll.
- *  CRITICAL: return the finished round (not the new waiting room) so clients can run spin animation.
- */
 async function ensureSpinResolved(round: typeof miniSpinRoomsTable.$inferSelect) {
   if (
     round.status === "starting" &&
@@ -167,7 +179,6 @@ async function ensureSpinResolved(round: typeof miniSpinRoomsTable.$inferSelect)
       .from(miniSpinRoomsTable)
       .where(eq(miniSpinRoomsTable.id, finishedId))
       .then((r) => r[0] ?? null);
-    // Return finished room so clients can play the wheel animation
     if (finished && finished.status === "finished" && finished.winnerId) {
       return finished;
     }
@@ -176,12 +187,42 @@ async function ensureSpinResolved(round: typeof miniSpinRoomsTable.$inferSelect)
   return round;
 }
 
+/** Keep returning a just-finished round for ~12s so ALL clients can play the spin animation. */
+const ANIMATION_WINDOW_MS = 12_000;
+async function getRecentFinishedForAnimation() {
+  const room = await db
+    .select()
+    .from(miniSpinRoomsTable)
+    .where(eq(miniSpinRoomsTable.status, "finished"))
+    .orderBy(desc(miniSpinRoomsTable.finishedAt))
+    .limit(1)
+    .then((r) => r[0] ?? null);
+  if (!room?.finishedAt || !room.winnerId) return null;
+  const age = Date.now() - new Date(room.finishedAt).getTime();
+  if (age < 0 || age > ANIMATION_WINDOW_MS) return null;
+  const players = (room.players as SpinPlayer[]) ?? [];
+  if (players.length < 2) return null;
+  return room;
+}
+
 /* ── GET /state ── */
 router.get("/state", async (_req, res) => {
   let round = await getActiveRound();
-  // Prefer resolving overdue starting rounds and returning the finished payload so the wheel can spin.
   round = await ensureSpinResolved(round);
-  res.json(formatRound(round));
+
+  // Animation window: if active is a fresh empty waiting room, prefer recent finished
+  if (round.status === "waiting") {
+    const players = (round.players as SpinPlayer[]) ?? [];
+    if (players.length === 0) {
+      const recent = await getRecentFinishedForAnimation();
+      if (recent) {
+        res.json(await formatRound(recent));
+        return;
+      }
+    }
+  }
+
+  res.json(await formatRound(round));
 });
 
 /* ── GET /history ── */
@@ -300,8 +341,6 @@ router.post("/join", async (req, res) => {
 
   let round = await getActiveRound();
   round = await ensureSpinResolved(round);
-  // After resolve, ensureSpinResolved returns the finished room for animation —
-  // join must attach to the NEW waiting room instead.
   if (round.status === "finished") {
     round = await getActiveRound();
   }
@@ -337,7 +376,7 @@ router.post("/join", async (req, res) => {
     .where(eq(miniSpinRoomsTable.id, round.id))
     .returning();
 
-  res.json(formatRound(updated));
+  res.json(await formatRound(updated));
 });
 
 /* ── POST /increase ── */
@@ -375,7 +414,7 @@ router.post("/increase", async (req, res) => {
     .where(eq(miniSpinRoomsTable.id, round.id))
     .returning();
 
-  res.json(formatRound(updated));
+  res.json(await formatRound(updated));
 });
 
 /* ── POST /client-seed ── */
@@ -421,7 +460,7 @@ router.get("/rooms/:id", async (req, res) => {
   const id = parseInt(req.params.id);
   const room = await db.select().from(miniSpinRoomsTable).where(eq(miniSpinRoomsTable.id, id)).then((r) => r[0] ?? null);
   if (!room) { res.status(404).json({ error: "Not found" }); return; }
-  res.json(formatRound(room));
+  res.json(await formatRound(room));
 });
 router.post("/rooms", async (_req, res) => { res.status(410).json({ error: "Use POST /join instead." }); });
 router.post("/rooms/:id/join", async (_req, res) => { res.status(410).json({ error: "Use POST /join instead." }); });

@@ -18,8 +18,17 @@ const router: IRouter = Router();
 
 const GRID_SIZE = 5;
 const HOUSE_EDGE = 0.97;
+/** Same currency as Spin — real TON. Stored in DB as milliTON (×1000) because stake/payout columns are integer. */
+const MIN_STAKE = 0.1;
 
 type CellState = "hidden" | "safe" | "mine";
+
+function toMilli(ton: number): number {
+  return Math.round(ton * 1000);
+}
+function fromMilli(milli: number): number {
+  return Math.round(milli) / 1000;
+}
 
 function generateBoard(minesCount: number): CellState[][] {
   const board: CellState[][] = Array.from({ length: GRID_SIZE }, () => Array(GRID_SIZE).fill("hidden"));
@@ -28,11 +37,9 @@ function generateBoard(minesCount: number): CellState[][] {
     const j = Math.floor(Math.random() * (i + 1));
     [positions[i], positions[j]] = [positions[j], positions[i]];
   }
-  const minePositions = positions.slice(0, minesCount);
-  for (const pos of minePositions) {
+  for (const pos of positions.slice(0, minesCount)) {
     board[Math.floor(pos / GRID_SIZE)][pos % GRID_SIZE] = "mine";
   }
-  // Fill remaining with safe
   for (let r = 0; r < GRID_SIZE; r++) {
     for (let c = 0; c < GRID_SIZE; c++) {
       if (board[r][c] === "hidden") board[r][c] = "safe";
@@ -69,12 +76,12 @@ function formatGame(game: typeof miniMineGamesTable.$inferSelect, hideBoard = tr
   return {
     id: game.id,
     telegramId: game.telegramId,
-    stake: game.stake,
+    stake: fromMilli(game.stake),
     minesCount: game.minesCount,
     revealed: displayBoard,
     multiplier: Number(game.multiplier),
     status: game.status,
-    payout: game.payout ?? null,
+    payout: game.payout != null ? fromMilli(game.payout) : null,
     createdAt: game.createdAt.toISOString(),
   };
 }
@@ -102,8 +109,10 @@ router.post("/start", async (req, res) => {
     res.status(400).json({ error: "Mines count must be between 1 and 24" });
     return;
   }
-  if (body.stake < 10) {
-    res.status(400).json({ error: "Minimum stake is 10 TONYX" });
+
+  const stakeTon = Math.round(Number(body.stake) * 1000) / 1000;
+  if (!Number.isFinite(stakeTon) || stakeTon < MIN_STAKE) {
+    res.status(400).json({ error: `Minimum stake is ${MIN_STAKE} TON` });
     return;
   }
 
@@ -112,8 +121,10 @@ router.post("/start", async (req, res) => {
     res.status(404).json({ error: "User not found" });
     return;
   }
-  if (user.tonyxCoins < body.stake) {
-    res.status(400).json({ error: `Insufficient TONYX. You have ${user.tonyxCoins}` });
+
+  const tonBal = Number(user.ton ?? 0);
+  if (tonBal < stakeTon) {
+    res.status(400).json({ error: `Insufficient TON. You have ${tonBal}` });
     return;
   }
 
@@ -128,13 +139,26 @@ router.post("/start", async (req, res) => {
     return;
   }
 
-  await db.update(usersTable).set({ tonyxCoins: user.tonyxCoins - body.stake, updatedAt: new Date() }).where(eq(usersTable.telegramId, body.telegramId));
+  const newTon = Math.round((tonBal - stakeTon) * 1000) / 1000;
+  await db
+    .update(usersTable)
+    .set({ ton: String(newTon), updatedAt: new Date() })
+    .where(eq(usersTable.telegramId, body.telegramId));
 
   const board = generateBoard(body.minesCount);
+  const stakeMilli = toMilli(stakeTon);
 
   const [game] = await db
     .insert(miniMineGamesTable)
-    .values({ telegramId: body.telegramId, stake: body.stake, minesCount: body.minesCount, board, revealed: [], multiplier: "1", status: "active" })
+    .values({
+      telegramId: body.telegramId,
+      stake: stakeMilli,
+      minesCount: body.minesCount,
+      board,
+      revealed: [],
+      multiplier: "1",
+      status: "active",
+    })
     .returning();
 
   const data = StartMineGameResponse.parse(formatGame(game));
@@ -165,14 +189,12 @@ async function handleReveal(req: any, res: any) {
     return;
   }
 
-  // Fetch user to check God Mode
   const user = await db.select().from(usersTable).where(eq(usersTable.telegramId, body.telegramId)).then((r) => r[0] ?? null);
   const godMode = user?.forceWin ?? false;
 
   let board = game.board as CellState[][];
   let cellType = board[body.row][body.col];
 
-  // God Mode: if cell is a mine, swap it with an unrevealed safe cell
   if (godMode && cellType === "mine") {
     const revealedSet = new Set(revealed.map(([r, c]) => `${r},${c}`));
     revealedSet.add(`${body.row},${body.col}`);
@@ -186,11 +208,9 @@ async function handleReveal(req: any, res: any) {
       }
     }
     if (swapPos) {
-      // Deep-clone board, swap positions
-      board = board.map(row => [...row]) as CellState[][];
+      board = board.map((row) => [...row]) as CellState[][];
       board[body.row][body.col] = "safe";
       board[swapPos[0]][swapPos[1]] = "mine";
-      // Persist swapped board
       await db.update(miniMineGamesTable).set({ board }).where(eq(miniMineGamesTable.id, game.id));
       cellType = "safe";
     }
@@ -247,19 +267,26 @@ router.post("/cashout", async (req, res) => {
   }
 
   const multiplier = Number(game.multiplier);
-  const payout = Math.floor(game.stake * multiplier);
+  const stakeTon = fromMilli(game.stake);
+  const payoutTon = Math.round(stakeTon * multiplier * 1000) / 1000;
+  const payoutMilli = toMilli(payoutTon);
 
   await db
     .update(miniMineGamesTable)
-    .set({ status: "won", payout, finishedAt: new Date() })
+    .set({ status: "won", payout: payoutMilli, finishedAt: new Date() })
     .where(eq(miniMineGamesTable.id, game.id));
 
   const user = await db.select().from(usersTable).where(eq(usersTable.telegramId, body.telegramId)).then((r) => r[0] ?? null);
+  let newBalance = 0;
   if (user) {
-    await db.update(usersTable).set({ tonyxCoins: user.tonyxCoins + payout, updatedAt: new Date() }).where(eq(usersTable.telegramId, body.telegramId));
+    newBalance = Math.round((Number(user.ton ?? 0) + payoutTon) * 1000) / 1000;
+    await db
+      .update(usersTable)
+      .set({ ton: String(newBalance), updatedAt: new Date() })
+      .where(eq(usersTable.telegramId, body.telegramId));
   }
 
-  const data = CashoutMineGameResponse.parse({ payout, multiplier, newBalance: (user?.tonyxCoins ?? 0) + payout });
+  const data = CashoutMineGameResponse.parse({ payout: payoutTon, multiplier, newBalance });
   res.json(data);
 });
 

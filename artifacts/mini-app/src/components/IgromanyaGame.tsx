@@ -1,9 +1,7 @@
 /**
- * Igromanya was a duplicate of Mines with a separate API (/games/igro).
- * It now reuses the same MinesGame UI + /api/mini/games/mines backend
- * so Solo / any entry that opens Igromanya behaves exactly like Mines.
+ * Igromanya uses the same premium Mines game as Solo.
  */
-import { MinesGame } from "@/pages/games";
+import MinesGame from "@/components/MinesGame";
 import { useLang } from "@/lib/LanguageContext";
 
 interface Props {

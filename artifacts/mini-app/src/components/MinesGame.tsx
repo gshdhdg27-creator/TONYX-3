@@ -1,6 +1,6 @@
 /**
  * Premium Mines — Stake-style 5×5
- * Same API: /api/mini/games/mines/{start,reveal,cashout,active}
+ * Resume on re-entry + abandon stuck games
  */
 import { useState, useMemo, useEffect, useRef, type CSSProperties } from "react";
 import { haptic, hapticNotify } from "@/lib/telegram";
@@ -23,6 +23,7 @@ const MINE_OPTIONS = [1, 3, 5, 10, 15, 24];
 const BET_PRESETS = [0.1, 0.5, 1, 2, 5, 10];
 const MIN_BET = 0.1;
 const GRID = 5;
+const LS_KEY = (tid: string) => `mines_active_${tid}`;
 
 function formatTon(v: number): string {
   const x = Math.round(v * 1000) / 1000;
@@ -106,38 +107,102 @@ export default function MinesGame({
 
   const countSafe = (grid: Cell[][]) => grid.flat().filter((c) => c === "safe").length;
 
+  const clearActiveLs = () => {
+    try {
+      if (telegramId) localStorage.removeItem(LS_KEY(telegramId));
+    } catch {
+      /* */
+    }
+  };
+
   const applyServerGame = (d: any) => {
+    if (!d || !d.id) return;
     const revealed = d.revealed as Cell[][];
     const sc = typeof d.safeCount === "number" ? d.safeCount : countSafe(revealed ?? []);
+    const status =
+      d.status === "active" || d.status === "won" || d.status === "lost" ? d.status : "active";
     setGame({
       id: d.id,
-      stake: Number(d.stake),
-      minesCount: d.minesCount,
-      revealed: d.revealed,
+      stake: Number(d.stake) || 0,
+      minesCount: Number(d.minesCount) || 3,
+      revealed: Array.isArray(revealed)
+        ? revealed
+        : Array.from({ length: 5 }, () => Array(5).fill("hidden" as Cell)),
       multiplier: Number(d.multiplier) || 1,
-      status: d.status,
+      status,
       payout: d.payout ?? null,
       safeCount: sc,
     });
     setLastFlip(null);
     setDisplayMult(Number(d.multiplier) || 1);
+    try {
+      if (status === "active" && telegramId) localStorage.setItem(LS_KEY(telegramId), String(d.id));
+      else if (telegramId) localStorage.removeItem(LS_KEY(telegramId));
+    } catch {
+      /* */
+    }
   };
 
-  // Resume active game on mount
+  const abandonStuck = async () => {
+    setBusy(true);
+    try {
+      const r = await fetch("/api/mini/games/mines/abandon", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ telegramId }),
+      });
+      const d = await r.json().catch(() => ({}));
+      clearActiveLs();
+      setGame(null);
+      onBalanceChange();
+      if (r.ok) flash(d.refunded ? `Ставка ${d.refunded} TON возвращена` : "Игра сброшена", "success");
+      else flash(d.error ?? "Не удалось сбросить", "error");
+    } catch {
+      flash(t.errNetwork, "error");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Resume on mount: /active then localStorage gameId
   useEffect(() => {
     if (!telegramId) return;
     let cancelled = false;
     (async () => {
       try {
-        const r = await fetch(`/api/mini/games/mines/active?telegramId=${encodeURIComponent(telegramId)}`);
-        if (!r.ok || cancelled) return;
-        const d = await r.json();
-        if (d?.game && d.game.status === "active" && !cancelled) {
-          applyServerGame(d.game);
+        const r = await fetch(
+          `/api/mini/games/mines/active?telegramId=${encodeURIComponent(telegramId)}`,
+        );
+        if (r.ok) {
+          const d = await r.json();
+          if (d?.game && d.game.status === "active" && !cancelled) {
+            applyServerGame(d.game);
+            return;
+          }
         }
-      } catch { /* ignore */ }
+      } catch {
+        /* */
+      }
+      try {
+        const saved = localStorage.getItem(LS_KEY(telegramId));
+        if (saved && !cancelled) {
+          const r2 = await fetch(`/api/mini/games/mines/${saved}`);
+          if (r2.ok) {
+            const g = await r2.json();
+            if (g?.status === "active" && !cancelled) {
+              applyServerGame(g);
+              return;
+            }
+          }
+          localStorage.removeItem(LS_KEY(telegramId));
+        }
+      } catch {
+        /* */
+      }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [telegramId]);
 
   useEffect(() => {
@@ -179,20 +244,31 @@ export default function MinesGame({
       });
       const d = await r.json();
       if (!r.ok) {
+        // Old API still returns 400 — try resume then abandon
         if (String(d.error ?? "").toLowerCase().includes("active")) {
           try {
-            const ar = await fetch(`/api/mini/games/mines/active?telegramId=${encodeURIComponent(telegramId)}`);
-            const ad = await ar.json();
-            if (ad?.game?.status === "active") {
-              applyServerGame(ad.game);
-              flash("Продолжаем текущую игру", "info");
-              return;
+            const ar = await fetch(
+              `/api/mini/games/mines/active?telegramId=${encodeURIComponent(telegramId)}`,
+            );
+            if (ar.ok) {
+              const ad = await ar.json();
+              if (ad?.game?.status === "active") {
+                applyServerGame(ad.game);
+                flash("Продолжаем текущую игру", "info");
+                return;
+              }
             }
-          } catch { /* fall through */ }
+          } catch {
+            /* */
+          }
+          // Last resort: abandon stuck + user can press start again
+          flash("Есть зависшая игра — нажми «Сбросить» ниже", "error");
+          return;
         }
         flash(d.error ?? t.errNetwork, "error");
         return;
       }
+      // New API returns game (new or resumed) with 200
       applyServerGame(d);
       if (!d.resumed) onBalanceChange();
       else flash("Продолжаем текущую игру", "info");
@@ -204,7 +280,7 @@ export default function MinesGame({
   };
 
   const reveal = async (row: number, col: number) => {
-    if (!game || game.status !== "active" || game.revealed[row][col] !== "hidden") return;
+    if (!game || game.status !== "active" || game.revealed[row]?.[col] !== "hidden") return;
     haptic("light");
     try {
       const r = await fetch("/api/mini/games/mines/reveal", {
@@ -232,8 +308,14 @@ export default function MinesGame({
         setTimeout(() => setExploding(null), 900);
         hapticNotify("error");
         flash(t.lost(game.stake), "error");
+        clearActiveLs();
         onBalanceChange();
       } else {
+        try {
+          localStorage.setItem(LS_KEY(telegramId), String(game.id));
+        } catch {
+          /* */
+        }
         haptic("light");
       }
     } catch {
@@ -258,7 +340,10 @@ export default function MinesGame({
       }
       hapticNotify("success");
       flash(t.won(d.payout, d.multiplier), "success");
-      setGame((prev) => (prev ? { ...prev, status: "won", payout: d.payout, multiplier: d.multiplier } : null));
+      setGame((prev) =>
+        prev ? { ...prev, status: "won", payout: d.payout, multiplier: d.multiplier } : null,
+      );
+      clearActiveLs();
       onBalanceChange();
     } catch {
       flash(t.errNetwork, "error");
@@ -299,7 +384,13 @@ export default function MinesGame({
 
       <div style={hero}>
         <div style={heroLabel}>
-          {isPlaying ? "ТЕКУЩИЙ" : isOver ? (game!.status === "won" ? "ВЫИГРЫШ" : "ПРОИГРЫШ") : "СЛЕДУЮЩИЙ"}
+          {isPlaying
+            ? "ТЕКУЩИЙ"
+            : isOver
+              ? game!.status === "won"
+                ? "ВЫИГРЫШ"
+                : "ПРОИГРЫШ"
+              : "СЛЕДУЮЩИЙ"}
         </div>
         <div
           className="mn-hero-mult"
@@ -440,7 +531,10 @@ export default function MinesGame({
               value={bet === 0 ? "" : bet}
               onChange={(e) => {
                 const raw = e.target.value.replace(",", ".").trim();
-                if (raw === "" || raw === ".") { setBet(0); return; }
+                if (raw === "" || raw === ".") {
+                  setBet(0);
+                  return;
+                }
                 const v = parseFloat(raw);
                 if (!Number.isNaN(v) && v >= 0) setBet(Math.round(v * 1000) / 1000);
               }}
@@ -501,12 +595,38 @@ export default function MinesGame({
             </button>
           </div>
 
-          <button type="button" disabled={busy || Number(bet) < MIN_BET} onClick={startGame} style={{
-            ...startBtn,
-            opacity: busy || Number(bet) < MIN_BET ? 0.55 : 1,
-            cursor: busy || Number(bet) < MIN_BET ? "not-allowed" : "pointer",
-          }}>
+          <button
+            type="button"
+            disabled={busy || Number(bet) < MIN_BET}
+            onClick={startGame}
+            style={{
+              ...startBtn,
+              opacity: busy || Number(bet) < MIN_BET ? 0.55 : 1,
+              cursor: busy || Number(bet) < MIN_BET ? "not-allowed" : "pointer",
+            }}
+          >
             {busy ? t.busy : t.startGame}
+          </button>
+
+          <button
+            type="button"
+            disabled={busy}
+            onClick={abandonStuck}
+            style={{
+              width: "100%",
+              marginTop: 10,
+              padding: "11px 0",
+              borderRadius: 12,
+              border: "1px solid rgba(248,113,113,0.35)",
+              background: "rgba(127,29,29,0.25)",
+              color: "#fca5a5",
+              fontSize: 12,
+              fontWeight: 700,
+              cursor: "pointer",
+              fontFamily: "inherit",
+            }}
+          >
+            Сбросить зависшую игру (возврат ставки)
           </button>
         </div>
       ) : (
@@ -565,6 +685,7 @@ export default function MinesGame({
             type="button"
             onClick={() => {
               setGame(null);
+              clearActiveLs();
               haptic("light");
             }}
             style={{ ...startBtn, marginTop: 16, padding: "13px 0" }}
@@ -823,23 +944,14 @@ const CSS = `
   .mn-toast-success { background: rgba(5,150,105,0.96); }
   .mn-toast-error { background: rgba(220,38,38,0.96); }
   .mn-toast-info { background: rgba(30,64,175,0.96); }
-
   .mn-cell {
-    aspect-ratio: 1;
-    border-radius: 12px;
-    border: none;
-    cursor: pointer;
-    font-family: inherit;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    position: relative;
-    transition: transform 0.15s ease, box-shadow 0.2s ease, background 0.2s ease;
+    aspect-ratio: 1; border-radius: 12px; border: none; cursor: pointer;
+    font-family: inherit; display: flex; align-items: center; justify-content: center;
+    position: relative; transition: transform 0.15s ease, box-shadow 0.2s ease;
     background: linear-gradient(160deg, #2a1f45 0%, #16102a 100%);
     box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 4px 12px rgba(0,0,0,0.35);
   }
   .mn-hidden:active { transform: scale(0.94); }
-  .mn-hidden:hover { box-shadow: inset 0 1px 0 rgba(255,255,255,0.1), 0 0 0 1px rgba(167,139,250,0.35), 0 6px 16px rgba(0,0,0,0.4); }
   .mn-safe {
     background: linear-gradient(160deg, #065f46 0%, #022c22 100%);
     box-shadow: inset 0 1px 0 rgba(74,222,128,0.25), 0 0 18px rgba(16,185,129,0.25);
@@ -849,10 +961,7 @@ const CSS = `
     box-shadow: inset 0 1px 0 rgba(248,113,113,0.25), 0 0 18px rgba(239,68,68,0.3);
   }
   .mn-idle { opacity: 0.55; cursor: default; }
-  .mn-dot {
-    width: 8px; height: 8px; border-radius: 50%;
-    background: rgba(148,163,184,0.25);
-  }
+  .mn-dot { width: 8px; height: 8px; border-radius: 50%; background: rgba(148,163,184,0.25); }
   .mn-flip { animation: mnFlip 0.45s cubic-bezier(0.34,1.4,0.64,1) both; }
   .mn-boom { animation: mnBoom 0.55s ease both; }
   @keyframes mnFlip {
@@ -870,31 +979,19 @@ const CSS = `
     50% { box-shadow: 0 0 18px rgba(251,191,36,0.35); }
   }
   .mn-cashout {
-    width: 100%;
-    padding: 15px 0;
-    border-radius: 14px;
-    border: none;
-    font-family: inherit;
-    font-size: 15px;
-    font-weight: 900;
-    cursor: pointer;
-    color: #1a0a00;
-    background: linear-gradient(135deg, #f59e0b, #fbbf24, #f59e0b);
-    background-size: 200% 100%;
-    box-shadow: 0 0 28px rgba(245,158,11,0.45), 0 4px 0 #b45309;
+    width: 100%; padding: 15px 0; border-radius: 14px; border: none;
+    font-family: inherit; font-size: 15px; font-weight: 900; cursor: pointer;
+    color: #1a0a00; background: linear-gradient(135deg, #f59e0b, #fbbf24, #f59e0b);
+    background-size: 200% 100%; box-shadow: 0 0 28px rgba(245,158,11,0.45), 0 4px 0 #b45309;
     animation: mnCash 2.2s ease infinite;
   }
   @keyframes mnCash {
-    0%,100% { background-position: 0% 50%; box-shadow: 0 0 22px rgba(245,158,11,0.4), 0 4px 0 #b45309; }
-    50% { background-position: 100% 50%; box-shadow: 0 0 36px rgba(251,191,36,0.55), 0 4px 0 #b45309; }
+    0%,100% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
   }
   .mn-hero-mult {
-    font-size: 42px;
-    font-weight: 900;
-    letter-spacing: -0.04em;
-    line-height: 1.1;
-    margin-top: 4px;
-    font-variant-numeric: tabular-nums;
+    font-size: 42px; font-weight: 900; letter-spacing: -0.04em;
+    line-height: 1.1; margin-top: 4px; font-variant-numeric: tabular-nums;
   }
   .mn-result { animation: mnResultIn 0.4s cubic-bezier(0.34,1.4,0.64,1) both; }
   @keyframes mnResultIn {

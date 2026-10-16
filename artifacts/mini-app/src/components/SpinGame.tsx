@@ -38,7 +38,7 @@ const SECTOR_COLORS = [
 const COMMISSION = 0.2;
 const MIN_STAKE = 0.1;
 const QUICK_BETS = [0.1, 0.5, 1, 5, 10];
-const SPIN_MS = 6200;
+const SPIN_MS = 7500;
 const AVATAR_MIN_SHARE = 0.03;
 
 const SIZE = 300;
@@ -247,6 +247,9 @@ function PremiumWheel({
           height: SIZE,
           borderRadius: "50%",
           transform: `rotate(${rotateDeg}deg)`,
+          transition: spinning
+            ? `transform ${SPIN_MS}ms cubic-bezier(0.08, 0.85, 0.12, 1)`
+            : "none",
           willChange: "transform",
           boxShadow: spinning
             ? "0 0 0 3px rgba(251,191,36,0.45), 0 0 40px rgba(124,92,255,0.35), 0 20px 50px rgba(0,0,0,0.55)"
@@ -454,6 +457,9 @@ export default function SpinGame({
   const seenFinishedId = useRef<number | null>(null);
   const prevStatusRef = useRef<string | null>(null);
   const spinningRef = useRef(false);
+  const spinTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const spinTickRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const watchedIdsRef = useRef<Set<number>>(new Set());
 
   const flash = useCallback((msg: string, type: "ok" | "err" = "ok") => {
     setToast({ msg, type });
@@ -489,53 +495,69 @@ export default function SpinGame({
 
   function startSpin(data: SpinRound) {
     if (spinningRef.current) return;
+    if (!data.winnerId || !data.players?.length) return;
     spinningRef.current = true;
-    if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    setSpinning(true);
+    if (rafRef.current) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+    if (spinTimerRef.current) {
+      clearTimeout(spinTimerRef.current);
+      spinTimerRef.current = null;
+    }
+
+    setRound(data);
     setWinnerBanner(null);
+    setSpinning(true);
 
     const players = data.players;
     const sectors = buildSectors(players);
-    const winner = sectors.find((s) => s.telegramId === data.winnerId) ?? sectors[0];
+    const winner =
+      sectors.find((s) => s.telegramId === data.winnerId) ?? sectors[0];
     if (!winner) {
       spinningRef.current = false;
       setSpinning(false);
       return;
     }
 
-    const turns = 5 + Math.floor(Math.random() * 3);
+    const turns = 6 + Math.floor(Math.random() * 3);
     const from = rotateDegRef.current;
     const adj = (((-winner.midDeg - from) % 360) + 360) % 360;
     const endAngle = from + turns * 360 + adj;
-    const delta = endAngle - from;
 
-    const start = performance.now();
-    lastSectorRef.current = -1;
-    const easeOutQuint = (t: number) => 1 - Math.pow(1 - t, 5);
+    // Lock current angle without transition
+    setSpinning(false);
+    setRotateDeg(from);
+    rotateDegRef.current = from;
 
-    const step = (now: number) => {
-      const t = Math.min(1, (now - start) / SPIN_MS);
-      const e = easeOutQuint(t);
-      const rot = from + delta * e;
-      rotateDegRef.current = rot;
-      setRotateDeg(rot);
-
-      const pointerInWheel = ((-rot % 360) + 360) % 360;
-      const cur = getSectorAt(pointerInWheel, players);
-      if (cur !== lastSectorRef.current && lastSectorRef.current !== -1) {
-        soundRatchet(0.08 + (1 - t) * 0.15);
-      }
-      lastSectorRef.current = cur;
-
-      if (t < 1) {
-        rafRef.current = requestAnimationFrame(step);
-      } else {
-        rotateDegRef.current = endAngle;
+    // Next frames: enable CSS transition + target angle
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        setSpinning(true);
         setRotateDeg(endAngle);
-        finishSpin(data);
-      }
-    };
-    rafRef.current = requestAnimationFrame(step);
+        rotateDegRef.current = endAngle;
+
+        let ticks = 0;
+        const tickIv = setInterval(() => {
+          ticks++;
+          const progress = ticks / (SPIN_MS / 90);
+          if (progress >= 1) {
+            clearInterval(tickIv);
+            return;
+          }
+          soundRatchet(0.06 + (1 - progress) * 0.14);
+        }, 90);
+        spinTickRef.current = tickIv;
+
+        spinTimerRef.current = setTimeout(() => {
+          if (spinTickRef.current) {
+            clearInterval(spinTickRef.current);
+            spinTickRef.current = null;
+          }
+          finishSpin(data);
+        }, SPIN_MS + 80);
+      });
+    });
   }
 
   const fetchState = useCallback(async () => {
@@ -545,24 +567,28 @@ export default function SpinGame({
       const data: SpinRound = await r.json();
 
       if (
+        data.id &&
+        (data.status === "waiting" || data.status === "starting")
+      ) {
+        watchedIdsRef.current.add(data.id);
+      }
+
+      const shouldAnimate =
         data.status === "finished" &&
-        data.winnerId &&
+        !!data.winnerId &&
+        data.players?.length > 0 &&
         data.id !== seenFinishedId.current &&
         !spinningRef.current &&
-        (prevStatusRef.current === "starting" ||
-          prevStatusRef.current === "waiting" ||
-          prevStatusRef.current === null)
-      ) {
-        if (prevStatusRef.current === "starting" || prevStatusRef.current === "waiting") {
-          seenFinishedId.current = data.id;
-          setRound(data);
-          startSpin(data);
-        } else {
-          seenFinishedId.current = data.id;
-          setRound(data);
-        }
+        watchedIdsRef.current.has(data.id);
+
+      if (shouldAnimate) {
+        seenFinishedId.current = data.id;
+        startSpin(data);
       } else if (!spinningRef.current) {
         setRound(data);
+        if (data.status === "finished" && data.id) {
+          seenFinishedId.current = data.id;
+        }
       }
       prevStatusRef.current = data.status;
     } catch {
@@ -578,10 +604,12 @@ export default function SpinGame({
       })
       .catch(() => null);
     fetchState();
-    const iv = setInterval(fetchState, 1200);
+    const iv = setInterval(fetchState, 900);
     return () => {
       clearInterval(iv);
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      if (spinTimerRef.current) clearTimeout(spinTimerRef.current);
+      if (spinTickRef.current) clearInterval(spinTickRef.current);
     };
   }, [fetchState]);
 
@@ -599,6 +627,19 @@ export default function SpinGame({
       soundTick();
     }
   }, [countdown, round?.status]);
+
+  useEffect(() => {
+    if (countdown === 0 && round?.status === "starting" && !spinningRef.current) {
+      const t = setTimeout(() => fetchState(), 200);
+      const t2 = setTimeout(() => fetchState(), 800);
+      const t3 = setTimeout(() => fetchState(), 1600);
+      return () => {
+        clearTimeout(t);
+        clearTimeout(t2);
+        clearTimeout(t3);
+      };
+    }
+  }, [countdown, round?.status, fetchState]);
 
   async function placeBet(amount: number) {
     if (!telegramId) {

@@ -1,4 +1,8 @@
-import { useState, useMemo, type CSSProperties } from "react";
+/**
+ * Premium Mines — Stake-style 5×5
+ * Same API: /api/mini/games/mines/{start,reveal,cashout}
+ */
+import { useState, useMemo, useEffect, useRef, type CSSProperties } from "react";
 import { haptic, hapticNotify } from "@/lib/telegram";
 import { translations, type Lang } from "@/lib/i18n";
 
@@ -36,10 +40,41 @@ function nextStepMult(safeOpened: number, mines: number): number {
   return Math.round(m * (rem / safeRem) * 0.97 * 100) / 100;
 }
 
-function multSteps(safeOpened: number, mines: number, count = 6): number[] {
+function multSteps(safeOpened: number, mines: number, count = 7): number[] {
   const arr: number[] = [];
   for (let i = 0; i < count; i++) arr.push(nextStepMult(safeOpened + i, mines));
   return arr;
+}
+
+function GemIcon({ size = 26 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" style={{ filter: "drop-shadow(0 0 8px rgba(52,211,153,0.7))" }}>
+      <path d="M12 2L15.5 8.5L22 9.5L17 14.5L18.5 21.5L12 18L5.5 21.5L7 14.5L2 9.5L8.5 8.5L12 2Z" fill="url(#gemG)" stroke="#6ee7b7" strokeWidth="0.6" />
+      <defs>
+        <linearGradient id="gemG" x1="12" y1="2" x2="12" y2="22" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#6ee7b7" />
+          <stop offset="0.5" stopColor="#34d399" />
+          <stop offset="1" stopColor="#059669" />
+        </linearGradient>
+      </defs>
+    </svg>
+  );
+}
+
+function BombIcon({ size = 26 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" style={{ filter: "drop-shadow(0 0 10px rgba(239,68,68,0.75))" }}>
+      <circle cx="12" cy="13" r="7.5" fill="url(#bombG)" stroke="#7f1d1d" strokeWidth="0.8" />
+      <path d="M12 5.5V3.5M14 4.5L15.5 3M10 4.5L8.5 3" stroke="#fbbf24" strokeWidth="1.6" strokeLinecap="round" />
+      <circle cx="10" cy="11.5" r="1.4" fill="rgba(255,255,255,0.35)" />
+      <defs>
+        <linearGradient id="bombG" x1="12" y1="5" x2="12" y2="21" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#f87171" />
+          <stop offset="1" stopColor="#991b1b" />
+        </linearGradient>
+      </defs>
+    </svg>
+  );
 }
 
 export default function MinesGame({
@@ -61,6 +96,8 @@ export default function MinesGame({
   const [exploding, setExploding] = useState<string | null>(null);
   const [lastFlip, setLastFlip] = useState<string | null>(null);
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" | "info" } | null>(null);
+  const [displayMult, setDisplayMult] = useState(1);
+  const multAnim = useRef<number | null>(null);
 
   const flash = (msg: string, type: "success" | "error" | "info") => {
     setToast({ msg, type });
@@ -68,6 +105,29 @@ export default function MinesGame({
   };
 
   const countSafe = (grid: Cell[][]) => grid.flat().filter((c) => c === "safe").length;
+
+  useEffect(() => {
+    const target = game?.status === "active" ? game.multiplier : nextStepMult(0, mines);
+    if (multAnim.current) cancelAnimationFrame(multAnim.current);
+    const start = displayMult;
+    const diff = target - start;
+    if (Math.abs(diff) < 0.001) {
+      setDisplayMult(target);
+      return;
+    }
+    const t0 = performance.now();
+    const dur = 280;
+    const tick = (now: number) => {
+      const p = Math.min(1, (now - t0) / dur);
+      const ease = 1 - Math.pow(1 - p, 3);
+      setDisplayMult(Math.round((start + diff * ease) * 100) / 100);
+      if (p < 1) multAnim.current = requestAnimationFrame(tick);
+    };
+    multAnim.current = requestAnimationFrame(tick);
+    return () => {
+      if (multAnim.current) cancelAnimationFrame(multAnim.current);
+    };
+  }, [game?.multiplier, game?.status, mines]);
 
   const startGame = async () => {
     const stake = Math.max(MIN_BET, Math.round(bet * 1000) / 1000);
@@ -99,6 +159,7 @@ export default function MinesGame({
         safeCount: 0,
       });
       setLastFlip(null);
+      setDisplayMult(1);
       onBalanceChange();
     } catch {
       flash(t.errNetwork, "error");
@@ -174,7 +235,7 @@ export default function MinesGame({
   const isPlaying = game?.status === "active";
   const isOver = game && game.status !== "active";
   const steps = useMemo(
-    () => multSteps(game?.safeCount ?? 0, game?.minesCount ?? mines, 6),
+    () => multSteps(game?.safeCount ?? 0, game?.minesCount ?? mines, 7),
     [game?.safeCount, game?.minesCount, mines],
   );
   const nextMult = nextStepMult(game?.safeCount ?? 0, game?.minesCount ?? mines);
@@ -191,32 +252,41 @@ export default function MinesGame({
       <div style={header}>
         <div>
           <div style={title}>Mines</div>
-          <div style={subtitle}>Premium · 5×5</div>
+          <div style={subtitle}>Stake style · 5×5</div>
         </div>
         <div style={balPill}>
-          <span style={{ opacity: 0.65, fontSize: 11 }}>Баланс</span>
-          <span style={{ fontWeight: 800, color: "#f8fafc" }}>{formatTon(balance)} TON</span>
+          <span style={{ opacity: 0.55, fontSize: 10, letterSpacing: "0.06em" }}>БАЛАНС</span>
+          <span style={{ fontWeight: 800, color: "#f8fafc", fontVariantNumeric: "tabular-nums" }}>
+            {formatTon(balance)} <span style={{ color: "#94a3b8", fontWeight: 600 }}>TON</span>
+          </span>
         </div>
       </div>
 
       <div style={hero}>
         <div style={heroLabel}>
-          {isPlaying ? "МНОЖИТЕЛЬ" : isOver ? (game!.status === "won" ? "ВЫИГРЫШ" : "ПРОИГРЫШ") : "СЛЕДУЮЩИЙ"}
+          {isPlaying ? "ТЕКУЩИЙ" : isOver ? (game!.status === "won" ? "ВЫИГРЫШ" : "ПРОИГРЫШ") : "СЛЕДУЮЩИЙ"}
         </div>
         <div
+          className="mn-hero-mult"
           style={{
-            ...heroMult,
-            color: isOver && game!.status === "lost" ? "#f87171" : isOver && game!.status === "won" ? "#4ade80" : "#fbbf24",
+            color:
+              isOver && game!.status === "lost"
+                ? "#f87171"
+                : isOver && game!.status === "won"
+                  ? "#4ade80"
+                  : "#fbbf24",
             textShadow:
               isOver && game!.status === "lost"
-                ? "0 0 28px rgba(248,113,113,0.45)"
-                : "0 0 32px rgba(251,191,36,0.4)",
+                ? "0 0 36px rgba(248,113,113,0.5)"
+                : isOver && game!.status === "won"
+                  ? "0 0 36px rgba(74,222,128,0.45)"
+                  : "0 0 40px rgba(251,191,36,0.45)",
           }}
         >
           {isOver && game!.status === "won" && game!.payout != null
             ? `+${formatTon(game!.payout)}`
             : isPlaying
-              ? `×${(game!.multiplier || 1).toFixed(2)}`
+              ? `×${displayMult.toFixed(2)}`
               : `×${nextMult.toFixed(2)}`}
         </div>
         {isPlaying && (
@@ -226,7 +296,8 @@ export default function MinesGame({
               {profit >= 0 ? "+" : ""}
               {formatTon(profit)}
             </span>
-            {" · "}💎 {gemsLeft}
+            <span style={{ opacity: 0.4, margin: "0 6px" }}>·</span>
+            <span style={{ color: "#34d399" }}>💎 {gemsLeft}</span>
           </div>
         )}
       </div>
@@ -250,14 +321,15 @@ export default function MinesGame({
                     cell === "safe" ? "mn-safe" : "",
                     cell === "mine" ? "mn-mine" : "",
                     cell === "hidden" && isPlaying ? "mn-hidden" : "",
+                    cell === "hidden" && !isPlaying ? "mn-idle" : "",
                     isBoom ? "mn-boom" : "",
                     isFlip ? "mn-flip" : "",
                   ]
                     .filter(Boolean)
                     .join(" ")}
                 >
-                  {cell === "safe" && <span className="mn-gem">💎</span>}
-                  {cell === "mine" && <span className="mn-bomb">💣</span>}
+                  {cell === "safe" && <GemIcon />}
+                  {cell === "mine" && <BombIcon />}
                   {cell === "hidden" && <span className="mn-dot" />}
                 </button>
               );
@@ -270,11 +342,13 @@ export default function MinesGame({
         {steps.map((m, i) => (
           <div
             key={i}
+            className={i === 0 ? "mn-ladder-active" : ""}
             style={{
               ...ladderItem,
-              background: i === 0 ? "rgba(251,191,36,0.14)" : "rgba(15,23,42,0.55)",
-              borderColor: i === 0 ? "rgba(251,191,36,0.45)" : "rgba(148,163,184,0.08)",
+              background: i === 0 ? "rgba(251,191,36,0.16)" : "rgba(15,23,42,0.5)",
+              borderColor: i === 0 ? "rgba(251,191,36,0.5)" : "rgba(148,163,184,0.07)",
               color: i === 0 ? "#fbbf24" : "#64748b",
+              boxShadow: i === 0 ? "0 0 14px rgba(251,191,36,0.2)" : "none",
             }}
           >
             ×{m.toFixed(2)}
@@ -290,13 +364,16 @@ export default function MinesGame({
               <button
                 key={m}
                 type="button"
-                onClick={() => setMines(m)}
+                onClick={() => {
+                  setMines(m);
+                  haptic("light");
+                }}
                 style={{
                   ...pill,
-                  background: mines === m ? "linear-gradient(135deg,#dc2626,#991b1b)" : "rgba(30,41,59,0.85)",
-                  borderColor: mines === m ? "rgba(248,113,113,0.55)" : "rgba(148,163,184,0.12)",
+                  background: mines === m ? "linear-gradient(135deg,#dc2626,#7f1d1d)" : "rgba(30,41,59,0.9)",
+                  borderColor: mines === m ? "rgba(248,113,113,0.55)" : "rgba(148,163,184,0.1)",
                   color: mines === m ? "#fff" : "#94a3b8",
-                  boxShadow: mines === m ? "0 0 18px rgba(220,38,38,0.35)" : "none",
+                  boxShadow: mines === m ? "0 0 20px rgba(220,38,38,0.4)" : "none",
                 }}
               >
                 {m}
@@ -344,8 +421,8 @@ export default function MinesGame({
                 style={{
                   ...pill,
                   flex: 1,
-                  background: bet === v ? "rgba(124,92,255,0.25)" : "rgba(30,41,59,0.85)",
-                  borderColor: bet === v ? "rgba(167,139,250,0.5)" : "rgba(148,163,184,0.12)",
+                  background: bet === v ? "rgba(124,92,255,0.28)" : "rgba(30,41,59,0.9)",
+                  borderColor: bet === v ? "rgba(167,139,250,0.55)" : "rgba(148,163,184,0.1)",
                   color: bet === v ? "#e9d5ff" : "#94a3b8",
                 }}
               >
@@ -357,18 +434,19 @@ export default function MinesGame({
               onClick={() => setBet(Math.max(MIN_BET, Math.floor(balance * 1000) / 1000))}
               style={{
                 ...pill,
-                flex: 1.2,
+                flex: 1.15,
                 background: "linear-gradient(135deg,#7c5cff,#a855f7)",
                 borderColor: "transparent",
                 color: "#fff",
                 fontWeight: 900,
+                boxShadow: "0 0 16px rgba(124,92,255,0.35)",
               }}
             >
               Max
             </button>
           </div>
 
-          <button type="button" disabled={busy} onClick={startGame} style={startBtn}>
+          <button type="button" disabled={busy || bet > balance || bet < MIN_BET} onClick={startGame} style={startBtn}>
             {busy ? t.busy : t.startGame}
           </button>
         </div>
@@ -401,18 +479,37 @@ export default function MinesGame({
 
       {isOver && (
         <div
+          className="mn-result"
           style={{
             ...resultCard,
-            borderColor: game!.status === "won" ? "rgba(34,197,94,0.45)" : "rgba(248,113,113,0.4)",
+            borderColor: game!.status === "won" ? "rgba(34,197,94,0.5)" : "rgba(248,113,113,0.45)",
+            boxShadow:
+              game!.status === "won"
+                ? "0 0 40px rgba(34,197,94,0.15)"
+                : "0 0 40px rgba(248,113,113,0.12)",
           }}
         >
-          <div style={{ fontSize: 15, fontWeight: 900, color: game!.status === "won" ? "#4ade80" : "#f87171" }}>
+          <div style={{ fontSize: 36, marginBottom: 6 }}>{game!.status === "won" ? "🎉" : "💥"}</div>
+          <div
+            style={{
+              fontSize: 18,
+              fontWeight: 900,
+              color: game!.status === "won" ? "#4ade80" : "#f87171",
+            }}
+          >
             {game!.status === "won" ? t.wonCard(game!.payout ?? cashoutAmt) : t.lostCard(game!.stake)}
           </div>
           <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 4 }}>
             {game!.status === "won" ? t.wonSub(game!.multiplier) : t.lostSub}
           </div>
-          <button type="button" onClick={() => setGame(null)} style={{ ...startBtn, marginTop: 14, padding: "12px 0" }}>
+          <button
+            type="button"
+            onClick={() => {
+              setGame(null);
+              haptic("light");
+            }}
+            style={{ ...startBtn, marginTop: 16, padding: "13px 0" }}
+          >
             Ещё раз
           </button>
         </div>
@@ -424,7 +521,7 @@ export default function MinesGame({
 const root: CSSProperties = {
   maxWidth: 420,
   margin: "0 auto",
-  padding: "8px 0 28px",
+  padding: "4px 0 32px",
   color: "#f1f5f9",
   fontFamily: "inherit",
 };
@@ -433,15 +530,15 @@ const header: CSSProperties = {
   display: "flex",
   justifyContent: "space-between",
   alignItems: "center",
-  marginBottom: 14,
+  marginBottom: 12,
   padding: "0 2px",
 };
 
 const title: CSSProperties = {
-  fontSize: 22,
+  fontSize: 24,
   fontWeight: 900,
-  letterSpacing: "-0.03em",
-  background: "linear-gradient(90deg,#f8fafc,#c4b5fd)",
+  letterSpacing: "-0.04em",
+  background: "linear-gradient(90deg,#f8fafc 0%,#c4b5fd 60%,#a78bfa 100%)",
   WebkitBackgroundClip: "text",
   WebkitTextFillColor: "transparent",
 };
@@ -451,55 +548,48 @@ const subtitle: CSSProperties = {
   color: "#64748b",
   fontWeight: 600,
   marginTop: 2,
+  letterSpacing: "0.02em",
 };
 
 const balPill: CSSProperties = {
   display: "flex",
   flexDirection: "column",
   alignItems: "flex-end",
-  gap: 2,
-  background: "rgba(15,23,42,0.9)",
+  gap: 1,
+  background: "rgba(15,23,42,0.92)",
   border: "1px solid rgba(148,163,184,0.12)",
-  borderRadius: 12,
-  padding: "8px 12px",
-  fontSize: 13,
+  borderRadius: 14,
+  padding: "8px 14px",
+  fontSize: 14,
 };
 
 const hero: CSSProperties = {
   textAlign: "center",
-  marginBottom: 14,
-  padding: "12px 8px 4px",
+  marginBottom: 12,
+  padding: "10px 8px 2px",
 };
 
 const heroLabel: CSSProperties = {
   fontSize: 10,
   fontWeight: 800,
-  letterSpacing: "0.14em",
+  letterSpacing: "0.16em",
   color: "#64748b",
 };
 
-const heroMult: CSSProperties = {
-  fontSize: 42,
-  fontWeight: 900,
-  letterSpacing: "-0.04em",
-  lineHeight: 1.1,
-  marginTop: 4,
-  fontVariantNumeric: "tabular-nums",
-};
-
 const heroSub: CSSProperties = {
-  fontSize: 12,
+  fontSize: 13,
   color: "#94a3b8",
   marginTop: 6,
   fontWeight: 600,
 };
 
 const gridWrap: CSSProperties = {
-  padding: 10,
-  borderRadius: 20,
-  background: "linear-gradient(160deg, rgba(30,16,51,0.95), rgba(8,6,18,0.98))",
-  border: "1px solid rgba(124,92,255,0.18)",
-  boxShadow: "0 20px 50px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.04)",
+  padding: 12,
+  borderRadius: 22,
+  background: "linear-gradient(165deg, rgba(36,20,60,0.95) 0%, rgba(8,6,18,0.98) 100%)",
+  border: "1px solid rgba(124,92,255,0.2)",
+  boxShadow:
+    "0 24px 56px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.05), 0 0 0 1px rgba(0,0,0,0.3)",
   marginBottom: 12,
 };
 
@@ -513,35 +603,38 @@ const ladder: CSSProperties = {
   display: "flex",
   gap: 6,
   overflowX: "auto",
-  paddingBottom: 4,
+  paddingBottom: 6,
   marginBottom: 14,
+  scrollbarWidth: "none",
 };
 
 const ladderItem: CSSProperties = {
   flex: "0 0 auto",
-  minWidth: 52,
+  minWidth: 54,
   textAlign: "center",
-  padding: "8px 10px",
-  borderRadius: 10,
+  padding: "9px 11px",
+  borderRadius: 11,
   border: "1px solid",
-  fontSize: 11,
+  fontSize: 12,
   fontWeight: 800,
   fontVariantNumeric: "tabular-nums",
+  transition: "all 0.2s ease",
 };
 
 const panel: CSSProperties = {
-  background: "rgba(15,10,25,0.75)",
+  background: "rgba(12,8,22,0.8)",
   border: "1px solid rgba(148,163,184,0.1)",
-  borderRadius: 18,
-  padding: 14,
+  borderRadius: 20,
+  padding: 16,
+  backdropFilter: "blur(8px)",
 };
 
 const sectionLabel: CSSProperties = {
   fontSize: 10,
   fontWeight: 800,
-  letterSpacing: "0.12em",
+  letterSpacing: "0.14em",
   color: "#64748b",
-  marginBottom: 8,
+  marginBottom: 10,
 };
 
 const pills: CSSProperties = {
@@ -551,21 +644,22 @@ const pills: CSSProperties = {
 };
 
 const pill: CSSProperties = {
-  minWidth: 40,
-  padding: "10px 0",
-  borderRadius: 12,
+  minWidth: 42,
+  padding: "11px 0",
+  borderRadius: 13,
   border: "1px solid",
   fontWeight: 800,
   fontSize: 13,
   cursor: "pointer",
   fontFamily: "inherit",
+  transition: "all 0.15s ease",
 };
 
 const metaRow: CSSProperties = {
   display: "flex",
   justifyContent: "space-between",
-  marginTop: 10,
-  fontSize: 11,
+  marginTop: 12,
+  fontSize: 12,
   color: "#64748b",
   fontWeight: 600,
 };
@@ -573,61 +667,63 @@ const metaRow: CSSProperties = {
 const betRow: CSSProperties = {
   display: "flex",
   gap: 8,
-  marginBottom: 8,
+  marginBottom: 10,
 };
 
 const betAdj: CSSProperties = {
-  width: 48,
-  borderRadius: 12,
+  width: 50,
+  borderRadius: 13,
   border: "1px solid rgba(148,163,184,0.15)",
-  background: "rgba(30,41,59,0.9)",
+  background: "rgba(30,41,59,0.95)",
   color: "#e2e8f0",
   fontWeight: 900,
-  fontSize: 14,
+  fontSize: 15,
   cursor: "pointer",
   fontFamily: "inherit",
 };
 
 const betInput: CSSProperties = {
   flex: 1,
-  padding: "12px 14px",
-  borderRadius: 12,
-  border: "1px solid rgba(124,92,255,0.3)",
-  background: "rgba(8,6,18,0.95)",
+  padding: "13px 14px",
+  borderRadius: 13,
+  border: "1px solid rgba(124,92,255,0.35)",
+  background: "rgba(8,6,18,0.98)",
   color: "#f8fafc",
-  fontSize: 16,
+  fontSize: 17,
   fontWeight: 800,
   textAlign: "center",
   outline: "none",
   fontFamily: "inherit",
+  fontVariantNumeric: "tabular-nums",
 };
 
 const startBtn: CSSProperties = {
   width: "100%",
-  marginTop: 14,
-  padding: "15px 0",
-  borderRadius: 14,
+  marginTop: 16,
+  padding: "16px 0",
+  borderRadius: 15,
   border: "none",
-  background: "linear-gradient(135deg,#7c5cff 0%,#a855f7 50%,#ec4899 100%)",
+  background: "linear-gradient(135deg,#7c5cff 0%,#a855f7 45%,#ec4899 100%)",
   color: "#fff",
-  fontSize: 15,
+  fontSize: 16,
   fontWeight: 900,
   cursor: "pointer",
   fontFamily: "inherit",
-  boxShadow: "0 8px 28px rgba(124,92,255,0.35)",
+  boxShadow: "0 10px 32px rgba(124,92,255,0.4)",
+  letterSpacing: "0.02em",
 };
 
 const liveStats: CSSProperties = {
   display: "grid",
   gridTemplateColumns: "1fr 1fr 1fr",
   gap: 8,
-  marginBottom: 12,
+  marginBottom: 14,
 };
 
 const statBox: CSSProperties = {
-  background: "rgba(30,41,59,0.7)",
-  borderRadius: 12,
-  padding: "10px 8px",
+  background: "rgba(30,41,59,0.75)",
+  borderRadius: 13,
+  padding: "11px 8px",
   textAlign: "center",
   border: "1px solid rgba(148,163,184,0.08)",
 };
@@ -635,32 +731,33 @@ const statBox: CSSProperties = {
 const statLab: CSSProperties = {
   fontSize: 9,
   fontWeight: 800,
-  letterSpacing: "0.1em",
+  letterSpacing: "0.12em",
   color: "#64748b",
 };
 
 const statVal: CSSProperties = {
-  fontSize: 14,
+  fontSize: 15,
   fontWeight: 900,
   marginTop: 4,
   color: "#f1f5f9",
+  fontVariantNumeric: "tabular-nums",
 };
 
 const hint: CSSProperties = {
   textAlign: "center",
-  padding: "14px 0",
+  padding: "15px 0",
   borderRadius: 14,
-  background: "rgba(30,41,59,0.5)",
+  background: "rgba(30,41,59,0.45)",
   color: "#64748b",
   fontSize: 13,
   fontWeight: 700,
 };
 
 const resultCard: CSSProperties = {
-  marginTop: 14,
-  padding: 16,
-  borderRadius: 16,
-  background: "rgba(15,10,25,0.9)",
+  marginTop: 16,
+  padding: 20,
+  borderRadius: 18,
+  background: "rgba(12,8,22,0.95)",
   border: "1px solid",
   textAlign: "center",
 };
@@ -668,18 +765,33 @@ const resultCard: CSSProperties = {
 const CSS = `
   .mn-toast {
     position: fixed; top: 16px; left: 50%; transform: translateX(-50%);
-    z-index: 9999; padding: 12px 18px; border-radius: 12px;
+    z-index: 9999; padding: 12px 20px; border-radius: 14px;
     font-size: 13px; font-weight: 700; color: #fff;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.45);
+    box-shadow: 0 12px 36px rgba(0,0,0,0.5);
     max-width: calc(100% - 32px);
+    animation: mnToastIn 0.3s ease;
   }
-  .mn-toast-success { background: rgba(5,150,105,0.96); }
-  .mn-toast-error { background: rgba(220,38,38,0.96); }
-  .mn-toast-info { background: rgba(30,64,175,0.96); }
+  @keyframes mnToastIn {
+    from { opacity: 0; transform: translateX(-50%) translateY(-12px); }
+    to { opacity: 1; transform: translateX(-50%) translateY(0); }
+  }
+  .mn-toast-success { background: rgba(5,150,105,0.97); }
+  .mn-toast-error { background: rgba(220,38,38,0.97); }
+  .mn-toast-info { background: rgba(30,64,175,0.97); }
+
+  .mn-hero-mult {
+    font-size: 48px;
+    font-weight: 900;
+    letter-spacing: -0.05em;
+    line-height: 1.05;
+    margin-top: 4px;
+    font-variant-numeric: tabular-nums;
+    transition: color 0.25s ease, text-shadow 0.25s ease;
+  }
 
   .mn-cell {
     aspect-ratio: 1;
-    border-radius: 12px;
+    border-radius: 14px;
     border: none;
     cursor: pointer;
     font-family: inherit;
@@ -687,56 +799,118 @@ const CSS = `
     align-items: center;
     justify-content: center;
     position: relative;
-    transition: transform 0.15s ease, box-shadow 0.2s ease, background 0.2s ease;
-    background: linear-gradient(160deg, #2a1f45 0%, #16102a 100%);
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 4px 12px rgba(0,0,0,0.35);
+    transition: transform 0.12s ease, box-shadow 0.2s ease, background 0.2s ease, filter 0.2s;
+    background: linear-gradient(155deg, #2e2348 0%, #1a1230 55%, #120e22 100%);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.07),
+      inset 0 -2px 0 rgba(0,0,0,0.25),
+      0 5px 0 #0d0a18,
+      0 8px 16px rgba(0,0,0,0.4);
   }
-  .mn-hidden:active { transform: scale(0.94); }
-  .mn-hidden:hover { box-shadow: inset 0 1px 0 rgba(255,255,255,0.1), 0 0 0 1px rgba(167,139,250,0.35), 0 6px 16px rgba(0,0,0,0.4); }
+  .mn-hidden {
+    transform: translateY(-3px);
+  }
+  .mn-hidden:active {
+    transform: translateY(0) scale(0.96);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.04),
+      0 2px 0 #0d0a18,
+      0 4px 10px rgba(0,0,0,0.35);
+  }
+  .mn-hidden:hover {
+    filter: brightness(1.12);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.1),
+      0 5px 0 #0d0a18,
+      0 0 0 1.5px rgba(167,139,250,0.4),
+      0 10px 20px rgba(0,0,0,0.45);
+  }
+  .mn-idle {
+    opacity: 0.55;
+    transform: none;
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.04),
+      0 3px 0 #0d0a18,
+      0 4px 10px rgba(0,0,0,0.3);
+  }
   .mn-safe {
-    background: linear-gradient(160deg, #065f46 0%, #022c22 100%);
-    box-shadow: inset 0 1px 0 rgba(74,222,128,0.25), 0 0 18px rgba(16,185,129,0.25);
+    background: linear-gradient(155deg, #047857 0%, #064e3b 50%, #022c22 100%);
+    box-shadow:
+      inset 0 1px 0 rgba(110,231,183,0.3),
+      0 0 22px rgba(16,185,129,0.35),
+      0 4px 12px rgba(0,0,0,0.3);
+    transform: none;
   }
   .mn-mine {
-    background: linear-gradient(160deg, #7f1d1d 0%, #450a0a 100%);
-    box-shadow: inset 0 1px 0 rgba(248,113,113,0.25), 0 0 18px rgba(239,68,68,0.3);
+    background: linear-gradient(155deg, #b91c1c 0%, #7f1d1d 50%, #450a0a 100%);
+    box-shadow:
+      inset 0 1px 0 rgba(252,165,165,0.25),
+      0 0 24px rgba(239,68,68,0.4),
+      0 4px 12px rgba(0,0,0,0.3);
+    transform: none;
   }
   .mn-dot {
-    width: 8px; height: 8px; border-radius: 50%;
-    background: rgba(148,163,184,0.25);
+    width: 7px; height: 7px; border-radius: 50%;
+    background: rgba(167,139,250,0.28);
+    box-shadow: 0 0 6px rgba(167,139,250,0.15);
   }
-  .mn-gem { font-size: 22px; filter: drop-shadow(0 2px 6px rgba(16,185,129,0.5)); }
-  .mn-bomb { font-size: 22px; filter: drop-shadow(0 2px 6px rgba(239,68,68,0.5)); }
-  .mn-flip { animation: mnFlip 0.45s cubic-bezier(0.34,1.4,0.64,1) both; }
-  .mn-boom { animation: mnBoom 0.55s ease both; }
+  .mn-flip {
+    animation: mnFlip 0.5s cubic-bezier(0.22, 1.2, 0.36, 1) both;
+  }
+  .mn-boom {
+    animation: mnBoom 0.6s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+  }
   @keyframes mnFlip {
-    0% { transform: scale(0.6) rotateY(90deg); opacity: 0.3; }
-    100% { transform: scale(1) rotateY(0); opacity: 1; }
+    0%   { transform: scale(0.55) rotateY(95deg); opacity: 0.2; filter: brightness(2); }
+    55%  { transform: scale(1.08) rotateY(-8deg); opacity: 1; }
+    100% { transform: scale(1) rotateY(0); opacity: 1; filter: brightness(1); }
   }
   @keyframes mnBoom {
-    0% { transform: scale(1); }
-    30% { transform: scale(1.18); }
-    100% { transform: scale(1); }
+    0%   { transform: scale(1); filter: brightness(1); }
+    25%  { transform: scale(1.28); filter: brightness(2.2); }
+    50%  { transform: scale(0.88); filter: brightness(1.4); }
+    75%  { transform: scale(1.1); }
+    100% { transform: scale(1); filter: brightness(1); }
   }
+
   .mn-cashout {
     width: 100%;
-    padding: 15px 0;
-    border-radius: 14px;
+    padding: 16px 0;
+    border-radius: 15px;
     border: none;
     font-family: inherit;
-    font-size: 15px;
+    font-size: 16px;
     font-weight: 900;
     cursor: pointer;
     color: #1a0a00;
-    background: linear-gradient(135deg, #f59e0b, #fbbf24, #f59e0b);
-    background-size: 200% 100%;
-    box-shadow: 0 0 28px rgba(245,158,11,0.45);
-    animation: mnCash 2.2s ease infinite;
+    background: linear-gradient(110deg, #f59e0b 0%, #fbbf24 40%, #fcd34d 60%, #f59e0b 100%);
+    background-size: 220% 100%;
+    box-shadow: 0 0 32px rgba(245,158,11,0.5), 0 6px 0 #b45309;
+    animation: mnCash 2s ease infinite;
+    letter-spacing: 0.02em;
+  }
+  .mn-cashout:active {
+    transform: translateY(3px);
+    box-shadow: 0 0 24px rgba(245,158,11,0.4), 0 2px 0 #b45309;
   }
   @keyframes mnCash {
-    0%,100% { background-position: 0% 50%; box-shadow: 0 0 22px rgba(245,158,11,0.4); }
-    50% { background-position: 100% 50%; box-shadow: 0 0 36px rgba(251,191,36,0.55); }
+    0%,100% { background-position: 0% 50%; box-shadow: 0 0 28px rgba(245,158,11,0.45), 0 6px 0 #b45309; }
+    50%     { background-position: 100% 50%; box-shadow: 0 0 42px rgba(251,191,36,0.6), 0 6px 0 #b45309; }
+  }
+
+  .mn-result {
+    animation: mnResultIn 0.4s cubic-bezier(0.22,1.2,0.36,1) both;
+  }
+  @keyframes mnResultIn {
+    from { opacity: 0; transform: scale(0.92) translateY(12px); }
+    to   { opacity: 1; transform: scale(1) translateY(0); }
+  }
+
+  .mn-ladder-active {
+    animation: mnLadderPulse 1.8s ease infinite;
+  }
+  @keyframes mnLadderPulse {
+    0%,100% { box-shadow: 0 0 12px rgba(251,191,36,0.2); }
+    50%     { box-shadow: 0 0 20px rgba(251,191,36,0.4); }
   }
 `;
-
-export { MinesGame };

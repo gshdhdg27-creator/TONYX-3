@@ -1,4 +1,4 @@
-import { useState, type CSSProperties } from "react";
+import { useState, useEffect, type CSSProperties } from "react";
 import { useTelegram } from "@/lib/telegram";
 import { useLang } from "@/lib/LanguageContext";
 import MinesGame from "@/components/MinesGame";
@@ -18,6 +18,23 @@ export default function SoloPage() {
   const [tab, setTab] = useState<Tab>("pick");
   const [tonBalance, setTonBalance] = useState(0);
 
+  const refreshBalance = async () => {
+    if (!telegramId) return;
+    try {
+      const r = await fetch(`/api/mini/wallet/profile?telegramId=${encodeURIComponent(telegramId)}`);
+      if (!r.ok) return;
+      const d = await r.json();
+      const ton = Number(d?.ton ?? d?.user?.ton ?? 0);
+      if (!Number.isNaN(ton)) setTonBalance(ton);
+    } catch {
+      /* ignore */
+    }
+  };
+
+  useEffect(() => {
+    refreshBalance();
+  }, [telegramId]);
+
   if (tab === "mines") {
     return (
       <div style={{ minHeight: "100dvh", padding: "12px 12px 110px", background: "#0a0612" }}>
@@ -28,7 +45,7 @@ export default function SoloPage() {
           telegramId={telegramId ?? ""}
           balance={tonBalance}
           lang={lang}
-          onBalanceChange={() => setTonBalance((b) => b)}
+          onBalanceChange={refreshBalance}
         />
       </div>
     );

@@ -18,7 +18,7 @@ const router: IRouter = Router();
 
 const GRID_SIZE = 5;
 const HOUSE_EDGE = 0.97;
-/** Same currency as Spin — real TON. Stored in DB as milliTON (×1000) because stake/payout columns are integer. */
+/** Same currency as Spin — real TON. Stored as milliTON (×1000). */
 const MIN_STAKE = 0.1;
 
 type CellState = "hidden" | "safe" | "mine";
@@ -57,13 +57,19 @@ function calcMultiplier(safeRevealed: number, totalCells: number, minesCount: nu
   return Math.round(multiplier * HOUSE_EDGE * 100) / 100;
 }
 
+function countSafeOnBoard(board: CellState[][], revealed: [number, number][]): number {
+  return revealed.filter(([r, c]) => board[r]?.[c] === "safe").length;
+}
+
 function formatGame(game: typeof miniMineGamesTable.$inferSelect, hideBoard = true) {
   const board = game.board as CellState[][];
   const revealed = (game.revealed as [number, number][]) ?? [];
   const displayBoard: string[][] = Array.from({ length: GRID_SIZE }, () => Array(GRID_SIZE).fill("hidden"));
 
   for (const [r, c] of revealed) {
-    displayBoard[r][c] = board[r][c];
+    if (r >= 0 && r < GRID_SIZE && c >= 0 && c < GRID_SIZE) {
+      displayBoard[r][c] = board[r][c];
+    }
   }
   if (game.status !== "active" && !hideBoard) {
     for (let r = 0; r < GRID_SIZE; r++) {
@@ -82,9 +88,67 @@ function formatGame(game: typeof miniMineGamesTable.$inferSelect, hideBoard = tr
     multiplier: Number(game.multiplier),
     status: game.status,
     payout: game.payout != null ? fromMilli(game.payout) : null,
+    safeCount: countSafeOnBoard(board, revealed),
     createdAt: game.createdAt.toISOString(),
   };
 }
+
+/** GET /active?telegramId= — resume stuck / open game. MUST be before /:gameId */
+router.get("/active", async (req, res) => {
+  const telegramId = String(req.query.telegramId ?? "");
+  if (!telegramId) {
+    res.status(400).json({ error: "telegramId required" });
+    return;
+  }
+  const game = await db
+    .select()
+    .from(miniMineGamesTable)
+    .where(and(eq(miniMineGamesTable.telegramId, telegramId), eq(miniMineGamesTable.status, "active")))
+    .then((r) => r[0] ?? null);
+
+  if (!game) {
+    res.json({ game: null });
+    return;
+  }
+  res.json({ game: formatGame(game) });
+});
+
+/** POST /abandon — force-close stuck active game without payout (refund stake) */
+router.post("/abandon", async (req, res) => {
+  const telegramId = String(req.body?.telegramId ?? "");
+  if (!telegramId) {
+    res.status(400).json({ error: "telegramId required" });
+    return;
+  }
+  const game = await db
+    .select()
+    .from(miniMineGamesTable)
+    .where(and(eq(miniMineGamesTable.telegramId, telegramId), eq(miniMineGamesTable.status, "active")))
+    .then((r) => r[0] ?? null);
+
+  if (!game) {
+    res.json({ ok: true, refunded: 0 });
+    return;
+  }
+
+  const stakeTon = fromMilli(game.stake);
+  await db
+    .update(miniMineGamesTable)
+    .set({ status: "lost", payout: 0, finishedAt: new Date() })
+    .where(eq(miniMineGamesTable.id, game.id));
+
+  const user = await db.select().from(usersTable).where(eq(usersTable.telegramId, telegramId)).then((r) => r[0] ?? null);
+  let newBalance = 0;
+  if (user) {
+    newBalance = Math.round((Number(user.ton ?? 0) + stakeTon) * 1000) / 1000;
+    await db
+      .update(usersTable)
+      .set({ ton: String(newBalance), updatedAt: new Date() })
+      .where(eq(usersTable.telegramId, telegramId));
+  }
+
+  res.json({ ok: true, refunded: stakeTon, newBalance });
+});
 
 router.get("/:gameId", async (req, res) => {
   const { gameId } = GetMineGameParams.parse({ gameId: parseInt(req.params.gameId) });
@@ -122,12 +186,6 @@ router.post("/start", async (req, res) => {
     return;
   }
 
-  const tonBal = Number(user.ton ?? 0);
-  if (tonBal < stakeTon) {
-    res.status(400).json({ error: `Insufficient TON. You have ${tonBal}` });
-    return;
-  }
-
   const activeGame = await db
     .select()
     .from(miniMineGamesTable)
@@ -135,7 +193,13 @@ router.post("/start", async (req, res) => {
     .then((r) => r[0] ?? null);
 
   if (activeGame) {
-    res.status(400).json({ error: "You already have an active game. Cash out or finish it first." });
+    res.json({ ...formatGame(activeGame), resumed: true });
+    return;
+  }
+
+  const tonBal = Number(user.ton ?? 0);
+  if (tonBal < stakeTon) {
+    res.status(400).json({ error: `Insufficient TON. You have ${tonBal}` });
     return;
   }
 

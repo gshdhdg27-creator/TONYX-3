@@ -13,21 +13,24 @@ import {
 } from "@workspace/api-client-react";
 import { useTelegram } from "@/lib/telegram";
 
-/* ── Portals-style Arena: vertical stake strips + bouncing puck ── */
+/**
+ * Premium Portals-like Arena (original implementation — not Portals source).
+ * Vertical stake strips + high-energy bouncing puck + glass UI.
+ */
 
-const W = 340;
-const H = 340;
-const BALL_R = 11;
-const MARGIN = 4;
+const W = 352;
+const H = 352;
+const BALL_R = 13;
+const MARGIN = 6;
 const COMMISSION = 0.2;
 const MIN_STAKE = 0.1;
-const DEFAULT_BETS = [0.1, 0.5, 1, 5, 10];
-const SPIN_MS = 6500;
+const DEFAULT_BETS = [0.1, 0.5, 1, 2, 5, 10];
+const SPIN_MS = 7200;
 
 const COLORS = [
-  "#5BE12C", "#FF4136", "#FF9F00", "#00C0FF",
-  "#B044FF", "#FFEB3B", "#FF69B4", "#00FFB2",
-  "#FF6E40", "#39CCCC",
+  "#22c55e", "#ef4444", "#f59e0b", "#06b6d4",
+  "#a855f7", "#eab308", "#ec4899", "#14b8a6",
+  "#f97316", "#3b82f6",
 ];
 
 interface ArenaPlayer {
@@ -67,6 +70,21 @@ type Strip = ArenaPlayer & {
   midX: number;
 };
 
+function haptic(type: "light" | "medium" | "heavy" = "light") {
+  try {
+    (window as any).Telegram?.WebApp?.HapticFeedback?.impactOccurred?.(type);
+  } catch {
+    /* */
+  }
+}
+function hapticNotify(type: "success" | "error" | "warning") {
+  try {
+    (window as any).Telegram?.WebApp?.HapticFeedback?.notificationOccurred?.(type);
+  } catch {
+    /* */
+  }
+}
+
 function initials(name: string | null | undefined, id: string) {
   return (name || id || "?").replace(/^@/, "").slice(0, 2).toUpperCase();
 }
@@ -97,13 +115,69 @@ function buildStrips(players: ArenaPlayer[]): Strip[] {
   });
 }
 
+const CSS = `
+@keyframes arPulse {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+@keyframes arGlow {
+  0%, 100% { box-shadow: 0 0 20px rgba(34,197,94,0.25), 0 0 60px rgba(34,197,94,0.08); }
+  50% { box-shadow: 0 0 32px rgba(34,197,94,0.45), 0 0 90px rgba(34,197,94,0.18); }
+}
+@keyframes arPop {
+  0% { opacity: 0; transform: translateY(16px) scale(0.94); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes arShine {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+.ar-board {
+  position: relative;
+  border-radius: 22px;
+  overflow: hidden;
+  background: #08080f;
+}
+.ar-board::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 22px;
+  pointer-events: none;
+  box-shadow:
+    inset 0 0 0 3px rgba(255,255,255,0.12),
+    inset 0 0 0 6px rgba(0,0,0,0.35),
+    inset 0 0 40px rgba(0,0,0,0.25);
+  z-index: 4;
+}
+.ar-strip-gloss {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    rgba(255,255,255,0.22) 0%,
+    rgba(255,255,255,0.05) 18%,
+    transparent 42%,
+    rgba(0,0,0,0.12) 100%
+  );
+  pointer-events: none;
+}
+.ar-puck-shadow {
+  position: absolute;
+  border-radius: 50%;
+  background: radial-gradient(ellipse, rgba(0,0,0,0.45) 0%, transparent 70%);
+  pointer-events: none;
+  z-index: 5;
+  transform: translate(-50%, -50%);
+}
+`;
+
 export default function ArenaGame({
   telegramId,
   tonBalance,
   onBalanceChange,
   onClose,
 }: Props) {
-  const { photoUrl } = useTelegram();
   const qc = useQueryClient();
   const { data: profile } = useGetUserProfile(telegramId ?? "", {
     query: { enabled: !!telegramId, refetchInterval: 5000 },
@@ -135,16 +209,16 @@ export default function ArenaGame({
   const [boardZoom, setBoardZoom] = useState(1);
   const [zoomOrigin, setZoomOrigin] = useState("50% 50%");
   const [puckVisible, setPuckVisible] = useState(false);
+  const [puckPos, setPuckPos] = useState({ x: W / 2, y: H / 2 });
   const [trail, setTrail] = useState<{ x: number; y: number; id: number }[]>([]);
+  const [flashWall, setFlashWall] = useState(false);
 
-  const ballRef = useRef<SVGCircleElement | null>(null);
-  const glowRef = useRef<SVGCircleElement | null>(null);
-  const posRef = useRef({ x: W / 2, y: H / 2 });
   const rafRef = useRef<number | null>(null);
   const settledRef = useRef<Set<number>>(new Set());
   const phaseRef = useRef<Phase>("lobby");
   const arenaIdRef = useRef<number | null>(null);
   const trailId = useRef(0);
+  const lastHitRef = useRef(0);
 
   useEffect(() => {
     phaseRef.current = phase;
@@ -172,18 +246,10 @@ export default function ArenaGame({
     setTimeout(() => setToast(null), 2200);
   };
 
-  function placeBall(nx: number, ny: number) {
-    posRef.current = { x: nx, y: ny };
-    ballRef.current?.setAttribute("cx", nx.toFixed(2));
-    ballRef.current?.setAttribute("cy", ny.toFixed(2));
-    glowRef.current?.setAttribute("cx", nx.toFixed(2));
-    glowRef.current?.setAttribute("cy", ny.toFixed(2));
-  }
-
   function resetAnim() {
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
     rafRef.current = null;
-    placeBall(W / 2, H / 2);
+    setPuckPos({ x: W / 2, y: H / 2 });
     setWinnerData(null);
     setFreezeStrips(null);
     setFreezePool(0);
@@ -191,6 +257,7 @@ export default function ArenaGame({
     setZoomOrigin("50% 50%");
     setPuckVisible(false);
     setTrail([]);
+    setFlashWall(false);
   }
 
   function runSpinAnimation(data: ArenaState) {
@@ -208,22 +275,23 @@ export default function ArenaGame({
     setBoardZoom(1);
     setPuckVisible(true);
     setTrail([]);
+    haptic("medium");
 
-    // Target: random point inside winner strip
-    const pad = 10;
+    const pad = 14;
+    const stripW = Math.max(8, winner.x1 - winner.x0);
     const tx =
       winner.x0 +
-      pad +
-      Math.random() * Math.max(4, winner.x1 - winner.x0 - pad * 2);
+      Math.min(stripW / 2, pad) +
+      Math.random() * Math.max(4, stripW - Math.min(stripW / 2, pad) * 2);
     const ty = pad + Math.random() * (H - pad * 2);
 
-    // Random start + velocity
     let x = MARGIN + BALL_R + Math.random() * (W - 2 * (MARGIN + BALL_R));
     let y = MARGIN + BALL_R + Math.random() * (H - 2 * (MARGIN + BALL_R));
+    // Fast Portals-like start speed
     const dir = Math.random() * Math.PI * 2;
-    let vx = Math.cos(dir) * (14 + Math.random() * 5);
-    let vy = Math.sin(dir) * (14 + Math.random() * 5);
-    placeBall(x, y);
+    let vx = Math.cos(dir) * (18 + Math.random() * 6);
+    let vy = Math.sin(dir) * (18 + Math.random() * 6);
+    setPuckPos({ x, y });
 
     const startTime = performance.now();
     let last = startTime;
@@ -232,15 +300,26 @@ export default function ArenaGame({
     const hiX = W - MARGIN - BALL_R;
     const hiY = H - MARGIN - BALL_R;
 
+    const hitWall = () => {
+      const now = performance.now();
+      if (now - lastHitRef.current > 80) {
+        lastHitRef.current = now;
+        haptic("light");
+        setFlashWall(true);
+        setTimeout(() => setFlashWall(false), 70);
+      }
+    };
+
     const step = (now: number) => {
       const elapsed = now - startTime;
       const raw = Math.min(1, elapsed / SPIN_MS);
 
       if (raw >= 1) {
-        placeBall(tx, ty);
+        setPuckPos({ x: tx, y: ty });
         setZoomOrigin(`${(tx / W) * 100}% ${(ty / H) * 100}%`);
-        setBoardZoom(1.55);
+        setBoardZoom(1.65);
         setPhase("winner");
+        hapticNotify("success");
         const payout = payoutOf(winner.stake, data.totalPool);
         const mult =
           winner.stake > 0
@@ -259,23 +338,36 @@ export default function ArenaGame({
           resetAnim();
           fetchState();
           refreshBalance();
-        }, 3600);
+        }, 3800);
         return;
       }
 
-      const dt = Math.min(0.034, Math.max(0.001, (now - last) / 1000));
+      const dt = Math.min(0.032, Math.max(0.001, (now - last) / 1000));
       last = now;
 
-      // Friction increases over time
-      const friction =
-        raw < 0.45 ? 0.998 : raw < 0.7 ? 0.985 : raw < 0.88 ? 0.94 : 0.82;
+      // Energy curve: long high-speed chaos, then soft settle
+      let friction = 0.999;
+      if (raw > 0.35) friction = 0.994;
+      if (raw > 0.55) friction = 0.985;
+      if (raw > 0.72) friction = 0.955;
+      if (raw > 0.88) friction = 0.88;
       vx *= Math.pow(friction, dt * 60);
       vy *= Math.pow(friction, dt * 60);
 
-      // Homing into winner strip in final phase
-      if (raw > 0.55) {
-        const t = (raw - 0.55) / 0.45;
-        const pull = t * t * 3.2;
+      // Keep minimum speed until late phase so it keeps bouncing like Portals
+      if (raw < 0.7) {
+        const spd = Math.hypot(vx, vy);
+        const minSpd = 8 - raw * 6;
+        if (spd < minSpd && spd > 0.1) {
+          vx = (vx / spd) * minSpd;
+          vy = (vy / spd) * minSpd;
+        }
+      }
+
+      // Homing only in the last stretch
+      if (raw > 0.68) {
+        const t = (raw - 0.68) / 0.32;
+        const pull = t * t * 4.5;
         const dx = tx - x;
         const dy = ty - y;
         const dist = Math.hypot(dx, dy) || 1;
@@ -288,36 +380,38 @@ export default function ArenaGame({
 
       if (x < lo) {
         x = lo;
-        vx = Math.abs(vx) * 0.92;
+        vx = Math.abs(vx) * 0.96;
+        hitWall();
       }
       if (x > hiX) {
         x = hiX;
-        vx = -Math.abs(vx) * 0.92;
+        vx = -Math.abs(vx) * 0.96;
+        hitWall();
       }
       if (y < lo) {
         y = lo;
-        vy = Math.abs(vy) * 0.92;
+        vy = Math.abs(vy) * 0.96;
+        hitWall();
       }
       if (y > hiY) {
         y = hiY;
-        vy = -Math.abs(vy) * 0.92;
+        vy = -Math.abs(vy) * 0.96;
+        hitWall();
       }
 
-      placeBall(x, y);
+      setPuckPos({ x, y });
 
-      // Trail dots
-      if (now - lastTrail > 40) {
+      if (now - lastTrail > 28) {
         lastTrail = now;
         const id = ++trailId.current;
-        setTrail((prev) => [...prev.slice(-18), { x, y, id }]);
+        setTrail((prev) => [...prev.slice(-28), { x, y, id }]);
       }
 
-      // Late zoom
-      if (raw > 0.82) {
-        const k = (raw - 0.82) / 0.18;
+      if (raw > 0.8) {
+        const k = (raw - 0.8) / 0.2;
         const ease = 1 - Math.pow(1 - k, 2);
         setZoomOrigin(`${(x / W) * 100}% ${(y / H) * 100}%`);
-        setBoardZoom(1 + ease * 0.5);
+        setBoardZoom(1 + ease * 0.6);
       }
 
       rafRef.current = requestAnimationFrame(step);
@@ -396,6 +490,7 @@ export default function ArenaGame({
       return;
     }
     setBusy(true);
+    haptic("light");
     try {
       const me = arena?.players.find((p) => p.telegramId === telegramId);
       const url = me
@@ -426,7 +521,7 @@ export default function ArenaGame({
 
   const statusLabel =
     phase === "spin"
-      ? "Шарик крутится…"
+      ? "Шайба в игре…"
       : phase === "winner"
         ? "Победитель!"
         : arena?.status === "starting"
@@ -439,49 +534,88 @@ export default function ArenaGame({
 
   return (
     <div style={root}>
+      <style>{CSS}</style>
+
+      {/* Ambient */}
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          pointerEvents: "none",
+          background:
+            "radial-gradient(ellipse 80% 40% at 50% 0%, rgba(34,197,94,0.12) 0%, transparent 60%), radial-gradient(ellipse 50% 30% at 80% 20%, rgba(168,85,247,0.08) 0%, transparent 70%)",
+        }}
+      />
+
       {/* Header */}
       <div style={header}>
         <button type="button" onClick={onClose} style={backBtn}>
           ←
         </button>
         <div style={{ flex: 1, textAlign: "center" }}>
-          <div style={{ fontSize: 11, color: "#94a3b8", fontWeight: 700, letterSpacing: "0.08em" }}>
+          <div
+            style={{
+              fontSize: 10,
+              color: "#86efac",
+              fontWeight: 800,
+              letterSpacing: "0.14em",
+            }}
+          >
             ARENA
           </div>
-          <div style={{ fontSize: 22, fontWeight: 900, letterSpacing: "-0.03em" }}>
-            {pool.toFixed(2)}{" "}
-            <span style={{ color: "#5BE12C", fontSize: 14 }}>TON</span>
+          <div
+            style={{
+              fontSize: 26,
+              fontWeight: 900,
+              letterSpacing: "-0.04em",
+              lineHeight: 1.1,
+            }}
+          >
+            {pool.toFixed(2)}
+            <span
+              style={{
+                color: "#4ade80",
+                fontSize: 13,
+                marginLeft: 6,
+                fontWeight: 800,
+              }}
+            >
+              TON
+            </span>
           </div>
         </div>
         <div style={{ width: 40 }} />
       </div>
 
-      {/* Status pill */}
-      <div style={{ textAlign: "center", marginBottom: 10 }}>
-        <span style={statusPill}>{statusLabel}</span>
+      <div style={{ textAlign: "center", marginBottom: 12 }}>
+        <span
+          style={{
+            ...statusPill,
+            animation: phase === "spin" ? "arPulse 1s ease-in-out infinite" : undefined,
+          }}
+        >
+          {statusLabel}
+        </span>
       </div>
 
       {/* Board */}
       <div style={boardWrap}>
         <div
+          className="ar-board"
           style={{
             width: W,
             height: H,
-            borderRadius: 18,
-            overflow: "hidden",
-            position: "relative",
-            background: "#0a0a12",
             transform: `scale(${boardZoom})`,
             transformOrigin: zoomOrigin,
             transition:
               phase === "winner"
-                ? "transform 0.5s cubic-bezier(0.22,1,0.36,1)"
+                ? "transform 0.55s cubic-bezier(0.22,1,0.36,1)"
                 : "none",
-            boxShadow:
-              "0 0 0 2px rgba(255,255,255,0.08), 0 20px 50px rgba(0,0,0,0.55)",
+            boxShadow: flashWall
+              ? "0 0 0 2px rgba(255,255,255,0.45), 0 0 40px rgba(255,255,255,0.2)"
+              : "0 0 0 1px rgba(255,255,255,0.1), 0 24px 60px rgba(0,0,0,0.55)",
           }}
         >
-          {/* Vertical strips */}
           {strips.length === 0 ? (
             <div
               style={{
@@ -493,6 +627,7 @@ export default function ArenaGame({
                 color: "#64748b",
                 fontWeight: 700,
                 fontSize: 14,
+                zIndex: 2,
               }}
             >
               Сделайте первую ставку
@@ -500,6 +635,7 @@ export default function ArenaGame({
           ) : (
             strips.map((s) => {
               const width = Math.max(2, s.x1 - s.x0);
+              const av = Math.min(52, Math.max(26, width - 10));
               return (
                 <div
                   key={s.telegramId}
@@ -509,36 +645,36 @@ export default function ArenaGame({
                     top: 0,
                     width,
                     height: "100%",
-                    background: s.color,
-                    borderRight: "1px solid rgba(0,0,0,0.25)",
+                    background: `linear-gradient(180deg, ${s.color} 0%, ${s.color}cc 100%)`,
+                    borderRight: "1px solid rgba(0,0,0,0.28)",
                     display: "flex",
                     flexDirection: "column",
                     alignItems: "center",
-                    justifyContent: "flex-start",
-                    paddingTop: 12,
+                    paddingTop: 14,
                     boxSizing: "border-box",
                     overflow: "hidden",
+                    zIndex: 1,
                   }}
                 >
-                  {/* Avatar */}
+                  <div className="ar-strip-gloss" />
                   <div
                     style={{
-                      width: Math.min(48, width - 8),
-                      height: Math.min(48, width - 8),
-                      minWidth: 28,
-                      minHeight: 28,
+                      width: av,
+                      height: av,
                       borderRadius: "50%",
                       border: "3px solid #fff",
                       overflow: "hidden",
-                      background: "#111",
-                      boxShadow: "0 4px 14px rgba(0,0,0,0.4)",
+                      background: "#0a0a12",
+                      boxShadow:
+                        "0 6px 18px rgba(0,0,0,0.45), 0 0 0 1px rgba(0,0,0,0.2)",
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
                       fontWeight: 900,
-                      fontSize: 12,
+                      fontSize: av * 0.32,
                       color: "#fff",
                       flexShrink: 0,
+                      zIndex: 1,
                     }}
                   >
                     {s.photoUrl ? (
@@ -555,33 +691,49 @@ export default function ArenaGame({
                       initials(s.username, s.telegramId)
                     )}
                   </div>
-                  {width > 42 && (
+                  {width > 48 && (
                     <>
                       <div
                         style={{
-                          marginTop: 6,
-                          fontSize: 11,
+                          marginTop: 8,
+                          fontSize: 12,
                           fontWeight: 900,
                           color: "#fff",
-                          textShadow: "0 1px 3px rgba(0,0,0,0.5)",
-                          maxWidth: width - 6,
+                          textShadow: "0 2px 6px rgba(0,0,0,0.55)",
+                          maxWidth: width - 8,
                           overflow: "hidden",
                           textOverflow: "ellipsis",
                           whiteSpace: "nowrap",
                           textAlign: "center",
+                          zIndex: 1,
                         }}
                       >
-                        {(s.username || s.telegramId).replace(/^@/, "").slice(0, 10)}
+                        {(s.username || s.telegramId)
+                          .replace(/^@/, "")
+                          .slice(0, 10)}
                       </div>
                       <div
                         style={{
-                          fontSize: 10,
+                          marginTop: 2,
+                          fontSize: 11,
                           fontWeight: 800,
-                          color: "rgba(255,255,255,0.9)",
-                          textShadow: "0 1px 2px rgba(0,0,0,0.4)",
+                          color: "rgba(255,255,255,0.95)",
+                          textShadow: "0 1px 4px rgba(0,0,0,0.5)",
+                          zIndex: 1,
                         }}
                       >
                         {(s.chance || s.share * 100).toFixed(1)}%
+                      </div>
+                      <div
+                        style={{
+                          marginTop: 2,
+                          fontSize: 10,
+                          fontWeight: 700,
+                          color: "rgba(255,255,255,0.75)",
+                          zIndex: 1,
+                        }}
+                      >
+                        {s.stake.toFixed(2)}
                       </div>
                     </>
                   )}
@@ -590,85 +742,130 @@ export default function ArenaGame({
             })
           )}
 
-          {/* SVG puck + trail on top */}
-          <svg
-            width={W}
-            height={H}
-            style={{
-              position: "absolute",
-              inset: 0,
-              pointerEvents: "none",
-              display: puckVisible || phase === "spin" || phase === "winner" ? "block" : "none",
-            }}
-          >
-            {trail.map((t, i) => (
-              <circle
-                key={t.id}
-                cx={t.x}
-                cy={t.y}
-                r={3 + (i / trail.length) * 4}
-                fill="#fff"
-                opacity={0.08 + (i / trail.length) * 0.35}
+          {/* Trail + puck */}
+          {(puckVisible || phase === "spin" || phase === "winner") && (
+            <>
+              {/* floor shadow under puck */}
+              <div
+                className="ar-puck-shadow"
+                style={{
+                  left: puckPos.x,
+                  top: puckPos.y + BALL_R + 4,
+                  width: BALL_R * 2.4,
+                  height: BALL_R * 0.7,
+                }}
               />
-            ))}
-            <circle
-              ref={glowRef}
-              cx={W / 2}
-              cy={H / 2}
-              r={BALL_R + 8}
-              fill="rgba(255,255,255,0.15)"
-            />
-            <circle
-              ref={ballRef}
-              cx={W / 2}
-              cy={H / 2}
-              r={BALL_R}
-              fill="#fff"
-              stroke="rgba(0,0,0,0.25)"
-              strokeWidth={1.5}
-              style={{ filter: "drop-shadow(0 2px 6px rgba(0,0,0,0.45))" }}
-            />
-          </svg>
+              <svg
+                width={W}
+                height={H}
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  pointerEvents: "none",
+                  zIndex: 6,
+                }}
+              >
+                <defs>
+                  <radialGradient id="puckGrad" cx="35%" cy="30%" r="65%">
+                    <stop offset="0%" stopColor="#ffffff" />
+                    <stop offset="55%" stopColor="#e8e8ef" />
+                    <stop offset="100%" stopColor="#9ca3af" />
+                  </radialGradient>
+                  <filter id="puckBlur" x="-50%" y="-50%" width="200%" height="200%">
+                    <feGaussianBlur stdDeviation="2.5" result="b" />
+                    <feMerge>
+                      <feMergeNode in="b" />
+                      <feMergeNode in="SourceGraphic" />
+                    </feMerge>
+                  </filter>
+                </defs>
+                {trail.map((t, i) => {
+                  const k = (i + 1) / trail.length;
+                  return (
+                    <circle
+                      key={t.id}
+                      cx={t.x}
+                      cy={t.y}
+                      r={2 + k * 5}
+                      fill="#fff"
+                      opacity={0.05 + k * 0.4}
+                    />
+                  );
+                })}
+                {/* outer glow */}
+                <circle
+                  cx={puckPos.x}
+                  cy={puckPos.y}
+                  r={BALL_R + 10}
+                  fill="rgba(255,255,255,0.12)"
+                />
+                <circle
+                  cx={puckPos.x}
+                  cy={puckPos.y}
+                  r={BALL_R + 4}
+                  fill="rgba(255,255,255,0.2)"
+                />
+                {/* main puck */}
+                <circle
+                  cx={puckPos.x}
+                  cy={puckPos.y}
+                  r={BALL_R}
+                  fill="url(#puckGrad)"
+                  stroke="rgba(0,0,0,0.2)"
+                  strokeWidth={1.2}
+                  filter="url(#puckBlur)"
+                />
+                {/* highlight */}
+                <ellipse
+                  cx={puckPos.x - 3}
+                  cy={puckPos.y - 4}
+                  rx={5}
+                  ry={3.5}
+                  fill="rgba(255,255,255,0.75)"
+                />
+              </svg>
+            </>
+          )}
         </div>
       </div>
 
-      {/* Players */}
+      {/* Players card */}
       <div style={playersCard}>
         <div
           style={{
             display: "flex",
             justifyContent: "space-between",
-            marginBottom: 8,
+            marginBottom: 10,
           }}
         >
           <span style={{ fontWeight: 800, fontSize: 13 }}>
             Игроки · {arena?.players.length ?? 0}
           </span>
           <span style={{ fontSize: 11, color: "#64748b" }}>
-            #{arena?.id ?? "—"}
+            раунд #{arena?.id ?? "—"}
           </span>
         </div>
         {(arena?.players ?? []).length === 0 && (
-          <div style={{ color: "#64748b", fontSize: 13, padding: "8px 0" }}>
+          <div style={{ color: "#64748b", fontSize: 13, padding: "6px 0" }}>
             Пока никого — будь первым
           </div>
         )}
         {(arena?.players ?? []).map((p, i) => (
           <div key={p.telegramId} style={playerRow}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <div
                 style={{
-                  width: 30,
-                  height: 30,
+                  width: 32,
+                  height: 32,
                   borderRadius: "50%",
                   background: colorFor(i),
                   overflow: "hidden",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  fontSize: 10,
+                  fontSize: 11,
                   fontWeight: 900,
-                  border: "2px solid rgba(255,255,255,0.25)",
+                  border: "2px solid rgba(255,255,255,0.3)",
                 }}
               >
                 {p.photoUrl ? (
@@ -685,7 +882,7 @@ export default function ArenaGame({
                 <div style={{ fontSize: 13, fontWeight: 700 }}>
                   {p.username || p.telegramId.slice(0, 8)}
                   {p.telegramId === telegramId ? (
-                    <span style={{ color: "#5BE12C", marginLeft: 4 }}>вы</span>
+                    <span style={{ color: "#4ade80", marginLeft: 5 }}>вы</span>
                   ) : null}
                 </div>
                 <div style={{ fontSize: 11, color: "#94a3b8" }}>
@@ -693,14 +890,14 @@ export default function ArenaGame({
                 </div>
               </div>
             </div>
-            <div style={{ fontWeight: 900, color: "#5BE12C", fontSize: 13 }}>
+            <div style={{ fontWeight: 900, color: "#4ade80", fontSize: 14 }}>
               {p.stake.toFixed(2)}
             </div>
           </div>
         ))}
       </div>
 
-      {/* Bet chips */}
+      {/* Bets */}
       <div style={betRow}>
         {DEFAULT_BETS.map((b) => (
           <button
@@ -722,8 +919,9 @@ export default function ArenaGame({
           onClick={() => placeBet(Math.round(balanceTon * 1000) / 1000)}
           style={{
             ...chip,
-            background: "rgba(255,65,54,0.2)",
-            color: "#FF4136",
+            background: "linear-gradient(135deg,rgba(239,68,68,0.25),rgba(239,68,68,0.12))",
+            color: "#fca5a5",
+            border: "1px solid rgba(239,68,68,0.3)",
             opacity: busy || phase !== "lobby" ? 0.4 : 1,
           }}
         >
@@ -732,25 +930,26 @@ export default function ArenaGame({
       </div>
 
       <div style={balanceLine}>
-        Баланс {balanceTon.toFixed(2)} TON
-        {meIn ? " · можно докинуть ставку" : ""}
+        Баланс <b style={{ color: "#e2e8f0" }}>{balanceTon.toFixed(2)} TON</b>
+        {meIn ? " · можно докинуть" : ""}
       </div>
 
-      {/* Winner sheet */}
+      {/* Winner */}
       {phase === "winner" && winnerData && (
         <div style={winnerOverlay}>
           <div
             style={{
               ...winnerSheet,
               borderTop: `3px solid ${winnerData.color}`,
+              animation: "arPop 0.35s ease-out",
             }}
           >
             <div
               style={{
-                width: 72,
-                height: 72,
+                width: 80,
+                height: 80,
                 borderRadius: "50%",
-                margin: "0 auto 12px",
+                margin: "0 auto 14px",
                 border: `3px solid ${winnerData.color}`,
                 overflow: "hidden",
                 background: "#111",
@@ -758,7 +957,8 @@ export default function ArenaGame({
                 alignItems: "center",
                 justifyContent: "center",
                 fontWeight: 900,
-                fontSize: 22,
+                fontSize: 24,
+                boxShadow: `0 0 32px ${winnerData.color}55`,
               }}
             >
               {winnerData.photo ? (
@@ -774,7 +974,7 @@ export default function ArenaGame({
             <div
               style={{
                 textAlign: "center",
-                fontSize: 20,
+                fontSize: 22,
                 fontWeight: 900,
                 marginBottom: 4,
               }}
@@ -786,7 +986,7 @@ export default function ArenaGame({
                 textAlign: "center",
                 color: "#94a3b8",
                 fontSize: 13,
-                marginBottom: 14,
+                marginBottom: 16,
               }}
             >
               забирает банк
@@ -794,9 +994,9 @@ export default function ArenaGame({
             <div
               style={{
                 textAlign: "center",
-                fontSize: 28,
+                fontSize: 32,
                 fontWeight: 900,
-                color: "#5BE12C",
+                color: "#4ade80",
               }}
             >
               +{winnerData.payout.toFixed(2)} TON
@@ -805,8 +1005,9 @@ export default function ArenaGame({
               style={{
                 textAlign: "center",
                 color: "#94a3b8",
-                fontSize: 13,
-                marginTop: 4,
+                fontSize: 14,
+                marginTop: 6,
+                fontWeight: 700,
               }}
             >
               ×{winnerData.mult}
@@ -830,23 +1031,27 @@ export default function ArenaGame({
 }
 
 const root: CSSProperties = {
+  position: "relative",
   minHeight: "100dvh",
-  padding: "10px 0 100px",
-  background: "radial-gradient(ellipse at 50% 0%, #1a1030 0%, #07070e 55%)",
+  padding: "8px 0 110px",
+  background: "#06060c",
   color: "#fff",
   fontFamily: "inherit",
+  overflow: "hidden",
 };
 const header: CSSProperties = {
   display: "flex",
   alignItems: "center",
-  padding: "4px 12px 8px",
+  padding: "4px 14px 6px",
+  position: "relative",
+  zIndex: 1,
 };
 const backBtn: CSSProperties = {
-  width: 40,
-  height: 40,
-  borderRadius: 12,
+  width: 42,
+  height: 42,
+  borderRadius: 14,
   border: "1px solid rgba(148,163,184,0.2)",
-  background: "rgba(15,23,42,0.8)",
+  background: "rgba(15,23,42,0.85)",
   color: "#e2e8f0",
   fontSize: 18,
   cursor: "pointer",
@@ -854,45 +1059,52 @@ const backBtn: CSSProperties = {
 };
 const statusPill: CSSProperties = {
   display: "inline-block",
-  padding: "5px 14px",
+  padding: "6px 16px",
   borderRadius: 999,
-  background: "rgba(91,225,44,0.12)",
-  color: "#8bf56b",
+  background: "rgba(34,197,94,0.12)",
+  border: "1px solid rgba(34,197,94,0.25)",
+  color: "#86efac",
   fontSize: 12,
   fontWeight: 800,
 };
 const boardWrap: CSSProperties = {
   display: "flex",
   justifyContent: "center",
-  margin: "0 12px 4px",
+  margin: "0 12px 6px",
+  position: "relative",
+  zIndex: 1,
 };
 const playersCard: CSSProperties = {
-  margin: "14px 14px 0",
-  background: "rgba(255,255,255,0.04)",
-  borderRadius: 16,
-  padding: "12px 14px",
-  border: "1px solid rgba(255,255,255,0.06)",
+  margin: "16px 14px 0",
+  background: "linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.03))",
+  borderRadius: 18,
+  padding: "14px 14px",
+  border: "1px solid rgba(255,255,255,0.08)",
+  position: "relative",
+  zIndex: 1,
 };
 const playerRow: CSSProperties = {
   display: "flex",
   alignItems: "center",
   justifyContent: "space-between",
-  padding: "7px 0",
+  padding: "8px 0",
   borderBottom: "1px solid rgba(255,255,255,0.05)",
 };
 const betRow: CSSProperties = {
-  margin: "14px 14px 0",
+  margin: "16px 14px 0",
   display: "flex",
   gap: 8,
   flexWrap: "wrap",
   justifyContent: "center",
+  position: "relative",
+  zIndex: 1,
 };
 const chip: CSSProperties = {
-  padding: "11px 16px",
+  padding: "12px 15px",
   borderRadius: 14,
-  border: "none",
-  background: "rgba(91,225,44,0.15)",
-  color: "#5BE12C",
+  border: "1px solid rgba(34,197,94,0.28)",
+  background: "rgba(34,197,94,0.12)",
+  color: "#4ade80",
   fontWeight: 900,
   fontSize: 14,
   cursor: "pointer",
@@ -900,15 +1112,18 @@ const chip: CSSProperties = {
 };
 const balanceLine: CSSProperties = {
   textAlign: "center",
-  marginTop: 10,
+  marginTop: 12,
   fontSize: 12,
   color: "#94a3b8",
   fontWeight: 600,
+  position: "relative",
+  zIndex: 1,
 };
 const winnerOverlay: CSSProperties = {
   position: "fixed",
   inset: 0,
-  background: "rgba(0,0,0,0.6)",
+  background: "rgba(0,0,0,0.62)",
+  backdropFilter: "blur(6px)",
   display: "flex",
   alignItems: "flex-end",
   justifyContent: "center",
@@ -917,9 +1132,9 @@ const winnerOverlay: CSSProperties = {
 const winnerSheet: CSSProperties = {
   width: "100%",
   maxWidth: 420,
-  background: "#0c1a12",
-  borderRadius: "22px 22px 0 0",
-  padding: "22px 18px 36px",
+  background: "linear-gradient(180deg,#0f1f16,#0a120e)",
+  borderRadius: "24px 24px 0 0",
+  padding: "26px 18px 40px",
 };
 const toastStyle: CSSProperties = {
   position: "fixed",
@@ -927,8 +1142,9 @@ const toastStyle: CSSProperties = {
   left: "50%",
   transform: "translateX(-50%)",
   color: "#fff",
-  padding: "10px 16px",
-  borderRadius: 12,
+  padding: "11px 18px",
+  borderRadius: 14,
   fontWeight: 700,
   zIndex: 700,
+  boxShadow: "0 10px 30px rgba(0,0,0,0.4)",
 };

@@ -235,6 +235,7 @@ export default function ArenaGame({
   const [freezeSectors, setFreezeSectors] = useState<ReturnType<typeof buildSectors> | null>(null);
   const [freezePool, setFreezePool] = useState(0);
   const [countdown, setCountdown] = useState(0);
+  const [waitingCountdown, setWaitingCountdown] = useState(15);
   const [spinCountdown, setSpinCountdown] = useState(0);
   const [spinEndsAt, setSpinEndsAt] = useState<number | null>(null);
   const [displayBalanceTon, setDisplayBalanceTon] = useState(balanceTon);
@@ -270,6 +271,15 @@ export default function ArenaGame({
   useEffect(() => { arenaIdRef.current = arena?.id ?? null; }, [arena?.id]);
   useEffect(() => { autoPlayRef.current = autoPlay; }, [autoPlay]);
   useEffect(() => { autoStakeRef.current = autoStake; }, [autoStake]);
+
+  useEffect(() => {
+    if (arena?.status !== "waiting") { setWaitingCountdown(15); return; }
+    const endAt = Date.now() + 15000;
+    const update = () => setWaitingCountdown(Math.max(0, Math.ceil((endAt - Date.now()) / 1000)));
+    update();
+    const id = setInterval(update, 200);
+    return () => clearInterval(id);
+  }, [arena?.status, arena?.id]);
 
   useEffect(() => {
     if (arena?.status !== "starting" || !arena.startAt) { setCountdown(0); return; }
@@ -340,11 +350,8 @@ export default function ArenaGame({
     const startTime = performance.now();
     const TOTAL_MS = 6200;
     const EDGE = 4;
-    const PHYSICS_END = 0.78;
     let last = startTime;
     let stopped = false;
-    let finalStart: { x: number; y: number } | null = null;
-    let finalStartElapsed = 0;
 
     const step = (now: number) => {
       if (stopped) return;
@@ -380,52 +387,30 @@ export default function ArenaGame({
       let nx = pos.x;
       let ny = pos.y;
 
-      if (raw < PHYSICS_END) {
-        // Отскоки от стен без притяжения к победителю: направление не меняется искусственно.
-        let { vx, vy } = velRef.current;
-        const progress = raw / PHYSICS_END;
-        const friction = 0.996 - progress * 0.008;
-        vx *= Math.pow(friction, dt * 60);
-        vy *= Math.pow(friction, dt * 60);
+      // Только физика отскоков на протяжении всего раунда: нет переключения траектории,
+      // резкого доворачивания или скачка позиции в последние секунды.
+      let { vx, vy } = velRef.current;
+      const progress = raw;
+      const friction = 0.998 - progress * 0.012;
+      vx *= Math.pow(friction, dt * 60);
+      vy *= Math.pow(friction, dt * 60);
 
-        nx = pos.x + vx * dt * 60;
-        ny = pos.y + vy * dt * 60;
+      nx = pos.x + vx * dt * 60;
+      ny = pos.y + vy * dt * 60;
 
-        if (nx - BALL_R <= EDGE) { nx = BALL_R + EDGE; vx = Math.abs(vx) * 0.94; }
-        if (nx + BALL_R >= SQ - EDGE) { nx = SQ - BALL_R - EDGE; vx = -Math.abs(vx) * 0.94; }
-        if (ny - BALL_R <= EDGE) { ny = BALL_R + EDGE; vy = Math.abs(vy) * 0.94; }
-        if (ny + BALL_R >= SQ - EDGE) { ny = SQ - BALL_R - EDGE; vy = -Math.abs(vy) * 0.94; }
+      if (nx - BALL_R <= EDGE) { nx = BALL_R + EDGE; vx = Math.abs(vx) * 0.96; }
+      if (nx + BALL_R >= SQ - EDGE) { nx = SQ - BALL_R - EDGE; vx = -Math.abs(vx) * 0.96; }
+      if (ny - BALL_R <= EDGE) { ny = BALL_R + EDGE; vy = Math.abs(vy) * 0.96; }
+      if (ny + BALL_R >= SQ - EDGE) { ny = SQ - BALL_R - EDGE; vy = -Math.abs(vy) * 0.96; }
 
-        velRef.current = { vx, vy };
-      } else {
-        // Плавное торможение по кривой Безье: стартовая касательная совпадает с текущей скоростью,
-        // поэтому шар не разворачивается резко. К концу скорость плавно падает до нуля.
-        if (!finalStart) {
-          finalStart = { x: pos.x, y: pos.y };
-          finalStartElapsed = elapsed;
-        }
-        const finalDuration = Math.max(1, TOTAL_MS - finalStartElapsed);
-        const t = Math.min(1, Math.max(0, (elapsed - finalStartElapsed) / finalDuration));
-        const easeT = t;
-        const { vx, vy } = velRef.current;
-        const speed = Math.hypot(vx, vy);
-        const tangentLen = Math.min(72, Math.max(18, speed * 8));
-        const c1x = finalStart.x + (speed > 0.01 ? vx / speed : target.x - finalStart.x) * tangentLen;
-        const c1y = finalStart.y + (speed > 0.01 ? vy / speed : target.y - finalStart.y) * tangentLen;
-        const c2x = target.x;
-        const c2y = target.y;
-        const u = 1 - easeT;
-        nx = u * u * u * finalStart.x + 3 * u * u * easeT * c1x + 3 * u * easeT * easeT * c2x + easeT * easeT * easeT * target.x;
-        ny = u * u * u * finalStart.y + 3 * u * u * easeT * c1y + 3 * u * easeT * easeT * c2y + easeT * easeT * easeT * target.y;
-        velRef.current = { vx: (nx - pos.x) / Math.max(dt * 60, 0.001), vy: (ny - pos.y) / Math.max(dt * 60, 0.001) };
-      }
+      velRef.current = { vx, vy };
 
       const ang = Math.hypot(nx - pos.x, ny - pos.y) > 0.05
         ? (Math.atan2(ny - pos.y, nx - pos.x) * 180) / Math.PI
         : arrowAngle;
       placeBall(nx, ny, ang);
       setArrowAngle(ang);
-      if (raw > 0.78) setBoardZoom(1 + ((raw - 0.78) / 0.22) * 0.06);
+      // Keep the board fixed during the spin; scaling during motion can look like jitter.
       rafRef.current = requestAnimationFrame(step);
     };
     rafRef.current = requestAnimationFrame(step);
@@ -493,7 +478,7 @@ export default function ArenaGame({
   }
 
   return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 400, background: "#0a0a12", color: "#f1f1f8", display: "flex", flexDirection: "column", fontFamily: "Inter, system-ui, sans-serif" }}>
+    <div style={{ position: "fixed", inset: 0, zIndex: 400, background: "#0a0a12", color: "#f1f1f8", display: "flex", flexDirection: "column", height: "100dvh", minHeight: 0, overflow: "hidden", fontFamily: "Inter, system-ui, sans-serif" }}>
       {toast && (
         <div style={{
           position: "fixed", top: 16, left: "50%", transform: "translateX(-50%)", zIndex: 9999,
@@ -527,6 +512,11 @@ export default function ArenaGame({
           display: "inline-block", background: "rgba(91,225,44,0.12)", border: "1px solid rgba(91,225,44,0.35)",
           borderRadius: 999, padding: "8px 18px", fontWeight: 800, fontSize: 14, color: "#b8f5a0",
         }}>Банк {pool.toFixed(3)} TON</div>
+        {arena?.status === "waiting" && phase === "lobby" && (
+          <div style={{ marginTop: 6, fontSize: 18, fontWeight: 900, color: "#fbbf24" }}>
+            Ожидание игроков: 00:{String(waitingCountdown).padStart(2, "0")}
+          </div>
+        )}
         {arena?.status === "starting" && countdown > 0 && phase === "lobby" && (
           <div style={{ marginTop: 6, fontSize: 20, fontWeight: 900, color: "#fbbf24" }}>Старт через 00:{String(countdown).padStart(2, "0")}</div>
         )}
@@ -548,8 +538,8 @@ export default function ArenaGame({
           {!sectors.length && (
             <rect x={0} y={0} width={SQ} height={SQ} fill="#1a1a28" />
           )}
-          <circle ref={glowRef} cx={CX} cy={CY} r={BALL_R + 6} fill="rgba(255,255,255,0.12)" />
-          <circle ref={ballRef} cx={CX} cy={CY} r={BALL_R} fill="url(#ballGrad)" stroke="rgba(255,255,255,0.5)" strokeWidth={1.5} />
+          <circle ref={glowRef} cx={CX} cy={CY} r={BALL_R + 6} fill="rgba(255,255,255,0.12)" opacity={phase === "lobby" ? 0 : 1} />
+          <circle ref={ballRef} cx={CX} cy={CY} r={BALL_R} fill="url(#ballGrad)" stroke="rgba(255,255,255,0.5)" strokeWidth={1.5} opacity={phase === "lobby" ? 0 : 1} />
           <defs>
             <radialGradient id="ballGrad" cx="35%" cy="30%">
               <stop offset="0%" stopColor="#ffffff" />
@@ -557,7 +547,7 @@ export default function ArenaGame({
               <stop offset="100%" stopColor="#94a3b8" />
             </radialGradient>
           </defs>
-          {arrowOn && (
+          {arrowOn && phase !== "lobby" && (
             <g ref={arrowRef} transform={`translate(${CX},${CY})`}>
               <polygon points="14,0 -6,-5 -6,5" fill="#fbbf24" opacity={0.9} />
             </g>
@@ -640,7 +630,7 @@ export default function ArenaGame({
       )}
 
       {sectors.length > 0 && (
-        <div style={{ padding: "14px 16px 96px", overflowY: "auto", flex: 1 }}>
+        <div style={{ padding: "14px 16px 96px", overflowY: "auto", overscrollBehavior: "contain", WebkitOverflowScrolling: "touch", flex: 1, minHeight: 0 }}>
           <div style={{ fontSize: 11, color: "#64748b", fontWeight: 800, marginBottom: 8 }}>
             {sectors.length} игрок{sectors.length === 1 ? "" : sectors.length < 5 ? "а" : "ов"}
             {arena?.id ? ` · #${arena.id}` : ""}

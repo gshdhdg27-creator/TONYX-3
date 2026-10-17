@@ -237,6 +237,14 @@ export default function ArenaGame({
   const [countdown, setCountdown] = useState(0);
   const [waitingCountdown, setWaitingCountdown] = useState(15);
   const [spinCountdown, setSpinCountdown] = useState(0);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyRooms, setHistoryRooms] = useState<Array<{
+    id: number; winnerUsername: string | null; winnerPayout: number; totalPool: number;
+    playerCount: number; players: Array<{ username: string | null; stake: number }>;
+    finishedAt: string | null;
+  }>>([]);
+  const [playersExpanded, setPlayersExpanded] = useState(true);
   const [spinEndsAt, setSpinEndsAt] = useState<number | null>(null);
   const [displayBalanceTon, setDisplayBalanceTon] = useState(balanceTon);
   const [customBet, setCustomBet] = useState("");
@@ -273,8 +281,8 @@ export default function ArenaGame({
   useEffect(() => { autoStakeRef.current = autoStake; }, [autoStake]);
 
   useEffect(() => {
-    const enoughPlayers = (arena?.players.length ?? 0) >= 2;
-    if (arena?.status !== "waiting" || !enoughPlayers) {
+    // Server startAt is the source of truth once two players have joined.
+    if (arena?.status !== "waiting" || (arena?.players.length ?? 0) < 2) {
       setWaitingCountdown(15);
       return;
     }
@@ -399,6 +407,15 @@ export default function ArenaGame({
       vx *= Math.pow(friction, dt * 60);
       vy *= Math.pow(friction, dt * 60);
 
+      // Gradually guide the puck toward the server-settled winner's territory.
+      // The attraction ramps up smoothly over the whole round, avoiding a last-second snap.
+      const dxTarget = target.x - pos.x;
+      const dyTarget = target.y - pos.y;
+      const distance = Math.hypot(dxTarget, dyTarget) || 1;
+      const steering = 0.0008 + progress * progress * 0.012;
+      vx += (dxTarget / distance) * steering * dt * 60;
+      vy += (dyTarget / distance) * steering * dt * 60;
+
       nx = pos.x + vx * dt * 60;
       ny = pos.y + vy * dt * 60;
 
@@ -502,12 +519,10 @@ export default function ArenaGame({
             background: "rgba(251,191,36,0.12)", border: "1px solid rgba(251,191,36,0.25)",
             borderRadius: 999, padding: "5px 10px",
           }}>{displayBalanceTon.toFixed(3)} TON</span>
-          {onOpenHistory && (
-            <button type="button" onClick={onOpenHistory} style={{
-              background: "rgba(255,255,255,0.06)", border: "none", color: "#94a3b8",
-              borderRadius: 10, padding: "8px 10px", cursor: "pointer",
-            }}>🕐</button>
-          )}
+          <button type="button" onClick={() => { setHistoryOpen(true); setHistoryLoading(true); fetch("/api/mini/games/arena/history?limit=30").then(r => r.json()).then(d => setHistoryRooms(Array.isArray(d.rooms) ? d.rooms : [])).catch(() => setHistoryRooms([])).finally(() => setHistoryLoading(false)); }} style={{
+            background: "rgba(255,255,255,0.06)", border: "none", color: "#94a3b8",
+            borderRadius: 10, padding: "8px 10px", cursor: "pointer",
+          }}>🕐</button>
         </div>
       </div>
 
@@ -641,11 +656,16 @@ export default function ArenaGame({
 
       {sectors.length > 0 && (
         <div style={{ padding: "14px 16px 96px", overflowY: "auto", overscrollBehavior: "contain", WebkitOverflowScrolling: "touch", flex: 1, minHeight: 0 }}>
-          <div style={{ fontSize: 11, color: "#64748b", fontWeight: 800, marginBottom: 8 }}>
-            {sectors.length} игрок{sectors.length === 1 ? "" : sectors.length < 5 ? "а" : "ов"}
-            {arena?.id ? ` · #${arena.id}` : ""}
-          </div>
-          {sectors.map((s) => {
+          <button type="button" onClick={() => setPlayersExpanded(v => !v)} style={{
+            width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
+            padding: "10px 12px", marginBottom: 8, borderRadius: 12,
+            background: "rgba(20,20,32,0.9)", border: "1px solid rgba(255,255,255,0.08)",
+            color: "#e2e8f0", fontSize: 12, fontWeight: 900, cursor: "pointer",
+          }}>
+            <span>{sectors.length} игроков{arena?.id ? ` · игра #${arena.id}` : ""}</span>
+            <span>{playersExpanded ? "Свернуть ▲" : "Игроки ▼"}</span>
+          </button>
+          {playersExpanded && sectors.map((s) => {
             const isMe = s.telegramId === telegramId;
             const isWin = phase === "winner" && !!winnerData && arena?.winnerId === s.telegramId;
             const photo = playerPhoto(s);
@@ -687,6 +707,38 @@ export default function ArenaGame({
               </div>
             );
           })}
+        </div>
+      )}
+
+      {historyOpen && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 12000, background: "rgba(0,0,0,0.78)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+          <div style={{ width: "100%", maxWidth: 440, maxHeight: "82dvh", overflowY: "auto", background: "#11111d", border: "1px solid rgba(148,163,184,0.2)", borderRadius: 18, padding: 16, boxShadow: "0 20px 60px rgba(0,0,0,0.6)" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+              <div style={{ fontSize: 18, fontWeight: 900 }}>История игр</div>
+              <button type="button" onClick={() => setHistoryOpen(false)} style={{ border: 0, borderRadius: 10, padding: "8px 11px", background: "rgba(255,255,255,0.08)", color: "#e2e8f0", cursor: "pointer" }}>✕</button>
+            </div>
+            {historyLoading ? (
+              <div style={{ padding: 24, textAlign: "center", color: "#94a3b8" }}>Загружаю историю…</div>
+            ) : historyRooms.length === 0 ? (
+              <div style={{ padding: 24, textAlign: "center", color: "#94a3b8" }}>Завершённых игр пока нет</div>
+            ) : historyRooms.map((room) => (
+              <div key={room.id} style={{ padding: "12px 0", borderBottom: "1px solid rgba(148,163,184,0.12)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
+                  <div style={{ fontSize: 13, fontWeight: 900 }}>Игра #{room.id}</div>
+                  <div style={{ fontSize: 11, color: "#64748b" }}>{room.finishedAt ? new Date(room.finishedAt).toLocaleString() : ""}</div>
+                </div>
+                <div style={{ marginTop: 5, fontSize: 13, color: "#5BE12C" }}>🏆 @{(room.winnerUsername || "игрок").replace(/^@/, "")} · +{Number(room.winnerPayout || 0).toFixed(3)} TON</div>
+                <div style={{ marginTop: 4, fontSize: 11, color: "#94a3b8" }}>Банк {Number(room.totalPool || 0).toFixed(3)} TON · {room.playerCount} игроков</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 7 }}>
+                  {(room.players || []).map((p, i) => (
+                    <span key={i} style={{ fontSize: 10, color: "#cbd5e1", background: "rgba(255,255,255,0.06)", borderRadius: 7, padding: "4px 7px" }}>
+                      @{(p.username || "игрок").replace(/^@/, "")} · {Number(p.stake || 0).toFixed(3)}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

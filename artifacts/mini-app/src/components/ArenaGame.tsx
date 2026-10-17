@@ -350,7 +350,6 @@ export default function ArenaGame({
     setArrowOn(true);
 
     const random = createSeededRandom(`${data.id}:${data.winnerId ?? winner.telegramId}`);
-    const target = randomInZone(winner, random);
     const startAng = random() * Math.PI * 2;
     const startR = 8 + random() * 18;
     const sx = CX + Math.cos(startAng) * startR;

@@ -240,10 +240,11 @@ export default function ArenaGame({
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyRooms, setHistoryRooms] = useState<Array<{
-    id: number; winnerUsername: string | null; winnerPayout: number; totalPool: number;
-    playerCount: number; players: Array<{ username: string | null; stake: number }>;
+    id: number; winnerId: string | null; winnerUsername: string | null; winnerPayout: number; totalPool: number;
+    playerCount: number; players: Array<{ telegramId: string; username: string | null; stake: number; chance?: number }>;
     finishedAt: string | null;
   }>>([]);
+  const [selectedHistoryRoom, setSelectedHistoryRoom] = useState<(typeof historyRooms)[number] | null>(null);
   const [playersExpanded, setPlayersExpanded] = useState(true);
   const [spinEndsAt, setSpinEndsAt] = useState<number | null>(null);
   const [displayBalanceTon, setDisplayBalanceTon] = useState(balanceTon);
@@ -407,15 +408,7 @@ export default function ArenaGame({
       vx *= Math.pow(friction, dt * 60);
       vy *= Math.pow(friction, dt * 60);
 
-      // Gradually guide the puck toward the server-settled winner's territory.
-      // The attraction ramps up smoothly over the whole round, avoiding a last-second snap.
-      const dxTarget = target.x - pos.x;
-      const dyTarget = target.y - pos.y;
-      const distance = Math.hypot(dxTarget, dyTarget) || 1;
-      const steering = 0.0008 + progress * progress * 0.04;
-      vx += (dxTarget / distance) * steering * dt * 60;
-      vy += (dyTarget / distance) * steering * dt * 60;
-
+      // Pure random bounce physics. No invisible force pulls the ball toward a preselected player.
       nx = pos.x + vx * dt * 60;
       ny = pos.y + vy * dt * 60;
 
@@ -655,7 +648,7 @@ export default function ArenaGame({
       )}
 
       {sectors.length > 0 && (
-        <div style={{ padding: "14px 16px 96px", overflowY: "auto", overscrollBehavior: "contain", WebkitOverflowScrolling: "touch", flex: 1, minHeight: 0 }}>
+        <div style={{ padding: "14px 16px 110px", overflowY: "auto", overflowX: "hidden", overscrollBehavior: "contain", WebkitOverflowScrolling: "touch", flex: "1 1 0", minHeight: 0, maxHeight: "calc(100dvh - 500px)" }}>
           <button type="button" onClick={() => setPlayersExpanded(v => !v)} style={{
             width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
             padding: "10px 12px", marginBottom: 8, borderRadius: 12,
@@ -722,20 +715,49 @@ export default function ArenaGame({
             ) : historyRooms.length === 0 ? (
               <div style={{ padding: 24, textAlign: "center", color: "#94a3b8" }}>Завершённых игр пока нет</div>
             ) : historyRooms.map((room) => (
-              <div key={room.id} style={{ padding: "12px 0", borderBottom: "1px solid rgba(148,163,184,0.12)" }}>
+              <button key={room.id} type="button" onClick={() => setSelectedHistoryRoom(room)} style={{ width: "100%", textAlign: "left", color: "inherit", cursor: "pointer", padding: "12px 0", border: 0, borderBottom: "1px solid rgba(148,163,184,0.12)", background: "transparent" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
-                  <div style={{ fontSize: 13, fontWeight: 900 }}>Игра #{room.id}</div>
+                  <div style={{ fontSize: 13, fontWeight: 900 }}>Игра #{room.id} <span style={{ color: "#60a5fa", fontSize: 10 }}>· Открыть игру ↗</span></div>
                   <div style={{ fontSize: 11, color: "#64748b" }}>{room.finishedAt ? new Date(room.finishedAt).toLocaleString() : ""}</div>
                 </div>
                 <div style={{ marginTop: 5, fontSize: 13, color: "#5BE12C" }}>🏆 @{(room.winnerUsername || "игрок").replace(/^@/, "")} · +{Number(room.winnerPayout || 0).toFixed(3)} TON</div>
                 <div style={{ marginTop: 4, fontSize: 11, color: "#94a3b8" }}>Банк {Number(room.totalPool || 0).toFixed(3)} TON · {room.playerCount} игроков</div>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 7 }}>
-                  {(room.players || []).map((p, i) => (
-                    <span key={i} style={{ fontSize: 10, color: "#cbd5e1", background: "rgba(255,255,255,0.06)", borderRadius: 7, padding: "4px 7px" }}>
-                      @{(p.username || "игрок").replace(/^@/, "")} · {Number(p.stake || 0).toFixed(3)}
-                    </span>
-                  ))}
-                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {selectedHistoryRoom && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 13000, background: "rgba(0,0,0,0.88)", display: "flex", alignItems: "center", justifyContent: "center", padding: 14 }}>
+          <div style={{ width: "100%", maxWidth: 420, maxHeight: "90dvh", overflowY: "auto", background: "#11111d", border: "1px solid rgba(148,163,184,0.2)", borderRadius: 18, padding: 16 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <div style={{ fontSize: 18, fontWeight: 900 }}>Игра #{selectedHistoryRoom.id}</div>
+              <button type="button" onClick={() => setSelectedHistoryRoom(null)} style={{ border: 0, borderRadius: 10, padding: "8px 11px", background: "rgba(255,255,255,0.08)", color: "#e2e8f0", cursor: "pointer" }}>✕</button>
+            </div>
+            <div style={{ width: "100%", aspectRatio: "1 / 1", borderRadius: 14, overflow: "hidden", background: "#12121c", border: "1px solid rgba(255,255,255,0.1)" }}>
+              <svg viewBox={`0 0 ${SQ} ${SQ}`} width="100%" height="100%" style={{ display: "block" }}>
+                {buildSectors(selectedHistoryRoom.players.map((p) => ({ ...p, chance: p.chance ?? 0 })), selectedHistoryRoom.id).map((s) => (
+                  <polygon key={s.telegramId} points={s.points} fill={s.color} opacity={0.9} stroke="rgba(0,0,0,0.4)" strokeWidth={1.5} />
+                ))}
+                {(() => {
+                  const replaySectors = buildSectors(selectedHistoryRoom.players.map((p) => ({ ...p, chance: p.chance ?? 0 })), selectedHistoryRoom.id);
+                  const win = replaySectors.find((s) => s.telegramId === selectedHistoryRoom.winnerId);
+                  const x = win?.ax ?? CX; const y = win?.ay ?? CY;
+                  return <g><circle cx={x} cy={y} r={BALL_R + 5} fill="rgba(255,255,255,0.2)" /><circle cx={x} cy={y} r={BALL_R} fill="#fff" stroke="#94a3b8" strokeWidth={2} /></g>;
+                })()}
+              </svg>
+            </div>
+            <div style={{ marginTop: 12, padding: 12, borderRadius: 12, background: "rgba(91,225,44,0.1)" }}>
+              <div style={{ color: "#5BE12C", fontWeight: 900 }}>🏆 Победитель: @{(selectedHistoryRoom.winnerUsername || "игрок").replace(/^@/, "")}</div>
+              <div style={{ color: "#fbbf24", fontWeight: 900, marginTop: 4 }}>Выигрыш: {Number(selectedHistoryRoom.winnerPayout).toFixed(3)} TON</div>
+              <div style={{ color: "#94a3b8", fontSize: 12, marginTop: 4 }}>Банк: {Number(selectedHistoryRoom.totalPool).toFixed(3)} TON · {selectedHistoryRoom.playerCount} игроков</div>
+            </div>
+            <div style={{ marginTop: 12, fontWeight: 900, fontSize: 13 }}>Игроки и ставки</div>
+            {selectedHistoryRoom.players.map((p, i) => (
+              <div key={p.telegramId} style={{ display: "flex", justifyContent: "space-between", gap: 8, padding: "8px 0", borderBottom: "1px solid rgba(148,163,184,0.1)", fontSize: 12 }}>
+                <span style={{ color: p.telegramId === selectedHistoryRoom.winnerId ? "#5BE12C" : "#e2e8f0" }}>{p.telegramId === selectedHistoryRoom.winnerId ? "🏆 " : ""}@{(p.username || p.telegramId).replace(/^@/, "")}</span>
+                <span style={{ color: "#fbbf24" }}>{Number(p.stake).toFixed(3)} TON</span>
               </div>
             ))}
           </div>

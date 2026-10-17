@@ -360,10 +360,10 @@ export default function ArenaGame({
 
       if (raw >= 1) {
         stopped = true;
-        placeBall(target.x, target.y);
+        // Keep the exact last physics position; never snap the ball to a target at round end.
         velRef.current = { vx: 0, vy: 0 };
         setArrowOn(false);
-        setBoardZoom(1.06);
+        setBoardZoom(1);
         setPhase("winner");
         setSpinCountdown(0);
         setSpinEndsAt(null);

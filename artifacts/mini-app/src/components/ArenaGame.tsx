@@ -13,7 +13,7 @@ import {
 import { useTelegram } from "@/lib/telegram";
 
 /* Portals arena v3 — full paint, no center hole, smooth 6s puck */
-const SQ = 300;
+const SQ = 340;
 const CX = SQ / 2;
 const CY = SQ / 2;
 const BALL_R = 10;
@@ -235,6 +235,9 @@ export default function ArenaGame({
   const [freezeSectors, setFreezeSectors] = useState<ReturnType<typeof buildSectors> | null>(null);
   const [freezePool, setFreezePool] = useState(0);
   const [countdown, setCountdown] = useState(0);
+  const [spinCountdown, setSpinCountdown] = useState(0);
+  const [spinEndsAt, setSpinEndsAt] = useState<number | null>(null);
+  const [displayBalanceTon, setDisplayBalanceTon] = useState(balanceTon);
   const [customBet, setCustomBet] = useState("");
   const [autoPlay, setAutoPlay] = useState(false);
   const [autoStake, setAutoStake] = useState(0.1);
@@ -256,6 +259,14 @@ export default function ArenaGame({
   const myPhoto = photoUrl;
 
   useEffect(() => { phaseRef.current = phase; }, [phase]);
+  useEffect(() => { if (phase === "lobby") setDisplayBalanceTon(balanceTon); }, [balanceTon, phase]);
+  useEffect(() => {
+    if (phase !== "spin" || !spinEndsAt) { setSpinCountdown(0); return; }
+    const update = () => setSpinCountdown(Math.max(0, Math.ceil((spinEndsAt - Date.now()) / 1000)));
+    update();
+    const id = setInterval(update, 200);
+    return () => clearInterval(id);
+  }, [phase, spinEndsAt]);
   useEffect(() => { arenaIdRef.current = arena?.id ?? null; }, [arena?.id]);
   useEffect(() => { autoPlayRef.current = autoPlay; }, [autoPlay]);
   useEffect(() => { autoStakeRef.current = autoStake; }, [autoStake]);
@@ -292,6 +303,8 @@ export default function ArenaGame({
     rafRef.current = null;
     placeBall(CX, CY);
     setWinnerData(null);
+    setSpinEndsAt(null);
+    setSpinCountdown(0);
     setFreezeSectors(null);
     setFreezePool(0);
     setBoardZoom(1);
@@ -307,6 +320,8 @@ export default function ArenaGame({
     setFreezeSectors(secs);
     setFreezePool(data.totalPool);
     setPhase("spin");
+    setSpinEndsAt(Date.now() + 6200);
+    setSpinCountdown(7);
     setWinnerData(null);
     setBoardZoom(1);
     setArrowOn(true);
@@ -343,6 +358,8 @@ export default function ArenaGame({
         setArrowOn(false);
         setBoardZoom(1.22);
         setPhase("winner");
+        setSpinCountdown(0);
+        setSpinEndsAt(null);
         const payout = payoutOf(winner.stake, data.totalPool);
         const mult = winner.stake > 0 ? Math.round((payout / winner.stake) * 100) / 100 : 0;
         setWinnerData({ name: data.winnerUsername || winner.username || winner.telegramId, payout, mult, photo: winner.photoUrl });
@@ -381,20 +398,31 @@ export default function ArenaGame({
 
         velRef.current = { vx, vy };
       } else {
-        // Финальная прямая траектория с плавным торможением вместо закручивания.
+        // Плавное торможение по кривой Безье: стартовая касательная совпадает с текущей скоростью,
+        // поэтому шар не разворачивается резко. К концу скорость плавно падает до нуля.
         if (!finalStart) {
           finalStart = { x: pos.x, y: pos.y };
           finalStartElapsed = elapsed;
         }
         const finalDuration = Math.max(1, TOTAL_MS - finalStartElapsed);
         const t = Math.min(1, Math.max(0, (elapsed - finalStartElapsed) / finalDuration));
-        const ease = 1 - Math.pow(1 - t, 3);
-        nx = finalStart.x + (target.x - finalStart.x) * ease;
-        ny = finalStart.y + (target.y - finalStart.y) * ease;
-        velRef.current = { vx: 0, vy: 0 };
+        const easeT = t * t * (3 - 2 * t);
+        const { vx, vy } = velRef.current;
+        const speed = Math.hypot(vx, vy);
+        const tangentLen = Math.min(72, Math.max(18, speed * 8));
+        const c1x = finalStart.x + (speed > 0.01 ? vx / speed : target.x - finalStart.x) * tangentLen;
+        const c1y = finalStart.y + (speed > 0.01 ? vy / speed : target.y - finalStart.y) * tangentLen;
+        const c2x = target.x;
+        const c2y = target.y;
+        const u = 1 - easeT;
+        nx = u * u * u * finalStart.x + 3 * u * u * easeT * c1x + 3 * u * easeT * easeT * c2x + easeT * easeT * easeT * target.x;
+        ny = u * u * u * finalStart.y + 3 * u * u * easeT * c1y + 3 * u * easeT * easeT * c2y + easeT * easeT * easeT * target.y;
+        velRef.current = { vx: (nx - pos.x) / Math.max(dt * 60, 0.001), vy: (ny - pos.y) / Math.max(dt * 60, 0.001) };
       }
 
-      const ang = (Math.atan2(ny - pos.y, nx - pos.x) * 180) / Math.PI;
+      const ang = Math.hypot(nx - pos.x, ny - pos.y) > 0.05
+        ? (Math.atan2(ny - pos.y, nx - pos.x) * 180) / Math.PI
+        : arrowAngle;
       placeBall(nx, ny, ang);
       setArrowAngle(ang);
       if (raw > 0.78) setBoardZoom(1 + ((raw - 0.78) / 0.22) * 0.22);
@@ -484,7 +512,7 @@ export default function ArenaGame({
             fontSize: 12, fontWeight: 800, color: "#fbbf24",
             background: "rgba(251,191,36,0.12)", border: "1px solid rgba(251,191,36,0.25)",
             borderRadius: 999, padding: "5px 10px",
-          }}>{balanceTon.toFixed(3)} TON</span>
+          }}>{displayBalanceTon.toFixed(3)} TON</span>
           {onOpenHistory && (
             <button type="button" onClick={onOpenHistory} style={{
               background: "rgba(255,255,255,0.06)", border: "none", color: "#94a3b8",
@@ -499,18 +527,21 @@ export default function ArenaGame({
           display: "inline-block", background: "rgba(91,225,44,0.12)", border: "1px solid rgba(91,225,44,0.35)",
           borderRadius: 999, padding: "8px 18px", fontWeight: 800, fontSize: 14, color: "#b8f5a0",
         }}>Банк {pool.toFixed(3)} TON</div>
-        {arena?.status === "starting" && countdown > 0 && (
-          <div style={{ marginTop: 6, fontSize: 18, fontWeight: 900, color: "#fbbf24" }}>00:{String(countdown).padStart(2, "0")}</div>
+        {arena?.status === "starting" && countdown > 0 && phase === "lobby" && (
+          <div style={{ marginTop: 6, fontSize: 20, fontWeight: 900, color: "#fbbf24" }}>Старт через 00:{String(countdown).padStart(2, "0")}</div>
+        )}
+        {phase === "spin" && (
+          <div style={{ marginTop: 6, fontSize: 20, fontWeight: 900, color: "#fbbf24" }}>До результата: 00:{String(spinCountdown).padStart(2, "0")}</div>
         )}
       </div>
 
       <div style={{
-        width: SQ, height: SQ, margin: "0 auto", borderRadius: 18, overflow: "hidden",
+        width: `min(${SQ}px, calc(100vw - 24px))`, aspectRatio: "1 / 1", height: "auto", flexShrink: 0, margin: "0 auto", borderRadius: 18, overflow: "hidden",
         transform: `scale(${boardZoom})`, transition: "transform 0.35s ease",
         boxShadow: "0 12px 40px rgba(0,0,0,0.55)", border: "2px solid rgba(255,255,255,0.08)",
         background: "#12121c", position: "relative",
       }}>
-        <svg width={SQ} height={SQ} style={{ display: "block" }}>
+        <svg viewBox={`0 0 ${SQ} ${SQ}`} width="100%" height="100%" style={{ display: "block" }}>
           {sectors.map((s) => (
             <polygon key={s.telegramId} points={s.points} fill={s.color} opacity={0.88} stroke="rgba(0,0,0,0.35)" strokeWidth={1.5} />
           ))}
@@ -554,7 +585,7 @@ export default function ArenaGame({
         })}
       </div>
 
-      {winnerData && (
+      {phase === "winner" && winnerData && (
         <div style={{
           margin: "14px 16px 0", padding: 16, borderRadius: 16, textAlign: "center",
           background: "linear-gradient(135deg, rgba(91,225,44,0.2), rgba(0,192,255,0.12))",
@@ -616,7 +647,7 @@ export default function ArenaGame({
           </div>
           {sectors.map((s) => {
             const isMe = s.telegramId === telegramId;
-            const isWin = phase === "winner" && arena?.winnerId === s.telegramId;
+            const isWin = phase === "winner" && !!winnerData && arena?.winnerId === s.telegramId;
             const photo = playerPhoto(s);
             return (
               <div key={s.telegramId} style={{

@@ -356,7 +356,7 @@ export default function ArenaGame({
         placeBall(target.x, target.y);
         velRef.current = { vx: 0, vy: 0 };
         setArrowOn(false);
-        setBoardZoom(1.22);
+        setBoardZoom(1.06);
         setPhase("winner");
         setSpinCountdown(0);
         setSpinEndsAt(null);
@@ -406,7 +406,7 @@ export default function ArenaGame({
         }
         const finalDuration = Math.max(1, TOTAL_MS - finalStartElapsed);
         const t = Math.min(1, Math.max(0, (elapsed - finalStartElapsed) / finalDuration));
-        const easeT = t * t * (3 - 2 * t);
+        const easeT = t;
         const { vx, vy } = velRef.current;
         const speed = Math.hypot(vx, vy);
         const tangentLen = Math.min(72, Math.max(18, speed * 8));
@@ -425,7 +425,7 @@ export default function ArenaGame({
         : arrowAngle;
       placeBall(nx, ny, ang);
       setArrowAngle(ang);
-      if (raw > 0.78) setBoardZoom(1 + ((raw - 0.78) / 0.22) * 0.22);
+      if (raw > 0.78) setBoardZoom(1 + ((raw - 0.78) / 0.22) * 0.06);
       rafRef.current = requestAnimationFrame(step);
     };
     rafRef.current = requestAnimationFrame(step);

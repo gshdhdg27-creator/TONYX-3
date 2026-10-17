@@ -208,7 +208,7 @@ function payoutOf(stake: number, pool: number) {
 }
 
 export default function ArenaGame({
-  telegramId, tonBalance, onBalanceChange, onClose, onOpenHistory,
+  telegramId, tonBalance, onBalanceChange, onClose,
 }: Props) {
   const { photoUrl } = useTelegram();
   const qc = useQueryClient();
@@ -412,7 +412,7 @@ export default function ArenaGame({
       const dxTarget = target.x - pos.x;
       const dyTarget = target.y - pos.y;
       const distance = Math.hypot(dxTarget, dyTarget) || 1;
-      const steering = 0.0008 + progress * progress * 0.012;
+      const steering = 0.0008 + progress * progress * 0.04;
       vx += (dxTarget / distance) * steering * dt * 60;
       vy += (dyTarget / distance) * steering * dt * 60;
 

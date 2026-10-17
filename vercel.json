@@ -3,6 +3,7 @@
   "buildCommand": "pnpm install --no-frozen-lockfile && node scripts/bundle-api.mjs && pnpm --filter @workspace/mini-app run build",
   "outputDirectory": "artifacts/mini-app/dist/public",
   "framework": null,
+  "installCommand": "pnpm install --no-frozen-lockfile",
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api/server" },
     { "source": "/(.*)", "destination": "/index.html" }

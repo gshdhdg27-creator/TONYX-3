@@ -404,10 +404,10 @@ router.post("/join", async (req, res) => {
 
   let newStatus = arena.status;
   let startAt = arena.startAt;
-  if (newPlayers.length >= MIN_PLAYERS && arena.status === "waiting") {
+  if (newPlayers.length >= MIN_PLAYERS && (arena.status === "waiting" || arena.status === "starting")) {
+    // Give every newly joined player a full visible countdown; state polling resolves it server-side.
     newStatus = "starting";
     startAt = new Date(Date.now() + TIMER_SECONDS * 1000);
-    setTimeout(() => resolveArena(arena.id), TIMER_SECONDS * 1000);
   }
 
   const [updated] = await db

@@ -325,13 +325,18 @@ export default function ArenaGame({
     const startTime = performance.now();
     const TOTAL_MS = 6200;
     const EDGE = 4;
+    const PHYSICS_END = 0.78;
     let last = startTime;
     let stopped = false;
+    let finalStart: { x: number; y: number } | null = null;
+    let finalStartElapsed = 0;
 
     const step = (now: number) => {
       if (stopped) return;
       const elapsed = now - startTime;
-      if (elapsed >= TOTAL_MS) {
+      const raw = Math.min(1, elapsed / TOTAL_MS);
+
+      if (raw >= 1) {
         stopped = true;
         placeBall(target.x, target.y);
         velRef.current = { vx: 0, vy: 0 };
@@ -351,58 +356,48 @@ export default function ArenaGame({
         }, 3200);
         return;
       }
+
       const dt = Math.min(0.032, Math.max(0.001, (now - last) / 1000));
       last = now;
-      const raw = elapsed / TOTAL_MS;
       const pos = posRef.current;
-      let { vx, vy } = velRef.current;
+      let nx = pos.x;
+      let ny = pos.y;
 
-      let friction: number;
-      if (raw < 0.35) friction = 0.997;
-      else if (raw < 0.55) friction = 0.988;
-      else if (raw < 0.72) friction = 0.97;
-      else if (raw < 0.88) friction = 0.94;
-      else friction = 0.88;
+      if (raw < PHYSICS_END) {
+        // Отскоки от стен без притяжения к победителю: направление не меняется искусственно.
+        let { vx, vy } = velRef.current;
+        const progress = raw / PHYSICS_END;
+        const friction = 0.996 - progress * 0.008;
+        vx *= Math.pow(friction, dt * 60);
+        vy *= Math.pow(friction, dt * 60);
 
-      vx *= Math.pow(friction, dt * 60);
-      vy *= Math.pow(friction, dt * 60);
+        nx = pos.x + vx * dt * 60;
+        ny = pos.y + vy * dt * 60;
 
-      if (raw > 0.42) {
-        const pull = Math.min(1, Math.max(0, (raw - 0.42) / 0.58));
-        const dx = target.x - pos.x;
-        const dy = target.y - pos.y;
-        const distance = Math.hypot(dx, dy);
-        const desiredSpeed = 2.2 + (1 - pull) * 2.8;
-        const desiredVx = distance > 0.001 ? (dx / distance) * desiredSpeed : 0;
-        const desiredVy = distance > 0.001 ? (dy / distance) * desiredSpeed : 0;
-        const steerLimit = (2.5 + pull * 4) * dt;
-        const steerX = desiredVx - vx;
-        const steerY = desiredVy - vy;
-        const steerLength = Math.hypot(steerX, steerY);
-        if (steerLength > steerLimit && steerLength > 0) {
-          vx += (steerX / steerLength) * steerLimit;
-          vy += (steerY / steerLength) * steerLimit;
-        } else {
-          vx = desiredVx;
-          vy = desiredVy;
+        if (nx - BALL_R <= EDGE) { nx = BALL_R + EDGE; vx = Math.abs(vx) * 0.94; }
+        if (nx + BALL_R >= SQ - EDGE) { nx = SQ - BALL_R - EDGE; vx = -Math.abs(vx) * 0.94; }
+        if (ny - BALL_R <= EDGE) { ny = BALL_R + EDGE; vy = Math.abs(vy) * 0.94; }
+        if (ny + BALL_R >= SQ - EDGE) { ny = SQ - BALL_R - EDGE; vy = -Math.abs(vy) * 0.94; }
+
+        velRef.current = { vx, vy };
+      } else {
+        // Финальная прямая траектория с плавным торможением вместо закручивания.
+        if (!finalStart) {
+          finalStart = { x: pos.x, y: pos.y };
+          finalStartElapsed = elapsed;
         }
+        const finalDuration = Math.max(1, TOTAL_MS - finalStartElapsed);
+        const t = Math.min(1, Math.max(0, (elapsed - finalStartElapsed) / finalDuration));
+        const ease = 1 - Math.pow(1 - t, 3);
+        nx = finalStart.x + (target.x - finalStart.x) * ease;
+        ny = finalStart.y + (target.y - finalStart.y) * ease;
+        velRef.current = { vx: 0, vy: 0 };
       }
 
-      let nx = pos.x + vx * dt * 60;
-      let ny = pos.y + vy * dt * 60;
-
-      if (nx - BALL_R <= EDGE) { nx = BALL_R + EDGE; vx = Math.abs(vx) * 0.92; }
-      if (nx + BALL_R >= SQ - EDGE) { nx = SQ - BALL_R - EDGE; vx = -Math.abs(vx) * 0.92; }
-      if (ny - BALL_R <= EDGE) { ny = BALL_R + EDGE; vy = Math.abs(vy) * 0.92; }
-      if (ny + BALL_R >= SQ - EDGE) { ny = SQ - BALL_R - EDGE; vy = -Math.abs(vy) * 0.92; }
-
-      velRef.current = { vx, vy };
-      const ang = (Math.atan2(vy, vx) * 180) / Math.PI;
+      const ang = (Math.atan2(ny - pos.y, nx - pos.x) * 180) / Math.PI;
       placeBall(nx, ny, ang);
       setArrowAngle(ang);
-
       if (raw > 0.78) setBoardZoom(1 + ((raw - 0.78) / 0.22) * 0.22);
-
       rafRef.current = requestAnimationFrame(step);
     };
     rafRef.current = requestAnimationFrame(step);
@@ -614,7 +609,7 @@ export default function ArenaGame({
       )}
 
       {sectors.length > 0 && (
-        <div style={{ padding: "14px 16px 24px", overflowY: "auto", flex: 1 }}>
+        <div style={{ padding: "14px 16px 96px", overflowY: "auto", flex: 1 }}>
           <div style={{ fontSize: 11, color: "#64748b", fontWeight: 800, marginBottom: 8 }}>
             {sectors.length} игрок{sectors.length === 1 ? "" : sectors.length < 5 ? "а" : "ов"}
             {arena?.id ? ` · #${arena.id}` : ""}
@@ -663,6 +658,49 @@ export default function ArenaGame({
           })}
         </div>
       )}
+
+      <div style={{
+        position: "fixed", left: 0, right: 0, bottom: 0, zIndex: 450,
+        display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12,
+        padding: "12px 18px calc(12px + env(safe-area-inset-bottom))",
+        background: "rgba(12,12,22,0.97)", borderTop: "1px solid rgba(148,163,184,0.18)",
+        boxShadow: "0 -8px 24px rgba(0,0,0,0.28)", backdropFilter: "blur(12px)",
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+          <div style={{
+            width: 38, height: 38, borderRadius: 12, display: "flex", alignItems: "center",
+            justifyContent: "center", background: "rgba(91,225,44,0.13)",
+            border: "1px solid rgba(91,225,44,0.25)", color: "#8bf56b", fontSize: 18,
+          }}>♟</div>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 900, color: "#f1f5f9" }}>
+              {arena?.players.length ?? 0} участн. поставили ставки
+            </div>
+            <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>
+              {pool.toFixed(3)} TON в банке
+            </div>
+          </div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
+          {(arena?.players ?? []).slice(0, 5).map((p, i) => (
+            <div key={p.telegramId} title={p.username || p.telegramId} style={{
+              width: 27, height: 27, marginLeft: i ? -7 : 0, borderRadius: "50%",
+              border: "2px solid #0c0c16", background: colorFor(i), color: "#fff",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 9, fontWeight: 900, overflow: "hidden",
+            }}>
+              {p.photoUrl ? <img src={p.photoUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : initials(p.username, p.telegramId)}
+            </div>
+          ))}
+          {(arena?.players.length ?? 0) > 5 && (
+            <div style={{
+              width: 27, height: 27, marginLeft: -7, borderRadius: "50%",
+              border: "2px solid #0c0c16", background: "#252538", color: "#e2e8f0",
+              display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, fontWeight: 900,
+            }}>+{(arena?.players.length ?? 0) - 5}</div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

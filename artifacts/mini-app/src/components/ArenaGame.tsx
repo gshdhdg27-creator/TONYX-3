@@ -273,13 +273,17 @@ export default function ArenaGame({
   useEffect(() => { autoStakeRef.current = autoStake; }, [autoStake]);
 
   useEffect(() => {
-    if (arena?.status !== "waiting") { setWaitingCountdown(15); return; }
+    const enoughPlayers = (arena?.players.length ?? 0) >= 2;
+    if (arena?.status !== "waiting" || !enoughPlayers) {
+      setWaitingCountdown(15);
+      return;
+    }
     const endAt = Date.now() + 15000;
     const update = () => setWaitingCountdown(Math.max(0, Math.ceil((endAt - Date.now()) / 1000)));
     update();
     const id = setInterval(update, 200);
     return () => clearInterval(id);
-  }, [arena?.status, arena?.id]);
+  }, [arena?.status, arena?.id, (arena?.players.length ?? 0) >= 2]);
 
   useEffect(() => {
     if (arena?.status !== "starting" || !arena.startAt) { setCountdown(0); return; }
@@ -513,9 +517,15 @@ export default function ArenaGame({
           borderRadius: 999, padding: "8px 18px", fontWeight: 800, fontSize: 14, color: "#b8f5a0",
         }}>Банк {pool.toFixed(3)} TON</div>
         {arena?.status === "waiting" && phase === "lobby" && (
-          <div style={{ marginTop: 6, fontSize: 18, fontWeight: 900, color: "#fbbf24" }}>
-            Ожидание игроков: 00:{String(waitingCountdown).padStart(2, "0")}
-          </div>
+          (arena?.players.length ?? 0) >= 2 ? (
+            <div style={{ marginTop: 6, fontSize: 18, fontWeight: 900, color: "#fbbf24" }}>
+              Старт через: 00:{String(waitingCountdown).padStart(2, "0")}
+            </div>
+          ) : (
+            <div style={{ marginTop: 6, fontSize: 13, fontWeight: 700, color: "#94a3b8" }}>
+              Таймер начнётся после ставок 2 игроков
+            </div>
+          )
         )}
         {arena?.status === "starting" && countdown > 0 && phase === "lobby" && (
           <div style={{ marginTop: 6, fontSize: 20, fontWeight: 900, color: "#fbbf24" }}>Старт через 00:{String(countdown).padStart(2, "0")}</div>

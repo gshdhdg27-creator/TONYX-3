@@ -5,7 +5,7 @@ type Side = "heads" | "tails";
 const MULTIPLIER = 1.92;
 const MIN_BET = 0.1;
 const BET_PRESETS = [0.1, 0.5, 1, 2, 5];
-const FLIP_MS = 3200;
+const FLIP_MS = 2800;
 
 function haptic(type: "light" | "medium" | "heavy" = "light") {
   try {
@@ -22,10 +22,9 @@ function hapticNotify(type: "success" | "error" | "warning") {
   }
 }
 
-/** Golden eagle emblem for heads */
-function EagleSvg() {
+function EagleSvg({ size = 56 }: { size?: number }) {
   return (
-    <svg viewBox="0 0 64 64" width="56" height="56" aria-hidden>
+    <svg viewBox="0 0 64 64" width={size} height={size} aria-hidden>
       <defs>
         <linearGradient id="eg" x1="0" y1="0" x2="1" y2="1">
           <stop offset="0%" stopColor="#fff7cc" />
@@ -38,20 +37,14 @@ function EagleSvg() {
         fill="url(#eg)"
         d="M32 10c2 6 4 10 4 14 0 2-1 4-2 5 4-1 9-1 13 1-3 2-7 3-11 3h-1c1 3 2 7 2 11 0 4-1 7-3 10-2-3-3-6-3-10 0-4 1-8 2-11h-1c-4 0-8-1-11-3 4-2 9-2 13-1-1-1-2-3-2-5 0-4 2-8 4-14z"
       />
-      <path
-        fill="#78350f"
-        opacity="0.35"
-        d="M28 28c-3 1-6 3-8 6 3 0 6-1 9-2m16 0c2 1 5 2 8 2-2-3-5-5-8-6"
-      />
       <circle cx="32" cy="24" r="2.2" fill="#78350f" opacity="0.5" />
     </svg>
   );
 }
 
-/** Silver crest for tails */
-function CrestSvg() {
+function CrestSvg({ size = 56 }: { size?: number }) {
   return (
-    <svg viewBox="0 0 64 64" width="56" height="56" aria-hidden>
+    <svg viewBox="0 0 64 64" width={size} height={size} aria-hidden>
       <defs>
         <linearGradient id="sg" x1="0" y1="0" x2="1" y2="1">
           <stop offset="0%" stopColor="#ffffff" />
@@ -60,50 +53,54 @@ function CrestSvg() {
         </linearGradient>
       </defs>
       <circle cx="32" cy="32" r="28" fill="none" stroke="url(#sg)" strokeWidth="1.5" opacity="0.5" />
-      <path
-        fill="url(#sg)"
-        d="M32 12l10 4v12c0 10-6 18-10 22-4-4-10-12-10-22V16l10-4z"
-      />
-      <path
-        fill="#334155"
-        opacity="0.4"
-        d="M32 18l6 2.5v9c0 7-3.5 13-6 16-2.5-3-6-9-6-16v-9L32 18z"
-      />
+      <path fill="url(#sg)" d="M32 12l10 4v12c0 10-6 18-10 22-4-4-10-12-10-22V16l10-4z" />
       <circle cx="32" cy="30" r="3" fill="#f8fafc" opacity="0.85" />
     </svg>
   );
 }
 
+/** Theme by player choice */
+const THEME = {
+  heads: {
+    accent: "#facc15",
+    accentDim: "rgba(250,204,21,0.22)",
+    border: "rgba(250,204,21,0.55)",
+    text: "#422006",
+    btnGrad: "linear-gradient(135deg,#92400e 0%,#eab308 45%,#fde68a 100%)",
+    btnShadow: "0 10px 32px rgba(234,179,8,0.4), inset 0 1px 0 rgba(255,255,255,0.35)",
+    pillActive: "rgba(250,204,21,0.22)",
+    pillBorder: "rgba(250,204,21,0.5)",
+    pillColor: "#fef08a",
+    inputBorder: "rgba(250,204,21,0.35)",
+    ambient: "rgba(250,204,21,0.16)",
+    ring: "rgba(250,204,21,0.2)",
+  },
+  tails: {
+    accent: "#e2e8f0",
+    accentDim: "rgba(226,232,240,0.18)",
+    border: "rgba(226,232,240,0.5)",
+    text: "#0f172a",
+    btnGrad: "linear-gradient(135deg,#475569 0%,#94a3b8 45%,#f1f5f9 100%)",
+    btnShadow: "0 10px 32px rgba(148,163,184,0.35), inset 0 1px 0 rgba(255,255,255,0.4)",
+    pillActive: "rgba(226,232,240,0.18)",
+    pillBorder: "rgba(226,232,240,0.45)",
+    pillColor: "#e2e8f0",
+    inputBorder: "rgba(148,163,184,0.4)",
+    ambient: "rgba(148,163,184,0.14)",
+    ring: "rgba(148,163,184,0.22)",
+  },
+};
+
 const CSS = `
 @keyframes cfIdleFloat {
-  0%, 100% { transform: translateY(0) rotateX(14deg) rotateY(0deg); }
-  50% { transform: translateY(-6px) rotateX(14deg) rotateY(8deg); }
-}
-@keyframes cfToss {
-  0% {
-    transform: translateY(0) scale(1) rotateX(14deg) rotateY(0deg);
-  }
-  12% {
-    transform: translateY(-110px) scale(1.08) rotateX(40deg) rotateY(calc(var(--spins) * 0.18));
-  }
-  55% {
-    transform: translateY(-40px) scale(1.02) rotateX(20deg) rotateY(calc(var(--spins) * 0.72));
-  }
-  82% {
-    transform: translateY(-8px) scale(1) rotateX(10deg) rotateY(calc(var(--spins) * 0.94));
-  }
-  92% {
-    transform: translateY(4px) scale(0.97) rotateX(16deg) rotateY(var(--spins));
-  }
-  100% {
-    transform: translateY(0) scale(1) rotateX(14deg) rotateY(var(--spins));
-  }
+  0%, 100% { transform: translateY(0px) rotateX(12deg) rotateY(var(--faceY, 0deg)); }
+  50% { transform: translateY(-7px) rotateX(12deg) rotateY(calc(var(--faceY, 0deg) + 6deg)); }
 }
 @keyframes cfShadowPulse {
   0% { transform: translateX(-50%) scaleX(1); opacity: 0.45; }
-  12% { transform: translateX(-50%) scaleX(0.45); opacity: 0.18; }
-  82% { transform: translateX(-50%) scaleX(0.85); opacity: 0.35; }
-  92% { transform: translateX(-50%) scaleX(1.15); opacity: 0.55; }
+  15% { transform: translateX(-50%) scaleX(0.4); opacity: 0.15; }
+  85% { transform: translateX(-50%) scaleX(0.9); opacity: 0.35; }
+  95% { transform: translateX(-50%) scaleX(1.2); opacity: 0.55; }
   100% { transform: translateX(-50%) scaleX(1); opacity: 0.4; }
 }
 @keyframes cfRingSpin {
@@ -111,26 +108,16 @@ const CSS = `
 }
 @keyframes cfSpark {
   0% { opacity: 0; transform: translate(-50%, -50%) scale(0.3); }
-  20% { opacity: 1; }
+  25% { opacity: 1; }
   100% { opacity: 0; transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(0); }
 }
 @keyframes cfWinPulse {
-  0%, 100% {
-    box-shadow:
-      0 0 0 0 rgba(250,204,21,0),
-      0 0 32px rgba(250,204,21,0.35),
-      0 0 80px rgba(250,204,21,0.15);
-  }
-  50% {
-    box-shadow:
-      0 0 0 12px rgba(250,204,21,0.08),
-      0 0 48px rgba(250,204,21,0.65),
-      0 0 100px rgba(250,204,21,0.28);
-  }
+  0%, 100% { box-shadow: 0 0 28px rgba(250,204,21,0.3), 0 0 70px rgba(250,204,21,0.12); }
+  50% { box-shadow: 0 0 44px rgba(250,204,21,0.65), 0 0 100px rgba(250,204,21,0.25); }
 }
 @keyframes cfLosePulse {
-  0%, 100% { box-shadow: 0 0 24px rgba(148,163,184,0.2); }
-  50% { box-shadow: 0 0 36px rgba(248,113,113,0.35); }
+  0%, 100% { box-shadow: 0 0 20px rgba(148,163,184,0.2); }
+  50% { box-shadow: 0 0 32px rgba(248,113,113,0.35); }
 }
 @keyframes cfShine {
   0% { background-position: 200% 0; }
@@ -141,36 +128,30 @@ const CSS = `
   100% { opacity: 1; transform: translateY(0) scale(1); }
 }
 
-.cf-root {
-  position: relative;
-  overflow: hidden;
-}
+.cf-root { position: relative; overflow: hidden; }
 .cf-ambient {
   pointer-events: none;
   position: absolute;
   inset: -40px -20px auto;
   height: 280px;
-  background:
-    radial-gradient(ellipse 70% 55% at 50% 40%, rgba(250,204,21,0.14) 0%, transparent 70%),
-    radial-gradient(ellipse 50% 40% at 20% 60%, rgba(124,58,237,0.12) 0%, transparent 70%),
-    radial-gradient(ellipse 50% 40% at 80% 50%, rgba(56,189,248,0.08) 0%, transparent 70%);
   z-index: 0;
+  transition: background 0.35s ease;
 }
 .cf-arena {
   position: relative;
   z-index: 1;
-  height: 240px;
+  height: 230px;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin: 4px 0 8px;
+  margin: 4px 0 6px;
 }
 .cf-floor {
   position: absolute;
-  bottom: 28px;
+  bottom: 24px;
   left: 50%;
-  width: 140px;
-  height: 18px;
+  width: 130px;
+  height: 16px;
   border-radius: 50%;
   background: radial-gradient(ellipse, rgba(0,0,0,0.55) 0%, transparent 70%);
   transform: translateX(-50%);
@@ -181,41 +162,43 @@ const CSS = `
 }
 .cf-ring {
   position: absolute;
-  width: 200px;
-  height: 200px;
+  width: 196px;
+  height: 196px;
   border-radius: 50%;
-  border: 1px solid rgba(250,204,21,0.12);
-  box-shadow: inset 0 0 40px rgba(250,204,21,0.04);
   z-index: 0;
+  transition: border-color 0.35s;
 }
 .cf-ring::before {
   content: "";
   position: absolute;
   inset: -8px;
   border-radius: 50%;
-  border: 1px dashed rgba(167,139,250,0.2);
+  border: 1px dashed rgba(167,139,250,0.18);
   animation: cfRingSpin 18s linear infinite;
 }
 .cf-stage {
-  perspective: 1200px;
-  width: 168px;
-  height: 168px;
+  perspective: 1100px;
+  width: 160px;
+  height: 160px;
   position: relative;
   z-index: 2;
+  border-radius: 50%;
 }
+.cf-stage.win { animation: cfWinPulse 1.4s ease-in-out infinite; }
+.cf-stage.lose { animation: cfLosePulse 1.4s ease-in-out infinite; }
+
 .cf-coin {
   width: 100%;
   height: 100%;
   position: relative;
   transform-style: preserve-3d;
-  transform: rotateX(14deg) rotateY(0deg);
+  transform: translateY(0) rotateX(12deg) rotateY(var(--faceY, 0deg));
+  will-change: transform;
 }
 .cf-coin.idle {
   animation: cfIdleFloat 3.2s ease-in-out infinite;
 }
-.cf-coin.tossing {
-  animation: cfToss ${FLIP_MS}ms cubic-bezier(0.18, 0.7, 0.15, 1) forwards;
-}
+
 .cf-face {
   position: absolute;
   inset: 0;
@@ -230,33 +213,28 @@ const CSS = `
   overflow: hidden;
 }
 .cf-heads {
-  background:
-    radial-gradient(circle at 32% 28%, #fffbeb 0%, #fde68a 18%, #fbbf24 42%, #d97706 72%, #92400e 100%);
-  transform: translateZ(5px);
+  background: radial-gradient(circle at 32% 28%, #fffbeb 0%, #fde68a 18%, #fbbf24 42%, #d97706 72%, #92400e 100%);
+  transform: rotateY(0deg) translateZ(4px);
   box-shadow:
     inset 0 3px 10px rgba(255,255,255,0.45),
-    inset 0 -8px 20px rgba(120,53,15,0.45),
-    0 0 0 3px rgba(180,120,20,0.55),
-    0 0 0 5px rgba(120,70,10,0.35),
-    0 16px 40px rgba(0,0,0,0.5);
+    inset 0 -8px 18px rgba(120,53,15,0.45),
+    0 0 0 3px rgba(180,120,20,0.5),
+    0 14px 36px rgba(0,0,0,0.5);
 }
 .cf-tails {
-  background:
-    radial-gradient(circle at 32% 28%, #ffffff 0%, #f1f5f9 18%, #cbd5e1 42%, #94a3b8 72%, #475569 100%);
-  transform: rotateY(180deg) translateZ(5px);
+  background: radial-gradient(circle at 32% 28%, #ffffff 0%, #f1f5f9 18%, #cbd5e1 42%, #94a3b8 72%, #475569 100%);
+  transform: rotateY(180deg) translateZ(4px);
   box-shadow:
     inset 0 3px 10px rgba(255,255,255,0.5),
-    inset 0 -8px 20px rgba(30,41,59,0.4),
-    0 0 0 3px rgba(148,163,184,0.55),
-    0 0 0 5px rgba(71,85,105,0.35),
-    0 16px 40px rgba(0,0,0,0.5);
+    inset 0 -8px 18px rgba(30,41,59,0.4),
+    0 0 0 3px rgba(148,163,184,0.5),
+    0 14px 36px rgba(0,0,0,0.5);
 }
 .cf-rim {
   position: absolute;
   inset: 8px;
   border-radius: 50%;
   border: 1.5px solid rgba(255,255,255,0.28);
-  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.12);
   pointer-events: none;
 }
 .cf-rim-inner {
@@ -270,12 +248,7 @@ const CSS = `
   position: absolute;
   inset: 0;
   border-radius: 50%;
-  background: linear-gradient(
-    115deg,
-    transparent 30%,
-    rgba(255,255,255,0.35) 48%,
-    transparent 62%
-  );
+  background: linear-gradient(115deg, transparent 30%, rgba(255,255,255,0.35) 48%, transparent 62%);
   background-size: 200% 100%;
   animation: cfShine 4s ease-in-out infinite;
   pointer-events: none;
@@ -284,58 +257,25 @@ const CSS = `
 .cf-label {
   font-size: 11px;
   font-weight: 900;
-  letter-spacing: 0.18em;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
   margin-top: 2px;
 }
-.cf-heads .cf-label { color: #78350f; text-shadow: 0 1px 0 rgba(255,255,255,0.25); }
-.cf-tails .cf-label { color: #1e293b; text-shadow: 0 1px 0 rgba(255,255,255,0.35); }
+.cf-heads .cf-label { color: #78350f; }
+.cf-tails .cf-label { color: #1e293b; }
 
-.cf-stage.win .cf-coin {
-  animation: none;
-  transform: rotateX(14deg) rotateY(var(--land, 0deg));
-}
-.cf-stage.win {
-  border-radius: 50%;
-  animation: cfWinPulse 1.4s ease-in-out infinite;
-}
-.cf-stage.lose {
-  border-radius: 50%;
-  animation: cfLosePulse 1.4s ease-in-out infinite;
-}
-
-.cf-sparks {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  z-index: 5;
-}
+.cf-sparks { position: absolute; inset: 0; pointer-events: none; z-index: 5; }
 .cf-spark {
   position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 6px;
-  height: 6px;
+  left: 50%; top: 50%;
+  width: 6px; height: 6px;
   border-radius: 50%;
   background: radial-gradient(circle, #fff 0%, #facc15 40%, transparent 70%);
   animation: cfSpark 0.9s ease-out forwards;
 }
-.cf-result {
-  animation: cfPop 0.35s ease-out;
-  text-align: center;
-  margin: 0 0 12px;
-}
-.cf-result-title {
-  font-size: 18px;
-  font-weight: 900;
-  letter-spacing: -0.02em;
-}
-.cf-result-sub {
-  font-size: 13px;
-  margin-top: 2px;
-  opacity: 0.85;
-  font-weight: 700;
-}
+.cf-result { animation: cfPop 0.35s ease-out; text-align: center; margin: 0 0 12px; }
+.cf-result-title { font-size: 18px; font-weight: 900; }
+.cf-result-sub { font-size: 13px; margin-top: 2px; font-weight: 700; opacity: 0.9; }
 `;
 
 export default function CoinFlipGame({
@@ -351,8 +291,8 @@ export default function CoinFlipGame({
   const [choice, setChoice] = useState<Side>("heads");
   const [busy, setBusy] = useState(false);
   const [spinning, setSpinning] = useState(false);
-  const [displaySide, setDisplaySide] = useState<Side>("heads");
-  const [landDeg, setLandDeg] = useState(0);
+  /** Current resting face of the coin (what user sees when idle) */
+  const [face, setFace] = useState<Side>("heads");
   const [sparks, setSparks] = useState<{ id: number; dx: number; dy: number; delay: number }[]>([]);
   const [lastResult, setLastResult] = useState<{
     won: boolean;
@@ -361,8 +301,13 @@ export default function CoinFlipGame({
     profit: number;
   } | null>(null);
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
+
   const coinRef = useRef<HTMLDivElement>(null);
+  const animRef = useRef<Animation | null>(null);
+  const faceYRef = useRef(0); // absolute rotateY degrees (0 = heads, 180 = tails, +360n)
   const sparkId = useRef(0);
+
+  const th = THEME[choice];
 
   const flash = (msg: string, ok: boolean) => {
     setToast({ msg, ok });
@@ -373,7 +318,7 @@ export default function CoinFlipGame({
     if (!lastResult?.won) return;
     const list = Array.from({ length: 14 }, () => {
       const ang = Math.random() * Math.PI * 2;
-      const dist = 50 + Math.random() * 70;
+      const dist = 48 + Math.random() * 70;
       return {
         id: ++sparkId.current,
         dx: Math.cos(ang) * dist,
@@ -385,6 +330,13 @@ export default function CoinFlipGame({
     const t = setTimeout(() => setSparks([]), 1000);
     return () => clearTimeout(t);
   }, [lastResult]);
+
+  /** Sync CSS var for idle animation */
+  useEffect(() => {
+    const el = coinRef.current;
+    if (!el || spinning) return;
+    el.style.setProperty("--faceY", `${faceYRef.current}deg`);
+  }, [face, spinning]);
 
   const play = async () => {
     if (busy || spinning) return;
@@ -421,43 +373,76 @@ export default function CoinFlipGame({
       }
 
       const result = d.result as Side;
-      // Continue from current face so animation always starts coherent
-      const fromDeg = displaySide === "tails" ? 180 : 0;
-      const baseSpins = 7 + Math.floor(Math.random() * 3); // 7–9 turns
-      const targetExtra = result === "heads" ? 0 : 180;
-      // land on correct face relative to start
-      let endDeg = fromDeg + baseSpins * 360 + targetExtra;
-      // if starting on tails and want heads: from 180 + n*360 + 180 = heads
-      if (displaySide === "tails") {
-        endDeg = 180 + baseSpins * 360 + (result === "tails" ? 0 : 180);
-      } else {
-        endDeg = baseSpins * 360 + (result === "heads" ? 0 : 180);
+      const el = coinRef.current;
+      if (!el) {
+        setBusy(false);
+        return;
       }
 
-      const el = coinRef.current;
-      if (el) {
-        el.style.setProperty("--spins", `${endDeg}deg`);
-        el.classList.remove("tossing", "idle");
-        void el.offsetWidth;
-        el.classList.add("tossing");
-      }
+      // Cancel any running animation
+      animRef.current?.cancel();
+
+      const startY = faceYRef.current;
+      // Normalize: heads = even half-turns (0, 360…), tails = odd (180, 540…)
+      const startNorm = ((startY % 360) + 360) % 360;
+      const wantNorm = result === "heads" ? 0 : 180;
+      const spins = 6 + Math.floor(Math.random() * 3); // 6–8 full turns
+      let delta = spins * 360 + (wantNorm - startNorm);
+      if (delta < spins * 360) delta += 360; // always go forward enough
+      const endY = startY + delta;
 
       setSpinning(true);
-      setLandDeg(endDeg);
+      el.classList.remove("idle");
 
-      // mid-flight haptics
-      setTimeout(() => haptic("light"), 400);
-      setTimeout(() => haptic("light"), 1200);
-      setTimeout(() => haptic("heavy"), FLIP_MS - 200);
+      // Web Animations API — reliable, no CSS calc bugs
+      const keyframes: Keyframe[] = [
+        {
+          transform: `translateY(0px) scale(1) rotateX(12deg) rotateY(${startY}deg)`,
+          offset: 0,
+        },
+        {
+          transform: `translateY(-120px) scale(1.1) rotateX(55deg) rotateY(${startY + delta * 0.22}deg)`,
+          offset: 0.18,
+        },
+        {
+          transform: `translateY(-55px) scale(1.04) rotateX(25deg) rotateY(${startY + delta * 0.55}deg)`,
+          offset: 0.45,
+        },
+        {
+          transform: `translateY(-12px) scale(1) rotateX(14deg) rotateY(${startY + delta * 0.88}deg)`,
+          offset: 0.78,
+        },
+        {
+          transform: `translateY(6px) scale(0.96) rotateX(16deg) rotateY(${endY}deg)`,
+          offset: 0.9,
+        },
+        {
+          transform: `translateY(0px) scale(1) rotateX(12deg) rotateY(${endY}deg)`,
+          offset: 1,
+        },
+      ];
 
-      await new Promise((res) => setTimeout(res, FLIP_MS + 40));
+      const anim = el.animate(keyframes, {
+        duration: FLIP_MS,
+        easing: "cubic-bezier(0.2, 0.7, 0.15, 1)",
+        fill: "forwards",
+      });
+      animRef.current = anim;
 
-      setDisplaySide(result);
+      setTimeout(() => haptic("light"), 350);
+      setTimeout(() => haptic("light"), 1100);
+      setTimeout(() => haptic("heavy"), FLIP_MS - 180);
+
+      await anim.finished.catch(() => undefined);
+
+      faceYRef.current = endY;
+      el.style.setProperty("--faceY", `${endY}deg`);
+      el.style.transform = `translateY(0px) rotateX(12deg) rotateY(${endY}deg)`;
+      // commit final state so fill:forwards can be cleared
+      anim.cancel();
+
+      setFace(result);
       setSpinning(false);
-      if (el) {
-        el.classList.remove("tossing");
-        el.style.setProperty("--land", `${endDeg}deg`);
-      }
 
       setLastResult({
         won: !!d.won,
@@ -476,6 +461,7 @@ export default function CoinFlipGame({
       onBalanceChange();
     } catch {
       flash("Ошибка сети", false);
+      setSpinning(false);
     } finally {
       setBusy(false);
     }
@@ -487,7 +473,13 @@ export default function CoinFlipGame({
   return (
     <div className="cf-root" style={root}>
       <style>{CSS}</style>
-      <div className="cf-ambient" />
+      <div
+        className="cf-ambient"
+        style={{
+          background: `radial-gradient(ellipse 70% 55% at 50% 40%, ${th.ambient} 0%, transparent 70%),
+            radial-gradient(ellipse 50% 40% at 20% 60%, rgba(124,58,237,0.1) 0%, transparent 70%)`,
+        }}
+      />
 
       {toast && (
         <div
@@ -502,39 +494,39 @@ export default function CoinFlipGame({
         </div>
       )}
 
-      {/* Hero */}
       <div style={hero}>
-        <div style={multBadge}>
-          <span style={{ opacity: 0.7, fontWeight: 700 }}>PAYOUT</span>
+        <div
+          style={{
+            ...multBadge,
+            background: th.btnGrad,
+            color: th.text,
+            boxShadow: `0 4px 18px ${th.accentDim}`,
+          }}
+        >
+          <span style={{ opacity: 0.75, fontWeight: 700 }}>PAYOUT</span>
           <span style={{ marginLeft: 6 }}>×{MULTIPLIER}</span>
         </div>
         <div style={heroTitle}>Coin Flip</div>
-        <div style={heroSub}>Орёл · золото &nbsp;|&nbsp; Решка · серебро</div>
+        <div style={heroSub}>
+          {choice === "heads" ? "Ставка на Орёл · золото" : "Ставка на Решку · серебро"}
+        </div>
       </div>
 
-      {/* Arena */}
       <div className="cf-arena">
-        <div className="cf-ring" />
+        <div
+          className="cf-ring"
+          style={{ border: `1px solid ${th.ring}`, boxShadow: `inset 0 0 36px ${th.accentDim}` }}
+        />
         <div className={`cf-floor ${spinning ? "tossing" : ""}`} />
         <div
           className={`cf-stage ${
             !spinning && lastResult ? (lastResult.won ? "win" : "lose") : ""
           }`}
-          style={{ ["--land" as string]: `${landDeg}deg` } as CSSProperties}
         >
           <div
             ref={coinRef}
-            className={`cf-coin ${spinning ? "tossing" : lastResult ? "" : "idle"}`}
-            style={
-              !spinning
-                ? {
-                    transform:
-                      displaySide === "tails"
-                        ? `rotateX(14deg) rotateY(${landDeg || 180}deg)`
-                        : `rotateX(14deg) rotateY(${landDeg || 0}deg)`,
-                  }
-                : undefined
-            }
+            className={`cf-coin ${!spinning && !lastResult ? "idle" : ""}`}
+            style={{ ["--faceY" as string]: `${faceYRef.current}deg` } as CSSProperties}
           >
             <div className="cf-face cf-heads">
               <div className="cf-rim" />
@@ -563,6 +555,10 @@ export default function CoinFlipGame({
                       ["--dx" as string]: `${s.dx}px`,
                       ["--dy" as string]: `${s.dy}px`,
                       animationDelay: `${s.delay}s`,
+                      background:
+                        choice === "tails"
+                          ? "radial-gradient(circle, #fff 0%, #cbd5e1 40%, transparent 70%)"
+                          : undefined,
                     } as CSSProperties
                   }
                 />
@@ -591,7 +587,6 @@ export default function CoinFlipGame({
         </div>
       )}
 
-      {/* Choice */}
       <div style={panel}>
         <div style={sectionLabel}>Выбери сторону</div>
         <div style={sideRow}>
@@ -617,9 +612,7 @@ export default function CoinFlipGame({
                   : "inset 0 1px 0 rgba(255,255,255,0.04)",
             }}
           >
-            <div style={{ transform: "scale(0.72)", marginBottom: -4 }}>
-              <EagleSvg />
-            </div>
+            <EagleSvg size={40} />
             <span style={{ fontWeight: 900, fontSize: 15 }}>Орёл</span>
             <span style={{ fontSize: 10, opacity: 0.7, fontWeight: 700 }}>GOLD</span>
           </button>
@@ -645,9 +638,7 @@ export default function CoinFlipGame({
                   : "inset 0 1px 0 rgba(255,255,255,0.04)",
             }}
           >
-            <div style={{ transform: "scale(0.72)", marginBottom: -4 }}>
-              <CrestSvg />
-            </div>
+            <CrestSvg size={40} />
             <span style={{ fontWeight: 900, fontSize: 15 }}>Решка</span>
             <span style={{ fontSize: 10, opacity: 0.7, fontWeight: 700 }}>SILVER</span>
           </button>
@@ -657,7 +648,11 @@ export default function CoinFlipGame({
         <div style={betRow}>
           <button
             type="button"
-            style={betAdj}
+            style={{
+              ...betAdj,
+              borderColor: th.border,
+              color: choice === "heads" ? "#fde68a" : "#e2e8f0",
+            }}
             disabled={busy || spinning}
             onClick={() => {
               setBet((b) => {
@@ -681,12 +676,16 @@ export default function CoinFlipGame({
               const v = parseFloat(raw);
               if (!Number.isNaN(v) && v >= 0) setBet(Math.round(v * 1000) / 1000);
             }}
-            style={betInput}
+            style={{ ...betInput, borderColor: th.inputBorder }}
             inputMode="decimal"
           />
           <button
             type="button"
-            style={betAdj}
+            style={{
+              ...betAdj,
+              borderColor: th.border,
+              color: choice === "heads" ? "#fde68a" : "#e2e8f0",
+            }}
             disabled={busy || spinning}
             onClick={() => {
               setBet((b) => {
@@ -715,9 +714,9 @@ export default function CoinFlipGame({
               style={{
                 ...pill,
                 flex: 1,
-                background: bet === v ? "rgba(250,204,21,0.2)" : "rgba(15,23,42,0.8)",
-                borderColor: bet === v ? "rgba(250,204,21,0.5)" : "rgba(148,163,184,0.1)",
-                color: bet === v ? "#fef08a" : "#94a3b8",
+                background: bet === v ? th.pillActive : "rgba(15,23,42,0.8)",
+                borderColor: bet === v ? th.pillBorder : "rgba(148,163,184,0.1)",
+                color: bet === v ? th.pillColor : "#94a3b8",
               }}
             >
               {v}
@@ -734,9 +733,9 @@ export default function CoinFlipGame({
             style={{
               ...pill,
               flex: 1.15,
-              background: "linear-gradient(135deg,#a16207,#facc15)",
+              background: th.btnGrad,
               borderColor: "transparent",
-              color: "#422006",
+              color: th.text,
               fontWeight: 900,
             }}
           >
@@ -746,7 +745,7 @@ export default function CoinFlipGame({
 
         <div style={metaRow}>
           <span>Баланс {balance.toFixed(2)} TON</span>
-          <span style={{ color: "#fde68a", fontWeight: 800 }}>
+          <span style={{ color: choice === "heads" ? "#fde68a" : "#e2e8f0", fontWeight: 800 }}>
             ≈ {potential.toFixed(2)} TON
           </span>
         </div>
@@ -757,18 +756,14 @@ export default function CoinFlipGame({
           onClick={play}
           style={{
             ...flipBtn,
+            background: th.btnGrad,
+            color: th.text,
+            boxShadow: canPlay ? th.btnShadow : "none",
             opacity: canPlay ? 1 : 0.5,
             cursor: canPlay ? "pointer" : "not-allowed",
-            transform: spinning ? "scale(0.98)" : undefined,
           }}
         >
-          {spinning ? (
-            <span style={{ letterSpacing: "0.06em" }}>FLIPPING…</span>
-          ) : busy ? (
-            "…"
-          ) : (
-            "Подбросить монету"
-          )}
+          {spinning ? "FLIPPING…" : busy ? "…" : "Подбросить монету"}
         </button>
       </div>
     </div>
@@ -793,7 +788,6 @@ const toastStyle: CSSProperties = {
   fontSize: 14,
   boxShadow: "0 12px 40px rgba(0,0,0,0.45)",
   maxWidth: "90vw",
-  backdropFilter: "blur(8px)",
 };
 const hero: CSSProperties = { textAlign: "center", marginBottom: 2, position: "relative", zIndex: 1 };
 const multBadge: CSSProperties = {
@@ -801,13 +795,10 @@ const multBadge: CSSProperties = {
   alignItems: "center",
   padding: "5px 14px",
   borderRadius: 999,
-  background: "linear-gradient(135deg,rgba(161,98,7,0.9),rgba(250,204,21,0.95))",
-  color: "#422006",
   fontWeight: 900,
   fontSize: 13,
   letterSpacing: "0.04em",
   marginBottom: 8,
-  boxShadow: "0 4px 20px rgba(250,204,21,0.25)",
 };
 const heroTitle: CSSProperties = {
   fontSize: 30,
@@ -822,7 +813,6 @@ const heroSub: CSSProperties = {
   color: "#a78bfa",
   marginTop: 4,
   fontWeight: 600,
-  letterSpacing: "0.02em",
 };
 const panel: CSSProperties = {
   position: "relative",
@@ -832,7 +822,7 @@ const panel: CSSProperties = {
   borderRadius: 20,
   background: "linear-gradient(180deg,rgba(24,16,48,0.92),rgba(10,6,18,0.96))",
   border: "1px solid rgba(167,139,250,0.18)",
-  boxShadow: "0 12px 40px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.04)",
+  boxShadow: "0 12px 40px rgba(0,0,0,0.35)",
 };
 const sectionLabel: CSSProperties = {
   fontSize: 10,
@@ -853,16 +843,14 @@ const sideBtn: CSSProperties = {
   border: "1.5px solid",
   cursor: "pointer",
   fontFamily: "inherit",
-  transition: "transform 0.15s, box-shadow 0.2s",
 };
 const betRow: CSSProperties = { display: "flex", gap: 8, alignItems: "center" };
 const betAdj: CSSProperties = {
   width: 48,
   height: 48,
   borderRadius: 14,
-  border: "1px solid rgba(148,163,184,0.18)",
+  border: "1px solid",
   background: "rgba(15,23,42,0.95)",
-  color: "#e2e8f0",
   fontWeight: 900,
   fontSize: 16,
   cursor: "pointer",
@@ -872,7 +860,7 @@ const betInput: CSSProperties = {
   flex: 1,
   height: 48,
   borderRadius: 14,
-  border: "1px solid rgba(250,204,21,0.28)",
+  border: "1px solid",
   background: "rgba(8,10,24,0.9)",
   color: "#fff",
   fontWeight: 800,
@@ -905,13 +893,9 @@ const flipBtn: CSSProperties = {
   height: 56,
   borderRadius: 18,
   border: "none",
-  background: "linear-gradient(135deg,#92400e 0%,#eab308 45%,#fde68a 100%)",
-  color: "#422006",
   fontWeight: 900,
   fontSize: 17,
   letterSpacing: "0.02em",
-  boxShadow:
-    "0 10px 32px rgba(234,179,8,0.4), inset 0 1px 0 rgba(255,255,255,0.35)",
   fontFamily: "inherit",
-  transition: "transform 0.15s, opacity 0.15s",
+  transition: "background 0.25s, box-shadow 0.25s, opacity 0.15s",
 };

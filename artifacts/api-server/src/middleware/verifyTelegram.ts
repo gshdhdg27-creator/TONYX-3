@@ -3,7 +3,19 @@ import crypto from "crypto";
 
 const MAX_AUTH_AGE_SECONDS = 24 * 60 * 60; // 24 hours
 
-function verifyInitData(initData: string, botToken: string): boolean {
+function timingSafeEqualHex(a: string, b: string): boolean {
+  try {
+    const ba = Buffer.from(a, "hex");
+    const bb = Buffer.from(b, "hex");
+    if (ba.length !== bb.length || ba.length === 0) return false;
+    return crypto.timingSafeEqual(ba, bb);
+  } catch {
+    return false;
+  }
+}
+
+/** Official Telegram WebApp initData HMAC verification */
+export function verifyInitData(initData: string, botToken: string): boolean {
   try {
     const params = new URLSearchParams(initData);
     const hash = params.get("hash");
@@ -25,10 +37,7 @@ function verifyInitData(initData: string, botToken: string): boolean {
       .update(dataCheckString)
       .digest("hex");
 
-    return crypto.timingSafeEqual(
-      Buffer.from(hash.padEnd(64, "0"), "hex"),
-      Buffer.from(expectedHash, "hex"),
-    );
+    return timingSafeEqualHex(hash, expectedHash);
   } catch {
     return false;
   }
@@ -66,14 +75,12 @@ export function telegramAuthMiddleware(
   const botToken = process.env["TELEGRAM_BOT_TOKEN"];
   const isProduction = process.env["NODE_ENV"] === "production";
 
-  // In production we ALWAYS require a valid bot token
   if (!botToken) {
     if (isProduction) {
       console.error("[Auth] TELEGRAM_BOT_TOKEN is missing in production");
       res.status(500).json({ error: "Server misconfiguration" });
       return;
     }
-    // Dev without token — allow (for local testing)
     next();
     return;
   }
@@ -82,7 +89,6 @@ export function telegramAuthMiddleware(
 
   if (!initData) {
     if (!isProduction) {
-      // Dev mode: allow missing initData
       next();
       return;
     }
@@ -91,14 +97,12 @@ export function telegramAuthMiddleware(
     return;
   }
 
-  // 1. Verify signature
   if (!verifyInitData(initData, botToken)) {
     console.warn(`[Auth] Invalid Telegram signature on ${req.method} ${req.path}`);
     res.status(401).json({ error: "Invalid Telegram signature" });
     return;
   }
 
-  // 2. Check auth_date (not older than 24 hours)
   const authDate = getAuthDate(initData);
   if (authDate === null) {
     console.warn(`[Auth] Missing auth_date on ${req.method} ${req.path}`);
@@ -115,7 +119,6 @@ export function telegramAuthMiddleware(
     return;
   }
 
-  // 3. Extract and attach verified telegramId
   const verifiedId = parseVerifiedTelegramId(initData);
   if (!verifiedId) {
     console.warn(`[Auth] Could not parse user id on ${req.method} ${req.path}`);

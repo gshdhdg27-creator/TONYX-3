@@ -1,46 +1,51 @@
 # TONYX Mini App
 
-Telegram Mini App for the TONYX platform — features a home dashboard, marketplace, mini-games, tasks, leaderboard, and profile management, with TON blockchain wallet integration.
+Telegram Mini App for the TONYX platform — home dashboard, marketplace, mini-games (Arena, Mines, Coin Flip, Spin), tasks, leaderboard, profile, TON wallet integration.
+
+Canonical product docs: root **[README.md](README.md)** and **[docs/](docs/)**.
 
 ## Run & Operate
 
-- `pnpm --filter @workspace/api-server run dev` — run the API server (port 8080)
-- `pnpm --filter @workspace/mini-app run dev` — run the frontend (port 18801)
-- `pnpm run typecheck` — full typecheck across all packages
+- `pnpm --filter @workspace/api-server run dev` — API (port 8080)
+- `pnpm --filter @workspace/mini-app run dev` — frontend
+- `pnpm run typecheck` — full typecheck
 - `pnpm run build` — typecheck + build all packages
-- `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- Required env: `DATABASE_URL` or `NEON_DATABASE_URL` — Postgres connection string
+- `pnpm --filter @workspace/api-spec run codegen` — regenerate hooks/Zod from OpenAPI
+- `pnpm --filter @workspace/db run push` — push DB schema (dev only)
+- Required env: `DATABASE_URL` or `NEON_DATABASE_URL`; production also needs `TELEGRAM_BOT_TOKEN`
 
 ## Stack
 
-- pnpm workspaces, Node.js 24, TypeScript 5.9
-- API: Express 5
+- pnpm workspaces, TypeScript 5.9
+- API: Express 5 + pino
 - DB: PostgreSQL + Drizzle ORM
-- Validation: Zod (`zod/v4`), `drizzle-zod`
-- API codegen: Orval (from OpenAPI spec)
-- Build: esbuild (CJS bundle)
+- Validation: Zod, drizzle-zod
+- API codegen: Orval from OpenAPI
+- Auth: Telegram WebApp `initData` HMAC (`middleware/verifyTelegram.ts`)
+- Rate limits: in-memory presets on mini join/play/finance/admin
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+| Concern | Path |
+|---------|------|
+| Mini API | `artifacts/api-server/src/routes/mini/` |
+| Legacy API | `artifacts/api-server/src/routes/*.ts` (deprecated — see ADR 001) |
+| Fairness | `artifacts/api-server/src/lib/fairness.ts` + `docs/FAIRNESS.md` |
+| Frontend | `artifacts/mini-app/src/` |
+| Architecture | `docs/ARCHITECTURE.md` |
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- **Dual route tree**: legacy + `/api/mini` until all hooks migrate (ADR 001).
+- **Balances**: product uses `ton` + `tonyxCoins`; legacy `coins` must not gain new writers.
+- **Auth**: production requires valid `x-telegram-init-data`; body `telegramId` must match verified user.
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
-
-## User preferences
-
-_Populate as you build — explicit user instructions worth remembering across sessions._
+PvP Arena (stake-weighted pot), solo games, market, finance, admin moderation.
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
-
-## Pointers
-
-- See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details
+- Never assume a legacy route is dead — grep Orval hook usage first.
+- Vercel serverless: in-memory rate limits are per-instance; Redis is the production target.
+- Close Telegram WebView fully after deploy to pick up new frontend bundles.

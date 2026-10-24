@@ -9,6 +9,7 @@ import {
 import { eq, isNull, or, and, ne } from "drizzle-orm";
 import { notifyUser } from "../services/botNotify.js";
 
+/** @deprecated Prefer /api/mini/users — also mounted under mini */
 const router: IRouter = Router();
 
 const COINS_PER_REFERRAL = 500;
@@ -33,11 +34,6 @@ async function isAdminUser(telegramId: string): Promise<boolean> {
   return row?.isAdmin === true;
 }
 
-
-/* ─── Deposit code generator ────────────────────────────────────────────────
-   12 uppercase alphanumeric chars, no ambiguous chars (0/O, 1/I).
-   Collision probability ≈ 1 in 3.5 trillion — effectively zero.
-──────────────────────────────────────────────────────────────────────────── */
 const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
 function generateDepositCode(): string {
@@ -49,7 +45,6 @@ function generateDepositCode(): string {
   return code;
 }
 
-/** Generates a code that doesn't already exist in the DB (retries on collision). */
 async function makeUniqueDepositCode(): Promise<string> {
   for (let attempt = 0; attempt < 10; attempt++) {
     const code = generateDepositCode();
@@ -59,7 +54,6 @@ async function makeUniqueDepositCode(): Promise<string> {
       .where(eq(usersTable.depositCode, code));
     if (!existing.length) return code;
   }
-  // Fallback: longer code to guarantee uniqueness
   return generateDepositCode() + generateDepositCode().slice(0, 4);
 }
 
@@ -77,27 +71,11 @@ async function getReferralCount(telegramId: string): Promise<number> {
   return referrals.length;
 }
 
-/**
- * Multi-account ("twink") detection.
- *
- * Runs right after a brand-new account is created. Looks for an existing,
- * different account sharing the same device (persisted client-side ID) or
- * IP address. If one is found, the earliest-created account in that group is
- * treated as the "main" account:
- *  - the brand-new account is immediately blocked (a Telegram identity can't
- *    be swapped by the web app, so we can't literally "log the user into"
- *    their main account — instead we block the twink and tell them to use
- *    their main account)
- *  - the main account receives a warning strike; after
- *    MAX_WARNINGS_BEFORE_MAIN_BAN strikes the main account is banned too.
- *  - Admins never receive bans or warnings.
- */
 async function checkAndHandleTwinkAccount(
   newUser: typeof usersTable.$inferSelect,
   ip: string | null,
   deviceId: string | null,
 ): Promise<typeof usersTable.$inferSelect> {
-  // Admins are never banned or warned for multi-accounts
   if (await isAdminUser(newUser.telegramId)) return newUser;
   if (!ip && !deviceId) return newUser;
 
@@ -134,7 +112,6 @@ async function checkAndHandleTwinkAccount(
       `Использование нескольких аккаунтов запрещено правилами проекта — пожалуйста, продолжайте играть со своего основного аккаунта.`,
   );
 
-  // Never apply warnings or ban to admin main accounts
   if (!mainIsAdmin) {
     const newWarningCount = (main.warningCount ?? 0) + 1;
     const mainShouldBeBanned = newWarningCount >= MAX_WARNINGS_BEFORE_MAIN_BAN;
@@ -217,7 +194,6 @@ router.post("/register", async (req, res) => {
       .returning();
     user = created;
 
-    // Multi-account ("twink") detection — only relevant for brand-new accounts.
     user = await checkAndHandleTwinkAccount(user, ip, deviceId);
 
     if (!user.isBlocked && body.referredBy && body.referredBy !== body.telegramId) {
@@ -227,27 +203,26 @@ router.post("/register", async (req, res) => {
         .where(eq(usersTable.telegramId, body.referredBy))
         .then((rows) => rows[0] ?? null);
       if (referrer) {
+        // NEW writes to users.coins forbidden — referral reward → tonyxCoins
         await db
           .update(usersTable)
           .set({
-            coins: referrer.coins + COINS_PER_REFERRAL,
+            tonyxCoins: (referrer.tonyxCoins ?? 0) + COINS_PER_REFERRAL,
             referralEarnings: referrer.referralEarnings + COINS_PER_REFERRAL,
           })
           .where(eq(usersTable.telegramId, body.referredBy));
       }
     }
   } else {
-    // Update profile fields + IP + lastLoginAt on every login
-    // Also backfill depositCode if user registered before this feature
     const updates: Partial<typeof usersTable.$inferInsert> = {
-      username:    body.username  ?? user.username  ?? undefined,
-      firstName:   body.firstName ?? user.firstName ?? undefined,
-      lastName:    body.lastName  ?? user.lastName  ?? undefined,
-      photoUrl:    body.photoUrl  ?? user.photoUrl  ?? undefined,
-      lastIp:      ip ?? user.lastIp ?? undefined,
-      deviceId:    deviceId ?? user.deviceId ?? undefined,
+      username: body.username ?? user.username ?? undefined,
+      firstName: body.firstName ?? user.firstName ?? undefined,
+      lastName: body.lastName ?? user.lastName ?? undefined,
+      photoUrl: body.photoUrl ?? user.photoUrl ?? undefined,
+      lastIp: ip ?? user.lastIp ?? undefined,
+      deviceId: deviceId ?? user.deviceId ?? undefined,
       lastLoginAt: new Date(),
-      updatedAt:   new Date(),
+      updatedAt: new Date(),
     };
 
     if (!user.depositCode) {
@@ -279,7 +254,6 @@ router.get("/:telegramId", async (req, res) => {
     return;
   }
 
-  // Backfill depositCode if missing (users registered before the feature)
   if (!user.depositCode) {
     const depositCode = await makeUniqueDepositCode();
     const [updated] = await db

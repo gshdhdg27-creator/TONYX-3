@@ -27,6 +27,10 @@ import battleRouter from "./battle.js";
 import casesRouter from "./cases.js";
 import adminCasesRouter from "./admin-cases.js";
 import inventoryRouter from "./inventory.js";
+/** Profile + register — same handlers as legacy, now under /api/mini with auth */
+import usersRouter from "../users.js";
+/** Referrals — under /api/mini with auth */
+import referralsRouter from "../referrals.js";
 
 const router: IRouter = Router();
 
@@ -62,12 +66,15 @@ router.use((req, res, next) => {
   next();
 });
 
+// Migrated from legacy /api/users and /api/referrals
+router.use("/users", usersRouter);
+router.use("/referrals", referralsRouter);
+
 router.use("/language", languageRouter);
 router.use("/wallet", walletRouter);
 router.use("/earn", earnRouter);
 router.use("/market", marketRouter);
 
-// Games — play/join rate limits
 router.use("/games/spin", limitPlay, spinRouter);
 router.use("/games/mines", limitPlay, minesRouter);
 router.use("/games/coin", limitPlay, coinRouter);

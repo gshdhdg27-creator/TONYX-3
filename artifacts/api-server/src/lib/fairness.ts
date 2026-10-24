@@ -29,3 +29,25 @@ export function pickWinnerByHash<T extends { stake: number }>(
   }
   return players[players.length - 1];
 }
+
+/** Arena winner payout: stake + (pool - stake) * (1 - commission). Default house edge 20%. */
+export function arenaPayout(
+  stake: number,
+  pool: number,
+  commission = 0.2,
+): number {
+  if (stake < 0 || pool < 0) return 0;
+  const safeStake = Math.min(stake, pool);
+  return Math.round((safeStake + (pool - safeStake) * (1 - commission)) * 1000) / 1000;
+}
+
+/** House edge amount retained from non-winner stakes. */
+export function arenaHouseCut(
+  stake: number,
+  pool: number,
+  commission = 0.2,
+): number {
+  if (stake < 0 || pool < 0) return 0;
+  const safeStake = Math.min(stake, pool);
+  return Math.round((pool - safeStake) * commission * 1000) / 1000;
+}

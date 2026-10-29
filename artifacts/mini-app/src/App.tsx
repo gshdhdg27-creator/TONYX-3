@@ -8,6 +8,7 @@ import LanguageModal from "@/components/LanguageModal";
 import Header from "@/components/Header";
 import HomePage from "@/pages/home";
 import MarketPage from "@/pages/market";
+import NftMarketPage from "@/pages/nft-market";
 import GamesPage from "@/pages/games";
 import CasesPage from "@/pages/cases";
 import PvpPage from "@/pages/pvp";
@@ -123,8 +124,6 @@ function AppShell() {
       },
       {
         onSuccess: (data) => {
-          // Immediately populate the profile cache so every page that calls
-          // useGetUserProfile already has depositCode without waiting for refetch.
           qc.setQueryData(getGetUserProfileQueryKey(telegramId), data);
         },
       },
@@ -132,9 +131,6 @@ function AppShell() {
   }, [telegramId]);
 
   useEffect(() => {
-    // ⚠️ ВРЕМЕННО ДЛЯ РАЗРАБОТКИ: если telegramId нет (открыто не в Telegram),
-    // не делаем запрос и сразу считаем blockStatus = "ok", чтобы не зависать на загрузке.
-    // Вернуть оригинальную строку "if (!telegramId) return;" перед публикацией.
     if (!telegramId) {
       setBlockStatus("ok");
       return;
@@ -149,12 +145,6 @@ function AppShell() {
       })
       .catch(() => setBlockStatus("ok"));
   }, [telegramId]);
-
-  // ⚠️ ВРЕМЕННО ОТКЛЮЧЕНО ДЛЯ РАЗРАБОТКИ — ОБЯЗАТЕЛЬНО ВЕРНУТЬ ПЕРЕД ЗАПУСКОМ В ПРОДАКШН!
-  // Эта проверка блокирует доступ вне Telegram. Раскомментировать перед публикацией.
-  // if (!isInTelegram || !telegramId) {
-  //   return <TelegramOnlyScreen />;
-  // }
 
   if (blockStatus === "banned") return <BannedScreen reason={bannedReason} />;
   if (blockStatus === "soft_deleted") return <SoftDeletedScreen />;
@@ -186,6 +176,7 @@ function AppShell() {
         <Switch>
           <Route path="/" component={HomePage} />
           <Route path="/market" component={MarketPage} />
+          <Route path="/nft-market" component={NftMarketPage} />
           <Route path="/games" component={GamesPage} />
           <Route path="/cases" component={CasesPage} />
           <Route path="/pvp" component={PvpPage} />

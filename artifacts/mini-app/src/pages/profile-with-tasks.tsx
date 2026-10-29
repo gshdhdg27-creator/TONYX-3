@@ -2,25 +2,18 @@ import ProfilePage from "@/pages/profile";
 import { ProfileTasksButton } from "@/components/ProfileTasksButton";
 
 /**
- * Profile shell: inserts a Portals-style Tasks button above the existing profile UI.
- * (Keeps profile.tsx untouched to avoid a huge rewrite.)
+ * Profile shell: Tasks button under global Header, then profile content.
  */
 export default function ProfileWithTasksPage() {
   return (
-    <div style={{ position: "relative" }}>
-      {/* Floating Tasks entry — sits under header, above profile content */}
-      <div
-        style={{
-          position: "sticky",
-          top: 0,
-          zIndex: 20,
-          padding: "8px 16px 0",
-          background: "linear-gradient(180deg, hsl(240 16% 4%) 60%, transparent)",
-        }}
-      >
+    <div style={{ position: "relative", paddingTop: 8 }}>
+      <div style={{ padding: "48px 16px 0" }}>
         <ProfileTasksButton />
       </div>
-      <ProfilePage />
+      {/* ProfilePage has its own top padding for Header — slightly reduced feel via negative margin */}
+      <div style={{ marginTop: -40 }}>
+        <ProfilePage />
+      </div>
     </div>
   );
 }

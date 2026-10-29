@@ -9,6 +9,7 @@ import Header from "@/components/Header";
 import HomePage from "@/pages/home";
 import MarketPage from "@/pages/market";
 import NftMarketPage from "@/pages/nft-market";
+import InventoryPage from "@/pages/inventory";
 import GamesPage from "@/pages/games";
 import CasesPage from "@/pages/cases";
 import PvpPage from "@/pages/pvp";
@@ -67,38 +68,8 @@ function SoftDeletedScreen() {
   );
 }
 
-function TelegramOnlyScreen() {
-  return (
-    <div style={{
-      height: "100dvh",
-      display: "flex",
-      flexDirection: "column",
-      alignItems: "center",
-      justifyContent: "center",
-      background: "radial-gradient(circle at 50% -10%, rgba(37,99,235,0.18), transparent 55%), hsl(240 16% 4%)",
-      color: "hsl(210 40% 96%)",
-      fontFamily: "'Space Grotesk', 'Inter', system-ui, sans-serif",
-      padding: "0 32px",
-      textAlign: "center",
-      gap: 0,
-    }}>
-      <div style={{ fontSize: 64, marginBottom: 24 }}>✈️</div>
-      <div style={{ fontSize: 22, fontWeight: 900, color: "#f1f5f9", marginBottom: 12 }}>
-        Откройте в Telegram
-      </div>
-      <div style={{ fontSize: 14, color: "#475569", lineHeight: 1.6, maxWidth: 300 }}>
-        Это приложение работает только внутри официального Telegram WebApp.
-        Пожалуйста, запустите его через бота в Telegram.
-      </div>
-      <div style={{ marginTop: 32, padding: "12px 28px", borderRadius: 14, background: "rgba(37,99,235,0.15)", border: "1px solid rgba(37,99,235,0.35)", fontSize: 13, color: "#60a5fa", fontWeight: 700 }}>
-        @TONYX_Bot
-      </div>
-    </div>
-  );
-}
-
 function AppShell() {
-  const { telegramId, isInTelegram, username, firstName, lastName, photoUrl, startParam } = useTelegram();
+  const { telegramId, username, firstName, lastName, photoUrl, startParam } = useTelegram();
   const register = useRegisterUser();
   const qc = useQueryClient();
   const [blockStatus, setBlockStatus] = useState<"loading"|"ok"|"banned"|"soft_deleted">("loading");
@@ -177,6 +148,7 @@ function AppShell() {
           <Route path="/" component={HomePage} />
           <Route path="/market" component={MarketPage} />
           <Route path="/nft-market" component={NftMarketPage} />
+          <Route path="/inventory" component={InventoryPage} />
           <Route path="/games" component={GamesPage} />
           <Route path="/cases" component={CasesPage} />
           <Route path="/pvp" component={PvpPage} />

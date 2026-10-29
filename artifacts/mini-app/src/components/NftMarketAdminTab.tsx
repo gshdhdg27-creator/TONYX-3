@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import {
   loadNftMarketConfig,
   saveNftMarketConfig,
@@ -98,24 +98,21 @@ export function NftMarketAdminTab() {
     const hidden = cfg.hidden.includes(short)
       ? cfg.hidden.filter((s) => s !== short)
       : [...cfg.hidden, short];
-    const next = { ...cfg, hidden };
-    setCfg(next);
+    setCfg({ ...cfg, hidden });
   };
 
   const toggleFeatured = (short: string) => {
     const featured = cfg.featured.includes(short)
       ? cfg.featured.filter((s) => s !== short)
       : [...cfg.featured, short];
-    const next = { ...cfg, featured };
-    setCfg(next);
+    setCfg({ ...cfg, featured });
   };
 
   const toggleWhitelist = (short: string) => {
     const whitelist = cfg.whitelist.includes(short)
       ? cfg.whitelist.filter((s) => s !== short)
       : [...cfg.whitelist, short];
-    const next = { ...cfg, whitelist };
-    setCfg(next);
+    setCfg({ ...cfg, whitelist });
   };
 
   const applyPriceEdit = () => {
@@ -130,27 +127,19 @@ export function NftMarketAdminTab() {
       const s = parseInt(editStock, 10);
       if (Number.isFinite(s) && s >= 0) stock[editShort] = s;
     }
-    const next = { ...cfg, priceOverrides: overrides, stock };
-    setCfg(next);
+    setCfg({ ...cfg, priceOverrides: overrides, stock });
     setEditShort(null);
   };
 
-  const hideAll = () => {
-    const next = { ...cfg, hidden: gifts.map((g) => g.short) };
-    setCfg(next);
-  };
-
-  const showAll = () => {
-    const next = { ...cfg, hidden: [], whitelist: [] };
-    setCfg(next);
-  };
+  const hideAll = () => setCfg({ ...cfg, hidden: gifts.map((g) => g.short) });
+  const showAll = () => setCfg({ ...cfg, hidden: [], whitelist: [] });
 
   return (
     <div style={{ padding: "0 0 40px", color: "#e2e8f0" }}>
       <div style={card}>
         <div style={{ fontSize: 16, fontWeight: 900, marginBottom: 4 }}>NFT Market · управление</div>
         <div style={{ fontSize: 12, color: "#64748b", marginBottom: 14 }}>
-          Лоты, цены, наличие, покупка. Сохраняется на этом устройстве (localStorage).
+          Лоты, цены, сток, покупка. После правок нажми «Сохранить».
         </div>
 
         <Toggle
@@ -193,16 +182,15 @@ export function NftMarketAdminTab() {
           <button type="button" onClick={hideAll} style={btnGhost}>Скрыть все</button>
           <button
             type="button"
-            onClick={() => {
-              const next = {
+            onClick={() =>
+              setCfg({
                 ...cfg,
                 priceOverrides: {},
                 stock: {},
                 featured: [],
                 markupPercent: 0,
-              };
-              setCfg(next);
-            }}
+              })
+            }
             style={btnGhost}
           >
             Сброс цен/стока
@@ -289,7 +277,7 @@ export function NftMarketAdminTab() {
 
         {cfg.whitelist.length > 0 && (
           <div style={{ marginTop: 10, fontSize: 11, color: "#fbbf24" }}>
-            Whitelist активен: только {cfg.whitelist.length} подарков. Очисти WL кнопкой «Показать все».
+            Whitelist активен: только {cfg.whitelist.length} подарков. «Показать все» сбрасывает WL.
           </div>
         )}
       </div>
@@ -335,7 +323,6 @@ function Toggle({
       <div style={{
         width: 44, height: 26, borderRadius: 999, padding: 3,
         background: on ? "#22c55e" : "rgba(255,255,255,0.15)",
-        transition: "background 0.2s",
       }}>
         <div style={{
           width: 20, height: 20, borderRadius: "50%", background: "#fff",
@@ -346,36 +333,36 @@ function Toggle({
   );
 }
 
-const card: React.CSSProperties = {
+const card: CSSProperties = {
   background: "rgba(15,23,42,0.7)", border: "1px solid rgba(255,255,255,0.08)",
   borderRadius: 18, padding: 14,
 };
-const label: React.CSSProperties = { display: "block", fontSize: 11, color: "#64748b", fontWeight: 700, marginBottom: 6 };
-const input: React.CSSProperties = {
+const label: CSSProperties = { display: "block", fontSize: 11, color: "#64748b", fontWeight: 700, marginBottom: 6 };
+const input: CSSProperties = {
   width: "100%", boxSizing: "border-box", background: "rgba(0,0,0,0.35)",
   border: "1px solid rgba(255,255,255,0.12)", borderRadius: 12, padding: "10px 12px",
   color: "#e2e8f0", fontSize: 13, fontFamily: "inherit", outline: "none",
 };
-const btnPrimary: React.CSSProperties = {
+const btnPrimary: CSSProperties = {
   padding: "10px 16px", borderRadius: 12, border: "none",
   background: "linear-gradient(135deg,#0891b2,#22d3ee)", color: "#fff",
   fontWeight: 800, fontSize: 13, cursor: "pointer", fontFamily: "inherit",
 };
-const btnGhost: React.CSSProperties = {
+const btnGhost: CSSProperties = {
   padding: "10px 12px", borderRadius: 12,
   border: "1px solid rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.05)",
   color: "#94a3b8", fontWeight: 700, fontSize: 12, cursor: "pointer", fontFamily: "inherit",
 };
-const miniBtn: React.CSSProperties = {
+const miniBtn: CSSProperties = {
   padding: "4px 8px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.12)",
   background: "rgba(255,255,255,0.06)", color: "#cbd5e1", fontSize: 10, fontWeight: 700,
   cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap",
 };
-const modalBg: React.CSSProperties = {
+const modalBg: CSSProperties = {
   position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", zIndex: 300,
   display: "flex", alignItems: "center", justifyContent: "center", padding: 20,
 };
-const modal: React.CSSProperties = {
+const modal: CSSProperties = {
   width: "100%", maxWidth: 360, background: "#0f172a", borderRadius: 18,
   border: "1px solid rgba(255,255,255,0.1)", padding: 16,
 };

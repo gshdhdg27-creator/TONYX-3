@@ -15,7 +15,7 @@ import CasesPage from "@/pages/cases";
 import PvpPage from "@/pages/pvp";
 import SoloPage from "@/pages/solo";
 import TasksPage from "@/pages/tasks";
-import ProfilePage from "@/pages/profile";
+import ProfileWithTasksPage from "@/pages/profile-with-tasks";
 import LeaderboardPage from "@/pages/leaderboard";
 import AdminPage from "@/pages/admin";
 import { initTelegram, useTelegram } from "@/lib/telegram";
@@ -154,7 +154,7 @@ function AppShell() {
           <Route path="/pvp" component={PvpPage} />
           <Route path="/solo" component={SoloPage} />
           <Route path="/tasks" component={TasksPage} />
-          <Route path="/profile" component={ProfilePage} />
+          <Route path="/profile" component={ProfileWithTasksPage} />
           <Route path="/leaderboard" component={LeaderboardPage} />
           <Route path="/admin" component={AdminPage} />
         </Switch>

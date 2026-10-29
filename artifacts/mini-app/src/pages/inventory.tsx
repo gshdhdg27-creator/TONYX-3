@@ -5,7 +5,6 @@ import { inventoryApi, type InventoryItem } from "@/lib/inventoryApi";
 const IMG = (short: string) =>
   `https://cdn.jsdelivr.net/gh/ssamy2/TG_Photos@main/webp/by_name/${short}.webp`;
 
-/** Map itemId / name to CDN short name when possible */
 function giftImg(item: InventoryItem): string | null {
   if (item.imageUrl) return item.imageUrl;
   const raw = (item.itemId || item.nameEn || item.nameRu || "").toLowerCase();
@@ -44,7 +43,6 @@ export default function InventoryPage() {
 
   return (
     <div style={page}>
-      {/* Header like Portals My Gifts */}
       <div style={header}>
         <div>
           <div style={{ fontSize: 20, fontWeight: 900 }}>My Gifts</div>
@@ -57,7 +55,6 @@ export default function InventoryPage() {
         </div>
       </div>
 
-      {/* Tabs */}
       <div style={tabsRow}>
         <button type="button" onClick={() => setTab("gifts")} style={tabBtn(tab === "gifts")}>
           Мои подарки
@@ -161,9 +158,9 @@ export default function InventoryPage() {
   );
 }
 
-const page: CSSProperties = { minHeight: "100%", paddingBottom: 24, color: "#e8e8ed" };
+const page: CSSProperties = { minHeight: "100%", paddingTop: 56, paddingBottom: 24, color: "#e8e8ed" };
 const header: CSSProperties = {
-  display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 14px 8px",
+  display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 14px 8px",
 };
 const countPill: CSSProperties = {
   background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)",

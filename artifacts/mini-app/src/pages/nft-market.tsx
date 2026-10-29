@@ -1,8 +1,12 @@
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
-import { useGetUserProfile } from "@workspace/api-client-react";
 import { useTelegram, haptic } from "@/lib/telegram";
+import {
+  loadNftMarketConfig,
+  effectivePrice,
+  isGiftVisible,
+  type NftMarketConfig,
+} from "@/lib/nftMarketConfig";
 
-/** Live floors: Portals / Getgems / Fragment from ssamy2 dataset (auto-updated) */
 const PRICES_URL =
   "https://cdn.jsdelivr.net/gh/ssamy2/TelegramGiftsAssests@main/Gifts_Details.json";
 const IMG = (short: string) =>
@@ -11,7 +15,7 @@ const IMG = (short: string) =>
 type GiftRow = {
   name: string;
   short: string;
-  price: number; // Portals floor preferred
+  price: number;
   floor: number;
   getgems: number;
   tgmrkt: number;
@@ -28,7 +32,7 @@ type PriceSource = {
   tgmrkt_price_ton?: number;
 };
 
-function pickPrice(g: PriceSource): number {
+function pickFloor(g: PriceSource): number {
   const candidates = [
     g.portal_price_ton,
     g.floor_price_ton,
@@ -58,13 +62,9 @@ type Tab = "items" | "collections";
 type Sort = "price_asc" | "price_desc" | "name";
 
 export default function NftMarketPage() {
-  const { telegramId } = useTelegram();
-  const { data: profile } = useGetUserProfile(telegramId ?? "", {
-    query: { enabled: !!telegramId, refetchInterval: 15000 },
-  } as Parameters<typeof useGetUserProfile>[1]);
+  useTelegram();
 
-  const tonBalance = Number((profile as { ton?: string | number } | undefined)?.ton ?? 0);
-
+  const [cfg, setCfg] = useState<NftMarketConfig>(() => loadNftMarketConfig());
   const [gifts, setGifts] = useState<GiftRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -78,6 +78,16 @@ export default function NftMarketPage() {
   const [toast, setToast] = useState<string | null>(null);
 
   useEffect(() => {
+    const sync = () => setCfg(loadNftMarketConfig());
+    window.addEventListener("tonyx-nft-cfg", sync);
+    window.addEventListener("storage", sync);
+    return () => {
+      window.removeEventListener("tonyx-nft-cfg", sync);
+      window.removeEventListener("storage", sync);
+    };
+  }, []);
+
+  useEffect(() => {
     let cancelled = false;
     (async () => {
       setLoading(true);
@@ -88,22 +98,18 @@ export default function NftMarketPage() {
         const data = (await res.json()) as { upgraded?: PriceSource[] };
         const rows: GiftRow[] = (data.upgraded ?? [])
           .map((g) => {
-            const portal = Number(g.portal_price_ton) || 0;
-            const floor = Number(g.floor_price_ton) || 0;
-            const getgems = Number(g.getgems_price_ton) || 0;
-            const tgmrkt = Number(g.tgmrkt_price_ton) || 0;
-            const price = pickPrice(g);
+            const floor = pickFloor(g);
             return {
               name: g.full_name,
               short: g.short_name,
-              price,
-              floor: floor || price,
-              getgems: getgems || price,
-              tgmrkt: tgmrkt || price,
+              price: floor,
+              floor,
+              getgems: Number(g.getgems_price_ton) || floor,
+              tgmrkt: Number(g.tgmrkt_price_ton) || floor,
               id: String(g.regular_id ?? g.short_name),
             };
           })
-          .filter((g) => g.short && g.price > 0);
+          .filter((g) => g.short && g.floor > 0);
         if (!cancelled) {
           setGifts(rows);
           setUpdatedAt(new Date().toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }));
@@ -119,8 +125,17 @@ export default function NftMarketPage() {
     };
   }, []);
 
+  const priced = useMemo(() => {
+    return gifts
+      .filter((g) => isGiftVisible(g.short, cfg))
+      .map((g) => ({
+        ...g,
+        price: effectivePrice(g.short, g.floor, cfg),
+      }));
+  }, [gifts, cfg]);
+
   const listings = useMemo(() => {
-    let list = [...gifts];
+    let list = [...priced];
     const q = search.toLowerCase().trim();
     if (q) {
       list = list.filter(
@@ -130,15 +145,21 @@ export default function NftMarketPage() {
           g.id.includes(q),
       );
     }
-    if (sort === "price_asc") list.sort((a, b) => a.price - b.price);
-    if (sort === "price_desc") list.sort((a, b) => b.price - a.price);
-    if (sort === "name") list.sort((a, b) => a.name.localeCompare(b.name));
+    // featured first
+    list.sort((a, b) => {
+      const fa = cfg.featured.includes(a.short) ? 0 : 1;
+      const fb = cfg.featured.includes(b.short) ? 0 : 1;
+      if (fa !== fb) return fa - fb;
+      if (sort === "price_asc") return a.price - b.price;
+      if (sort === "price_desc") return b.price - a.price;
+      return a.name.localeCompare(b.name);
+    });
     return list;
-  }, [gifts, search, sort]);
+  }, [priced, search, sort, cfg.featured]);
 
   const collections = useMemo(() => {
-    return [...gifts].sort((a, b) => b.price - a.price);
-  }, [gifts]);
+    return [...priced].sort((a, b) => b.price - a.price);
+  }, [priced]);
 
   const flash = (msg: string) => {
     setToast(msg);
@@ -148,6 +169,10 @@ export default function NftMarketPage() {
   const handleBuy = async () => {
     if (!selected) return;
     haptic("medium");
+    if (!cfg.buyEnabled) {
+      flash("Покупка временно отключена админом");
+      return;
+    }
     setBuying(true);
     await new Promise((r) => setTimeout(r, 800));
     setBuying(false);
@@ -161,84 +186,94 @@ export default function NftMarketPage() {
 
       {toast && <div style={toastStyle}>{toast}</div>}
 
+      {/* top padding under global Header balance */}
       <div style={header}>
         <div>
           <div style={{ fontSize: 20, fontWeight: 900, letterSpacing: 0.2 }}>NFT Market</div>
           <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>
-            Реальные цены Portals / Getgems
+            {cfg.bannerText}
             {updatedAt ? ` · ${updatedAt}` : ""}
           </div>
         </div>
-        <div style={balancePill}>
-          <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#38bdf8", boxShadow: "0 0 8px #38bdf8" }} />
-          <span style={{ fontWeight: 800, color: "#e2e8f0" }}>{tonBalance.toFixed(2)}</span>
-          <span style={{ color: "#64748b", fontWeight: 700 }}>TON</span>
-        </div>
       </div>
 
-      <div style={banner}>
-        <div style={{ fontSize: 13, fontWeight: 800, color: "#e2e8f0" }}>
-          🎁 {loading ? "…" : gifts.length} коллекций · floor live
+      {!cfg.enabled && (
+        <div style={{ margin: "0 14px 12px", padding: 20, borderRadius: 16, textAlign: "center",
+          background: "rgba(248,113,113,0.1)", border: "1px solid rgba(248,113,113,0.3)", color: "#fca5a5", fontSize: 13, fontWeight: 700 }}>
+          Маркет временно закрыт
         </div>
-        <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>
-          Источник: Portals floor (ssamy2 / TelegramGiftsAssests)
+      )}
+
+      {cfg.enabled && (
+        <div style={banner}>
+          <div style={{ fontSize: 13, fontWeight: 800, color: "#e2e8f0" }}>
+            🎁 {loading ? "…" : listings.length} лотов
+            {cfg.markupPercent ? ` · +${cfg.markupPercent}%` : ""}
+          </div>
+          <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>
+            Цены от Portals floor · управление в админке → NFT
+          </div>
         </div>
-      </div>
+      )}
 
-      <div style={tabsRow}>
-        <button type="button" onClick={() => setTab("items")} style={tabBtn(tab === "items")}>
-          All items
-        </button>
-        <button type="button" onClick={() => setTab("collections")} style={tabBtn(tab === "collections")}>
-          Collections
-        </button>
-      </div>
-
-      <div style={{ padding: "0 14px 10px" }}>
-        <div style={{ display: "flex", gap: 6, marginBottom: 10, overflowX: "auto" }}>
-          {(
-            [
-              ["price_asc", "Цена ↑"],
-              ["price_desc", "Цена ↓"],
-              ["name", "Имя"],
-            ] as const
-          ).map(([k, label]) => (
-            <button
-              key={k}
-              type="button"
-              onClick={() => setSort(k)}
-              style={{
-                ...chip,
-                borderColor: sort === k ? "rgba(56,189,248,0.5)" : "rgba(255,255,255,0.08)",
-                background: sort === k ? "rgba(56,189,248,0.15)" : "rgba(255,255,255,0.05)",
-                color: sort === k ? "#7dd3fc" : "#94a3b8",
-              }}
-            >
-              {label}
+      {cfg.enabled && (
+        <>
+          <div style={tabsRow}>
+            <button type="button" onClick={() => setTab("items")} style={tabBtn(tab === "items")}>
+              All items
             </button>
-          ))}
-        </div>
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by name or ID"
-          style={searchInput}
-        />
-      </div>
+            <button type="button" onClick={() => setTab("collections")} style={tabBtn(tab === "collections")}>
+              Collections
+            </button>
+          </div>
 
-      {loading && (
+          <div style={{ padding: "0 14px 10px" }}>
+            <div style={{ display: "flex", gap: 6, marginBottom: 10, overflowX: "auto" }}>
+              {(
+                [
+                  ["price_asc", "Цена ↑"],
+                  ["price_desc", "Цена ↓"],
+                  ["name", "Имя"],
+                ] as const
+              ).map(([k, label]) => (
+                <button
+                  key={k}
+                  type="button"
+                  onClick={() => setSort(k)}
+                  style={{
+                    ...chip,
+                    borderColor: sort === k ? "rgba(56,189,248,0.5)" : "rgba(255,255,255,0.08)",
+                    background: sort === k ? "rgba(56,189,248,0.15)" : "rgba(255,255,255,0.05)",
+                    color: sort === k ? "#7dd3fc" : "#94a3b8",
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by name or ID"
+              style={searchInput}
+            />
+          </div>
+        </>
+      )}
+
+      {loading && cfg.enabled && (
         <div style={{ textAlign: "center", color: "#64748b", padding: 40, fontSize: 13 }}>
           Загрузка актуальных цен…
         </div>
       )}
 
-      {loadError && !loading && (
+      {loadError && !loading && cfg.enabled && (
         <div style={{ textAlign: "center", color: "#f87171", padding: 24, fontSize: 13 }}>
           Не удалось загрузить цены: {loadError}
         </div>
       )}
 
-      {!loading && !loadError && tab === "items" && (
+      {!loading && !loadError && cfg.enabled && tab === "items" && (
         <div style={grid}>
           {listings.map((g, i) => (
             <button
@@ -263,7 +298,9 @@ export default function NftMarketPage() {
                 />
               </div>
               <div style={cardBody}>
-                <div style={cardName}>{g.name}</div>
+                <div style={cardName}>
+                  {cfg.featured.includes(g.short) ? "★ " : ""}{g.name}
+                </div>
                 <div style={cardId}>#{g.id.slice(-6)}</div>
                 <div style={priceBtn}>
                   <TonIcon />
@@ -280,7 +317,7 @@ export default function NftMarketPage() {
         </div>
       )}
 
-      {!loading && !loadError && tab === "collections" && (
+      {!loading && !loadError && cfg.enabled && tab === "collections" && (
         <div style={{ padding: "0 14px 24px", display: "flex", flexDirection: "column", gap: 8 }}>
           {collections
             .filter((c) => {
@@ -310,7 +347,7 @@ export default function NftMarketPage() {
                     <TonIcon size={12} />
                     {fmtPrice(c.price)}
                   </div>
-                  <div style={{ fontSize: 10, color: "#64748b", marginTop: 2 }}>Portals</div>
+                  <div style={{ fontSize: 10, color: "#64748b", marginTop: 2 }}>Sale</div>
                 </div>
               </button>
             ))}
@@ -322,9 +359,7 @@ export default function NftMarketPage() {
           <div style={modalSheet} onClick={(e) => e.stopPropagation()}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
               <div style={{ fontSize: 16, fontWeight: 900 }}>Купить подарок</div>
-              <button type="button" onClick={() => setSelected(null)} style={closeBtn}>
-                ×
-              </button>
+              <button type="button" onClick={() => setSelected(null)} style={closeBtn}>×</button>
             </div>
 
             <div style={modalHero}>
@@ -338,42 +373,37 @@ export default function NftMarketPage() {
 
             <div style={modalStats}>
               <div style={statCell}>
-                <div style={statLabel}>Portals</div>
-                <div style={statValue}>
-                  <TonIcon /> {fmtPrice(selected.price)}
-                </div>
+                <div style={statLabel}>Цена</div>
+                <div style={statValue}><TonIcon /> {fmtPrice(selected.price)}</div>
+              </div>
+              <div style={statCell}>
+                <div style={statLabel}>Portals floor</div>
+                <div style={statValue}><TonIcon /> {fmtPrice(selected.floor)}</div>
               </div>
               <div style={statCell}>
                 <div style={statLabel}>Getgems</div>
-                <div style={statValue}>
-                  <TonIcon /> {fmtPrice(selected.getgems)}
-                </div>
+                <div style={statValue}><TonIcon /> {fmtPrice(selected.getgems)}</div>
               </div>
               <div style={statCell}>
-                <div style={statLabel}>Floor</div>
+                <div style={statLabel}>Сток</div>
                 <div style={statValue}>
-                  <TonIcon /> {fmtPrice(selected.floor)}
-                </div>
-              </div>
-              <div style={statCell}>
-                <div style={statLabel}>Ваш баланс</div>
-                <div style={statValue}>
-                  <TonIcon /> {tonBalance.toFixed(2)}
+                  {cfg.stock[selected.short] == null ? "∞" : cfg.stock[selected.short]}
                 </div>
               </div>
             </div>
 
             <button
               type="button"
-              disabled={buying}
+              disabled={buying || !cfg.buyEnabled}
               onClick={handleBuy}
-              style={{ ...buyBtn, opacity: buying ? 0.6 : 1 }}
+              style={{ ...buyBtn, opacity: buying || !cfg.buyEnabled ? 0.55 : 1 }}
             >
-              {buying ? "Обработка…" : `Купить · ${fmtPrice(selected.price)} TON`}
+              {!cfg.buyEnabled
+                ? "Покупка отключена"
+                : buying
+                  ? "Обработка…"
+                  : `Купить · ${fmtPrice(selected.price)} TON`}
             </button>
-            <div style={{ fontSize: 11, color: "#475569", textAlign: "center", marginTop: 10 }}>
-              Цены live с рынка · покупка скоро
-            </div>
           </div>
         </div>
       )}
@@ -391,12 +421,16 @@ function TonIcon({ size = 14 }: { size?: number }) {
   );
 }
 
-const page: CSSProperties = { minHeight: "100%", paddingBottom: 20, color: "#e8e8ed", background: "transparent" };
-const header: CSSProperties = { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 14px 8px" };
-const balancePill: CSSProperties = {
-  display: "flex", alignItems: "center", gap: 6,
-  background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)",
-  borderRadius: 999, padding: "8px 12px", fontSize: 13,
+const page: CSSProperties = {
+  minHeight: "100%",
+  paddingTop: 56,
+  paddingBottom: 20,
+  color: "#e8e8ed",
+  background: "transparent",
+};
+const header: CSSProperties = {
+  display: "flex", alignItems: "center", justifyContent: "space-between",
+  padding: "8px 14px 8px",
 };
 const banner: CSSProperties = {
   margin: "0 14px 12px", padding: "12px 14px", borderRadius: 16,
@@ -477,20 +511,15 @@ const statCell: CSSProperties = {
   background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)",
   borderRadius: 12, padding: "10px 12px",
 };
-const statLabel: CSSProperties = {
-  fontSize: 10, color: "#64748b", fontWeight: 700, letterSpacing: "0.06em", marginBottom: 4,
-};
-const statValue: CSSProperties = {
-  fontSize: 16, fontWeight: 900, color: "#e2e8f0", display: "flex", alignItems: "center", gap: 5,
-};
+const statLabel: CSSProperties = { fontSize: 10, color: "#64748b", fontWeight: 700, marginBottom: 4 };
+const statValue: CSSProperties = { fontSize: 14, fontWeight: 800, color: "#e2e8f0", display: "flex", alignItems: "center", gap: 4 };
 const buyBtn: CSSProperties = {
   width: "100%", padding: "14px 0", borderRadius: 14, border: "none",
-  background: "linear-gradient(135deg,#0098EA,#38bdf8)", color: "#fff",
+  background: "linear-gradient(135deg,#0077b5,#0098EA)", color: "#fff",
   fontSize: 15, fontWeight: 800, cursor: "pointer", fontFamily: "inherit",
-  boxShadow: "0 8px 28px rgba(0,152,234,0.35)",
 };
 const toastStyle: CSSProperties = {
-  position: "fixed", top: 16, left: "50%", transform: "translateX(-50%)", zIndex: 300,
-  background: "rgba(30,64,175,0.95)", color: "#fff", padding: "10px 18px",
-  borderRadius: 12, fontSize: 13, fontWeight: 700, boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
+  position: "fixed", top: 72, left: "50%", transform: "translateX(-50%)", zIndex: 400,
+  background: "rgba(15,23,42,0.95)", border: "1px solid rgba(56,189,248,0.4)",
+  color: "#e2e8f0", padding: "10px 16px", borderRadius: 12, fontSize: 13, fontWeight: 700,
 };

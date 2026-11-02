@@ -93,7 +93,7 @@ export default function SoloPage() {
 
   if (tab === "plinko") {
     return (
-      <div style={{ minHeight: "100dvh", padding: "12px 12px 110px", background: "#0a0612" }}>
+      <div style={{ minHeight: "100dvh", padding: "12px 12px 140px", background: "#0a0612" }}>
         <button type="button" onClick={() => setTab("pick")} style={back}>
           ← Назад
         </button>

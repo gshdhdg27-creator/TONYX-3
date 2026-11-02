@@ -139,7 +139,6 @@ export function GameCard({
         }
       `}</style>
 
-      {/* background */}
       <div style={{ position: "absolute", inset: 0, background: gradient }} />
       <div
         style={{
@@ -149,7 +148,6 @@ export function GameCard({
             "radial-gradient(ellipse 80% 60% at 50% 20%, rgba(255,255,255,0.18), transparent 55%), linear-gradient(180deg, transparent 35%, rgba(0,0,0,0.55) 100%)",
         }}
       />
-      {/* grid texture */}
       <div
         style={{
           position: "absolute",
@@ -161,7 +159,6 @@ export function GameCard({
           pointerEvents: "none",
         }}
       />
-      {/* shine */}
       <div
         style={{
           position: "absolute",
@@ -175,7 +172,6 @@ export function GameCard({
         }}
       />
 
-      {/* NEW badge top-right */}
       {badge && (
         <span
           style={{
@@ -198,7 +194,6 @@ export function GameCard({
         </span>
       )}
 
-      {/* online top-left */}
       {online != null && (
         <span style={onlinePill}>
           <span
@@ -216,18 +211,16 @@ export function GameCard({
         </span>
       )}
 
-      {/* scene art */}
       <div style={{ position: "absolute", left: 0, right: 0, top: online != null ? 28 : 16, zIndex: 2 }}>
-        {emoji && !scene ? (
-          <div style={{ textAlign: "center", fontSize: wide ? 64 : 52, animation: "gcFloat 3s ease-in-out infinite" }}>
-            {emoji}
-          </div>
-        ) : (
+        {scene && scene !== "generic" ? (
           <Scene kind={scene} wide={wide} />
+        ) : (
+          <div style={{ textAlign: "center", fontSize: wide ? 64 : 52, animation: "gcFloat 3s ease-in-out infinite" }}>
+            {emoji || "🎮"}
+          </div>
         )}
       </div>
 
-      {/* title */}
       <div style={nameStyle}>{name}</div>
       {footer}
     </button>

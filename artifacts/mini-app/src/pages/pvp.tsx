@@ -8,11 +8,6 @@ import { GameCard } from "@/components/GameCard";
 
 type Tab = "pick" | "arena" | "spin";
 
-const LOTTIE = {
-  arena: "https://assets2.lottiefiles.com/packages/lf20_ydo1amjm.json",
-  spin: "https://assets9.lottiefiles.com/packages/lf20_CQp5Qv.json",
-};
-
 export default function PvpPage() {
   const { telegramId } = useTelegram();
   const qc = useQueryClient();
@@ -60,33 +55,26 @@ export default function PvpPage() {
   return (
     <div style={page}>
       <div style={header}>
-        <div style={title}>PvP игры</div>
-        <div style={sub}>Snoop Dogg Arena · TONYX</div>
+        <div style={title}>PvP</div>
+        <div style={sub}>Арена · Spin</div>
       </div>
 
-      <div
-        style={{
-          padding: "8px 16px 120px",
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr",
-          gap: 12,
-        }}
-      >
+      <div style={{ padding: "8px 16px 120px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         <GameCard
-          name="Арена"
+          name="АРЕНА"
           badge="PvP"
           badgeColor="#a855f7"
-          lottieSrc={LOTTIE.arena}
-          emoji="⚔"
+          online={42}
+          emoji="⚔️"
           gradient="linear-gradient(160deg, #1a0a2e 0%, #2e1065 45%, #0f172a 100%)"
           accent="rgba(168,85,247,0.55)"
           onClick={() => setTab("arena")}
         />
         <GameCard
-          name="Spin"
-          badge="Solo"
+          name="SPIN"
+          badge="LIVE"
           badgeColor="#22d3ee"
-          lottieSrc={LOTTIE.spin}
+          online={21}
           emoji="🎡"
           gradient="linear-gradient(160deg, #042f2e 0%, #0e7490 45%, #0f172a 100%)"
           accent="rgba(34,211,238,0.5)"
@@ -99,26 +87,14 @@ export default function PvpPage() {
 
 const page: CSSProperties = {
   minHeight: "100dvh",
-  background: "#0a0612",
+  background: "radial-gradient(ellipse at 50% -5%, #3b1d6d 0%, #0a0612 55%)",
   color: "#e2e8f0",
   fontFamily: "Inter, system-ui, sans-serif",
 };
 
-const header: CSSProperties = {
-  padding: "18px 16px 8px",
-};
-
-const title: CSSProperties = {
-  fontSize: 22,
-  fontWeight: 900,
-};
-
-const sub: CSSProperties = {
-  fontSize: 12,
-  color: "#64748b",
-  marginTop: 4,
-};
-
+const header: CSSProperties = { padding: "18px 16px 8px" };
+const title: CSSProperties = { fontSize: 28, fontWeight: 900 };
+const sub: CSSProperties = { fontSize: 13, color: "#c4b5fd", marginTop: 4, fontWeight: 600 };
 const back: CSSProperties = {
   margin: "12px 16px",
   background: "rgba(255,255,255,0.06)",

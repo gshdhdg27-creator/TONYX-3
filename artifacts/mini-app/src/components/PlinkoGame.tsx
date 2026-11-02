@@ -6,7 +6,7 @@ const PRESETS = [0.1, 0.5, 1, 2, 5];
 type Risk = "low" | "med" | "high";
 
 function buildTable(rows: number, risk: Risk): number[] {
-  const TABLES: Record<string, Record<number, number[]>> = {
+  const TABLES: Record<Risk, Record<number, number[]>> = {
     low: {
       8:  [2.0, 1.5, 1.2, 1.0, 0.9, 1.0, 1.2, 1.5, 2.0],
       9:  [2.2, 1.6, 1.3, 1.1, 0.9, 0.9, 1.1, 1.3, 1.6, 2.2],
@@ -41,22 +41,22 @@ function buildTable(rows: number, risk: Risk): number[] {
       16: [75, 18, 5.0, 1.6, 0.7, 0.3, 0.15, 0.1, 0.05, 0.1, 0.15, 0.3, 0.7, 1.6, 5.0, 18, 75],
     },
   };
-  const byRisk = TABLES[risk] ?? TABLES.med;
-  const t = byRisk[rows];
-  if (t && t.length === rows + 1) return t;
-  const keys = Object.keys(byRisk).map(Number).sort((a, b) => a - b);
-  const nearest = keys.reduce((a, b) => (Math.abs(b - rows) < Math.abs(a - rows) ? b : a), 12);
-  return byRisk[nearest] ?? TABLES.med[12]!;
+  const byRisk = TABLES[risk];
+  return byRisk[rows] ?? byRisk[12]!;
 }
 
 function bucketColor(m: number, max: number): string {
   const t = max > 0 ? Math.min(1, m / max) : 0;
-  if (t >= 0.7) return "#ff4d8d";
-  if (t >= 0.45) return "#ff7a45";
-  if (t >= 0.28) return "#ffb020";
-  if (t >= 0.15) return "#e8d44a";
-  if (t >= 0.08) return "#9fd84a";
+  if (t >= 0.55) return "#ff4d8d";
+  if (t >= 0.28) return "#f5c542";
+  if (t >= 0.12) return "#9fd84a";
   return "#3dd68c";
+}
+
+function fmtMult(m: number): string {
+  if (m >= 10) return `×${Math.round(m)}`;
+  if (m >= 1) return `×${m % 1 === 0 ? m.toFixed(0) : m}`;
+  return `×${m}`;
 }
 
 function haptic(t: "light" | "medium" | "heavy" = "light") {
@@ -64,24 +64,6 @@ function haptic(t: "light" | "medium" | "heavy" = "light") {
 }
 function hapticNotify(t: "success" | "error") {
   try { (window as any).Telegram?.WebApp?.HapticFeedback?.notificationOccurred?.(t); } catch { /* */ }
-}
-
-function pegPositions(rows: number, W: number, topY: number, pegAreaH: number, padX: number) {
-  const pts: { x: number; y: number; r: number }[][] = [];
-  for (let r = 0; r < rows; r++) {
-    const count = r + 3;
-    const y = topY + ((r + 0.55) / rows) * pegAreaH;
-    const spanFrac = (count - 1) / (rows + 2);
-    const usable = W - padX * 2;
-    const span = usable * Math.min(1, spanFrac * 1.05 + 0.15);
-    const row: { x: number; y: number; r: number }[] = [];
-    for (let c = 0; c < count; c++) {
-      const x = count === 1 ? W / 2 : W / 2 - span / 2 + (c / (count - 1)) * span;
-      row.push({ x, y, r });
-    }
-    pts.push(row);
-  }
-  return pts;
 }
 
 function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
@@ -95,11 +77,32 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
   ctx.closePath();
 }
 
+/** Classic triangle: row r has r+1 pegs, bottom row aligns with bucket gaps */
+function pegLayout(rows: number, W: number, topY: number, areaH: number, pad: number) {
+  const rowsPts: { x: number; y: number }[][] = [];
+  for (let r = 0; r < rows; r++) {
+    const count = r + 1; // 1,2,3...rows — classic plinko pyramid
+    // Actually reference starts ~3; use r+1 but scale span to full width on last row
+    const n = r + 1;
+    const y = topY + ((r + 0.5) / rows) * areaH;
+    const usable = W - pad * 2;
+    // last row span = almost full; earlier rows proportional
+    const span = usable * (n / rows);
+    const row: { x: number; y: number }[] = [];
+    for (let c = 0; c < n; c++) {
+      const x = n === 1 ? W / 2 : W / 2 - span / 2 + (c / (n - 1)) * span;
+      row.push({ x, y });
+    }
+    rowsPts.push(row);
+  }
+  return rowsPts;
+}
+
 export default function PlinkoGame({
   telegramId, balance, onBalanceChange,
 }: { telegramId: string; balance: number; onBalanceChange: () => void }) {
   const [stake, setStake] = useState(0.5);
-  const [risk, setRisk] = useState<Risk>("high");
+  const [risk, setRisk] = useState<Risk>("med");
   const [rows, setRows] = useState(12);
   const [busy, setBusy] = useState(false);
   const [hit, setHit] = useState<number | null>(null);
@@ -109,7 +112,7 @@ export default function PlinkoGame({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const ballRef = useRef<{ x: number; y: number; visible: boolean }>({ x: 0, y: 0, visible: false });
   const animRef = useRef(0);
-  const pegsRef = useRef<{ x: number; y: number; r: number }[][]>([]);
+  const pegsRef = useRef<{ x: number; y: number }[][]>([]);
 
   const table = useMemo(() => buildTable(rows, risk), [rows, risk]);
   const maxM = useMemo(() => Math.max(...table, 1), [table]);
@@ -118,8 +121,8 @@ export default function PlinkoGame({
     const c = canvasRef.current;
     if (!c) return;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const W = c.clientWidth;
-    const H = c.clientHeight;
+    const W = Math.max(1, c.clientWidth);
+    const H = Math.max(1, c.clientHeight);
     if (c.width !== Math.floor(W * dpr) || c.height !== Math.floor(H * dpr)) {
       c.width = Math.floor(W * dpr);
       c.height = Math.floor(H * dpr);
@@ -129,91 +132,102 @@ export default function PlinkoGame({
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, W, H);
 
-    ctx.fillStyle = "rgba(255,255,255,0.4)";
-    for (const [sx, sy] of [[0.12,0.08],[0.88,0.1],[0.2,0.35],[0.8,0.32],[0.08,0.55],[0.92,0.5],[0.15,0.75],[0.85,0.7]] as number[][]) {
+    // stars
+    ctx.fillStyle = "rgba(255,255,255,0.35)";
+    [[0.1,0.12],[0.9,0.14],[0.18,0.4],[0.82,0.38],[0.12,0.68],[0.88,0.65]].forEach(([sx, sy]) => {
       ctx.beginPath();
-      ctx.arc(sx * W, sy * H, 1.1, 0, Math.PI * 2);
+      ctx.arc(sx * W, sy * H, 1.2, 0, Math.PI * 2);
       ctx.fill();
-    }
+    });
 
-    const padX = 16;
-    const topY = 40;
-    const bucketH = 38;
-    const pegAreaH = H - topY - bucketH - 6;
+    const pad = 12;
+    const topY = 36;
+    const bucketH = 36;
+    const areaH = H - topY - bucketH - 4;
     const slots = table.length;
 
+    // gold dropper
     const dx = W / 2;
-    const dy = 12;
-    const g = ctx.createLinearGradient(dx - 30, dy, dx + 30, dy + 14);
-    g.addColorStop(0, "#ffe9a8");
-    g.addColorStop(0.5, "#f5c542");
-    g.addColorStop(1, "#c99212");
-    ctx.fillStyle = g;
-    ctx.shadowColor = "rgba(245,197,66,0.7)";
-    ctx.shadowBlur = 14;
-    roundRect(ctx, dx - 28, dy, 56, 14, 7);
+    const grad = ctx.createLinearGradient(dx - 24, 10, dx + 24, 22);
+    grad.addColorStop(0, "#ffe9a8");
+    grad.addColorStop(0.5, "#f5c542");
+    grad.addColorStop(1, "#c99212");
+    ctx.fillStyle = grad;
+    ctx.shadowColor = "rgba(245,197,66,0.65)";
+    ctx.shadowBlur = 12;
+    roundRect(ctx, dx - 24, 10, 48, 12, 6);
     ctx.fill();
     ctx.shadowBlur = 0;
 
-    const pegs = pegPositions(rows, W, topY, pegAreaH, padX);
+    // pegs — start from 3 for nicer triangle like reference
+    const pegs: { x: number; y: number }[][] = [];
+    for (let r = 0; r < rows; r++) {
+      const count = r + 3;
+      const y = topY + ((r + 0.5) / rows) * areaH;
+      const usable = W - pad * 2;
+      const span = usable * Math.min(1, (count - 1) / (rows + 2) + 0.12);
+      const row: { x: number; y: number }[] = [];
+      for (let i = 0; i < count; i++) {
+        const x = count === 1 ? W / 2 : W / 2 - span / 2 + (i / (count - 1)) * span;
+        row.push({ x, y });
+      }
+      pegs.push(row);
+    }
     pegsRef.current = pegs;
-    const pegR = Math.max(3, Math.min(5, (W - padX * 2) / (rows * 2.8)));
 
+    const pegR = Math.max(2.8, Math.min(4.5, (W - pad * 2) / (rows * 2.6)));
     for (const row of pegs) {
       for (const p of row) {
-        const gg = ctx.createRadialGradient(p.x - pegR * 0.35, p.y - pegR * 0.35, 0, p.x, p.y, pegR);
-        gg.addColorStop(0, "#ffffff");
-        gg.addColorStop(0.35, "#ddd6fe");
-        gg.addColorStop(1, "#8b5cf6");
+        const g = ctx.createRadialGradient(p.x - pegR * 0.3, p.y - pegR * 0.3, 0, p.x, p.y, pegR);
+        g.addColorStop(0, "#fff");
+        g.addColorStop(0.4, "#ddd6fe");
+        g.addColorStop(1, "#7c3aed");
         ctx.beginPath();
         ctx.arc(p.x, p.y, pegR, 0, Math.PI * 2);
-        ctx.fillStyle = gg;
-        ctx.fill();
-        ctx.beginPath();
-        ctx.arc(p.x - pegR * 0.28, p.y - pegR * 0.28, pegR * 0.28, 0, Math.PI * 2);
-        ctx.fillStyle = "rgba(255,255,255,0.65)";
+        ctx.fillStyle = g;
         ctx.fill();
       }
     }
 
-    const bw = (W - padX * 2) / slots;
+    // buckets
+    const bw = (W - pad * 2) / slots;
     table.forEach((m, i) => {
-      const x = padX + i * bw;
+      const x = pad + i * bw;
       const y = H - bucketH;
       const col = bucketColor(m, maxM);
       const active = highlight === i;
-      ctx.shadowColor = active ? col : "transparent";
-      ctx.shadowBlur = active ? 16 : 0;
       ctx.fillStyle = col;
-      roundRect(ctx, x + 1.5, y, bw - 3, bucketH - 8, 8);
+      ctx.shadowColor = active ? col : "transparent";
+      ctx.shadowBlur = active ? 14 : 0;
+      roundRect(ctx, x + 1, y, bw - 2, bucketH - 6, 6);
       ctx.fill();
       ctx.shadowBlur = 0;
       if (active) {
         ctx.strokeStyle = "#fff";
-        ctx.lineWidth = 2;
-        roundRect(ctx, x + 1.5, y, bw - 3, bucketH - 8, 8);
+        ctx.lineWidth = 1.5;
+        roundRect(ctx, x + 1, y, bw - 2, bucketH - 6, 6);
         ctx.stroke();
       }
       ctx.fillStyle = "#1a1030";
-      const fs = Math.max(7, Math.min(11, bw * 0.38));
-      ctx.font = `800 ${fs}px system-ui, -apple-system, sans-serif`;
+      const fs = Math.max(6, Math.min(10, bw * 0.4));
+      ctx.font = `800 ${fs}px system-ui,sans-serif`;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText(m >= 10 ? `×${Math.round(m)}` : `×${m}`, x + bw / 2, y + (bucketH - 8) / 2);
+      ctx.fillText(fmtMult(m), x + bw / 2, y + (bucketH - 6) / 2);
     });
 
     const b = ballRef.current;
     if (b.visible) {
-      const br = Math.max(5.5, pegR * 1.25);
+      const br = Math.max(5, pegR * 1.3);
       ctx.beginPath();
       ctx.arc(b.x, b.y, br, 0, Math.PI * 2);
       const bg = ctx.createRadialGradient(b.x - 2, b.y - 2, 0, b.x, b.y, br);
-      bg.addColorStop(0, "#ffffff");
-      bg.addColorStop(0.4, "#e9d5ff");
+      bg.addColorStop(0, "#fff");
+      bg.addColorStop(0.45, "#e9d5ff");
       bg.addColorStop(1, "#a855f7");
       ctx.fillStyle = bg;
       ctx.shadowColor = "#c084fc";
-      ctx.shadowBlur = 18;
+      ctx.shadowBlur = 14;
       ctx.fill();
       ctx.shadowBlur = 0;
     }
@@ -223,7 +237,10 @@ export default function PlinkoGame({
   useEffect(() => {
     const onR = () => draw(hit);
     window.addEventListener("resize", onR);
-    return () => { window.removeEventListener("resize", onR); cancelAnimationFrame(animRef.current); };
+    return () => {
+      window.removeEventListener("resize", onR);
+      cancelAnimationFrame(animRef.current);
+    };
   }, [draw, hit]);
 
   const flash = (msg: string) => {
@@ -238,30 +255,30 @@ export default function PlinkoGame({
       if (!pegs.length) { resolve(); return; }
 
       const first = pegs[0]!;
-      const startX = first.length ? (first[0]!.x + first[first.length - 1]!.x) / 2 : 0;
-      ballRef.current = { x: startX, y: first[0]!.y - 22, visible: true };
+      const startX = (first[0]!.x + first[first.length - 1]!.x) / 2;
+      ballRef.current = { x: startX, y: first[0]!.y - 20, visible: true };
 
       let step = 0;
-      let pegIndex = 0;
+      let pegIndex = Math.floor(first.length / 2);
 
       const go = () => {
         if (step >= path.length || step >= pegs.length) {
           const c = canvasRef.current;
           const W = c?.clientWidth ?? 300;
-          const H = c?.clientHeight ?? 360;
-          const padX = 16;
-          const bw = (W - padX * 2) / table.length;
-          const targetX = padX + finalSlot * bw + bw / 2;
-          const targetY = H - 20;
+          const H = c?.clientHeight ?? 320;
+          const pad = 12;
+          const bw = (W - pad * 2) / table.length;
+          const targetX = pad + finalSlot * bw + bw / 2;
+          const targetY = H - 18;
           const fromX = ballRef.current.x;
           const fromY = ballRef.current.y;
           const t0 = performance.now();
           const tick = (now: number) => {
-            const p = Math.min(1, (now - t0) / 520);
+            const p = Math.min(1, (now - t0) / 480);
             const e = 1 - Math.pow(1 - p, 2);
             ballRef.current.x = fromX + (targetX - fromX) * e;
             ballRef.current.y = fromY + (targetY - fromY) * e;
-            draw(p > 0.85 ? finalSlot : null);
+            draw(p > 0.8 ? finalSlot : null);
             if (p < 1) animRef.current = requestAnimationFrame(tick);
             else { setHit(finalSlot); haptic("medium"); resolve(); }
           };
@@ -270,20 +287,19 @@ export default function PlinkoGame({
         }
 
         const right = path[step]! === 1;
-        pegIndex = Math.min(pegIndex + (right ? 1 : 0), (pegs[step]?.length ?? 1) - 1);
+        pegIndex = Math.min(Math.max(0, pegIndex + (right ? 1 : 0)), (pegs[step]?.length ?? 1) - 1);
         const row = pegs[step]!;
-        const idx = Math.min(Math.max(pegIndex, 0), row.length - 1);
-        const peg = row[idx]!;
-        const toX = peg.x + (right ? 10 : -10);
+        const peg = row[Math.min(pegIndex, row.length - 1)]!;
+        const toX = peg.x + (right ? 8 : -8);
         const toY = peg.y;
         const fromX = ballRef.current.x;
         const fromY = ballRef.current.y;
         const t0 = performance.now();
-        const dur = 200 + Math.min(80, step * 6);
+        const dur = 210 + Math.min(70, step * 5);
 
         const tick = (now: number) => {
           const p = Math.min(1, (now - t0) / dur);
-          const arc = Math.sin(p * Math.PI) * 12;
+          const arc = Math.sin(p * Math.PI) * 11;
           ballRef.current.x = fromX + (toX - fromX) * p;
           ballRef.current.y = fromY + (toY - fromY) * p - arc;
           draw(null);
@@ -316,7 +332,7 @@ export default function PlinkoGame({
       const profit = Number(d.profit) || 0;
       setLast({ mult: Number(d.multiplier) || 0, profit });
       if (profit >= 0) hapticNotify("success"); else hapticNotify("error");
-      flash(profit >= 0 ? `+${profit.toFixed(3)} TON  ·  ×${d.multiplier}` : `${profit.toFixed(3)} TON`);
+      flash(profit >= 0 ? `+${profit.toFixed(3)} TON · ×${d.multiplier}` : `${profit.toFixed(3)} TON`);
       onBalanceChange();
     } catch {
       flash("Сеть недоступна");
@@ -330,95 +346,167 @@ export default function PlinkoGame({
   return (
     <div style={root}>
       {toast && <div style={toastStyle}>{toast}</div>}
-      <div style={seg}>
-        {([["low", "Лёгкий"], ["med", "Средний"], ["high", "Сложный"]] as [Risk, string][]).map(([r, label]) => (
-          <button key={r} type="button" disabled={busy} onClick={() => { setRisk(r); setHit(null); }}
+
+      {/* Risk */}
+      <div style={riskRow}>
+        {(
+          [
+            ["low", "Лёгкий"],
+            ["med", "Средний"],
+            ["high", "Сложный"],
+          ] as [Risk, string][]
+        ).map(([r, label]) => (
+          <button
+            key={r}
+            type="button"
+            disabled={busy}
+            onClick={() => { setRisk(r); setHit(null); }}
             style={{
-              ...segBtn,
-              background: risk === r ? "linear-gradient(135deg,#6d28d9,#a855f7)" : "transparent",
+              ...riskBtn,
+              background: risk === r ? "linear-gradient(135deg,#6d28d9,#a855f7)" : "rgba(255,255,255,0.04)",
               color: risk === r ? "#fff" : "#94a3b8",
-              boxShadow: risk === r ? "0 4px 16px rgba(168,85,247,0.4)" : "none",
-            }}>{label}</button>
+              boxShadow: risk === r ? "0 4px 14px rgba(168,85,247,0.35)" : "none",
+            }}
+          >
+            {label}
+          </button>
         ))}
       </div>
-      <div style={{ marginBottom: 12 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-          <span style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8" }}>Количество рядов</span>
+
+      {/* Rows */}
+      <div style={{ marginBottom: 10 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 2 }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8" }}>Ряды</span>
           <span style={{ fontSize: 13, fontWeight: 900, color: "#e9d5ff" }}>{rows}</span>
         </div>
-        <input type="range" min={8} max={16} step={1} value={rows} disabled={busy}
+        <input
+          type="range" min={8} max={16} step={1} value={rows} disabled={busy}
           onChange={(e) => { setRows(Number(e.target.value)); setHit(null); }}
-          style={{ width: "100%", accentColor: "#a855f7" }} />
-        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "#64748b" }}>
-          <span>8</span><span>16</span>
-        </div>
+          style={{ width: "100%", accentColor: "#a855f7" }}
+        />
       </div>
+
+      {/* Board */}
       <div style={board}>
         <canvas ref={canvasRef} style={{ width: "100%", height: "100%", display: "block" }} />
       </div>
+
       {last && (
-        <div style={{ textAlign: "center", fontWeight: 900, fontSize: 17, marginBottom: 10, color: last.profit >= 0 ? "#4ade80" : "#f87171" }}>
+        <div style={{
+          textAlign: "center", fontWeight: 900, fontSize: 15, margin: "6px 0 8px",
+          color: last.profit >= 0 ? "#4ade80" : "#f87171",
+        }}>
           ×{last.mult} → {last.profit >= 0 ? "+" : ""}{last.profit.toFixed(3)} TON
         </div>
       )}
+
+      {/* Bet — compact so not covered by bottom nav */}
       <div style={panel}>
-        <span style={lab}>Ставка TON</span>
-        <input type="number" min={MIN_BET} step="0.1" value={stake} disabled={busy}
-          onChange={(e) => setStake(Math.max(MIN_BET, Number(e.target.value) || MIN_BET))} style={inp} />
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <input
+            type="number" min={MIN_BET} step="0.1" value={stake} disabled={busy}
+            onChange={(e) => setStake(Math.max(MIN_BET, Number(e.target.value) || MIN_BET))}
+            style={{ ...inp, flex: 1, margin: 0 }}
+            placeholder="Ставка"
+          />
+          <button type="button" disabled={busy || stake > balance} onClick={play} style={btnPlay}>
+            {busy ? "…" : "Играть"}
+          </button>
+        </div>
         <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
           {PRESETS.map((p) => (
             <button key={p} type="button" disabled={busy} onClick={() => setStake(p)} style={chip}>{p}</button>
           ))}
+          <span style={{ marginLeft: "auto", fontSize: 12, color: "#64748b", alignSelf: "center" }}>
+            {balance.toFixed(2)} TON
+          </span>
         </div>
-        <div style={{ fontSize: 12, color: "#64748b", margin: "12px 0" }}>
-          Баланс <b style={{ color: "#e2e8f0" }}>{balance.toFixed(3)} TON</b>
-        </div>
-        <button type="button" disabled={busy || stake > balance} onClick={play} style={btn}>
-          {busy ? "Падает…" : "Играть"}
-        </button>
       </div>
     </div>
   );
 }
 
-const root: CSSProperties = { color: "#e2e8f0", position: "relative" };
-const seg: CSSProperties = {
-  display: "flex", gap: 4, padding: 4, borderRadius: 14,
-  background: "rgba(0,0,0,0.35)", border: "1px solid rgba(255,255,255,0.08)", marginBottom: 12,
+const root: CSSProperties = {
+  color: "#e2e8f0",
+  position: "relative",
+  paddingBottom: 24,
 };
-const segBtn: CSSProperties = {
-  flex: 1, padding: "10px 0", borderRadius: 11, border: "none",
-  fontWeight: 800, fontSize: 13, cursor: "pointer", fontFamily: "inherit", transition: "0.15s",
+const riskRow: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "1fr 1fr 1fr",
+  gap: 6,
+  marginBottom: 10,
+};
+const riskBtn: CSSProperties = {
+  padding: "10px 4px",
+  borderRadius: 12,
+  border: "1px solid rgba(255,255,255,0.1)",
+  fontWeight: 800,
+  fontSize: 12,
+  cursor: "pointer",
+  fontFamily: "inherit",
 };
 const board: CSSProperties = {
-  height: 360, borderRadius: 28, overflow: "hidden", marginBottom: 12,
+  height: 300,
+  borderRadius: 22,
+  overflow: "hidden",
+  marginBottom: 8,
   background: "radial-gradient(ellipse 90% 70% at 50% 0%, #5b21b6 0%, #2e1065 45%, #0c0618 100%)",
   border: "1px solid rgba(167,139,250,0.4)",
-  boxShadow: "0 0 60px rgba(124,58,237,0.25), inset 0 1px 0 rgba(255,255,255,0.08)",
+  boxShadow: "0 0 40px rgba(124,58,237,0.2)",
 };
 const panel: CSSProperties = {
-  background: "rgba(15,23,42,0.85)", borderRadius: 18, padding: 14,
+  background: "rgba(15,23,42,0.9)",
+  borderRadius: 16,
+  padding: 12,
   border: "1px solid rgba(255,255,255,0.08)",
 };
-const lab: CSSProperties = { display: "block", fontSize: 11, fontWeight: 700, color: "#64748b", marginBottom: 6 };
 const inp: CSSProperties = {
-  width: "100%", boxSizing: "border-box", padding: "12px 14px", borderRadius: 12,
-  border: "1px solid rgba(255,255,255,0.12)", background: "rgba(0,0,0,0.4)",
-  color: "#fff", fontSize: 16, fontWeight: 800, fontFamily: "inherit",
+  boxSizing: "border-box",
+  padding: "12px 12px",
+  borderRadius: 12,
+  border: "1px solid rgba(255,255,255,0.12)",
+  background: "rgba(0,0,0,0.4)",
+  color: "#fff",
+  fontSize: 15,
+  fontWeight: 800,
+  fontFamily: "inherit",
 };
 const chip: CSSProperties = {
-  padding: "6px 12px", borderRadius: 999, border: "1px solid rgba(255,255,255,0.1)",
-  background: "rgba(255,255,255,0.05)", color: "#cbd5e1", fontWeight: 700, fontSize: 12,
-  cursor: "pointer", fontFamily: "inherit",
+  padding: "5px 10px",
+  borderRadius: 999,
+  border: "1px solid rgba(255,255,255,0.1)",
+  background: "rgba(255,255,255,0.05)",
+  color: "#cbd5e1",
+  fontWeight: 700,
+  fontSize: 12,
+  cursor: "pointer",
+  fontFamily: "inherit",
 };
-const btn: CSSProperties = {
-  width: "100%", padding: "15px 0", borderRadius: 14, border: "none",
-  background: "linear-gradient(135deg,#7c3aed,#c084fc)", color: "#fff",
-  fontSize: 16, fontWeight: 900, cursor: "pointer", fontFamily: "inherit",
-  boxShadow: "0 8px 28px rgba(168,85,247,0.45)",
+const btnPlay: CSSProperties = {
+  padding: "12px 18px",
+  borderRadius: 12,
+  border: "none",
+  background: "linear-gradient(135deg,#7c3aed,#c084fc)",
+  color: "#fff",
+  fontSize: 14,
+  fontWeight: 900,
+  cursor: "pointer",
+  fontFamily: "inherit",
+  whiteSpace: "nowrap",
+  boxShadow: "0 6px 20px rgba(168,85,247,0.4)",
 };
 const toastStyle: CSSProperties = {
-  position: "fixed", top: 72, left: "50%", transform: "translateX(-50%)", zIndex: 50,
-  padding: "10px 18px", borderRadius: 12, fontWeight: 800, fontSize: 13,
-  background: "rgba(15,23,42,0.95)", border: "1px solid rgba(255,255,255,0.15)", color: "#fff",
+  position: "fixed",
+  top: 72,
+  left: "50%",
+  transform: "translateX(-50%)",
+  zIndex: 50,
+  padding: "10px 18px",
+  borderRadius: 12,
+  fontWeight: 800,
+  fontSize: 13,
+  background: "rgba(15,23,42,0.95)",
+  border: "1px solid rgba(255,255,255,0.15)",
+  color: "#fff",
 };

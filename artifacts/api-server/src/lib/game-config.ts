@@ -2,13 +2,10 @@ import { db } from "@workspace/db";
 import { systemSettingsTable } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
 
-export type GameKey = "spin" | "mines" | "arena" | "igro" | "coin";
+export type GameKey = "spin" | "mines" | "arena" | "igro" | "coin" | "crash" | "plinko" | "upgrade";
 
 /**
  * Server-side authority for the admin "game enabled" toggles.
- * The frontend already hides/disables cards for a disabled game, but a
- * client could still call the API directly, so every game's start/join
- * route must check this before allowing play.
  */
 export async function isGameEnabled(game: GameKey): Promise<boolean> {
   const row = await db

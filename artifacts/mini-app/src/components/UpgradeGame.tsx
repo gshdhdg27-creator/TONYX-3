@@ -17,7 +17,7 @@ export default function UpgradeGame({
   const [stake, setStake] = useState(0.5);
   const [chance, setChance] = useState(35);
   const [busy, setBusy] = useState(false);
-  const [angle, setAngle] = useState(-90); // degrees, -90 = top
+  const [angle, setAngle] = useState(-90);
   const [result, setResult] = useState<null | { won: boolean; profit: number; roll: number }>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [sparks, setSparks] = useState<{ id: number; x: number; y: number; c: string }[]>([]);
@@ -25,9 +25,6 @@ export default function UpgradeGame({
 
   const mult = useMemo(() => Math.round(((100 / chance) * (1 - HOUSE)) * 1000) / 1000, [chance]);
   const potential = useMemo(() => Math.round(stake * mult * 1000) / 1000, [stake, mult]);
-
-  // win zone is first `chance`% of circle starting from top going clockwise
-  const winDeg = chance * 3.6;
 
   const flash = (msg: string) => {
     setToast(msg);
@@ -44,7 +41,6 @@ export default function UpgradeGame({
 
       const tick = (now: number) => {
         const p = Math.min(1, (now - t0) / dur);
-        // ease out cubic
         const e = 1 - Math.pow(1 - p, 3);
         const a = start + (targetDeg - start) * e;
         setAngle(a);
@@ -85,7 +81,6 @@ export default function UpgradeGame({
       if (won) {
         hapticNotify("success");
         haptic("heavy");
-        // confetti sparks
         const s = Array.from({ length: 18 }, (_, i) => ({
           id: i,
           x: 50 + (Math.random() - 0.5) * 80,
@@ -134,23 +129,17 @@ export default function UpgradeGame({
               <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
             </filter>
           </defs>
-          {/* track bg */}
           <circle cx="100" cy="100" r="78" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="16" />
-          {/* lose arc full then win on top */}
           <circle cx="100" cy="100" r="78" fill="none" stroke="url(#loseG)" strokeWidth="16"
             strokeDasharray={`${(100 - chance) * 4.9} 490`} strokeDashoffset={-chance * 4.9}
             transform="rotate(-90 100 100)" strokeLinecap="butt" opacity={0.85} />
           <circle cx="100" cy="100" r="78" fill="none" stroke="url(#winG)" strokeWidth="16"
             strokeDasharray={`${chance * 4.9} 490`} strokeDashoffset={0}
             transform="rotate(-90 100 100)" strokeLinecap="butt" filter="url(#glow)" />
-
-          {/* center */}
           <circle cx="100" cy="100" r="58" fill="#0b1020" stroke="rgba(255,255,255,0.08)" strokeWidth="1" />
           <text x="100" y="92" textAnchor="middle" fill="#94a3b8" fontSize="11" fontWeight="700">CHANCE</text>
           <text x="100" y="114" textAnchor="middle" fill="#fff" fontSize="28" fontWeight="900">{chance}%</text>
-
-          {/* needle */}
-          <g transform={`rotate(${angle} 100 100)`} style={{ transition: busy ? undefined : "transform 0.2s" }}>
+          <g transform={`rotate(${angle} 100 100)`}>
             <polygon points="100,28 106,100 94,100" fill="#fff" filter="url(#glow)" />
             <circle cx="100" cy="100" r="8" fill="#fff" />
             <circle cx="100" cy="100" r="4" fill="#ec4899" />
@@ -158,7 +147,15 @@ export default function UpgradeGame({
         </svg>
 
         {sparks.map((s) => (
-          <span key={s.id} className="up-spark" style={{ left: `${s.x}%", top: `${s.y}%`, background: s.c }} />
+          <span
+            key={s.id}
+            className="up-spark"
+            style={{
+              left: `${s.x}%`,
+              top: `${s.y}%`,
+              background: s.c,
+            }}
+          />
         ))}
 
         {result && !busy && (

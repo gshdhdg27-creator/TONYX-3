@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties }
 
 const MIN_BET = 0.1;
 const PRESETS = [0.1, 0.5, 1, 2, 5];
+const BALL_PRESETS = [1, 5, 10, 25];
+const MAX_BALLS = 50;
 
 type Risk = "low" | "med" | "high";
 
@@ -41,8 +43,7 @@ function buildTable(rows: number, risk: Risk): number[] {
       16: [75, 18, 5.0, 1.6, 0.7, 0.3, 0.15, 0.1, 0.05, 0.1, 0.15, 0.3, 0.7, 1.6, 5.0, 18, 75],
     },
   };
-  const byRisk = TABLES[risk];
-  return byRisk[rows] ?? byRisk[12]!;
+  return TABLES[risk][rows] ?? TABLES[risk][12]!;
 }
 
 function bucketColor(m: number, max: number): string {
@@ -83,10 +84,12 @@ export default function PlinkoGame({
   const [stake, setStake] = useState(0.5);
   const [risk, setRisk] = useState<Risk>("med");
   const [rows, setRows] = useState(12);
+  const [balls, setBalls] = useState(1);
   const [busy, setBusy] = useState(false);
   const [hit, setHit] = useState<number | null>(null);
   const [toast, setToast] = useState<string | null>(null);
-  const [last, setLast] = useState<null | { mult: number; profit: number }>(null);
+  const [last, setLast] = useState<null | { mult: number; profit: number; count: number }>(null);
+  const [progress, setProgress] = useState("");
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const ballRef = useRef<{ x: number; y: number; visible: boolean }>({ x: 0, y: 0, visible: false });
@@ -95,6 +98,7 @@ export default function PlinkoGame({
 
   const table = useMemo(() => buildTable(rows, risk), [rows, risk]);
   const maxM = useMemo(() => Math.max(...table, 1), [table]);
+  const totalCost = Math.round(stake * balls * 1000) / 1000;
 
   const draw = useCallback((highlight: number | null) => {
     const c = canvasRef.current;
@@ -249,7 +253,7 @@ export default function PlinkoGame({
           const fromY = ballRef.current.y;
           const t0 = performance.now();
           const tick = (now: number) => {
-            const p = Math.min(1, (now - t0) / 480);
+            const p = Math.min(1, (now - t0) / 400);
             const e = 1 - Math.pow(1 - p, 2);
             ballRef.current.x = fromX + (targetX - fromX) * e;
             ballRef.current.y = fromY + (targetY - fromY) * e;
@@ -270,7 +274,7 @@ export default function PlinkoGame({
         const fromX = ballRef.current.x;
         const fromY = ballRef.current.y;
         const t0 = performance.now();
-        const dur = 210 + Math.min(70, step * 5);
+        const dur = balls > 5 ? 90 + Math.min(30, step * 2) : 180 + Math.min(50, step * 4);
 
         const tick = (now: number) => {
           const p = Math.min(1, (now - t0) / dur);
@@ -279,7 +283,7 @@ export default function PlinkoGame({
           ballRef.current.y = fromY + (toY - fromY) * p - arc;
           draw(null);
           if (p < 1) animRef.current = requestAnimationFrame(tick);
-          else { haptic("light"); step += 1; go(); }
+          else { if (balls <= 5) haptic("light"); step += 1; go(); }
         };
         animRef.current = requestAnimationFrame(tick);
       };
@@ -288,32 +292,66 @@ export default function PlinkoGame({
 
   const play = async () => {
     if (busy || !telegramId) return;
-    if (stake > balance) { flash("Недостаточно TON"); return; }
+    const n = Math.max(1, Math.min(MAX_BALLS, Math.round(balls) || 1));
+    if (stake * n > balance + 1e-9) {
+      flash(`Нужно ${totalCost} TON на ${n} шар(ов)`);
+      return;
+    }
     setBusy(true);
     setHit(null);
     setLast(null);
+    setProgress("");
     haptic("medium");
+
+    let totalProfit = 0;
+    let lastMult = 0;
+    let okCount = 0;
+
     try {
-      const res = await fetch("/api/mini/games/plinko/play", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ telegramId, stake, risk, rows }),
-      });
-      const d = await res.json();
-      if (!res.ok) { flash(d.error ?? "Ошибка"); setBusy(false); return; }
-      draw(null);
-      await new Promise((r) => requestAnimationFrame(() => r(null)));
-      await animatePath(Array.isArray(d.path) ? d.path : [], Number(d.slot) || 0);
-      const profit = Number(d.profit) || 0;
-      setLast({ mult: Number(d.multiplier) || 0, profit });
-      if (profit >= 0) hapticNotify("success"); else hapticNotify("error");
-      flash(profit >= 0 ? `+${profit.toFixed(3)} TON · ×${d.multiplier}` : `${profit.toFixed(3)} TON`);
-      onBalanceChange();
+      for (let i = 0; i < n; i++) {
+        setProgress(n > 1 ? `${i + 1} / ${n}` : "");
+        const res = await fetch("/api/mini/games/plinko/play", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ telegramId, stake, risk, rows }),
+        });
+        const d = await res.json();
+        if (!res.ok) {
+          flash(d.error ?? "Ошибка");
+          break;
+        }
+        draw(null);
+        await new Promise((r) => requestAnimationFrame(() => r(null)));
+        await animatePath(Array.isArray(d.path) ? d.path : [], Number(d.slot) || 0);
+        totalProfit += Number(d.profit) || 0;
+        lastMult = Number(d.multiplier) || 0;
+        okCount += 1;
+        ballRef.current.visible = false;
+        draw(Number(d.slot) || 0);
+      }
+
+      if (okCount > 0) {
+        const profit = Math.round(totalProfit * 1000) / 1000;
+        setLast({
+          mult: okCount === 1 ? lastMult : Math.round((profit / (stake * okCount) + 1) * 100) / 100,
+          profit,
+          count: okCount,
+        });
+        if (profit >= 0) hapticNotify("success");
+        else hapticNotify("error");
+        flash(
+          okCount === 1
+            ? `${profit >= 0 ? "+" : ""}${profit.toFixed(3)} TON · ×${lastMult}`
+            : `${okCount} шаров · ${profit >= 0 ? "+" : ""}${profit.toFixed(3)} TON`,
+        );
+        onBalanceChange();
+      }
     } catch {
       flash("Сеть недоступна");
     } finally {
       ballRef.current.visible = false;
       setBusy(false);
+      setProgress("");
       draw(hit);
     }
   };
@@ -321,18 +359,6 @@ export default function PlinkoGame({
   return (
     <div style={root}>
       {toast && <div style={toastStyle}>{toast}</div>}
-
-      <div style={{ marginBottom: 10 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 2 }}>
-          <span style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8" }}>Ряды</span>
-          <span style={{ fontSize: 13, fontWeight: 900, color: "#e9d5ff" }}>{rows}</span>
-        </div>
-        <input
-          type="range" min={8} max={16} step={1} value={rows} disabled={busy}
-          onChange={(e) => { setRows(Number(e.target.value)); setHit(null); }}
-          style={{ width: "100%", accentColor: "#a855f7" }}
-        />
-      </div>
 
       <div style={board}>
         <canvas ref={canvasRef} style={{ width: "100%", height: "100%", display: "block" }} />
@@ -343,10 +369,13 @@ export default function PlinkoGame({
           textAlign: "center", fontWeight: 900, fontSize: 15, margin: "8px 0",
           color: last.profit >= 0 ? "#4ade80" : "#f87171",
         }}>
-          ×{last.mult} → {last.profit >= 0 ? "+" : ""}{last.profit.toFixed(3)} TON
+          {last.count > 1 ? `${last.count} шаров · ` : ""}
+          {last.count === 1 ? `×${last.mult} → ` : ""}
+          {last.profit >= 0 ? "+" : ""}{last.profit.toFixed(3)} TON
         </div>
       )}
 
+      {/* Risk */}
       <div style={riskRow}>
         {([["low", "Лёгкий"], ["med", "Средний"], ["high", "Сложный"]] as [Risk, string][]).map(([r, label]) => (
           <button
@@ -366,24 +395,87 @@ export default function PlinkoGame({
         ))}
       </div>
 
+      {/* Rows — under board */}
+      <div style={{ marginBottom: 10 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 2 }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8" }}>Ряды</span>
+          <span style={{ fontSize: 13, fontWeight: 900, color: "#e9d5ff" }}>{rows}</span>
+        </div>
+        <input
+          type="range" min={8} max={16} step={1} value={rows} disabled={busy}
+          onChange={(e) => { setRows(Number(e.target.value)); setHit(null); }}
+          style={{ width: "100%", accentColor: "#a855f7" }}
+        />
+      </div>
+
+      {/* Balls count */}
+      <div style={{ marginBottom: 10 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8", marginBottom: 6 }}>Шары</div>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+          {BALL_PRESETS.map((n) => (
+            <button
+              key={n}
+              type="button"
+              disabled={busy}
+              onClick={() => setBalls(n)}
+              style={{
+                ...chip,
+                borderColor: balls === n ? "rgba(168,85,247,0.7)" : "rgba(255,255,255,0.1)",
+                background: balls === n ? "rgba(124,58,237,0.35)" : "rgba(255,255,255,0.05)",
+                color: balls === n ? "#e9d5ff" : "#cbd5e1",
+              }}
+            >
+              {n}
+            </button>
+          ))}
+          <input
+            type="number"
+            min={1}
+            max={MAX_BALLS}
+            value={balls}
+            disabled={busy}
+            onChange={(e) => setBalls(Math.max(1, Math.min(MAX_BALLS, Math.round(Number(e.target.value) || 1)))}
+            style={{
+              ...inp,
+              width: 64,
+              padding: "6px 8px",
+              fontSize: 13,
+              textAlign: "center",
+            }}
+            title="Своё число"
+          />
+        </div>
+      </div>
+
       <div style={panel}>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           <input
             type="number" min={MIN_BET} step="0.1" value={stake} disabled={busy}
             onChange={(e) => setStake(Math.max(MIN_BET, Number(e.target.value) || MIN_BET))}
             style={{ ...inp, flex: 1, margin: 0 }}
-            placeholder="Ставка"
+            placeholder="Ставка за шар"
           />
-          <button type="button" disabled={busy || stake > balance} onClick={play} style={btnPlay}>
-            {busy ? "…" : "Играть"}
+          <button
+            type="button"
+            disabled={busy || totalCost > balance}
+            onClick={play}
+            style={btnPlay}
+          >
+            {busy ? (progress || "…") : balls > 1 ? `×${balls}` : "Играть"}
           </button>
         </div>
-        <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap", alignItems: "center" }}>
           {PRESETS.map((p) => (
             <button key={p} type="button" disabled={busy} onClick={() => setStake(p)} style={chip}>{p}</button>
           ))}
-          <span style={{ marginLeft: "auto", fontSize: 12, color: "#64748b", alignSelf: "center" }}>
+          <span style={{ marginLeft: "auto", fontSize: 11, color: "#64748b", textAlign: "right" }}>
             {balance.toFixed(2)} TON
+            {balls > 1 && (
+              <>
+                <br />
+                <b style={{ color: "#c4b5fd" }}>{totalCost.toFixed(2)} TON</b> всего
+              </>
+            )}
           </span>
         </div>
       </div>
@@ -457,6 +549,7 @@ const btnPlay: CSSProperties = {
   fontFamily: "inherit",
   whiteSpace: "nowrap",
   boxShadow: "0 6px 20px rgba(168,85,247,0.4)",
+  minWidth: 72,
 };
 const toastStyle: CSSProperties = {
   position: "fixed",

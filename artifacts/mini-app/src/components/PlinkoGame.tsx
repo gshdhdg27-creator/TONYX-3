@@ -375,7 +375,6 @@ export default function PlinkoGame({
         </div>
       )}
 
-      {/* Risk */}
       <div style={riskRow}>
         {([["low", "Лёгкий"], ["med", "Средний"], ["high", "Сложный"]] as [Risk, string][]).map(([r, label]) => (
           <button
@@ -395,7 +394,6 @@ export default function PlinkoGame({
         ))}
       </div>
 
-      {/* Rows — under board */}
       <div style={{ marginBottom: 10 }}>
         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 2 }}>
           <span style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8" }}>Ряды</span>
@@ -408,7 +406,6 @@ export default function PlinkoGame({
         />
       </div>
 
-      {/* Balls count */}
       <div style={{ marginBottom: 10 }}>
         <div style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8", marginBottom: 6 }}>Шары</div>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
@@ -434,7 +431,7 @@ export default function PlinkoGame({
             max={MAX_BALLS}
             value={balls}
             disabled={busy}
-            onChange={(e) => setBalls(Math.max(1, Math.min(MAX_BALLS, Math.round(Number(e.target.value) || 1)))}
+            onChange={(e) => setBalls(Math.max(1, Math.min(MAX_BALLS, Math.round(Number(e.target.value) || 1))))}
             style={{
               ...inp,
               width: 64,

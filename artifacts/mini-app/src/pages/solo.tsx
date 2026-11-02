@@ -12,14 +12,6 @@ import { useQueryClient } from "@tanstack/react-query";
 
 type Tab = "pick" | "mines" | "coin" | "crash" | "plinko" | "upgrade";
 
-const LOTTIE = {
-  mines: "https://assets5.lottiefiles.com/packages/lf20_k86wxpgr.json",
-  coin: "https://assets3.lottiefiles.com/packages/lf20_ysrn2iwp.json",
-  crash: "https://assets9.lottiefiles.com/packages/lf20_jbrw3hcz.json",
-  plinko: "https://assets2.lottiefiles.com/packages/lf20_kyu7xb1v.json",
-  upgrade: "https://assets1.lottiefiles.com/packages/lf20_jcikwtux.json",
-};
-
 export default function SoloPage() {
   const { telegramId } = useTelegram();
   const { lang } = useLang();
@@ -124,73 +116,68 @@ export default function SoloPage() {
   return (
     <div style={page}>
       <div style={header}>
-        <div style={title}>Соло игры</div>
-        <div style={sub}>Mines · Coin · Crash · Plinko · Upgrade</div>
+        <div style={title}>Соло</div>
+        <div style={sub}>Выбери режим</div>
       </div>
+
       <div style={{ display: "grid", gap: 12 }}>
+        {/* wide UPGRADE like reference */}
         <GameCard
           wide
-          name="Mines"
-          badge="Solo"
-          badgeColor="#22c55e"
-          online={31}
-          lottieSrc={LOTTIE.mines}
-          emoji="💎"
-          stickers={["🐶", "🎁"]}
-          gradient="linear-gradient(145deg, #14532d 0%, #7c3aed 45%, #0f172a 100%)"
-          accent="rgba(34,197,94,0.4)"
-          onClick={() => setTab("mines")}
+          scene="upgrade"
+          name="UPGRADE"
+          badge="NEW"
+          badgeColor="#ec4899"
+          online={14}
+          gradient="linear-gradient(135deg, #fbbf24 0%, #f59e0b 35%, #db2777 100%)"
+          accent="rgba(251,191,36,0.45)"
+          onClick={() => setTab("upgrade")}
         />
+
         <div style={grid}>
           <GameCard
-            name="Coin Flip"
-            badge="Live"
-            badgeColor="#22c55e"
-            online={18}
-            lottieSrc={LOTTIE.coin}
-            emoji="🪙"
-            stickers={["🦅", "⚪"]}
-            gradient="linear-gradient(145deg, #713f12 0%, #eab308 40%, #4c1d95 100%)"
-            accent="rgba(234,179,8,0.45)"
-            onClick={() => setTab("coin")}
-          />
-          <GameCard
-            name="Crash"
-            badge="New"
-            badgeColor="#f97316"
-            online={24}
-            lottieSrc={LOTTIE.crash}
-            emoji="🚀"
-            stickers={["📈"]}
-            gradient="linear-gradient(145deg, #4c1d95 0%, #7c3aed 40%, #ea580c 100%)"
-            accent="rgba(249,115,22,0.45)"
-            onClick={() => setTab("crash")}
-          />
-          <GameCard
-            name="Plinko"
-            badge="New"
+            scene="plinko"
+            name="PLINKO"
+            badge="NEW"
             badgeColor="#38bdf8"
-            online={15}
-            lottieSrc={LOTTIE.plinko}
-            emoji="⚪"
-            stickers={["🎯"]}
-            gradient="linear-gradient(145deg, #0c4a6e 0%, #0284c7 40%, #0f172a 100%)"
-            accent="rgba(56,189,248,0.45)"
+            online={19}
+            gradient="linear-gradient(160deg, #0ea5e9 0%, #0369a1 45%, #0c4a6e 100%)"
+            accent="rgba(14,165,233,0.5)"
             onClick={() => setTab("plinko")}
           />
-          <GameCard
-            name="Upgrade"
-            badge="New"
-            badgeColor="#ec4899"
-            online={12}
-            lottieSrc={LOTTIE.upgrade}
-            emoji="⬆️"
-            stickers={["💎"]}
-            gradient="linear-gradient(145deg, #831843 0%, #db2777 40%, #0f172a 100%)"
-            accent="rgba(236,72,153,0.45)"
-            onClick={() => setTab("upgrade")}
-          />
+          <div style={{ display: "grid", gap: 12 }}>
+            <GameCard
+              scene="mines"
+              name="MINES"
+              badge="NEW"
+              badgeColor="#a855f7"
+              online={31}
+              gradient="linear-gradient(145deg, #6d28d9 0%, #4c1d95 50%, #1e1b4b 100%)"
+              accent="rgba(168,85,247,0.5)"
+              onClick={() => setTab("mines")}
+            />
+            <GameCard
+              scene="crash"
+              name="CRASH"
+              badge="NEW"
+              badgeColor="#f97316"
+              online={27}
+              gradient="linear-gradient(145deg, #1d4ed8 0%, #7c3aed 40%, #ea580c 100%)"
+              accent="rgba(249,115,22,0.5)"
+              onClick={() => setTab("crash")}
+            />
+          </div>
         </div>
+
+        <GameCard
+          wide
+          scene="coin"
+          name="COIN FLIP"
+          online={18}
+          gradient="linear-gradient(135deg, #fde047 0%, #eab308 40%, #a16207 100%)"
+          accent="rgba(234,179,8,0.5)"
+          onClick={() => setTab("coin")}
+        />
       </div>
     </div>
   );
@@ -200,12 +187,17 @@ const page: CSSProperties = {
   minHeight: "100dvh",
   padding: "18px 14px 120px",
   color: "#fff",
-  background: "radial-gradient(ellipse at 70% -10%, #4c1d95 0%, #0a0612 52%)",
+  background: "radial-gradient(ellipse at 50% -5%, #3b1d6d 0%, #0a0612 55%)",
 };
 const header: CSSProperties = { marginBottom: 16 };
-const title: CSSProperties = { fontSize: 26, fontWeight: 900, letterSpacing: "-0.03em" };
-const sub: CSSProperties = { fontSize: 12, color: "#c4b5fd", marginTop: 4, fontWeight: 600 };
-const grid: CSSProperties = { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 };
+const title: CSSProperties = { fontSize: 28, fontWeight: 900, letterSpacing: "-0.03em" };
+const sub: CSSProperties = { fontSize: 13, color: "#c4b5fd", marginTop: 4, fontWeight: 600 };
+const grid: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "1.05fr 0.95fr",
+  gap: 12,
+  alignItems: "stretch",
+};
 const back: CSSProperties = {
   marginBottom: 12,
   height: 36,

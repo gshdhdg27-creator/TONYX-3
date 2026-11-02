@@ -4,136 +4,68 @@ const MIN_BET = 0.1;
 const PRESETS = [0.1, 0.5, 1, 2, 5];
 const HOUSE = 0.04;
 
-type Props = {
-  telegramId: string;
-  balance: number;
-  onBalanceChange: () => void;
-};
+function haptic(t: "light" | "medium" | "heavy" = "light") {
+  try { (window as any).Telegram?.WebApp?.HapticFeedback?.impactOccurred?.(t); } catch { /* */ }
+}
+function hapticNotify(t: "success" | "error") {
+  try { (window as any).Telegram?.WebApp?.HapticFeedback?.notificationOccurred?.(t); } catch { /* */ }
+}
 
-export default function UpgradeGame({ telegramId, balance, onBalanceChange }: Props) {
+export default function UpgradeGame({
+  telegramId, balance, onBalanceChange,
+}: { telegramId: string; balance: number; onBalanceChange: () => void }) {
   const [stake, setStake] = useState(0.5);
-  const [chance, setChance] = useState(40);
+  const [chance, setChance] = useState(35);
   const [busy, setBusy] = useState(false);
-  const [spinning, setSpinning] = useState(false);
-  const [needle, setNeedle] = useState(-1); // degrees 0-360 mapped from roll
-  const [error, setError] = useState<string | null>(null);
-  const [last, setLast] = useState<null | { won: boolean; payout: number; profit: number; roll: number }>(null);
-  const [flash, setFlash] = useState<"win" | "lose" | null>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [angle, setAngle] = useState(-90); // degrees, -90 = top
+  const [result, setResult] = useState<null | { won: boolean; profit: number; roll: number }>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  const [sparks, setSparks] = useState<{ id: number; x: number; y: number; c: string }[]>([]);
+  const animRef = useRef(0);
 
-  const mult = useMemo(
-    () => Math.round(((100 / chance) * (1 - HOUSE)) * 1000) / 1000,
-    [chance],
-  );
+  const mult = useMemo(() => Math.round(((100 / chance) * (1 - HOUSE)) * 1000) / 1000, [chance]);
   const potential = useMemo(() => Math.round(stake * mult * 1000) / 1000, [stake, mult]);
 
-  const drawWheel = (pointerDeg: number, animChance: number) => {
-    const c = canvasRef.current;
-    if (!c) return;
-    const ctx = c.getContext("2d");
-    if (!ctx) return;
-    const dpr = window.devicePixelRatio || 1;
-    const size = Math.min(c.clientWidth, 280);
-    if (c.width !== size * dpr || c.height !== size * dpr) {
-      c.width = size * dpr;
-      c.height = size * dpr;
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    }
-    const cx = size / 2;
-    const cy = size / 2;
-    const r = size / 2 - 12;
-    ctx.clearRect(0, 0, size, size);
+  // win zone is first `chance`% of circle starting from top going clockwise
+  const winDeg = chance * 3.6;
 
-    // outer ring
-    ctx.beginPath();
-    ctx.arc(cx, cy, r + 6, 0, Math.PI * 2);
-    ctx.strokeStyle = "rgba(255,255,255,0.08)";
-    ctx.lineWidth = 10;
-    ctx.stroke();
-
-    // lose arc (full circle base)
-    ctx.beginPath();
-    ctx.arc(cx, cy, r, 0, Math.PI * 2);
-    ctx.strokeStyle = "#7f1d1d";
-    ctx.lineWidth = 22;
-    ctx.lineCap = "butt";
-    ctx.stroke();
-
-    // win arc from top, clockwise amount = chance%
-    const winAngle = (animChance / 100) * Math.PI * 2;
-    ctx.beginPath();
-    ctx.arc(cx, cy, r, -Math.PI / 2, -Math.PI / 2 + winAngle);
-    const grad = ctx.createLinearGradient(cx - r, cy, cx + r, cy);
-    grad.addColorStop(0, "#16a34a");
-    grad.addColorStop(1, "#4ade80");
-    ctx.strokeStyle = grad;
-    ctx.lineWidth = 22;
-    ctx.stroke();
-
-    // inner disk
-    ctx.beginPath();
-    ctx.arc(cx, cy, r - 28, 0, Math.PI * 2);
-    const ig = ctx.createRadialGradient(cx, cy - 20, 0, cx, cy, r - 28);
-    ig.addColorStop(0, "#2a1848");
-    ig.addColorStop(1, "#0f0a1a");
-    ctx.fillStyle = ig;
-    ctx.fill();
-    ctx.strokeStyle = "rgba(255,255,255,0.08)";
-    ctx.lineWidth = 1;
-    ctx.stroke();
-
-    // center text
-    ctx.fillStyle = "#e2e8f0";
-    ctx.font = "900 28px system-ui";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(`${animChance}%`, cx, cy - 8);
-    ctx.font = "700 12px system-ui";
-    ctx.fillStyle = "#94a3b8";
-    ctx.fillText(`${mult}x`, cx, cy + 16);
-
-    // pointer needle from center
-    if (pointerDeg >= 0) {
-      const rad = ((pointerDeg - 90) * Math.PI) / 180;
-      const nx = cx + Math.cos(rad) * (r - 8);
-      const ny = cy + Math.sin(rad) * (r - 8);
-      ctx.beginPath();
-      ctx.moveTo(cx, cy);
-      ctx.lineTo(nx, ny);
-      ctx.strokeStyle = "#fff";
-      ctx.lineWidth = 3;
-      ctx.shadowColor = "#fff";
-      ctx.shadowBlur = 10;
-      ctx.stroke();
-      ctx.shadowBlur = 0;
-      ctx.beginPath();
-      ctx.arc(nx, ny, 6, 0, Math.PI * 2);
-      ctx.fillStyle = "#fff";
-      ctx.fill();
-      ctx.beginPath();
-      ctx.arc(cx, cy, 8, 0, Math.PI * 2);
-      ctx.fillStyle = "#f472b6";
-      ctx.fill();
-    }
+  const flash = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 2400);
   };
 
-  // redraw on chance change
-  useMemo(() => {
-    requestAnimationFrame(() => drawWheel(needle, chance));
-  }, [chance, mult, needle]);
+  const spinTo = (rollPercent: number) =>
+    new Promise<void>((resolve) => {
+      cancelAnimationFrame(animRef.current);
+      const targetDeg = -90 + rollPercent * 3.6 + 360 * (4 + Math.floor(Math.random() * 2));
+      const start = angle;
+      const t0 = performance.now();
+      const dur = 2800;
+
+      const tick = (now: number) => {
+        const p = Math.min(1, (now - t0) / dur);
+        // ease out cubic
+        const e = 1 - Math.pow(1 - p, 3);
+        const a = start + (targetDeg - start) * e;
+        setAngle(a);
+        if (p < 1) {
+          if (Math.floor(p * 20) !== Math.floor((p - 0.016) * 20)) haptic("light");
+          animRef.current = requestAnimationFrame(tick);
+        } else {
+          setAngle(-90 + rollPercent * 3.6);
+          resolve();
+        }
+      };
+      animRef.current = requestAnimationFrame(tick);
+    });
 
   const play = async () => {
     if (busy || !telegramId) return;
-    if (stake > balance) {
-      setError("Недостаточно TON");
-      return;
-    }
+    if (stake > balance) { flash("Недостаточно TON"); return; }
     setBusy(true);
-    setSpinning(true);
-    setError(null);
-    setLast(null);
-    setFlash(null);
-
+    setResult(null);
+    setSparks([]);
+    haptic("medium");
     try {
       const res = await fetch("/api/mini/games/upgrade/play", {
         method: "POST",
@@ -142,233 +74,175 @@ export default function UpgradeGame({ telegramId, balance, onBalanceChange }: Pr
       });
       const d = await res.json();
       if (!res.ok) {
-        setError(d.error ?? "Ошибка");
-        setSpinning(false);
+        flash(d.error ?? "Ошибка");
         setBusy(false);
         return;
       }
-
-      const roll = Number(d.roll) || 0; // 0..100
-      const targetDeg = (roll / 100) * 360;
-      // spin multiple revolutions then land
-      const totalSpin = 360 * 4 + targetDeg;
-      const start = performance.now();
-      const dur = 2200;
-
-      await new Promise<void>((resolve) => {
-        const tick = (now: number) => {
-          const p = Math.min(1, (now - start) / dur);
-          // ease out cubic
-          const ease = 1 - Math.pow(1 - p, 3);
-          const deg = totalSpin * ease;
-          setNeedle(deg % 360);
-          drawWheel(deg % 360, chance);
-          if (p < 1) requestAnimationFrame(tick);
-          else resolve();
-        };
-        requestAnimationFrame(tick);
-      });
-
-      setNeedle(targetDeg);
-      drawWheel(targetDeg, chance);
+      const roll = Number(d.roll) || 0;
+      await spinTo(roll);
       const won = !!d.won;
-      setFlash(won ? "win" : "lose");
-      setLast({
-        won,
-        payout: Number(d.payout) || 0,
-        profit: Number(d.profit) || 0,
-        roll,
-      });
+      setResult({ won, profit: Number(d.profit) || 0, roll });
+      if (won) {
+        hapticNotify("success");
+        haptic("heavy");
+        // confetti sparks
+        const s = Array.from({ length: 18 }, (_, i) => ({
+          id: i,
+          x: 50 + (Math.random() - 0.5) * 80,
+          y: 40 + (Math.random() - 0.5) * 60,
+          c: ["#f472b6", "#fbbf24", "#4ade80", "#38bdf8", "#fff"][i % 5]!,
+        }));
+        setSparks(s);
+        setTimeout(() => setSparks([]), 900);
+        flash(`+${Number(d.profit).toFixed(3)} TON · ${mult}x`);
+      } else {
+        hapticNotify("error");
+        flash(`Мимо · −${stake} TON`);
+      }
       onBalanceChange();
     } catch {
-      setError("Сеть недоступна");
+      flash("Сеть недоступна");
     } finally {
-      setSpinning(false);
       setBusy(false);
     }
   };
 
   return (
-    <div style={wrap}>
+    <div style={root}>
       <style>{`
-        @keyframes upWin {
-          0%,100% { box-shadow: 0 0 24px rgba(74,222,128,0.25); }
-          50% { box-shadow: 0 0 50px rgba(74,222,128,0.55); }
+        @keyframes upSpark {
+          0% { opacity: 1; transform: translate(-50%,-50%) scale(1); }
+          100% { opacity: 0; transform: translate(-50%,-50%) scale(0) translateY(-30px); }
         }
-        @keyframes upLose {
-          0%,100% { box-shadow: 0 0 16px rgba(248,113,113,0.2); }
-          50% { box-shadow: 0 0 36px rgba(248,113,113,0.45); }
-        }
+        .up-spark { position:absolute; width:8px; height:8px; border-radius:50%; animation:upSpark .9s ease-out forwards; }
       `}</style>
+      {toast && <div style={toastStyle}>{toast}</div>}
 
-      <div
-        style={{
-          ...panel,
-          animation:
-            flash === "win"
-              ? "upWin 0.9s ease 3"
-              : flash === "lose"
-                ? "upLose 0.7s ease 2"
-                : undefined,
-          borderColor:
-            flash === "win"
-              ? "rgba(74,222,128,0.55)"
-              : flash === "lose"
-                ? "rgba(248,113,113,0.5)"
-                : "rgba(244,114,182,0.35)",
-        }}
-      >
-        <div style={{ display: "flex", justifyContent: "center" }}>
-          <canvas
-            ref={canvasRef}
-            style={{ width: "min(100%, 280px)", height: "min(100vw, 280px)", maxHeight: 280 }}
-          />
-        </div>
+      <div style={dialWrap}>
+        <svg viewBox="0 0 200 200" width="100%" height="100%" style={{ display: "block" }}>
+          <defs>
+            <linearGradient id="winG" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stopColor="#16a34a" />
+              <stop offset="100%" stopColor="#4ade80" />
+            </linearGradient>
+            <linearGradient id="loseG" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stopColor="#7f1d1d" />
+              <stop offset="100%" stopColor="#ef4444" />
+            </linearGradient>
+            <filter id="glow">
+              <feGaussianBlur stdDeviation="3" result="b" />
+              <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
+            </filter>
+          </defs>
+          {/* track bg */}
+          <circle cx="100" cy="100" r="78" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="16" />
+          {/* lose arc full then win on top */}
+          <circle cx="100" cy="100" r="78" fill="none" stroke="url(#loseG)" strokeWidth="16"
+            strokeDasharray={`${(100 - chance) * 4.9} 490`} strokeDashoffset={-chance * 4.9}
+            transform="rotate(-90 100 100)" strokeLinecap="butt" opacity={0.85} />
+          <circle cx="100" cy="100" r="78" fill="none" stroke="url(#winG)" strokeWidth="16"
+            strokeDasharray={`${chance * 4.9} 490`} strokeDashoffset={0}
+            transform="rotate(-90 100 100)" strokeLinecap="butt" filter="url(#glow)" />
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 8 }}>
-          <div style={stat}>
-            <div style={statL}>Шанс</div>
-            <div style={statV}>{chance}%</div>
-          </div>
-          <div style={stat}>
-            <div style={statL}>Множитель</div>
-            <div style={statV}>{mult}x</div>
-          </div>
-          <div style={stat}>
-            <div style={statL}>Ставка</div>
-            <div style={statV}>{stake} TON</div>
-          </div>
-          <div style={stat}>
-            <div style={statL}>Выплата</div>
-            <div style={{ ...statV, color: "#4ade80" }}>{potential} TON</div>
-          </div>
-        </div>
+          {/* center */}
+          <circle cx="100" cy="100" r="58" fill="#0b1020" stroke="rgba(255,255,255,0.08)" strokeWidth="1" />
+          <text x="100" y="92" textAnchor="middle" fill="#94a3b8" fontSize="11" fontWeight="700">CHANCE</text>
+          <text x="100" y="114" textAnchor="middle" fill="#fff" fontSize="28" fontWeight="900">{chance}%</text>
 
-        {last && (
-          <div
-            style={{
-              marginTop: 14,
-              textAlign: "center",
-              fontWeight: 900,
-              fontSize: 17,
-              color: last.won ? "#4ade80" : "#f87171",
-            }}
-          >
-            {last.won
-              ? `Успех! +${last.profit.toFixed(3)} TON`
-              : `Мимо (${last.roll.toFixed(1)}%) · −${stake} TON`}
+          {/* needle */}
+          <g transform={`rotate(${angle} 100 100)`} style={{ transition: busy ? undefined : "transform 0.2s" }}>
+            <polygon points="100,28 106,100 94,100" fill="#fff" filter="url(#glow)" />
+            <circle cx="100" cy="100" r="8" fill="#fff" />
+            <circle cx="100" cy="100" r="4" fill="#ec4899" />
+          </g>
+        </svg>
+
+        {sparks.map((s) => (
+          <span key={s.id} className="up-spark" style={{ left: `${s.x}%", top: `${s.y}%`, background: s.c }} />
+        ))}
+
+        {result && !busy && (
+          <div style={{
+            position: "absolute", left: 0, right: 0, bottom: 8, textAlign: "center",
+            fontWeight: 900, fontSize: 15,
+            color: result.won ? "#4ade80" : "#f87171",
+          }}>
+            {result.won ? `УСПЕХ +${result.profit.toFixed(3)} TON` : `МИМО (${result.roll.toFixed(1)}%)`}
           </div>
         )}
       </div>
 
-      <div style={row}>
-        <label style={lab}>Шанс победы: {chance}%</label>
-        <input
-          type="range"
-          min={5}
-          max={90}
-          value={chance}
-          disabled={busy}
-          onChange={(e) => {
-            const v = Number(e.target.value);
-            setChance(v);
-            setFlash(null);
-            drawWheel(needle, v);
-          }}
-          style={{ width: "100%", accentColor: "#f472b6" }}
-        />
+      <div style={stats}>
+        <div style={stat}><div style={statL}>Множитель</div><div style={statV}>{mult}x</div></div>
+        <div style={stat}><div style={statL}>Выплата</div><div style={{ ...statV, color: "#4ade80" }}>{potential}</div></div>
       </div>
 
-      <div style={row}>
-        <label style={lab}>Ставка TON</label>
-        <input
-          type="number"
-          min={MIN_BET}
-          step="0.1"
-          value={stake}
-          disabled={busy}
-          onChange={(e) => setStake(Math.max(MIN_BET, Number(e.target.value) || MIN_BET))}
-          style={inp}
-        />
-        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+      <div style={panel}>
+        <span style={lab}>Шанс победы · {chance}%</span>
+        <input type="range" min={5} max={90} value={chance} disabled={busy}
+          onChange={(e) => setChance(Number(e.target.value))} style={{ width: "100%", accentColor: "#ec4899" }} />
+        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "#64748b", marginTop: 4 }}>
+          <span>5% · x19</span><span>90% · x1.06</span>
+        </div>
+
+        <span style={{ ...lab, marginTop: 14 }}>Ставка TON</span>
+        <input type="number" min={MIN_BET} step="0.1" value={stake} disabled={busy}
+          onChange={(e) => setStake(Math.max(MIN_BET, Number(e.target.value) || MIN_BET))} style={inp} />
+        <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
           {PRESETS.map((p) => (
-            <button key={p} type="button" disabled={busy} onClick={() => setStake(p)} style={chip}>
-              {p}
-            </button>
+            <button key={p} type="button" disabled={busy} onClick={() => setStake(p)} style={chip}>{p}</button>
           ))}
         </div>
-      </div>
 
-      <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 12 }}>
-        Баланс: <b style={{ color: "#e2e8f0" }}>{balance.toFixed(3)} TON</b>
+        <div style={{ fontSize: 12, color: "#64748b", margin: "12px 0" }}>
+          Баланс <b style={{ color: "#e2e8f0" }}>{balance.toFixed(3)} TON</b>
+        </div>
+        <button type="button" disabled={busy || stake > balance} onClick={play} style={btn}>
+          {busy ? "Крутим…" : "⬆️  Upgrade"}
+        </button>
       </div>
-      {error && <div style={{ color: "#f87171", fontSize: 13, marginBottom: 10 }}>{error}</div>}
-
-      <button type="button" disabled={busy || stake > balance} onClick={play} style={btn}>
-        {spinning ? "Крутим…" : `⬆️ Upgrade · ${stake} TON`}
-      </button>
     </div>
   );
 }
 
-const wrap: CSSProperties = { color: "#e2e8f0" };
-const panel: CSSProperties = {
-  borderRadius: 22,
-  padding: 16,
-  marginBottom: 14,
-  background: "linear-gradient(165deg,#3b0764 0%,#1a0a2e 45%,#0f0a1a 100%)",
-  border: "1px solid rgba(244,114,182,0.35)",
-  boxShadow: "0 16px 48px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.06)",
+const root: CSSProperties = { color: "#e2e8f0", position: "relative" };
+const dialWrap: CSSProperties = {
+  position: "relative", height: 240, marginBottom: 12, borderRadius: 20, overflow: "hidden",
+  background: "radial-gradient(ellipse at 50% 40%, rgba(236,72,153,0.2) 0%, #0a0612 70%)",
+  border: "1px solid rgba(244,114,182,0.3)",
+  boxShadow: "0 0 40px rgba(236,72,153,0.12)",
+  padding: 8,
 };
+const stats: CSSProperties = { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 12 };
 const stat: CSSProperties = {
-  background: "rgba(255,255,255,0.05)",
-  borderRadius: 12,
-  padding: "10px 12px",
+  background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)",
+  borderRadius: 14, padding: "12px 14px",
+};
+const statL: CSSProperties = { fontSize: 10, color: "#64748b", fontWeight: 700 };
+const statV: CSSProperties = { fontSize: 20, fontWeight: 900, marginTop: 2 };
+const panel: CSSProperties = {
+  background: "rgba(15,23,42,0.8)", borderRadius: 18, padding: 14,
   border: "1px solid rgba(255,255,255,0.08)",
 };
-const statL: CSSProperties = { fontSize: 10, color: "#94a3b8", fontWeight: 700 };
-const statV: CSSProperties = { fontSize: 16, fontWeight: 900, marginTop: 2 };
-const row: CSSProperties = { marginBottom: 12 };
-const lab: CSSProperties = {
-  display: "block",
-  fontSize: 11,
-  fontWeight: 700,
-  color: "#64748b",
-  marginBottom: 6,
-};
+const lab: CSSProperties = { display: "block", fontSize: 11, fontWeight: 700, color: "#64748b", marginBottom: 6 };
 const inp: CSSProperties = {
-  width: "100%",
-  boxSizing: "border-box",
-  padding: "12px 14px",
-  borderRadius: 12,
-  border: "1px solid rgba(255,255,255,0.12)",
-  background: "rgba(0,0,0,0.35)",
-  color: "#fff",
-  fontSize: 15,
-  fontWeight: 700,
-  fontFamily: "inherit",
+  width: "100%", boxSizing: "border-box", padding: "12px 14px", borderRadius: 12,
+  border: "1px solid rgba(255,255,255,0.12)", background: "rgba(0,0,0,0.4)",
+  color: "#fff", fontSize: 16, fontWeight: 800, fontFamily: "inherit",
 };
 const chip: CSSProperties = {
-  padding: "6px 12px",
-  borderRadius: 999,
-  border: "1px solid rgba(255,255,255,0.12)",
-  background: "rgba(255,255,255,0.06)",
-  color: "#cbd5e1",
-  fontWeight: 700,
-  fontSize: 12,
-  cursor: "pointer",
-  fontFamily: "inherit",
+  padding: "6px 12px", borderRadius: 999, border: "1px solid rgba(255,255,255,0.1)",
+  background: "rgba(255,255,255,0.05)", color: "#cbd5e1", fontWeight: 700, fontSize: 12,
+  cursor: "pointer", fontFamily: "inherit",
 };
 const btn: CSSProperties = {
-  width: "100%",
-  padding: "15px 0",
-  borderRadius: 14,
-  border: "none",
-  background: "linear-gradient(135deg,#be185d,#f472b6 55%,#fbcfe8)",
-  color: "#1a0a14",
-  fontSize: 15,
-  fontWeight: 900,
-  cursor: "pointer",
-  fontFamily: "inherit",
-  boxShadow: "0 8px 28px rgba(219,39,119,0.4)",
+  width: "100%", padding: "15px 0", borderRadius: 14, border: "none",
+  background: "linear-gradient(135deg,#db2777,#f472b6)", color: "#fff",
+  fontSize: 16, fontWeight: 900, cursor: "pointer", fontFamily: "inherit",
+  boxShadow: "0 8px 28px rgba(236,72,153,0.35)",
+};
+const toastStyle: CSSProperties = {
+  position: "fixed", top: 72, left: "50%", transform: "translateX(-50%)", zIndex: 50,
+  padding: "10px 18px", borderRadius: 12, fontWeight: 800, fontSize: 13,
+  background: "rgba(15,23,42,0.95)", border: "1px solid rgba(255,255,255,0.15)", color: "#fff",
 };

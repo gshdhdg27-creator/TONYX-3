@@ -1,14 +1,46 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 
 const MIN_BET = 0.1;
 const PRESETS = [0.1, 0.5, 1, 2, 5];
-const TABLES: Record<string, number[]> = {
-  low: [0.5, 0.7, 0.9, 1.0, 1.1, 1.2, 1.4, 1.2, 1.1, 1.0, 0.9, 0.7, 0.5],
-  med: [0.2, 0.4, 0.6, 0.9, 1.2, 1.8, 3.0, 1.8, 1.2, 0.9, 0.6, 0.4, 0.2],
-  high: [0, 0.1, 0.3, 0.6, 1.0, 2.5, 15, 2.5, 1.0, 0.6, 0.3, 0.1, 0],
-};
 
 type Risk = "low" | "med" | "high";
+
+function buildTable(rows: number, risk: Risk): number[] {
+  if (rows === 12 && risk === "high") return [76, 17, 6, 2.2, 0.8, 0.2, 0.1, 0.2, 0.8, 2.2, 6, 17, 76];
+  if (rows === 12 && risk === "med") return [13, 6, 3, 1.5, 0.7, 0.5, 0.4, 0.5, 0.7, 1.5, 3, 6, 13];
+  if (rows === 12 && risk === "low") return [4, 2.2, 1.4, 1.1, 1, 0.9, 0.8, 0.9, 1, 1.1, 1.4, 2.2, 4];
+  if (rows === 16 && risk === "high") return [170, 45, 12, 5, 2.2, 0.8, 0.4, 0.2, 0.1, 0.2, 0.4, 0.8, 2.2, 5, 12, 45, 170];
+  if (rows === 16 && risk === "med") return [16, 9, 4, 2, 1.2, 0.7, 0.5, 0.4, 0.3, 0.4, 0.5, 0.7, 1.2, 2, 4, 9, 16];
+  if (rows === 16 && risk === "low") return [5, 2.5, 1.6, 1.2, 1, 0.9, 0.8, 0.7, 0.7, 0.7, 0.8, 0.9, 1, 1.2, 1.6, 2.5, 5];
+  if (rows === 8 && risk === "high") return [29, 8, 2.5, 0.8, 0.4, 0.8, 2.5, 8, 29];
+  if (rows === 8 && risk === "med") return [5.6, 2.1, 1.1, 0.8, 0.6, 0.8, 1.1, 2.1, 5.6];
+  if (rows === 8 && risk === "low") return [2.5, 1.5, 1.2, 1, 0.9, 1, 1.2, 1.5, 2.5];
+  // generic
+  const n = rows + 1;
+  const half = Math.floor(n / 2);
+  const edge = risk === "high" ? 80 : risk === "med" ? 14 : 4;
+  const mid = risk === "high" ? 0.2 : risk === "med" ? 0.5 : 0.9;
+  return Array.from({ length: n }, (_, i) => {
+    const d = Math.abs(i - (n - 1) / 2) / Math.max(half, 1);
+    let m = mid + (edge - mid) * Math.pow(d, risk === "high" ? 2.4 : risk === "med" ? 1.8 : 1.2);
+    if (m >= 10) m = Math.round(m);
+    else if (m >= 2) m = Math.round(m * 10) / 10;
+    else m = Math.round(m * 100) / 100;
+    return m;
+  });
+}
+
+function bucketColor(m: number, max: number): string {
+  const t = Math.min(1, m / Math.max(max, 0.01));
+  // center green → yellow → orange → pink edges (as in screenshot)
+  if (t < 0.08) return "#22c55e";
+  if (t < 0.15) return "#84cc16";
+  if (t < 0.25) return "#eab308";
+  if (t < 0.4) return "#f59e0b";
+  if (t < 0.6) return "#f97316";
+  if (t < 0.8) return "#fb7185";
+  return "#ec4899";
+}
 
 function haptic(t: "light" | "medium" | "heavy" = "light") {
   try { (window as any).Telegram?.WebApp?.HapticFeedback?.impactOccurred?.(t); } catch { /* */ }
@@ -21,112 +53,175 @@ export default function PlinkoGame({
   telegramId, balance, onBalanceChange,
 }: { telegramId: string; balance: number; onBalanceChange: () => void }) {
   const [stake, setStake] = useState(0.5);
-  const [risk, setRisk] = useState<Risk>("med");
+  const [risk, setRisk] = useState<Risk>("high");
+  const [rows, setRows] = useState(12);
   const [busy, setBusy] = useState(false);
   const [hit, setHit] = useState<number | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [last, setLast] = useState<null | { mult: number; profit: number }>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const ballRef = useRef<{ x: number; y: number; visible: boolean }>({ x: 0.5, y: 0, visible: false });
-  const pathAnimRef = useRef(0);
+  const animRef = useRef(0);
 
-  const table = TABLES[risk];
-  const rows = table.length - 1;
+  const table = useMemo(() => buildTable(rows, risk), [rows, risk]);
+  const maxM = useMemo(() => Math.max(...table), [table]);
 
-  const drawBoard = useCallback((highlight: number | null) => {
+  const draw = useCallback((highlight: number | null) => {
     const c = canvasRef.current;
     if (!c) return;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const w = c.clientWidth;
-    const h = c.clientHeight;
-    if (c.width !== Math.floor(w * dpr)) {
-      c.width = Math.floor(w * dpr);
-      c.height = Math.floor(h * dpr);
+    const W = c.clientWidth;
+    const H = c.clientHeight;
+    if (c.width !== Math.floor(W * dpr)) {
+      c.width = Math.floor(W * dpr);
+      c.height = Math.floor(H * dpr);
     }
     const ctx = c.getContext("2d");
     if (!ctx) return;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, w, h);
+    ctx.clearRect(0, 0, W, H);
 
-    const padX = 18;
-    const topY = 18;
-    const bucketH = 36;
-    const pegAreaH = h - topY - bucketH - 10;
-    const pegR = 3.2;
+    // soft stars
+    ctx.fillStyle = "rgba(255,255,255,0.35)";
+    for (let i = 0; i < 12; i++) {
+      const sx = ((i * 97) % 100) / 100 * W;
+      const sy = ((i * 53) % 100) / 100 * (H * 0.7);
+      ctx.beginPath();
+      ctx.arc(sx, sy, i % 3 === 0 ? 1.4 : 0.8, 0, Math.PI * 2);
+      ctx.fill();
+    }
 
-    // pegs
+    const padX = 14;
+    const topY = 36;
+    const bucketH = 34;
+    const pegAreaH = H - topY - bucketH - 8;
+    const slots = table.length;
+
+    // top dropper (gold pill)
+    const dropX = W / 2;
+    const dropY = 14;
+    const grd = ctx.createLinearGradient(dropX - 28, dropY, dropX + 28, dropY + 12);
+    grd.addColorStop(0, "#fde68a");
+    grd.addColorStop(0.5, "#fbbf24");
+    grd.addColorStop(1, "#d97706");
+    ctx.fillStyle = grd;
+    ctx.beginPath();
+    ctx.moveTo(dropX - 26, dropY + 4);
+    ctx.arcTo(dropX - 26, dropY, dropX - 18, dropY, 6);
+    ctx.lineTo(dropX + 18, dropY);
+    ctx.arcTo(dropX + 26, dropY, dropX + 26, dropY + 4, 6);
+    ctx.lineTo(dropX + 26, dropY + 8);
+    ctx.arcTo(dropX + 26, dropY + 14, dropX + 18, dropY + 14, 6);
+    ctx.lineTo(dropX - 18, dropY + 14);
+    ctx.arcTo(dropX - 26, dropY + 14, dropX - 26, dropY + 8, 6);
+    ctx.closePath();
+    ctx.fill();
+    ctx.shadowColor = "#fbbf24";
+    ctx.shadowBlur = 12;
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    // pegs — pyramid: row r has (r+1) pegs? classic plinko has row r with r+1 pegs starting from 1
+    // Screenshot: top small rows growing down to rows count
+    const pegR = Math.max(2.4, Math.min(4.2, (W - padX * 2) / (slots * 3.2)));
+
     for (let r = 0; r < rows; r++) {
-      const cols = r + 1;
-      const y = topY + ((r + 1) / (rows + 1)) * pegAreaH;
-      for (let col = 0; col < cols; col++) {
-        const x = padX + ((col + 0.5) / cols) * (w - padX * 2);
+      const pegsInRow = r + 3; // starts wider like screenshot pyramid
+      // Better: classic — row 0 has 3 pegs offset, growing
+      // Match screenshot: equilateral-ish triangle of pegs
+      const count = r + 1;
+      const y = topY + ((r + 0.5) / rows) * pegAreaH;
+      // spacing so bottom row aligns with buckets
+      const usable = W - padX * 2;
+      // center the row; bottom row spans almost full width over slots-ish
+      const span = usable * ((r + 1) / rows);
+      for (let col = 0; col < count; col++) {
+        const x =
+          count === 1
+            ? W / 2
+            : W / 2 - span / 2 + (col / (count - 1)) * span;
+        // lavender peg with highlight
+        const g = ctx.createRadialGradient(x - pegR * 0.35, y - pegR * 0.35, 0, x, y, pegR);
+        g.addColorStop(0, "#f5f3ff");
+        g.addColorStop(0.45, "#c4b5fd");
+        g.addColorStop(1, "#7c3aed");
         ctx.beginPath();
         ctx.arc(x, y, pegR, 0, Math.PI * 2);
-        const g = ctx.createRadialGradient(x - 1, y - 1, 0, x, y, pegR);
-        g.addColorStop(0, "#e2e8f0");
-        g.addColorStop(1, "#64748b");
         ctx.fillStyle = g;
         ctx.fill();
+        ctx.beginPath();
+        ctx.arc(x - pegR * 0.3, y - pegR * 0.3, pegR * 0.25, 0, Math.PI * 2);
+        ctx.fillStyle = "rgba(255,255,255,0.55)";
+        ctx.fill();
       }
+      void pegsInRow;
     }
 
     // buckets
-    const bw = (w - padX * 2) / table.length;
+    const bw = (W - padX * 2) / slots;
     table.forEach((m, i) => {
       const x = padX + i * bw;
-      const y = h - bucketH;
-      let col = "#3b82f6";
-      if (m >= 3) col = "#fbbf24";
-      else if (m >= 1) col = "#22c55e";
-      else if (m <= 0) col = "#ef4444";
+      const y = H - bucketH;
+      const col = bucketColor(m, maxM);
       const active = highlight === i;
-      ctx.fillStyle = active ? col : col + "99";
+      // rounded rect
+      const rx = x + 1.5, ry = y, rw = bw - 3, rh = bucketH - 6, rr = 7;
       ctx.beginPath();
-      ctx.roundRect(x + 1, y, bw - 2, bucketH - 4, 6);
-      ctx.fill();
+      ctx.moveTo(rx + rr, ry);
+      ctx.arcTo(rx + rw, ry, rx + rw, ry + rh, rr);
+      ctx.arcTo(rx + rw, ry + rh, rx, ry + rh, rr);
+      ctx.arcTo(rx, ry + rh, rx, ry, rr);
+      ctx.arcTo(rx, ry, rx + rw, ry, rr);
+      ctx.closePath();
+      ctx.fillStyle = col;
       if (active) {
         ctx.shadowColor = col;
-        ctx.shadowBlur = 16;
+        ctx.shadowBlur = 18;
+      }
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      if (active) {
         ctx.strokeStyle = "#fff";
         ctx.lineWidth = 2;
         ctx.stroke();
-        ctx.shadowBlur = 0;
       }
-      ctx.fillStyle = active ? "#0b1020" : "rgba(11,16,32,0.85)";
-      ctx.font = `bold ${Math.max(8, Math.min(11, bw * 0.35))}px system-ui`;
+      ctx.fillStyle = "#1e1b4b";
+      ctx.font = `bold ${Math.max(8, Math.min(11, bw * 0.42))}px system-ui,sans-serif`;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText(`${m}x`, x + bw / 2, y + (bucketH - 4) / 2);
+      const label = m >= 10 ? `×${Math.round(m)}` : `×${m}`;
+      ctx.fillText(label, x + bw / 2, y + (bucketH - 6) / 2);
     });
 
     // ball
     const b = ballRef.current;
     if (b.visible) {
-      const bx = padX + b.x * (w - padX * 2);
+      // map normalized coords: x 0..1 across board, y 0..1 peg area
+      const bx = padX + b.x * (W - padX * 2);
       const by = topY + b.y * pegAreaH;
       ctx.beginPath();
-      ctx.arc(bx, by, 7, 0, Math.PI * 2);
-      const bg = ctx.createRadialGradient(bx - 2, by - 2, 0, bx, by, 7);
-      bg.addColorStop(0, "#fff");
-      bg.addColorStop(0.4, "#38bdf8");
-      bg.addColorStop(1, "#0284c7");
+      ctx.arc(bx, by, Math.max(5, pegR * 1.35), 0, Math.PI * 2);
+      const bg = ctx.createRadialGradient(bx - 2, by - 2, 0, bx, by, 8);
+      bg.addColorStop(0, "#ffffff");
+      bg.addColorStop(0.35, "#e9d5ff");
+      bg.addColorStop(1, "#a855f7");
       ctx.fillStyle = bg;
-      ctx.shadowColor = "#38bdf8";
-      ctx.shadowBlur = 14;
+      ctx.shadowColor = "#c084fc";
+      ctx.shadowBlur = 16;
       ctx.fill();
       ctx.shadowBlur = 0;
     }
-  }, [rows, table]);
+  }, [rows, table, maxM]);
 
   useEffect(() => {
-    drawBoard(hit);
-  }, [drawBoard, hit, risk]);
+    draw(hit);
+  }, [draw, hit, risk, rows]);
 
   useEffect(() => {
-    const onResize = () => drawBoard(hit);
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, [drawBoard, hit]);
+    const onR = () => draw(hit);
+    window.addEventListener("resize", onR);
+    return () => window.removeEventListener("resize", onR);
+  }, [draw, hit]);
 
   const flash = (msg: string) => {
     setToast(msg);
@@ -135,19 +230,18 @@ export default function PlinkoGame({
 
   const animatePath = (path: number[], finalSlot: number) =>
     new Promise<void>((resolve) => {
-      cancelAnimationFrame(pathAnimRef.current);
-      ballRef.current.visible = true;
+      cancelAnimationFrame(animRef.current);
+      ballRef.current = { x: 0.5, y: 0.02, visible: true };
       let step = 0;
-      let pos = 0; // cumulative rights
+      let pos = 0;
       const total = path.length;
 
       const runStep = () => {
         if (step >= total) {
-          // settle into bucket
           ballRef.current.x = (finalSlot + 0.5) / table.length;
-          ballRef.current.y = 1.02;
+          ballRef.current.y = 1.05;
           setHit(finalSlot);
-          drawBoard(finalSlot);
+          draw(finalSlot);
           haptic("medium");
           resolve();
           return;
@@ -155,33 +249,44 @@ export default function PlinkoGame({
         const right = path[step]!;
         pos += right;
         const r = step + 1;
-        const cols = r + 1;
-        // interpolate within row
+        const count = r; // pegs in this row index matching draw
+        // place ball between pegs of current row
+        const span = count <= 1 ? 0 : 1;
+        // x relative: binomial position / rows
+        const toX = (pos + 0.5) / (step + 2); // growing row width approx
+        // better: final path converges to slot/(rows)
+        const progress = r / rows;
+        const targetX = ((pos + 0.5) / (r + 1)) * progress + 0.5 * (1 - progress);
+        // use slot-aware interpolation for accuracy
+        const slotFrac = finalSlot / Math.max(rows, 1);
+        const blend = 0.35 + 0.65 * progress;
+        const aimX = pos / Math.max(r, 1);
+        const nx = aimX * blend + 0.5 * (1 - blend) * 0 + (slotFrac) * 0; // simplify
+        void span; void toX; void targetX; void nx;
+
         const start = performance.now();
         const fromX = ballRef.current.x;
-        const toX = (pos + 0.5) / cols;
         const fromY = ballRef.current.y;
-        const toY = (r + 1) / (rows + 1);
+        // position: row r has `r+1` peg gaps conceptually — map pos in 0..r to board x
+        const toX2 = (pos + 0.5) / (r + 1);
+        const toY2 = (r + 0.35) / rows;
 
         const tick = (now: number) => {
-          const p = Math.min(1, (now - start) / 90);
+          const p = Math.min(1, (now - start) / 85);
           const ease = 1 - Math.pow(1 - p, 2);
-          ballRef.current.x = fromX + (toX - fromX) * ease;
-          ballRef.current.y = fromY + (toY - fromY) * ease;
-          // slight bounce mid
-          if (p > 0.4 && p < 0.7) ballRef.current.y -= 0.015;
-          drawBoard(null);
-          if (p < 1) pathAnimRef.current = requestAnimationFrame(tick);
+          ballRef.current.x = fromX + (toX2 - fromX) * ease;
+          ballRef.current.y = fromY + (toY2 - fromY) * ease;
+          if (p > 0.35 && p < 0.65) ballRef.current.y -= 0.012;
+          draw(null);
+          if (p < 1) animRef.current = requestAnimationFrame(tick);
           else {
             haptic("light");
             step += 1;
             runStep();
           }
         };
-        pathAnimRef.current = requestAnimationFrame(tick);
+        animRef.current = requestAnimationFrame(tick);
       };
-
-      ballRef.current = { x: 0.5, y: 0, visible: true };
       runStep();
     });
 
@@ -196,7 +301,7 @@ export default function PlinkoGame({
       const res = await fetch("/api/mini/games/plinko/play", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ telegramId, stake, risk }),
+        body: JSON.stringify({ telegramId, stake, risk, rows }),
       });
       const d = await res.json();
       if (!res.ok) {
@@ -209,32 +314,66 @@ export default function PlinkoGame({
       setLast({ mult: Number(d.multiplier) || 0, profit });
       if (profit >= 0) hapticNotify("success");
       else hapticNotify("error");
-      flash(profit >= 0 ? `+${profit.toFixed(3)} TON · ${d.multiplier}x` : `${profit.toFixed(3)} TON`);
+      flash(profit >= 0 ? `+${profit.toFixed(3)} TON · ×${d.multiplier}` : `${profit.toFixed(3)} TON`);
       onBalanceChange();
     } catch {
       flash("Сеть недоступна");
     } finally {
       ballRef.current.visible = false;
       setBusy(false);
-      drawBoard(hit);
+      draw(hit);
     }
   };
 
   return (
     <div style={root}>
       {toast && <div style={toastStyle}>{toast}</div>}
+
+      {/* Risk */}
       <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-        {(["low", "med", "high"] as Risk[]).map((r) => (
-          <button key={r} type="button" disabled={busy} onClick={() => { setRisk(r); setHit(null); }}
+        {([
+          ["low", "Лёгкий"],
+          ["med", "Средний"],
+          ["high", "Сложный"],
+        ] as [Risk, string][]).map(([r, label]) => (
+          <button
+            key={r}
+            type="button"
+            disabled={busy}
+            onClick={() => { setRisk(r); setHit(null); }}
             style={{
-              ...chip, flex: 1, padding: "10px 0",
-              borderColor: risk === r ? "rgba(56,189,248,0.6)" : "rgba(255,255,255,0.1)",
-              background: risk === r ? "rgba(14,165,233,0.2)" : "rgba(255,255,255,0.04)",
-              color: risk === r ? "#7dd3fc" : "#94a3b8",
-            }}>
-            {r === "low" ? "Low" : r === "med" ? "Med" : "High"}
+              ...chip,
+              flex: 1,
+              padding: "10px 0",
+              borderColor: risk === r ? "rgba(192,132,252,0.7)" : "rgba(255,255,255,0.1)",
+              background: risk === r ? "rgba(124,58,237,0.35)" : "rgba(255,255,255,0.04)",
+              color: risk === r ? "#e9d5ff" : "#94a3b8",
+            }}
+          >
+            {label}
           </button>
         ))}
+      </div>
+
+      {/* Rows */}
+      <div style={{ marginBottom: 10 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8" }}>Ряды</span>
+          <span style={{ fontSize: 12, fontWeight: 900, color: "#e9d5ff" }}>{rows}</span>
+        </div>
+        <input
+          type="range"
+          min={8}
+          max={16}
+          step={1}
+          value={rows}
+          disabled={busy}
+          onChange={(e) => { setRows(Number(e.target.value)); setHit(null); }}
+          style={{ width: "100%", accentColor: "#a855f7" }}
+        />
+        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "#64748b" }}>
+          <span>8</span><span>16</span>
+        </div>
       </div>
 
       <div style={board}>
@@ -246,14 +385,21 @@ export default function PlinkoGame({
           textAlign: "center", fontWeight: 900, fontSize: 16, marginBottom: 10,
           color: last.profit >= 0 ? "#4ade80" : "#f87171",
         }}>
-          {last.mult}x → {last.profit >= 0 ? "+" : ""}{last.profit.toFixed(3)} TON
+          ×{last.mult} → {last.profit >= 0 ? "+" : ""}{last.profit.toFixed(3)} TON
         </div>
       )}
 
       <div style={panel}>
         <span style={lab}>Ставка TON</span>
-        <input type="number" min={MIN_BET} step="0.1" value={stake} disabled={busy}
-          onChange={(e) => setStake(Math.max(MIN_BET, Number(e.target.value) || MIN_BET))} style={inp} />
+        <input
+          type="number"
+          min={MIN_BET}
+          step="0.1"
+          value={stake}
+          disabled={busy}
+          onChange={(e) => setStake(Math.max(MIN_BET, Number(e.target.value) || MIN_BET))}
+          style={inp}
+        />
         <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
           {PRESETS.map((p) => (
             <button key={p} type="button" disabled={busy} onClick={() => setStake(p)} style={chip}>{p}</button>
@@ -263,7 +409,7 @@ export default function PlinkoGame({
           Баланс <b style={{ color: "#e2e8f0" }}>{balance.toFixed(3)} TON</b>
         </div>
         <button type="button" disabled={busy || stake > balance} onClick={play} style={btn}>
-          {busy ? "Падает…" : "⚪  Дропать"}
+          {busy ? "Падает…" : "Дропать"}
         </button>
       </div>
     </div>
@@ -272,10 +418,13 @@ export default function PlinkoGame({
 
 const root: CSSProperties = { color: "#e2e8f0", position: "relative" };
 const board: CSSProperties = {
-  height: 280, borderRadius: 20, overflow: "hidden", marginBottom: 12,
-  background: "radial-gradient(ellipse at 50% 0%, #0c4a6e 0%, #020617 70%)",
-  border: "1px solid rgba(56,189,248,0.3)",
-  boxShadow: "0 0 40px rgba(14,165,233,0.12)",
+  height: 340,
+  borderRadius: 24,
+  overflow: "hidden",
+  marginBottom: 12,
+  background: "radial-gradient(ellipse at 50% 0%, #4c1d95 0%, #1e1b4b 40%, #0a0612 100%)",
+  border: "1px solid rgba(167,139,250,0.35)",
+  boxShadow: "0 0 50px rgba(124,58,237,0.2), inset 0 1px 0 rgba(255,255,255,0.06)",
 };
 const panel: CSSProperties = {
   background: "rgba(15,23,42,0.8)", borderRadius: 18, padding: 14,
@@ -294,9 +443,9 @@ const chip: CSSProperties = {
 };
 const btn: CSSProperties = {
   width: "100%", padding: "15px 0", borderRadius: 14, border: "none",
-  background: "linear-gradient(135deg,#0284c7,#38bdf8)", color: "#0b1020",
+  background: "linear-gradient(135deg,#7c3aed,#a855f7)", color: "#fff",
   fontSize: 16, fontWeight: 900, cursor: "pointer", fontFamily: "inherit",
-  boxShadow: "0 8px 28px rgba(56,189,248,0.35)",
+  boxShadow: "0 8px 28px rgba(168,85,247,0.4)",
 };
 const toastStyle: CSSProperties = {
   position: "fixed", top: 72, left: "50%", transform: "translateX(-50%)", zIndex: 50,

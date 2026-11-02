@@ -77,27 +77,6 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
   ctx.closePath();
 }
 
-/** Classic triangle: row r has r+1 pegs, bottom row aligns with bucket gaps */
-function pegLayout(rows: number, W: number, topY: number, areaH: number, pad: number) {
-  const rowsPts: { x: number; y: number }[][] = [];
-  for (let r = 0; r < rows; r++) {
-    const count = r + 1; // 1,2,3...rows — classic plinko pyramid
-    // Actually reference starts ~3; use r+1 but scale span to full width on last row
-    const n = r + 1;
-    const y = topY + ((r + 0.5) / rows) * areaH;
-    const usable = W - pad * 2;
-    // last row span = almost full; earlier rows proportional
-    const span = usable * (n / rows);
-    const row: { x: number; y: number }[] = [];
-    for (let c = 0; c < n; c++) {
-      const x = n === 1 ? W / 2 : W / 2 - span / 2 + (c / (n - 1)) * span;
-      row.push({ x, y });
-    }
-    rowsPts.push(row);
-  }
-  return rowsPts;
-}
-
 export default function PlinkoGame({
   telegramId, balance, onBalanceChange,
 }: { telegramId: string; balance: number; onBalanceChange: () => void }) {
@@ -132,7 +111,6 @@ export default function PlinkoGame({
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, W, H);
 
-    // stars
     ctx.fillStyle = "rgba(255,255,255,0.35)";
     [[0.1,0.12],[0.9,0.14],[0.18,0.4],[0.82,0.38],[0.12,0.68],[0.88,0.65]].forEach(([sx, sy]) => {
       ctx.beginPath();
@@ -146,7 +124,6 @@ export default function PlinkoGame({
     const areaH = H - topY - bucketH - 4;
     const slots = table.length;
 
-    // gold dropper
     const dx = W / 2;
     const grad = ctx.createLinearGradient(dx - 24, 10, dx + 24, 22);
     grad.addColorStop(0, "#ffe9a8");
@@ -159,7 +136,6 @@ export default function PlinkoGame({
     ctx.fill();
     ctx.shadowBlur = 0;
 
-    // pegs — start from 3 for nicer triangle like reference
     const pegs: { x: number; y: number }[][] = [];
     for (let r = 0; r < rows; r++) {
       const count = r + 3;
@@ -189,7 +165,6 @@ export default function PlinkoGame({
       }
     }
 
-    // buckets
     const bw = (W - pad * 2) / slots;
     table.forEach((m, i) => {
       const x = pad + i * bw;
@@ -347,15 +322,33 @@ export default function PlinkoGame({
     <div style={root}>
       {toast && <div style={toastStyle}>{toast}</div>}
 
-      {/* Risk */}
+      <div style={{ marginBottom: 10 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 2 }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8" }}>Ряды</span>
+          <span style={{ fontSize: 13, fontWeight: 900, color: "#e9d5ff" }}>{rows}</span>
+        </div>
+        <input
+          type="range" min={8} max={16} step={1} value={rows} disabled={busy}
+          onChange={(e) => { setRows(Number(e.target.value)); setHit(null); }}
+          style={{ width: "100%", accentColor: "#a855f7" }}
+        />
+      </div>
+
+      <div style={board}>
+        <canvas ref={canvasRef} style={{ width: "100%", height: "100%", display: "block" }} />
+      </div>
+
+      {last && (
+        <div style={{
+          textAlign: "center", fontWeight: 900, fontSize: 15, margin: "8px 0",
+          color: last.profit >= 0 ? "#4ade80" : "#f87171",
+        }}>
+          ×{last.mult} → {last.profit >= 0 ? "+" : ""}{last.profit.toFixed(3)} TON
+        </div>
+      )}
+
       <div style={riskRow}>
-        {(
-          [
-            ["low", "Лёгкий"],
-            ["med", "Средний"],
-            ["high", "Сложный"],
-          ] as [Risk, string][]
-        ).map(([r, label]) => (
+        {([["low", "Лёгкий"], ["med", "Средний"], ["high", "Сложный"]] as [Risk, string][]).map(([r, label]) => (
           <button
             key={r}
             type="button"
@@ -373,34 +366,6 @@ export default function PlinkoGame({
         ))}
       </div>
 
-      {/* Rows */}
-      <div style={{ marginBottom: 10 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 2 }}>
-          <span style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8" }}>Ряды</span>
-          <span style={{ fontSize: 13, fontWeight: 900, color: "#e9d5ff" }}>{rows}</span>
-        </div>
-        <input
-          type="range" min={8} max={16} step={1} value={rows} disabled={busy}
-          onChange={(e) => { setRows(Number(e.target.value)); setHit(null); }}
-          style={{ width: "100%", accentColor: "#a855f7" }}
-        />
-      </div>
-
-      {/* Board */}
-      <div style={board}>
-        <canvas ref={canvasRef} style={{ width: "100%", height: "100%", display: "block" }} />
-      </div>
-
-      {last && (
-        <div style={{
-          textAlign: "center", fontWeight: 900, fontSize: 15, margin: "6px 0 8px",
-          color: last.profit >= 0 ? "#4ade80" : "#f87171",
-        }}>
-          ×{last.mult} → {last.profit >= 0 ? "+" : ""}{last.profit.toFixed(3)} TON
-        </div>
-      )}
-
-      {/* Bet — compact so not covered by bottom nav */}
       <div style={panel}>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           <input
@@ -426,15 +391,12 @@ export default function PlinkoGame({
   );
 }
 
-const root: CSSProperties = {
-  color: "#e2e8f0",
-  position: "relative",
-  paddingBottom: 24,
-};
+const root: CSSProperties = { color: "#e2e8f0", position: "relative", paddingBottom: 24 };
 const riskRow: CSSProperties = {
   display: "grid",
   gridTemplateColumns: "1fr 1fr 1fr",
   gap: 6,
+  marginTop: 4,
   marginBottom: 10,
 };
 const riskBtn: CSSProperties = {
@@ -447,7 +409,7 @@ const riskBtn: CSSProperties = {
   fontFamily: "inherit",
 };
 const board: CSSProperties = {
-  height: 300,
+  height: 420,
   borderRadius: 22,
   overflow: "hidden",
   marginBottom: 8,

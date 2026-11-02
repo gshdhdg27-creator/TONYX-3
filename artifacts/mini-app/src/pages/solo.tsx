@@ -3,16 +3,21 @@ import { useTelegram } from "@/lib/telegram";
 import { useLang } from "@/lib/LanguageContext";
 import MinesGame from "@/components/MinesGame";
 import CoinFlipGame from "@/components/CoinFlipGame";
+import CrashGame from "@/components/CrashGame";
+import PlinkoGame from "@/components/PlinkoGame";
+import UpgradeGame from "@/components/UpgradeGame";
 import { GameCard } from "@/components/GameCard";
 import { useGetUserProfile, getGetUserProfileQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 
-type Tab = "pick" | "mines" | "coin" | "roulette";
+type Tab = "pick" | "mines" | "coin" | "crash" | "plinko" | "upgrade";
 
 const LOTTIE = {
   mines: "https://assets5.lottiefiles.com/packages/lf20_k86wxpgr.json",
   coin: "https://assets3.lottiefiles.com/packages/lf20_ysrn2iwp.json",
-  roulette: "https://assets4.lottiefiles.com/packages/lf20_3r3i3yqy.json",
+  crash: "https://assets9.lottiefiles.com/packages/lf20_jbrw3hcz.json",
+  plinko: "https://assets2.lottiefiles.com/packages/lf20_kyu7xb1v.json",
+  upgrade: "https://assets1.lottiefiles.com/packages/lf20_jcikwtux.json",
 };
 
 export default function SoloPage() {
@@ -71,16 +76,47 @@ export default function SoloPage() {
     );
   }
 
-  if (tab === "roulette") {
+  if (tab === "crash") {
     return (
-      <div style={page}>
+      <div style={{ minHeight: "100dvh", padding: "12px 12px 110px", background: "#0a0612" }}>
         <button type="button" onClick={() => setTab("pick")} style={back}>
           ← Назад
         </button>
-        <div style={title}>Рулетка</div>
-        <div style={{ color: "#c4b5fd", lineHeight: 1.5, marginTop: 8 }}>
-          Карточка в стиле TONYX готова. Игровая логика — следующим шагом.
-        </div>
+        <CrashGame
+          telegramId={telegramId ?? ""}
+          balance={tonBalance}
+          onBalanceChange={refreshBalance}
+        />
+      </div>
+    );
+  }
+
+  if (tab === "plinko") {
+    return (
+      <div style={{ minHeight: "100dvh", padding: "12px 12px 110px", background: "#0a0612" }}>
+        <button type="button" onClick={() => setTab("pick")} style={back}>
+          ← Назад
+        </button>
+        <PlinkoGame
+          telegramId={telegramId ?? ""}
+          balance={tonBalance}
+          onBalanceChange={refreshBalance}
+        />
+      </div>
+    );
+  }
+
+  if (tab === "upgrade") {
+    return (
+      <div style={{ minHeight: "100dvh", padding: "12px 12px 110px", background: "#0a0612" }}>
+        <button type="button" onClick={() => setTab("pick")} style={back}>
+          ← Назад
+        </button>
+        <UpgradeGame
+          telegramId={telegramId ?? ""}
+          balance={tonBalance}
+          onBalanceChange={refreshBalance}
+        />
       </div>
     );
   }
@@ -89,7 +125,7 @@ export default function SoloPage() {
     <div style={page}>
       <div style={header}>
         <div style={title}>Соло игры</div>
-        <div style={sub}>Dogg Style · NFT gifts inside</div>
+        <div style={sub}>Mines · Coin · Crash · Plinko · Upgrade</div>
       </div>
       <div style={{ display: "grid", gap: 12 }}>
         <GameCard
@@ -119,16 +155,40 @@ export default function SoloPage() {
             onClick={() => setTab("coin")}
           />
           <GameCard
-            name="Рулетка"
-            badge="Новое"
-            badgeColor="#eab308"
-            online={9}
-            lottieSrc={LOTTIE.roulette}
-            emoji="🎡"
-            stickers={["👑"]}
-            gradient="linear-gradient(145deg, #4c0519 0%, #a855f7 40%, #ca8a04 90%)"
-            accent="rgba(192,38,211,0.4)"
-            onClick={() => setTab("roulette")}
+            name="Crash"
+            badge="New"
+            badgeColor="#f97316"
+            online={24}
+            lottieSrc={LOTTIE.crash}
+            emoji="🚀"
+            stickers={["📈"]}
+            gradient="linear-gradient(145deg, #4c1d95 0%, #7c3aed 40%, #ea580c 100%)"
+            accent="rgba(249,115,22,0.45)"
+            onClick={() => setTab("crash")}
+          />
+          <GameCard
+            name="Plinko"
+            badge="New"
+            badgeColor="#38bdf8"
+            online={15}
+            lottieSrc={LOTTIE.plinko}
+            emoji="⚪"
+            stickers={["🎯"]}
+            gradient="linear-gradient(145deg, #0c4a6e 0%, #0284c7 40%, #0f172a 100%)"
+            accent="rgba(56,189,248,0.45)"
+            onClick={() => setTab("plinko")}
+          />
+          <GameCard
+            name="Upgrade"
+            badge="New"
+            badgeColor="#ec4899"
+            online={12}
+            lottieSrc={LOTTIE.upgrade}
+            emoji="⬆️"
+            stickers={["💎"]}
+            gradient="linear-gradient(145deg, #831843 0%, #db2777 40%, #0f172a 100%)"
+            accent="rgba(236,72,153,0.45)"
+            onClick={() => setTab("upgrade")}
           />
         </div>
       </div>

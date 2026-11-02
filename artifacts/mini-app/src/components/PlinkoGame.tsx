@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties }
 const MIN_BET = 0.1;
 const PRESETS = [0.1, 0.5, 1, 2, 5];
 const BALL_PRESETS = [1, 5, 10, 25];
-const MAX_BALLS = 50;
+const MAX_BALLS = 50; /* build-ok */
 
 type Risk = "low" | "med" | "high";
 
@@ -431,7 +431,10 @@ export default function PlinkoGame({
             max={MAX_BALLS}
             value={balls}
             disabled={busy}
-            onChange={(e) => setBalls(Math.max(1, Math.min(MAX_BALLS, Math.round(Number(e.target.value) || 1))))}
+            onChange={(e) => {
+              const v = Math.round(Number(e.target.value) || 1);
+              setBalls(Math.max(1, Math.min(MAX_BALLS, v)));
+            }}
             style={{
               ...inp,
               width: 64,

@@ -2,8 +2,9 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties } from "re
 
 const MIN_BET = 0.1;
 const PRESETS = [0.1, 0.5, 1, 2, 5, 10];
-const BETTING_SEC = 10;
-const RESULT_SEC = 2.5;
+const ROUND_MS = 20_000;
+const BETTING_MS = 10_000;
+const FLY_MS = 7_500;
 
 function haptic(t: "light" | "medium" | "heavy" = "light") {
   try { (window as any).Telegram?.WebApp?.HapticFeedback?.impactOccurred?.(t); } catch { /* */ }
@@ -12,8 +13,67 @@ function hapticNotify(t: "success" | "error") {
   try { (window as any).Telegram?.WebApp?.HapticFeedback?.notificationOccurred?.(t); } catch { /* */ }
 }
 
-type Hist = { mult: number; won: boolean };
-type Phase = "betting" | "fly" | "crash" | "win";
+type Hist = { mult: number; won: boolean; roundId: number };
+type Phase = "betting" | "fly" | "crash" | "win" | "result";
+
+type ServerState = {
+  roundId: number;
+  phase: "betting" | "fly" | "result";
+  phaseRemaining: number;
+  phaseElapsed: number;
+  crashPoint: number | null;
+  serverNow: number;
+};
+
+function localState(offsetMs: number): ServerState {
+  const now = Date.now() + offsetMs;
+  const roundId = Math.floor(now / ROUND_MS);
+  const elapsed = now % ROUND_MS;
+  if (elapsed < BETTING_MS) {
+    return {
+      roundId,
+      phase: "betting",
+      phaseElapsed: elapsed,
+      phaseRemaining: BETTING_MS - elapsed,
+      crashPoint: null,
+      serverNow: now,
+    };
+  }
+  if (elapsed < BETTING_MS + FLY_MS) {
+    return {
+      roundId,
+      phase: "fly",
+      phaseElapsed: elapsed - BETTING_MS,
+      phaseRemaining: BETTING_MS + FLY_MS - elapsed,
+      crashPoint: null,
+      serverNow: now,
+    };
+  }
+  return {
+    roundId,
+    phase: "result",
+    phaseElapsed: elapsed - BETTING_MS - FLY_MS,
+    phaseRemaining: ROUND_MS - elapsed,
+    crashPoint: null,
+    serverNow: now,
+  };
+}
+
+function multAtTime(tSec: number, crash: number): number {
+  const m = 1 + (Math.exp(tSec * 0.55) - 1) * 0.85;
+  return Math.min(crash, Math.round(m * 100) / 100);
+}
+
+function crashTimeSec(crash: number): number {
+  // invert approx growth until crash
+  const target = Math.max(crash, 1.01);
+  let t = 0;
+  for (let i = 0; i < 200; i++) {
+    if (multAtTime(t, 999) >= target) return t;
+    t += 0.05;
+  }
+  return Math.min(FLY_MS / 1000, t);
+}
 
 export default function CrashGame({
   telegramId, balance, onBalanceChange,
@@ -21,7 +81,7 @@ export default function CrashGame({
   const [stake, setStake] = useState(0.5);
   const [autoCashout, setAutoCashout] = useState(2);
   const [phase, setPhase] = useState<Phase>("betting");
-  const [countdown, setCountdown] = useState(BETTING_SEC);
+  const [countdown, setCountdown] = useState(10);
   const [mult, setMult] = useState(1);
   const [toast, setToast] = useState<string | null>(null);
   const [history, setHistory] = useState<Hist[]>([]);
@@ -29,21 +89,17 @@ export default function CrashGame({
   const [lockedStake, setLockedStake] = useState(0);
   const [lockedCashout, setLockedCashout] = useState(2);
   const [roundId, setRoundId] = useState(0);
+  const [settling, setSettling] = useState(false);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const pointsRef = useRef<{ t: number; m: number }[]>([{ t: 0, m: 1 }]);
-  const rafRef = useRef(0);
+  const offsetRef = useRef(0);
+  const crashRef = useRef<number | null>(null);
+  const settledRoundRef = useRef<number | null>(null);
+  const betRoundRef = useRef<number | null>(null);
+  const betResultRef = useRef<any>(null);
+  const lastPhaseRef = useRef<string>("");
   const wonRef = useRef(false);
-  const phaseRef = useRef<Phase>("betting");
-  const betLockedRef = useRef(false);
-  const lockedStakeRef = useRef(0);
-  const lockedCashoutRef = useRef(2);
-  const runningRef = useRef(true);
-
-  useEffect(() => { phaseRef.current = phase; }, [phase]);
-  useEffect(() => { betLockedRef.current = betLocked; }, [betLocked]);
-  useEffect(() => { lockedStakeRef.current = lockedStake; }, [lockedStake]);
-  useEffect(() => { lockedCashoutRef.current = lockedCashout; }, [lockedCashout]);
 
   const draw = useCallback((current: number, crashed: boolean) => {
     const c = canvasRef.current;
@@ -61,7 +117,6 @@ export default function CrashGame({
     ctx.clearRect(0, 0, w, h);
 
     ctx.strokeStyle = "rgba(255,255,255,0.045)";
-    ctx.lineWidth = 1;
     for (let i = 1; i < 5; i++) {
       const y = (h / 5) * i;
       ctx.beginPath();
@@ -118,186 +173,163 @@ export default function CrashGame({
     setTimeout(() => setToast(null), 2600);
   };
 
-  const placeBet = () => {
-    if (phaseRef.current !== "betting" || betLockedRef.current) return;
+  // Sync clock with server periodically
+  useEffect(() => {
+    let alive = true;
+    const sync = async () => {
+      try {
+        const r = await fetch("/api/mini/games/crash/state");
+        const d = await r.json();
+        if (!alive) return;
+        if (typeof d.serverNow === "number") {
+          offsetRef.current = d.serverNow - Date.now();
+        }
+        if (d.crashPoint != null) crashRef.current = Number(d.crashPoint);
+      } catch { /* offline: local clock */ }
+    };
+    void sync();
+    const id = setInterval(sync, 5000);
+    return () => { alive = false; clearInterval(id); };
+  }, []);
+
+  // Global tick — never stops
+  useEffect(() => {
+    let raf = 0;
+    const tick = () => {
+      const st = localState(offsetRef.current);
+      setRoundId(st.roundId);
+
+      if (st.phase === "betting") {
+        if (lastPhaseRef.current !== "betting") {
+          // new betting window
+          pointsRef.current = [{ t: 0, m: 1 }];
+          setMult(1);
+          crashRef.current = null;
+          wonRef.current = false;
+          betResultRef.current = null;
+          if (betRoundRef.current !== null && betRoundRef.current !== st.roundId) {
+            setBetLocked(false);
+            setLockedStake(0);
+            betRoundRef.current = null;
+          }
+          draw(1, false);
+        }
+        setPhase("betting");
+        setCountdown(Math.ceil(st.phaseRemaining / 1000));
+        lastPhaseRef.current = "betting";
+      } else if (st.phase === "fly") {
+        const tSec = st.phaseElapsed / 1000;
+        // fetch crash once when entering fly
+        if (lastPhaseRef.current === "betting") {
+          haptic("light");
+          void fetch("/api/mini/games/crash/state")
+            .then((r) => r.json())
+            .then((d) => {
+              if (d.crashPoint != null) crashRef.current = Number(d.crashPoint);
+            })
+            .catch(() => {});
+        }
+        const crash = crashRef.current ?? 2;
+        const crashT = crashTimeSec(crash);
+        const crashed = tSec >= crashT;
+        const m = crashed ? crash : multAtTime(tSec, crash);
+        const rounded = Math.round(m * 100) / 100;
+
+        if (!crashed) {
+          pointsRef.current.push({ t: tSec, m: rounded });
+          if (pointsRef.current.length > 400) pointsRef.current.shift();
+          setMult(rounded);
+          setPhase("fly");
+          draw(rounded, false);
+        } else {
+          setMult(crash);
+          setPhase(wonRef.current ? "win" : "crash");
+          draw(crash, true);
+
+          // settle history once per round
+          if (settledRoundRef.current !== st.roundId) {
+            settledRoundRef.current = st.roundId;
+            const res = betResultRef.current;
+            if (res && !res.error) {
+              wonRef.current = !!res.won;
+              setHistory((h) => [
+                { mult: res.won ? Number(res.cashoutAt) : crash, won: !!res.won, roundId: st.roundId },
+                ...h,
+              ].slice(0, 16));
+              if (res.won) {
+                hapticNotify("success");
+                flash(`+${Number(res.profit).toFixed(3)} TON · ${res.cashoutAt}x`);
+              } else {
+                hapticNotify("error");
+                flash(`CRASH ${crash.toFixed(2)}x`);
+              }
+              onBalanceChange();
+            } else {
+              setHistory((h) => [{ mult: crash, won: false, roundId: st.roundId }, ...h].slice(0, 16));
+            }
+            setBetLocked(false);
+            setLockedStake(0);
+            betRoundRef.current = null;
+          }
+        }
+        lastPhaseRef.current = crashed ? "crash" : "fly";
+      } else {
+        // result pad
+        const crash = crashRef.current ?? mult;
+        setPhase(wonRef.current ? "win" : "crash");
+        setMult(crash);
+        draw(crash, true);
+        lastPhaseRef.current = "result";
+      }
+
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [draw, onBalanceChange]);
+
+  const placeBet = async () => {
+    if (phase !== "betting" || betLocked || settling) return;
     if (!telegramId) return;
     if (stake > balance) { flash("Недостаточно TON"); return; }
-    if (stake < MIN_BET) { flash(`Мин. ${MIN_BET} TON`); return; }
-    setBetLocked(true);
-    setLockedStake(stake);
-    setLockedCashout(Math.max(1.01, Math.min(100, autoCashout)));
-    haptic("medium");
-    flash(`Ставка ${stake.toFixed(2)} TON · авто ${autoCashout}x`);
-  };
 
-  const runFlight = useCallback(async () => {
-    setPhase("fly");
-    setMult(1);
-    pointsRef.current = [{ t: 0, m: 1 }];
-    wonRef.current = false;
-    cancelAnimationFrame(rafRef.current);
+    const st = localState(offsetRef.current);
+    if (st.phase !== "betting") { flash("Ставки закрыты"); return; }
 
-    const hasBet = betLockedRef.current && lockedStakeRef.current > 0;
-    const target = lockedCashoutRef.current;
-    const stakeAmt = lockedStakeRef.current;
-
-    let serverData: any = null;
-    let apiP: Promise<any> | null = null;
-
-    if (hasBet && telegramId) {
-      apiP = fetch("/api/mini/games/crash/play", {
+    setSettling(true);
+    try {
+      const res = await fetch("/api/mini/games/crash/play", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ telegramId, stake: stakeAmt, cashoutAt: target }),
-      }).then(async (r) => {
-        const d = await r.json();
-        if (!r.ok) throw new Error(d.error || "Ошибка");
-        return d;
-      }).catch((e) => ({ error: e?.message || "Сеть" }));
-    } else {
-      const r = Math.random();
-      const crashPoint = r < 0.03 ? 1 : Math.max(1.01, Math.floor(100 / (1 - r * 0.96)) / 100);
-      serverData = { crashPoint: Math.min(crashPoint, 50), won: false, cosmetic: true };
-    }
-
-    const start = performance.now();
-    await new Promise<void>((resolve) => {
-      const tick = (now: number) => {
-        if (!runningRef.current) { resolve(); return; }
-        const t = (now - start) / 1000;
-        const growthCap = hasBet ? target * 1.05 : 8;
-        const m = Math.min(growthCap, 1 + (Math.exp(t * 0.55) - 1) * 0.85);
-        const rounded = Math.round(m * 100) / 100;
-        pointsRef.current.push({ t, m: rounded });
-        if (pointsRef.current.length > 500) pointsRef.current.shift();
-        setMult(rounded);
-        draw(rounded, false);
-
-        if (serverData) {
-          const cp = Number(serverData.crashPoint) || 1;
-          const stopAt = hasBet && !serverData.error
-            ? (serverData.won ? Math.min(target, cp) : Math.min(cp, growthCap))
-            : Math.min(cp, growthCap);
-          if (rounded >= stopAt * 0.97 || t > 18) {
-            resolve();
-            return;
-          }
-        } else if (t > 12) {
-          resolve();
-          return;
-        }
-        rafRef.current = requestAnimationFrame(tick);
-      };
-      rafRef.current = requestAnimationFrame(tick);
-      if (apiP) {
-        apiP.then((d) => { serverData = d; }).catch((e) => { serverData = { error: e.message }; });
-      }
-    });
-    cancelAnimationFrame(rafRef.current);
-
-    if (apiP && !serverData) {
-      try { serverData = await apiP; } catch (e: any) { serverData = { error: e?.message }; }
-    }
-
-    if (hasBet && serverData?.error) {
-      flash(serverData.error);
-      setBetLocked(false);
-      setLockedStake(0);
-      return;
-    }
-
-    const crash = Number(serverData?.crashPoint) || 1;
-    const won = hasBet && !!serverData?.won;
-    wonRef.current = won;
-
-    if (won) {
-      setMult(target);
-      pointsRef.current.push({
-        t: (pointsRef.current[pointsRef.current.length - 1]?.t || 0) + 0.05,
-        m: target,
+        body: JSON.stringify({
+          telegramId,
+          stake,
+          cashoutAt: Math.max(1.01, Math.min(100, autoCashout)),
+          roundId: st.roundId,
+        }),
       });
-      draw(target, false);
-      setPhase("win");
-      hapticNotify("success");
-      flash(`+${Number(serverData.profit).toFixed(3)} TON · ${target}x`);
-      setHistory((h) => [{ mult: target, won: true }, ...h].slice(0, 16));
+      const d = await res.json();
+      if (!res.ok) {
+        flash(d.error || "Ошибка");
+        return;
+      }
+      betResultRef.current = d;
+      betRoundRef.current = st.roundId;
+      setBetLocked(true);
+      setLockedStake(stake);
+      setLockedCashout(Number(d.cashoutAt));
+      if (d.publicCrashPoint != null) {
+        // don't show yet — keep secret until fly; server has settled
+      }
+      haptic("medium");
+      flash(`Ставка ${stake.toFixed(2)} TON · авто ${d.cashoutAt}x`);
       onBalanceChange();
-    } else {
-      const from = pointsRef.current.length
-        ? pointsRef.current[pointsRef.current.length - 1]!.m
-        : 1;
-      const end = Math.max(crash, 1);
-      const t0 = performance.now();
-      await new Promise<void>((resolve) => {
-        const tick = (now: number) => {
-          const p = Math.min(1, (now - t0) / 420);
-          const m = from + (end - from) * p;
-          const rounded = Math.round(m * 100) / 100;
-          const t = (pointsRef.current[pointsRef.current.length - 1]?.t || 0) + 0.02;
-          pointsRef.current.push({ t, m: rounded });
-          setMult(rounded);
-          draw(rounded, p > 0.75);
-          if (p < 1) rafRef.current = requestAnimationFrame(tick);
-          else resolve();
-        };
-        rafRef.current = requestAnimationFrame(tick);
-      });
-      setPhase("crash");
-      hapticNotify("error");
-      haptic("heavy");
-      if (hasBet) {
-        flash(`CRASH ${crash.toFixed(2)}x`);
-        onBalanceChange();
-      }
-      setHistory((h) => [{ mult: crash, won: false }, ...h].slice(0, 16));
+    } catch {
+      flash("Сеть недоступна");
+    } finally {
+      setSettling(false);
     }
-
-    setBetLocked(false);
-    setLockedStake(0);
-  }, [telegramId, draw, onBalanceChange]);
-
-  const runFlightRef = useRef(runFlight);
-  runFlightRef.current = runFlight;
-  const drawRef = useRef(draw);
-  drawRef.current = draw;
-
-  useEffect(() => {
-    runningRef.current = true;
-    let cancelled = false;
-    const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
-
-    const loop = async () => {
-      while (!cancelled && runningRef.current) {
-        setPhase("betting");
-        setMult(1);
-        pointsRef.current = [{ t: 0, m: 1 }];
-        drawRef.current(1, false);
-        setBetLocked(false);
-        setLockedStake(0);
-
-        for (let s = BETTING_SEC; s >= 0; s--) {
-          if (cancelled) return;
-          setCountdown(s);
-          if (s > 0) await sleep(1000);
-        }
-
-        if (cancelled) return;
-        haptic("light");
-        await runFlightRef.current();
-
-        if (cancelled) return;
-        await sleep(RESULT_SEC * 1000);
-        setRoundId((n) => n + 1);
-      }
-    };
-
-    void loop();
-    return () => {
-      cancelled = true;
-      runningRef.current = false;
-      cancelAnimationFrame(rafRef.current);
-    };
-  }, []);
+  };
 
   const multColor =
     phase === "crash" ? "#f87171"
@@ -305,7 +337,7 @@ export default function CrashGame({
         : phase === "fly" ? "#fbbf24"
           : "#e2e8f0";
 
-  const canBet = phase === "betting" && !betLocked && stake <= balance;
+  const canBet = phase === "betting" && !betLocked && !settling && stake <= balance;
 
   return (
     <div style={root}>
@@ -321,7 +353,7 @@ export default function CrashGame({
       <div style={histRow}>
         {history.length === 0 && <span style={{ color: "#475569", fontSize: 11 }}>история</span>}
         {history.map((h, i) => (
-          <span key={`${roundId}-${i}`} style={{
+          <span key={`${h.roundId}-${i}`} style={{
             ...histChip,
             color: h.won ? "#86efac" : "#fca5a5",
             borderColor: h.won ? "rgba(74,222,128,0.35)" : "rgba(248,113,113,0.35)",
@@ -335,7 +367,7 @@ export default function CrashGame({
         {phase === "betting" ? (
           <div style={bettingOverlay}>
             <div style={countdownBig}>{countdown}</div>
-            <div style={bettingHint}>Ставки · раунд #{roundId + 1}</div>
+            <div style={bettingHint}>Ставки · раунд #{roundId}</div>
             {betLocked && (
               <div style={betPlaced}>
                 ✓ {lockedStake.toFixed(2)} TON · авто {lockedCashout}x
@@ -343,71 +375,56 @@ export default function CrashGame({
             )}
           </div>
         ) : (
-          <div className={`cm ${phase}`} style={{
+          <div className={`cm ${phase === "win" ? "win" : phase === "crash" || phase === "result" ? "crash" : "fly"}`} style={{
             position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center",
             pointerEvents: "none", fontSize: 54, fontWeight: 900, letterSpacing: "-0.04em",
             color: multColor, fontVariantNumeric: "tabular-nums",
           }}>{mult.toFixed(2)}x</div>
         )}
-        {phase === "crash" && <div style={crashBanner}>CRASHED</div>}
+        {(phase === "crash" || phase === "result") && !wonRef.current && <div style={crashBanner}>CRASHED</div>}
         {phase === "win" && <div style={{ ...crashBanner, color: "#4ade80" }}>CASH OUT</div>}
       </div>
 
       <div style={panel}>
         <div style={field}>
           <span style={lab}>Ставка</span>
-          <input
-            type="number" min={MIN_BET} step="0.1" value={stake}
+          <input type="number" min={MIN_BET} step="0.1" value={stake}
             disabled={phase !== "betting" || betLocked}
             onChange={(e) => setStake(Math.max(MIN_BET, Number(e.target.value) || MIN_BET))}
-            style={inp}
-          />
+            style={inp} />
           <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
             {PRESETS.map((p) => (
-              <button
-                key={p} type="button"
-                disabled={phase !== "betting" || betLocked}
-                onClick={() => setStake(p)}
-                style={chip}
-              >{p}</button>
+              <button key={p} type="button" disabled={phase !== "betting" || betLocked}
+                onClick={() => setStake(p)} style={chip}>{p}</button>
             ))}
           </div>
         </div>
         <div style={field}>
           <span style={lab}>Авто-кэшаут</span>
-          <input
-            type="number" min={1.01} max={100} step="0.1" value={autoCashout}
+          <input type="number" min={1.01} max={100} step="0.1" value={autoCashout}
             disabled={phase !== "betting" || betLocked}
             onChange={(e) => setAutoCashout(Math.max(1.01, Number(e.target.value) || 2))}
-            style={inp}
-          />
+            style={inp} />
         </div>
         <div style={{ fontSize: 12, color: "#64748b", marginBottom: 12 }}>
           Баланс <b style={{ color: "#e2e8f0" }}>{balance.toFixed(3)} TON</b>
           {" · "}Потенциал <b style={{ color: "#4ade80" }}>{(stake * autoCashout).toFixed(3)} TON</b>
         </div>
-        <button
-          type="button"
-          disabled={!canBet}
-          onClick={placeBet}
-          style={{
-            ...btn,
-            opacity: canBet ? 1 : 0.55,
-            background: betLocked
-              ? "linear-gradient(135deg,#1d4ed8,#38bdf8)"
-              : phase === "betting"
-                ? "linear-gradient(135deg,#16a34a,#4ade80)"
-                : "linear-gradient(135deg,#334155,#475569)",
-            color: betLocked ? "#fff" : phase === "betting" ? "#052e16" : "#cbd5e1",
-          }}
-        >
-          {betLocked
-            ? "Ставка принята"
+        <button type="button" disabled={!canBet} onClick={placeBet} style={{
+          ...btn,
+          opacity: canBet ? 1 : 0.55,
+          background: betLocked
+            ? "linear-gradient(135deg,#1d4ed8,#38bdf8)"
             : phase === "betting"
-              ? `Поставить · ${countdown}s`
-              : phase === "fly"
-                ? "Полёт…"
-                : "Ждите раунд…"}
+              ? "linear-gradient(135deg,#16a34a,#4ade80)"
+              : "linear-gradient(135deg,#334155,#475569)",
+          color: betLocked ? "#fff" : phase === "betting" ? "#052e16" : "#cbd5e1",
+        }}>
+          {settling ? "…"
+            : betLocked ? "Ставка принята"
+              : phase === "betting" ? `Поставить · ${countdown}s`
+                : phase === "fly" ? "Полёт…"
+                  : "Ждите раунд…"}
         </button>
       </div>
     </div>
@@ -432,9 +449,7 @@ const countdownBig: CSSProperties = {
   fontSize: 72, fontWeight: 900, color: "#fbbf24", lineHeight: 1,
   textShadow: "0 0 40px rgba(251,191,36,0.55)", fontVariantNumeric: "tabular-nums",
 };
-const bettingHint: CSSProperties = {
-  marginTop: 8, fontSize: 13, fontWeight: 700, color: "#94a3b8", letterSpacing: "0.04em",
-};
+const bettingHint: CSSProperties = { marginTop: 8, fontSize: 13, fontWeight: 700, color: "#94a3b8" };
 const betPlaced: CSSProperties = {
   marginTop: 12, padding: "8px 14px", borderRadius: 999, fontWeight: 800, fontSize: 13,
   background: "rgba(34,197,94,0.2)", border: "1px solid rgba(74,222,128,0.45)", color: "#86efac",

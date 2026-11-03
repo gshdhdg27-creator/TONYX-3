@@ -16,6 +16,7 @@ import marketPoolRouter from "./market-pool.js";
 import historyRouter from "./history.js";
 import adminRouter from "./admin.js";
 import adminCrashRouter from "./admin-crash.js";
+import adminExtraRouter from "./admin-extra.js";
 import investmentsRouter from "./investments.js";
 import boostsRouter from "./boosts.js";
 import languageRouter from "./language.js";
@@ -31,9 +32,7 @@ import battleRouter from "./battle.js";
 import casesRouter from "./cases.js";
 import adminCasesRouter from "./admin-cases.js";
 import inventoryRouter from "./inventory.js";
-/** Profile + register — same handlers as legacy, now under /api/mini with auth */
 import usersRouter from "../users.js";
-/** Referrals — under /api/mini with auth */
 import referralsRouter from "../referrals.js";
 
 const router: IRouter = Router();
@@ -70,7 +69,6 @@ router.use((req, res, next) => {
   next();
 });
 
-// Migrated from legacy /api/users and /api/referrals
 router.use("/users", usersRouter);
 router.use("/referrals", referralsRouter);
 
@@ -98,6 +96,7 @@ router.use("/battle", battleRouter);
 router.use("/", historyRouter);
 router.use("/admin", limitAdmin, adminRouter);
 router.use("/admin", limitAdmin, adminCrashRouter);
+router.use("/admin", limitAdmin, adminExtraRouter);
 router.use("/cases", limitPlay, casesRouter);
 router.use("/admin", limitAdmin, adminCasesRouter);
 router.use("/inventory", inventoryRouter);

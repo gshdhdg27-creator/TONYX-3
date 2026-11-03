@@ -20,22 +20,22 @@ export default function HomePage() {
   const view = useGameStore((s) => s.view);
   const setView = useGameStore((s) => s.setView);
 
-useEffect(() => {
-  const apply = () => {
-    const open = sessionStorage.getItem("tonyx-open");
-    if (open !== "bosses" && open !== "cards" && open !== "collection") return;
-    sessionStorage.removeItem("tonyx-open");
-    window.setTimeout(() => {
-      if (open === "bosses") setView("home");
-      if (open === "cards") setView("hero-shop");
-      if (open === "collection") setView("collection");
-    }, 700);
-  };
-  apply();
-  window.addEventListener("tonyx-open", apply);
-  return () => window.removeEventListener("tonyx-open", apply);
-}, [setView]);
-  const init = useGameStore((s) => s.init);
+  useEffect(() => {
+    const apply = () => {
+      const open = sessionStorage.getItem("tonyx-open");
+      if (open !== "bosses" && open !== "cards" && open !== "collection") return;
+      sessionStorage.removeItem("tonyx-open");
+      window.setTimeout(() => {
+        if (open === "bosses") setView("home");
+        if (open === "cards") setView("hero-shop");
+        if (open === "collection") setView("collection");
+      }, 700);
+    };
+    apply();
+    window.addEventListener("tonyx-open", apply);
+    return () => window.removeEventListener("tonyx-open", apply);
+  }, [setView]);
+
   const setTonBalance = useGameStore((s) => s.setTonBalance);
   const setTonyxBalance = useGameStore((s) => s.setTonyxBalance);
   const markTonInitialized = useGameStore((s) => s.markTonInitialized);
@@ -64,10 +64,8 @@ useEffect(() => {
     markTonInitialized();
   }, [profile, setTonBalance, setTonyxBalance, markTonInitialized]);
 
-  useEffect(() => {
-    const t = setTimeout(() => init(), 500);
-    return () => clearTimeout(t);
-  }, [init]);
+  // init() is now called early from App.tsx during SplashScreen.
+  // Do NOT call it again here — that caused the second "Boss Dogg Loading" screen.
 
   // Pull the admin-configured boss HP / revive cost / boost % values once on startup
   // and bump configVersion so views relying on them re-render with the live numbers.

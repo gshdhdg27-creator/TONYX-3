@@ -25,6 +25,7 @@ import { useRegisterUser, getGetUserProfileQueryKey } from "@workspace/api-clien
 import { SplashScreen } from "@/components/SplashScreen";
 import { RocketScene } from "@/components/RocketScene";
 import { OnboardingTour } from "@/components/OnboardingTour";
+import { useGameStore } from "@/store/gameStore";
 
 const MANIFEST_URL = typeof window !== "undefined"
   ? `${window.location.origin}/tonconnect-manifest.json`
@@ -173,6 +174,15 @@ function App() {
   const [whiteOpacity, setWhiteOpacity] = useState<number | null>(null);
   const [showTour, setShowTour] = useState(false);
   const needsOnboarding = useRef<boolean>(!localStorage.getItem(ONBOARD_KEY));
+
+  // Preload game state in background while the beautiful SplashScreen is playing.
+  // By the time splash finishes, view is already "home" → no second "Boss Dogg Loading".
+  useEffect(() => {
+    const t = setTimeout(() => {
+      useGameStore.getState().init();
+    }, 300);
+    return () => clearTimeout(t);
+  }, []);
 
   const handleSplashDone = useCallback(() => {
     setStage(needsOnboarding.current ? "rocket" : "app");

@@ -400,6 +400,10 @@ export const useGameStore = create<GameStore>()(
       },
 
       init: () => {
+        // Idempotent: if we already left the loading state, do nothing.
+        // Prevents double-init and the second "Boss Dogg Loading" screen.
+        if (get().view !== "loading") return;
+
         const { boost, ownedMages, equippedSlots } = get();
 
         let dpsMultiplier = boost.dpsMultiplier;

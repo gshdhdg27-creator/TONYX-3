@@ -13,7 +13,46 @@ function hapticNotify(t: "success" | "error") {
   try { (window as any).Telegram?.WebApp?.HapticFeedback?.notificationOccurred?.(t); } catch { /* */ }
 }
 
-type Hist = { mult: number; won: boolean; roundId: number };
+const HIST_KEY = "tonyx_crash_history_v1";
+const HIST_MAX = 40;
+
+function loadHist(): Hist[] {
+  try {
+    const raw = localStorage.getItem(HIST_KEY);
+    if (!raw) return [];
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr) ? arr.slice(0, HIST_MAX) : [];
+  } catch { return []; }
+}
+
+function saveHist(items: Hist[]) {
+  try { localStorage.setItem(HIST_KEY, JSON.stringify(items.slice(0, HIST_MAX))); } catch { /* */ }
+}
+
+function roundHash(roundId: number): string {
+  let h = (roundId * 2654435761) >>> 0;
+  return ("00000000" + h.toString(16)).slice(-8);
+}
+
+function fmtTime(ts: number): string {
+  try {
+    return new Date(ts).toLocaleString(undefined, {
+      day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit",
+    });
+  } catch { return String(ts); }
+}
+
+type Hist = {
+  mult: number;
+  won: boolean;
+  roundId: number;
+  at: number;
+  hash: string;
+  stake?: number;
+  cashoutAt?: number;
+  profit?: number;
+  mine?: boolean;
+};
 type Phase = "betting" | "fly" | "crash" | "win" | "result";
 
 type ServerState = {
@@ -65,7 +104,6 @@ function multAtTime(tSec: number, crash: number): number {
 }
 
 function crashTimeSec(crash: number): number {
-  // invert approx growth until crash
   const target = Math.max(crash, 1.01);
   let t = 0;
   for (let i = 0; i < 200; i++) {
@@ -73,6 +111,20 @@ function crashTimeSec(crash: number): number {
     t += 0.05;
   }
   return Math.min(FLY_MS / 1000, t);
+}
+
+function Row({ label, value, ok, mono }: { label: string; value: string; ok?: boolean; mono?: boolean }) {
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "8px 0", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+      <span style={{ fontSize: 12, color: "#94a3b8", fontWeight: 600 }}>{label}</span>
+      <span style={{
+        fontSize: 13, fontWeight: 800, textAlign: "right",
+        color: ok === true ? "#4ade80" : ok === false ? "#f87171" : "#e2e8f0",
+        fontFamily: mono ? "ui-monospace, SFMono-Regular, Menlo, monospace" : "inherit",
+        wordBreak: "break-all",
+      }}>{value}</span>
+    </div>
+  );
 }
 
 export default function CrashGame({
@@ -84,7 +136,8 @@ export default function CrashGame({
   const [countdown, setCountdown] = useState(10);
   const [mult, setMult] = useState(1);
   const [toast, setToast] = useState<string | null>(null);
-  const [history, setHistory] = useState<Hist[]>([]);
+  const [history, setHistory] = useState<Hist[]>(() => loadHist());
+  const [selected, setSelected] = useState<Hist | null>(null);
   const [betLocked, setBetLocked] = useState(false);
   const [lockedStake, setLockedStake] = useState(0);
   const [lockedCashout, setLockedCashout] = useState(2);
@@ -173,7 +226,6 @@ export default function CrashGame({
     setTimeout(() => setToast(null), 2600);
   };
 
-  // Sync clock with server periodically
   useEffect(() => {
     let alive = true;
     const sync = async () => {
@@ -185,14 +237,13 @@ export default function CrashGame({
           offsetRef.current = d.serverNow - Date.now();
         }
         if (d.crashPoint != null) crashRef.current = Number(d.crashPoint);
-      } catch { /* offline: local clock */ }
+      } catch { /* offline */ }
     };
     void sync();
     const id = setInterval(sync, 5000);
     return () => { alive = false; clearInterval(id); };
   }, []);
 
-  // Global tick — never stops
   useEffect(() => {
     let raf = 0;
     const tick = () => {
@@ -201,7 +252,6 @@ export default function CrashGame({
 
       if (st.phase === "betting") {
         if (lastPhaseRef.current !== "betting") {
-          // new betting window
           pointsRef.current = [{ t: 0, m: 1 }];
           setMult(1);
           crashRef.current = null;
@@ -219,7 +269,6 @@ export default function CrashGame({
         lastPhaseRef.current = "betting";
       } else if (st.phase === "fly") {
         const tSec = st.phaseElapsed / 1000;
-        // fetch crash once when entering fly
         if (lastPhaseRef.current === "betting") {
           haptic("light");
           void fetch("/api/mini/games/crash/state")
@@ -246,16 +295,25 @@ export default function CrashGame({
           setPhase(wonRef.current ? "win" : "crash");
           draw(crash, true);
 
-          // settle history once per round
           if (settledRoundRef.current !== st.roundId) {
             settledRoundRef.current = st.roundId;
             const res = betResultRef.current;
+            const entry: Hist = {
+              mult: crash,
+              won: false,
+              roundId: st.roundId,
+              at: Date.now(),
+              hash: roundHash(st.roundId),
+              mine: false,
+            };
             if (res && !res.error) {
               wonRef.current = !!res.won;
-              setHistory((h) => [
-                { mult: res.won ? Number(res.cashoutAt) : crash, won: !!res.won, roundId: st.roundId },
-                ...h,
-              ].slice(0, 16));
+              entry.won = !!res.won;
+              entry.mult = res.won ? Number(res.cashoutAt) : crash;
+              entry.stake = Number(res.stake) || undefined;
+              entry.cashoutAt = Number(res.cashoutAt) || undefined;
+              entry.profit = Number(res.profit);
+              entry.mine = true;
               if (res.won) {
                 hapticNotify("success");
                 flash(`+${Number(res.profit).toFixed(3)} TON · ${res.cashoutAt}x`);
@@ -264,9 +322,12 @@ export default function CrashGame({
                 flash(`CRASH ${crash.toFixed(2)}x`);
               }
               onBalanceChange();
-            } else {
-              setHistory((h) => [{ mult: crash, won: false, roundId: st.roundId }, ...h].slice(0, 16));
             }
+            setHistory((h) => {
+              const next = [entry, ...h.filter((x) => x.roundId !== entry.roundId)].slice(0, HIST_MAX);
+              saveHist(next);
+              return next;
+            });
             setBetLocked(false);
             setLockedStake(0);
             betRoundRef.current = null;
@@ -274,7 +335,6 @@ export default function CrashGame({
         }
         lastPhaseRef.current = crashed ? "crash" : "fly";
       } else {
-        // result pad
         const crash = crashRef.current ?? mult;
         setPhase(wonRef.current ? "win" : "crash");
         setMult(crash);
@@ -286,7 +346,7 @@ export default function CrashGame({
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [draw, onBalanceChange]);
+  }, [draw, onBalanceChange, mult]);
 
   const placeBet = async () => {
     if (phase !== "betting" || betLocked || settling) return;
@@ -318,9 +378,6 @@ export default function CrashGame({
       setBetLocked(true);
       setLockedStake(stake);
       setLockedCashout(Number(d.cashoutAt));
-      if (d.publicCrashPoint != null) {
-        // don't show yet — keep secret until fly; server has settled
-      }
       haptic("medium");
       flash(`Ставка ${stake.toFixed(2)} TON · авто ${d.cashoutAt}x`);
       onBalanceChange();
@@ -353,14 +410,57 @@ export default function CrashGame({
       <div style={histRow}>
         {history.length === 0 && <span style={{ color: "#475569", fontSize: 11 }}>история</span>}
         {history.map((h, i) => (
-          <span key={`${h.roundId}-${i}`} style={{
-            ...histChip,
-            color: h.won ? "#86efac" : "#fca5a5",
-            borderColor: h.won ? "rgba(74,222,128,0.35)" : "rgba(248,113,113,0.35)",
-            background: h.won ? "rgba(22,163,74,0.15)" : "rgba(185,28,28,0.15)",
-          }}>{h.mult.toFixed(2)}x</span>
+          <button
+            key={`${h.roundId}-${i}`}
+            type="button"
+            onClick={() => setSelected(h)}
+            style={{
+              ...histChip,
+              color: h.won ? "#86efac" : "#fca5a5",
+              borderColor: h.won ? "rgba(74,222,128,0.45)" : "rgba(248,113,113,0.45)",
+              background: h.won ? "rgba(22,163,74,0.18)" : "rgba(185,28,28,0.18)",
+              boxShadow: h.mine ? "0 0 0 1px rgba(251,191,36,0.45)" : undefined,
+            }}
+          >
+            {h.mult.toFixed(2)}x
+          </button>
         ))}
       </div>
+
+      {selected && (
+        <div style={modalBackdrop} onClick={() => setSelected(null)}>
+          <div style={modalCard} onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <div style={{ fontWeight: 900, fontSize: 16 }}>Раунд #{selected.roundId}</div>
+              <button type="button" onClick={() => setSelected(null)} style={modalClose}>✕</button>
+            </div>
+            <div style={{
+              fontSize: 28, fontWeight: 900, marginBottom: 14,
+              color: selected.won ? "#4ade80" : "#f87171",
+            }}>
+              {selected.mult.toFixed(2)}x
+            </div>
+            <Row label="Статус" value={selected.won ? "Выигрыш" : "Crash"} ok={selected.won} />
+            <Row label="Время" value={fmtTime(selected.at)} />
+            <Row label="Номер раунда" value={String(selected.roundId)} />
+            <Row label="Hash ID" value={selected.hash} mono />
+            {selected.mine && (
+              <>
+                <Row label="Ваша ставка" value={selected.stake != null ? `${selected.stake} TON` : "—"} />
+                <Row label="Авто-кэшаут" value={selected.cashoutAt != null ? `${selected.cashoutAt}x` : "—"} />
+                <Row
+                  label="Профит"
+                  value={selected.profit != null ? `${selected.profit >= 0 ? "+" : ""}${selected.profit.toFixed(3)} TON` : "—"}
+                  ok={selected.profit != null && selected.profit >= 0}
+                />
+              </>
+            )}
+            {!selected.mine && (
+              <div style={{ marginTop: 10, fontSize: 12, color: "#64748b" }}>Вы не ставили в этом раунде</div>
+            )}
+          </div>
+        </div>
+      )}
 
       <div style={graphWrap}>
         <canvas ref={canvasRef} style={{ width: "100%", height: "100%", display: "block" }} />
@@ -433,7 +533,10 @@ export default function CrashGame({
 
 const root: CSSProperties = { color: "#e2e8f0", position: "relative" };
 const histRow: CSSProperties = { display: "flex", gap: 6, overflowX: "auto", paddingBottom: 10, minHeight: 28 };
-const histChip: CSSProperties = { flexShrink: 0, fontSize: 11, fontWeight: 800, padding: "4px 8px", borderRadius: 8, border: "1px solid" };
+const histChip: CSSProperties = {
+  flexShrink: 0, fontSize: 11, fontWeight: 800, padding: "5px 10px", borderRadius: 8,
+  border: "1px solid", cursor: "pointer", fontFamily: "inherit",
+};
 const graphWrap: CSSProperties = {
   position: "relative", height: 240, borderRadius: 20, overflow: "hidden", marginBottom: 14,
   background: "linear-gradient(180deg,#0c1222 0%,#06080f 100%)",
@@ -478,4 +581,18 @@ const toastStyle: CSSProperties = {
   position: "fixed", top: 72, left: "50%", transform: "translateX(-50%)", zIndex: 50,
   padding: "10px 18px", borderRadius: 12, fontWeight: 800, fontSize: 13,
   background: "rgba(15,23,42,0.95)", border: "1px solid rgba(255,255,255,0.15)", color: "#fff",
+};
+const modalBackdrop: CSSProperties = {
+  position: "fixed", inset: 0, zIndex: 80, background: "rgba(0,0,0,0.65)",
+  display: "flex", alignItems: "center", justifyContent: "center", padding: 20,
+};
+const modalCard: CSSProperties = {
+  width: "100%", maxWidth: 340, borderRadius: 18, padding: 16,
+  background: "linear-gradient(180deg, #1a1030 0%, #0c1222 100%)",
+  border: "1px solid rgba(168,85,247,0.35)",
+  boxShadow: "0 20px 50px rgba(0,0,0,0.5)",
+};
+const modalClose: CSSProperties = {
+  border: "none", background: "rgba(255,255,255,0.08)", color: "#94a3b8",
+  width: 32, height: 32, borderRadius: 10, fontWeight: 800, cursor: "pointer", fontFamily: "inherit",
 };

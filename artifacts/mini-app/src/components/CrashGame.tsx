@@ -130,7 +130,6 @@ export default function CrashGame({
     flash(`Ставка ${stake.toFixed(2)} TON · авто ${autoCashout}x`);
   };
 
-  /** Run one flight: real API if bet locked, else cosmetic only */
   const runFlight = useCallback(async () => {
     setPhase("fly");
     setMult(1);
@@ -156,9 +155,8 @@ export default function CrashGame({
         return d;
       }).catch((e) => ({ error: e?.message || "Сеть" }));
     } else {
-      // cosmetic crash point ~ same distribution feel
       const r = Math.random();
-      const crashPoint = r < 0.03 ? 1 : Math.max(1.01, Math.floor((100 / (1 - r * 0.96)) ) / 100);
+      const crashPoint = r < 0.03 ? 1 : Math.max(1.01, Math.floor(100 / (1 - r * 0.96)) / 100);
       serverData = { crashPoint: Math.min(crashPoint, 50), won: false, cosmetic: true };
     }
 
@@ -175,9 +173,6 @@ export default function CrashGame({
         setMult(rounded);
         draw(rounded, false);
 
-        if (apiP && !serverData) {
-          // wait for API without blocking animation forever
-        }
         if (serverData) {
           const cp = Number(serverData.crashPoint) || 1;
           const stopAt = hasBet && !serverData.error
@@ -228,7 +223,9 @@ export default function CrashGame({
       setHistory((h) => [{ mult: target, won: true }, ...h].slice(0, 16));
       onBalanceChange();
     } else {
-      const from = mult > 1 ? mult : 1;
+      const from = pointsRef.current.length
+        ? pointsRef.current[pointsRef.current.length - 1]!.m
+        : 1;
       const end = Math.max(crash, 1);
       const t0 = performance.now();
       await new Promise<void>((resolve) => {
@@ -257,22 +254,24 @@ export default function CrashGame({
 
     setBetLocked(false);
     setLockedStake(0);
-  }, [telegramId, draw, onBalanceChange, mult, flash]);
+  }, [telegramId, draw, onBalanceChange]);
 
-  // Continuous round loop
+  const runFlightRef = useRef(runFlight);
+  runFlightRef.current = runFlight;
+  const drawRef = useRef(draw);
+  drawRef.current = draw;
+
   useEffect(() => {
     runningRef.current = true;
     let cancelled = false;
-
     const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
     const loop = async () => {
       while (!cancelled && runningRef.current) {
-        // Betting phase
         setPhase("betting");
         setMult(1);
         pointsRef.current = [{ t: 0, m: 1 }];
-        draw(1, false);
+        drawRef.current(1, false);
         setBetLocked(false);
         setLockedStake(0);
 
@@ -284,7 +283,7 @@ export default function CrashGame({
 
         if (cancelled) return;
         haptic("light");
-        await runFlight();
+        await runFlightRef.current();
 
         if (cancelled) return;
         await sleep(RESULT_SEC * 1000);
@@ -298,7 +297,7 @@ export default function CrashGame({
       runningRef.current = false;
       cancelAnimationFrame(rafRef.current);
     };
-  }, [runFlight, draw]);
+  }, []);
 
   const multColor =
     phase === "crash" ? "#f87171"

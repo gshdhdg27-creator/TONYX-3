@@ -9,14 +9,7 @@ const HIST_KEY = "tonyx_crash_hist_v2";
 const HIST_MAX = 40;
 
 type Phase = "betting" | "fly" | "crash" | "win";
-type Hist = {
-  roundId: number;
-  crash: number;
-  hash: string;
-  at: number;
-  won?: boolean;
-  payout?: number;
-};
+type Hist = { roundId: number; crash: number; hash: string; at: number; won?: boolean; payout?: number };
 
 type RoundSnap = {
   roundId: number;
@@ -33,16 +26,10 @@ function loadHist(): Hist[] {
     if (!raw) return [];
     const arr = JSON.parse(raw);
     return Array.isArray(arr) ? arr.slice(0, HIST_MAX) : [];
-  } catch {
-    return [];
-  }
+  } catch { return []; }
 }
 function saveHist(items: Hist[]) {
-  try {
-    localStorage.setItem(HIST_KEY, JSON.stringify(items.slice(0, HIST_MAX)));
-  } catch {
-    /* */
-  }
+  try { localStorage.setItem(HIST_KEY, JSON.stringify(items.slice(0, HIST_MAX))); } catch { /* */ }
 }
 
 function snapFromClock(offsetMs: number, epochMs: number, crashByRound: Map<number, number>): RoundSnap {
@@ -52,35 +39,13 @@ function snapFromClock(offsetMs: number, epochMs: number, crashByRound: Map<numb
   const roundId = idx0 + 1;
   const elapsed = elapsedTotal % ROUND_MS;
   const crashPoint = crashByRound.get(roundId) ?? null;
-
   if (elapsed < BETTING_MS) {
-    return {
-      roundId,
-      phase: "betting",
-      phaseElapsed: elapsed,
-      phaseRemaining: BETTING_MS - elapsed,
-      crashPoint: null,
-      serverNow: now,
-    };
+    return { roundId, phase: "betting", phaseElapsed: elapsed, phaseRemaining: BETTING_MS - elapsed, crashPoint: null, serverNow: now };
   }
   if (elapsed < BETTING_MS + FLY_MS) {
-    return {
-      roundId,
-      phase: "fly",
-      phaseElapsed: elapsed - BETTING_MS,
-      phaseRemaining: BETTING_MS + FLY_MS - elapsed,
-      crashPoint,
-      serverNow: now,
-    };
+    return { roundId, phase: "fly", phaseElapsed: elapsed - BETTING_MS, phaseRemaining: BETTING_MS + FLY_MS - elapsed, crashPoint, serverNow: now };
   }
-  return {
-    roundId,
-    phase: "result",
-    phaseElapsed: elapsed - BETTING_MS - FLY_MS,
-    phaseRemaining: ROUND_MS - elapsed,
-    crashPoint,
-    serverNow: now,
-  };
+  return { roundId, phase: "result", phaseElapsed: elapsed - BETTING_MS - FLY_MS, phaseRemaining: ROUND_MS - elapsed, crashPoint, serverNow: now };
 }
 
 function multAt(elapsedMs: number, crash: number): number {
@@ -92,11 +57,11 @@ function multAt(elapsedMs: number, crash: number): number {
 export default function CrashGame({
   telegramId,
   balance,
-  onBalance,
+  onBalanceChange,
 }: {
   telegramId: string;
   balance: number;
-  onBalance: (n: number) => void;
+  onBalanceChange: () => void;
 }) {
   const [ready, setReady] = useState(false);
   const [phase, setPhase] = useState<Phase>("betting");
@@ -118,7 +83,6 @@ export default function CrashGame({
   const betRoundRef = useRef<number | null>(null);
   const settledRef = useRef<Set<number>>(new Set());
   const readyRef = useRef(false);
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   const applyServer = useCallback((d: any) => {
     if (typeof d.serverNow === "number") offsetRef.current = d.serverNow - Date.now();
@@ -138,20 +102,12 @@ export default function CrashGame({
         const d = await r.json();
         if (!alive) return;
         applyServer(d);
-        if (isBoot) {
-          readyRef.current = true;
-          setReady(true);
-        }
-      } catch {
-        /* */
-      }
+        if (isBoot) { readyRef.current = true; setReady(true); }
+      } catch { /* */ }
     };
     void pull(true);
     const id = setInterval(() => void pull(false), 4000);
-    return () => {
-      alive = false;
-      clearInterval(id);
-    };
+    return () => { alive = false; clearInterval(id); };
   }, [applyServer]);
 
   useEffect(() => {
@@ -167,7 +123,6 @@ export default function CrashGame({
         }
       }
       setRoundId(st.roundId);
-
       if (st.phase === "betting") {
         setPhase("betting");
         setMult(1);
@@ -183,21 +138,14 @@ export default function CrashGame({
           setMult(crash);
           if (!settledRef.current.has(st.roundId)) {
             settledRef.current.add(st.roundId);
-            const item: Hist = {
-              roundId: st.roundId,
-              crash,
-              hash: String(st.roundId),
-              at: Date.now(),
-            };
+            const item: Hist = { roundId: st.roundId, crash, hash: String(st.roundId), at: Date.now() };
             setHist((h) => {
               const next = [item, ...h.filter((x) => x.roundId !== st.roundId)].slice(0, HIST_MAX);
               saveHist(next);
               return next;
             });
           }
-        } else {
-          setPhase("fly");
-        }
+        } else setPhase("fly");
       } else {
         const crash = crashMapRef.current.get(st.roundId) ?? st.crashPoint ?? 1;
         setPhase("crash");
@@ -211,30 +159,21 @@ export default function CrashGame({
 
   const placeBet = async () => {
     if (busy || phase !== "betting" || !telegramId) return;
-    if (stake > balance) {
-      setMsg("Недостаточно TON");
-      return;
-    }
+    if (stake > balance) { setMsg("Недостаточно TON"); return; }
     setBusy(true);
     setMsg("");
     try {
       const r = await fetch("/api/mini/games/crash/play", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          telegramId,
-          stake,
-          cashoutAt,
-          roundId,
-        }),
+        body: JSON.stringify({ telegramId, stake, cashoutAt, roundId }),
       });
       const d = await r.json();
-      if (!r.ok) {
-        setMsg(d.error || "Ошибка");
-      } else {
+      if (!r.ok) setMsg(d.error || "Ошибка");
+      else {
         setBetActive(true);
         betRoundRef.current = roundId;
-        if (typeof d.newBalance === "number") onBalance(d.newBalance);
+        onBalanceChange();
         setMsg(d.won ? `Выигрыш +${d.profit}` : `Проигрыш ${stake}`);
         setHist((h) => {
           const item: Hist = {
@@ -250,16 +189,12 @@ export default function CrashGame({
           return next;
         });
       }
-    } catch {
-      setMsg("Сеть");
-    } finally {
-      setBusy(false);
-    }
+    } catch { setMsg("Сеть"); }
+    finally { setBusy(false); }
   };
 
   const phaseColor =
     phase === "betting" ? "#38bdf8" : phase === "fly" ? "#4ade80" : phase === "win" ? "#fbbf24" : "#f87171";
-
   const card: CSSProperties = {
     background: "rgba(15,23,42,0.95)",
     border: "1px solid rgba(56,189,248,0.2)",
@@ -269,9 +204,7 @@ export default function CrashGame({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-      {!ready && (
-        <div style={{ textAlign: "center", color: "#64748b", padding: 24 }}>Синхронизация раунда…</div>
-      )}
+      {!ready && <div style={{ textAlign: "center", color: "#64748b", padding: 24 }}>Синхронизация раунда…</div>}
       {ready && (
         <>
           <div style={{ ...card, textAlign: "center" }}>
@@ -287,7 +220,6 @@ export default function CrashGame({
               {phase === "fly" && "Полёт"}
               {(phase === "crash" || phase === "win") && "Краш"}
             </div>
-            <canvas ref={canvasRef} width={320} height={120} style={{ width: "100%", marginTop: 8, borderRadius: 8, background: "#0f172a" }} />
           </div>
 
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
@@ -343,15 +275,9 @@ export default function CrashGame({
               value={stake}
               onChange={(e) => setStake(Math.max(MIN_BET, Number(e.target.value) || MIN_BET))}
               style={{
-                width: "100%",
-                boxSizing: "border-box",
-                padding: "10px 12px",
-                borderRadius: 10,
-                border: "1px solid rgba(255,255,255,0.1)",
-                background: "#0f172a",
-                color: "#f1f5f9",
-                marginBottom: 10,
-                fontFamily: "inherit",
+                width: "100%", boxSizing: "border-box", padding: "10px 12px", borderRadius: 10,
+                border: "1px solid rgba(255,255,255,0.1)", background: "#0f172a", color: "#f1f5f9",
+                marginBottom: 10, fontFamily: "inherit",
               }}
             />
             <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 6 }}>Автокэшаут</div>
@@ -362,15 +288,9 @@ export default function CrashGame({
               value={cashoutAt}
               onChange={(e) => setCashoutAt(Math.max(1.01, Number(e.target.value) || 1.01))}
               style={{
-                width: "100%",
-                boxSizing: "border-box",
-                padding: "10px 12px",
-                borderRadius: 10,
-                border: "1px solid rgba(255,255,255,0.1)",
-                background: "#0f172a",
-                color: "#f1f5f9",
-                marginBottom: 12,
-                fontFamily: "inherit",
+                width: "100%", boxSizing: "border-box", padding: "10px 12px", borderRadius: 10,
+                border: "1px solid rgba(255,255,255,0.1)", background: "#0f172a", color: "#f1f5f9",
+                marginBottom: 12, fontFamily: "inherit",
               }}
             />
             <button
@@ -378,26 +298,15 @@ export default function CrashGame({
               disabled={busy || phase !== "betting" || betActive}
               onClick={() => void placeBet()}
               style={{
-                width: "100%",
-                padding: "14px 0",
-                borderRadius: 12,
-                border: "none",
-                background:
-                  phase === "betting" && !betActive
-                    ? "linear-gradient(135deg,#0369a1,#0ea5e9)"
-                    : "rgba(100,116,139,0.3)",
-                color: "#fff",
-                fontWeight: 900,
-                fontSize: 15,
-                cursor: phase === "betting" && !betActive ? "pointer" : "not-allowed",
-                fontFamily: "inherit",
+                width: "100%", padding: "14px 0", borderRadius: 12, border: "none",
+                background: phase === "betting" && !betActive ? "linear-gradient(135deg,#0369a1,#0ea5e9)" : "rgba(100,116,139,0.3)",
+                color: "#fff", fontWeight: 900, fontSize: 15,
+                cursor: phase === "betting" && !betActive ? "pointer" : "not-allowed", fontFamily: "inherit",
               }}
             >
               {betActive ? "Ставка принята" : phase !== "betting" ? "Ждите раунд" : busy ? "…" : `Ставка ${stake} TON`}
             </button>
-            {msg && (
-              <div style={{ marginTop: 10, fontSize: 13, color: "#cbd5e1", textAlign: "center" }}>{msg}</div>
-            )}
+            {msg && <div style={{ marginTop: 10, fontSize: 13, color: "#cbd5e1", textAlign: "center" }}>{msg}</div>}
           </div>
         </>
       )}
@@ -405,50 +314,17 @@ export default function CrashGame({
       {detail && (
         <div
           onClick={() => setDetail(null)}
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,0.7)",
-            zIndex: 50,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: 16,
-          }}
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}
         >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            style={{ ...card, width: "100%", maxWidth: 320 }}
-          >
-            <div style={{ fontSize: 16, fontWeight: 900, color: "#f1f5f9", marginBottom: 10 }}>
-              Раунд #{detail.roundId}
-            </div>
+          <div onClick={(e) => e.stopPropagation()} style={{ ...card, width: "100%", maxWidth: 320 }}>
+            <div style={{ fontSize: 16, fontWeight: 900, color: "#f1f5f9", marginBottom: 10 }}>Раунд #{detail.roundId}</div>
             <div style={{ fontSize: 13, color: "#94a3b8", lineHeight: 1.7 }}>
-              <div>
-                Коэффициент: <b style={{ color: "#4ade80" }}>{detail.crash.toFixed(2)}x</b>
-              </div>
+              <div>Коэффициент: <b style={{ color: "#4ade80" }}>{detail.crash.toFixed(2)}x</b></div>
               <div>Hash: {detail.hash || "—"}</div>
               <div>Время: {new Date(detail.at).toLocaleString()}</div>
-              {detail.won != null && (
-                <div>Статус: {detail.won ? `Выигрыш ${detail.payout ?? ""}` : "Проигрыш"}</div>
-              )}
+              {detail.won != null && <div>Статус: {detail.won ? `Выигрыш ${detail.payout ?? ""}` : "Проигрыш"}</div>}
             </div>
-            <button
-              type="button"
-              onClick={() => setDetail(null)}
-              style={{
-                marginTop: 14,
-                width: "100%",
-                padding: 10,
-                borderRadius: 10,
-                border: "none",
-                background: "#1e293b",
-                color: "#e2e8f0",
-                fontWeight: 700,
-                cursor: "pointer",
-                fontFamily: "inherit",
-              }}
-            >
+            <button type="button" onClick={() => setDetail(null)} style={{ marginTop: 14, width: "100%", padding: 10, borderRadius: 10, border: "none", background: "#1e293b", color: "#e2e8f0", fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
               Закрыть
             </button>
           </div>

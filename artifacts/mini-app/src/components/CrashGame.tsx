@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties } from "re
 
 const MIN_BET = 0.1;
 const PRESETS = [0.1, 0.5, 1, 2, 5, 10];
+const BETTING_SEC = 10;
+const RESULT_SEC = 2.5;
 
 function haptic(t: "light" | "medium" | "heavy" = "light") {
   try { (window as any).Telegram?.WebApp?.HapticFeedback?.impactOccurred?.(t); } catch { /* */ }
@@ -11,22 +13,37 @@ function hapticNotify(t: "success" | "error") {
 }
 
 type Hist = { mult: number; won: boolean };
+type Phase = "betting" | "fly" | "crash" | "win";
 
 export default function CrashGame({
   telegramId, balance, onBalanceChange,
 }: { telegramId: string; balance: number; onBalanceChange: () => void }) {
   const [stake, setStake] = useState(0.5);
   const [autoCashout, setAutoCashout] = useState(2);
-  const [busy, setBusy] = useState(false);
+  const [phase, setPhase] = useState<Phase>("betting");
+  const [countdown, setCountdown] = useState(BETTING_SEC);
   const [mult, setMult] = useState(1);
-  const [phase, setPhase] = useState<"idle" | "fly" | "crash" | "win">("idle");
   const [toast, setToast] = useState<string | null>(null);
   const [history, setHistory] = useState<Hist[]>([]);
+  const [betLocked, setBetLocked] = useState(false);
+  const [lockedStake, setLockedStake] = useState(0);
+  const [lockedCashout, setLockedCashout] = useState(2);
+  const [roundId, setRoundId] = useState(0);
+
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const pointsRef = useRef<{ t: number; m: number }[]>([{ t: 0, m: 1 }]);
   const rafRef = useRef(0);
-  const startRef = useRef(0);
   const wonRef = useRef(false);
+  const phaseRef = useRef<Phase>("betting");
+  const betLockedRef = useRef(false);
+  const lockedStakeRef = useRef(0);
+  const lockedCashoutRef = useRef(2);
+  const runningRef = useRef(true);
+
+  useEffect(() => { phaseRef.current = phase; }, [phase]);
+  useEffect(() => { betLockedRef.current = betLocked; }, [betLocked]);
+  useEffect(() => { lockedStakeRef.current = lockedStake; }, [lockedStake]);
+  useEffect(() => { lockedCashoutRef.current = lockedCashout; }, [lockedCashout]);
 
   const draw = useCallback((current: number, crashed: boolean) => {
     const c = canvasRef.current;
@@ -87,138 +104,209 @@ export default function CrashGame({
     ctx.shadowBlur = 0;
 
     const last = pts[pts.length - 1]!;
-    const x = xOf(last.t);
-    const y = yOf(last.m);
     ctx.beginPath();
-    ctx.arc(x, y, 8, 0, Math.PI * 2);
+    ctx.arc(xOf(last.t), yOf(last.m), 8, 0, Math.PI * 2);
     ctx.fillStyle = "#fff";
     ctx.shadowColor = "#fff";
     ctx.shadowBlur = 18;
     ctx.fill();
     ctx.shadowBlur = 0;
-
-    if (!crashed) {
-      for (let i = 0; i < 8; i++) {
-        const j = Math.max(0, pts.length - 1 - i * 2);
-        const p = pts[j]!;
-        ctx.beginPath();
-        ctx.arc(xOf(p.t) - i * 1.5, yOf(p.m) + i * 0.8, Math.max(1, 4 - i * 0.45), 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(74,222,128,${0.55 - i * 0.06})`;
-        ctx.fill();
-      }
-    }
   }, []);
-
-  useEffect(() => { draw(1, false); }, [draw]);
-  useEffect(() => () => cancelAnimationFrame(rafRef.current), []);
 
   const flash = (msg: string) => {
     setToast(msg);
     setTimeout(() => setToast(null), 2600);
   };
 
-  const play = async () => {
-    if (busy || !telegramId) return;
+  const placeBet = () => {
+    if (phaseRef.current !== "betting" || betLockedRef.current) return;
+    if (!telegramId) return;
     if (stake > balance) { flash("Недостаточно TON"); return; }
-    const target = Math.max(1.01, Math.min(100, autoCashout));
-    setBusy(true);
+    if (stake < MIN_BET) { flash(`Мин. ${MIN_BET} TON`); return; }
+    setBetLocked(true);
+    setLockedStake(stake);
+    setLockedCashout(Math.max(1.01, Math.min(100, autoCashout)));
+    haptic("medium");
+    flash(`Ставка ${stake.toFixed(2)} TON · авто ${autoCashout}x`);
+  };
+
+  /** Run one flight: real API if bet locked, else cosmetic only */
+  const runFlight = useCallback(async () => {
     setPhase("fly");
     setMult(1);
     pointsRef.current = [{ t: 0, m: 1 }];
     wonRef.current = false;
-    haptic("medium");
+    cancelAnimationFrame(rafRef.current);
+
+    const hasBet = betLockedRef.current && lockedStakeRef.current > 0;
+    const target = lockedCashoutRef.current;
+    const stakeAmt = lockedStakeRef.current;
 
     let serverData: any = null;
-    const apiP = fetch("/api/mini/games/crash/play", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ telegramId, stake, cashoutAt: target }),
-    }).then(async (r) => {
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.error || "Ошибка");
-      return d;
-    });
+    let apiP: Promise<any> | null = null;
 
-    startRef.current = performance.now();
+    if (hasBet && telegramId) {
+      apiP = fetch("/api/mini/games/crash/play", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ telegramId, stake: stakeAmt, cashoutAt: target }),
+      }).then(async (r) => {
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.error || "Ошибка");
+        return d;
+      }).catch((e) => ({ error: e?.message || "Сеть" }));
+    } else {
+      // cosmetic crash point ~ same distribution feel
+      const r = Math.random();
+      const crashPoint = r < 0.03 ? 1 : Math.max(1.01, Math.floor((100 / (1 - r * 0.96)) ) / 100);
+      serverData = { crashPoint: Math.min(crashPoint, 50), won: false, cosmetic: true };
+    }
+
+    const start = performance.now();
     await new Promise<void>((resolve) => {
       const tick = (now: number) => {
-        const t = (now - startRef.current) / 1000;
-        const m = Math.min(target * 1.02, 1 + (Math.exp(t * 0.55) - 1) * 0.85);
+        if (!runningRef.current) { resolve(); return; }
+        const t = (now - start) / 1000;
+        const growthCap = hasBet ? target * 1.05 : 8;
+        const m = Math.min(growthCap, 1 + (Math.exp(t * 0.55) - 1) * 0.85);
         const rounded = Math.round(m * 100) / 100;
         pointsRef.current.push({ t, m: rounded });
         if (pointsRef.current.length > 500) pointsRef.current.shift();
         setMult(rounded);
         draw(rounded, false);
+
+        if (apiP && !serverData) {
+          // wait for API without blocking animation forever
+        }
         if (serverData) {
-          if (rounded >= Math.min(target, Number(serverData.crashPoint) || target) * 0.96 || rounded >= target * 0.98) {
+          const cp = Number(serverData.crashPoint) || 1;
+          const stopAt = hasBet && !serverData.error
+            ? (serverData.won ? Math.min(target, cp) : Math.min(cp, growthCap))
+            : Math.min(cp, growthCap);
+          if (rounded >= stopAt * 0.97 || t > 18) {
             resolve();
             return;
           }
+        } else if (t > 12) {
+          resolve();
+          return;
         }
-        if (rounded < target * 0.98) rafRef.current = requestAnimationFrame(tick);
-        else resolve();
+        rafRef.current = requestAnimationFrame(tick);
       };
       rafRef.current = requestAnimationFrame(tick);
-      apiP.then((d) => { serverData = d; }).catch((e) => { serverData = { error: e.message }; });
+      if (apiP) {
+        apiP.then((d) => { serverData = d; }).catch((e) => { serverData = { error: e.message }; });
+      }
     });
     cancelAnimationFrame(rafRef.current);
 
-    try {
-      const d = serverData ?? (await apiP);
-      if (d.error) {
-        flash(d.error);
-        setPhase("idle");
-        setBusy(false);
-        setMult(1);
-        return;
-      }
-      const crash = Number(d.crashPoint);
-      wonRef.current = !!d.won;
-
-      if (d.won) {
-        setMult(target);
-        pointsRef.current.push({ t: pointsRef.current[pointsRef.current.length - 1]!.t + 0.05, m: target });
-        draw(target, false);
-        setPhase("win");
-        hapticNotify("success");
-        flash(`+${Number(d.profit).toFixed(3)} TON  ·  ${target}x`);
-        setHistory((h) => [{ mult: target, won: true }, ...h].slice(0, 14));
-      } else {
-        const from = mult;
-        const end = Math.max(crash, 1);
-        const t0 = performance.now();
-        await new Promise<void>((resolve) => {
-          const tick = (now: number) => {
-            const p = Math.min(1, (now - t0) / 480);
-            const m = from + (end - from) * p;
-            const rounded = Math.round(m * 100) / 100;
-            const t = pointsRef.current[pointsRef.current.length - 1]!.t + 0.02;
-            pointsRef.current.push({ t, m: rounded });
-            setMult(rounded);
-            draw(rounded, p > 0.8);
-            if (p < 1) rafRef.current = requestAnimationFrame(tick);
-            else resolve();
-          };
-          rafRef.current = requestAnimationFrame(tick);
-        });
-        setPhase("crash");
-        hapticNotify("error");
-        haptic("heavy");
-        flash(`CRASH ${crash.toFixed(2)}x`);
-        setHistory((h) => [{ mult: crash, won: false }, ...h].slice(0, 14));
-      }
-      onBalanceChange();
-    } catch (e: any) {
-      flash(e?.message || "Сеть");
-      setPhase("idle");
-    } finally {
-      setBusy(false);
-      setTimeout(() => setPhase("idle"), 2000);
+    if (apiP && !serverData) {
+      try { serverData = await apiP; } catch (e: any) { serverData = { error: e?.message }; }
     }
-  };
+
+    if (hasBet && serverData?.error) {
+      flash(serverData.error);
+      setBetLocked(false);
+      setLockedStake(0);
+      return;
+    }
+
+    const crash = Number(serverData?.crashPoint) || 1;
+    const won = hasBet && !!serverData?.won;
+    wonRef.current = won;
+
+    if (won) {
+      setMult(target);
+      pointsRef.current.push({
+        t: (pointsRef.current[pointsRef.current.length - 1]?.t || 0) + 0.05,
+        m: target,
+      });
+      draw(target, false);
+      setPhase("win");
+      hapticNotify("success");
+      flash(`+${Number(serverData.profit).toFixed(3)} TON · ${target}x`);
+      setHistory((h) => [{ mult: target, won: true }, ...h].slice(0, 16));
+      onBalanceChange();
+    } else {
+      const from = mult > 1 ? mult : 1;
+      const end = Math.max(crash, 1);
+      const t0 = performance.now();
+      await new Promise<void>((resolve) => {
+        const tick = (now: number) => {
+          const p = Math.min(1, (now - t0) / 420);
+          const m = from + (end - from) * p;
+          const rounded = Math.round(m * 100) / 100;
+          const t = (pointsRef.current[pointsRef.current.length - 1]?.t || 0) + 0.02;
+          pointsRef.current.push({ t, m: rounded });
+          setMult(rounded);
+          draw(rounded, p > 0.75);
+          if (p < 1) rafRef.current = requestAnimationFrame(tick);
+          else resolve();
+        };
+        rafRef.current = requestAnimationFrame(tick);
+      });
+      setPhase("crash");
+      hapticNotify("error");
+      haptic("heavy");
+      if (hasBet) {
+        flash(`CRASH ${crash.toFixed(2)}x`);
+        onBalanceChange();
+      }
+      setHistory((h) => [{ mult: crash, won: false }, ...h].slice(0, 16));
+    }
+
+    setBetLocked(false);
+    setLockedStake(0);
+  }, [telegramId, draw, onBalanceChange, mult, flash]);
+
+  // Continuous round loop
+  useEffect(() => {
+    runningRef.current = true;
+    let cancelled = false;
+
+    const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+    const loop = async () => {
+      while (!cancelled && runningRef.current) {
+        // Betting phase
+        setPhase("betting");
+        setMult(1);
+        pointsRef.current = [{ t: 0, m: 1 }];
+        draw(1, false);
+        setBetLocked(false);
+        setLockedStake(0);
+
+        for (let s = BETTING_SEC; s >= 0; s--) {
+          if (cancelled) return;
+          setCountdown(s);
+          if (s > 0) await sleep(1000);
+        }
+
+        if (cancelled) return;
+        haptic("light");
+        await runFlight();
+
+        if (cancelled) return;
+        await sleep(RESULT_SEC * 1000);
+        setRoundId((n) => n + 1);
+      }
+    };
+
+    void loop();
+    return () => {
+      cancelled = true;
+      runningRef.current = false;
+      cancelAnimationFrame(rafRef.current);
+    };
+  }, [runFlight, draw]);
 
   const multColor =
-    phase === "crash" ? "#f87171" : phase === "win" ? "#4ade80" : phase === "fly" ? "#fbbf24" : "#e2e8f0";
+    phase === "crash" ? "#f87171"
+      : phase === "win" ? "#4ade80"
+        : phase === "fly" ? "#fbbf24"
+          : "#e2e8f0";
+
+  const canBet = phase === "betting" && !betLocked && stake <= balance;
 
   return (
     <div style={root}>
@@ -230,10 +318,11 @@ export default function CrashGame({
         .cm.win{color:#4ade80!important;animation:crashPulse 1s ease-in-out infinite}
       `}</style>
       {toast && <div style={toastStyle}>{toast}</div>}
+
       <div style={histRow}>
         {history.length === 0 && <span style={{ color: "#475569", fontSize: 11 }}>история</span>}
         {history.map((h, i) => (
-          <span key={i} style={{
+          <span key={`${roundId}-${i}`} style={{
             ...histChip,
             color: h.won ? "#86efac" : "#fca5a5",
             borderColor: h.won ? "rgba(74,222,128,0.35)" : "rgba(248,113,113,0.35)",
@@ -241,37 +330,85 @@ export default function CrashGame({
           }}>{h.mult.toFixed(2)}x</span>
         ))}
       </div>
+
       <div style={graphWrap}>
         <canvas ref={canvasRef} style={{ width: "100%", height: "100%", display: "block" }} />
-        <div className={`cm ${phase}`} style={{
-          position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center",
-          pointerEvents: "none", fontSize: 54, fontWeight: 900, letterSpacing: "-0.04em",
-          color: multColor, fontVariantNumeric: "tabular-nums",
-        }}>{mult.toFixed(2)}x</div>
+        {phase === "betting" ? (
+          <div style={bettingOverlay}>
+            <div style={countdownBig}>{countdown}</div>
+            <div style={bettingHint}>Ставки · раунд #{roundId + 1}</div>
+            {betLocked && (
+              <div style={betPlaced}>
+                ✓ {lockedStake.toFixed(2)} TON · авто {lockedCashout}x
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className={`cm ${phase}`} style={{
+            position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center",
+            pointerEvents: "none", fontSize: 54, fontWeight: 900, letterSpacing: "-0.04em",
+            color: multColor, fontVariantNumeric: "tabular-nums",
+          }}>{mult.toFixed(2)}x</div>
+        )}
         {phase === "crash" && <div style={crashBanner}>CRASHED</div>}
+        {phase === "win" && <div style={{ ...crashBanner, color: "#4ade80" }}>CASH OUT</div>}
       </div>
+
       <div style={panel}>
         <div style={field}>
           <span style={lab}>Ставка</span>
-          <input type="number" min={MIN_BET} step="0.1" value={stake} disabled={busy}
-            onChange={(e) => setStake(Math.max(MIN_BET, Number(e.target.value) || MIN_BET))} style={inp} />
+          <input
+            type="number" min={MIN_BET} step="0.1" value={stake}
+            disabled={phase !== "betting" || betLocked}
+            onChange={(e) => setStake(Math.max(MIN_BET, Number(e.target.value) || MIN_BET))}
+            style={inp}
+          />
           <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
             {PRESETS.map((p) => (
-              <button key={p} type="button" disabled={busy} onClick={() => setStake(p)} style={chip}>{p}</button>
+              <button
+                key={p} type="button"
+                disabled={phase !== "betting" || betLocked}
+                onClick={() => setStake(p)}
+                style={chip}
+              >{p}</button>
             ))}
           </div>
         </div>
         <div style={field}>
           <span style={lab}>Авто-кэшаут</span>
-          <input type="number" min={1.01} max={100} step="0.1" value={autoCashout} disabled={busy}
-            onChange={(e) => setAutoCashout(Math.max(1.01, Number(e.target.value) || 2))} style={inp} />
+          <input
+            type="number" min={1.01} max={100} step="0.1" value={autoCashout}
+            disabled={phase !== "betting" || betLocked}
+            onChange={(e) => setAutoCashout(Math.max(1.01, Number(e.target.value) || 2))}
+            style={inp}
+          />
         </div>
         <div style={{ fontSize: 12, color: "#64748b", marginBottom: 12 }}>
           Баланс <b style={{ color: "#e2e8f0" }}>{balance.toFixed(3)} TON</b>
           {" · "}Потенциал <b style={{ color: "#4ade80" }}>{(stake * autoCashout).toFixed(3)} TON</b>
         </div>
-        <button type="button" disabled={busy || stake > balance} onClick={play} style={btn}>
-          {busy ? (phase === "fly" ? "Полёт…" : "…") : "🚀  Играть"}
+        <button
+          type="button"
+          disabled={!canBet}
+          onClick={placeBet}
+          style={{
+            ...btn,
+            opacity: canBet ? 1 : 0.55,
+            background: betLocked
+              ? "linear-gradient(135deg,#1d4ed8,#38bdf8)"
+              : phase === "betting"
+                ? "linear-gradient(135deg,#16a34a,#4ade80)"
+                : "linear-gradient(135deg,#334155,#475569)",
+            color: betLocked ? "#fff" : phase === "betting" ? "#052e16" : "#cbd5e1",
+          }}
+        >
+          {betLocked
+            ? "Ставка принята"
+            : phase === "betting"
+              ? `Поставить · ${countdown}s`
+              : phase === "fly"
+                ? "Полёт…"
+                : "Ждите раунд…"}
         </button>
       </div>
     </div>
@@ -282,10 +419,26 @@ const root: CSSProperties = { color: "#e2e8f0", position: "relative" };
 const histRow: CSSProperties = { display: "flex", gap: 6, overflowX: "auto", paddingBottom: 10, minHeight: 28 };
 const histChip: CSSProperties = { flexShrink: 0, fontSize: 11, fontWeight: 800, padding: "4px 8px", borderRadius: 8, border: "1px solid" };
 const graphWrap: CSSProperties = {
-  position: "relative", height: 230, borderRadius: 20, overflow: "hidden", marginBottom: 14,
+  position: "relative", height: 240, borderRadius: 20, overflow: "hidden", marginBottom: 14,
   background: "linear-gradient(180deg,#0c1222 0%,#06080f 100%)",
   border: "1px solid rgba(74,222,128,0.22)",
   boxShadow: "0 0 40px rgba(74,222,128,0.1), inset 0 1px 0 rgba(255,255,255,0.04)",
+};
+const bettingOverlay: CSSProperties = {
+  position: "absolute", inset: 0, display: "flex", flexDirection: "column",
+  alignItems: "center", justifyContent: "center", pointerEvents: "none",
+  background: "radial-gradient(ellipse at center, rgba(15,23,42,0.35), transparent 70%)",
+};
+const countdownBig: CSSProperties = {
+  fontSize: 72, fontWeight: 900, color: "#fbbf24", lineHeight: 1,
+  textShadow: "0 0 40px rgba(251,191,36,0.55)", fontVariantNumeric: "tabular-nums",
+};
+const bettingHint: CSSProperties = {
+  marginTop: 8, fontSize: 13, fontWeight: 700, color: "#94a3b8", letterSpacing: "0.04em",
+};
+const betPlaced: CSSProperties = {
+  marginTop: 12, padding: "8px 14px", borderRadius: 999, fontWeight: 800, fontSize: 13,
+  background: "rgba(34,197,94,0.2)", border: "1px solid rgba(74,222,128,0.45)", color: "#86efac",
 };
 const crashBanner: CSSProperties = {
   position: "absolute", left: 0, right: 0, bottom: 14, textAlign: "center",
@@ -304,8 +457,8 @@ const chip: CSSProperties = {
 };
 const btn: CSSProperties = {
   width: "100%", padding: "15px 0", borderRadius: 14, border: "none",
-  background: "linear-gradient(135deg,#16a34a,#4ade80)", color: "#052e16",
-  fontSize: 16, fontWeight: 900, cursor: "pointer", fontFamily: "inherit", boxShadow: "0 8px 28px rgba(74,222,128,0.35)",
+  fontSize: 16, fontWeight: 900, cursor: "pointer", fontFamily: "inherit",
+  boxShadow: "0 8px 28px rgba(74,222,128,0.25)",
 };
 const toastStyle: CSSProperties = {
   position: "fixed", top: 72, left: "50%", transform: "translateX(-50%)", zIndex: 50,

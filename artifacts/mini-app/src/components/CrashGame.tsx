@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties } from "re
 
 const MIN_BET = 0.1;
 const PRESETS = [0.1, 0.5, 1, 2, 5, 10];
+
+/** Must match server games-crash.ts */
 const ROUND_MS = 20_000;
 const BETTING_MS = 10_000;
 const FLY_MS = 7_500;
@@ -16,32 +18,6 @@ function hapticNotify(t: "success" | "error") {
 const HIST_KEY = "tonyx_crash_history_v1";
 const HIST_MAX = 40;
 
-function loadHist(): Hist[] {
-  try {
-    const raw = localStorage.getItem(HIST_KEY);
-    if (!raw) return [];
-    const arr = JSON.parse(raw);
-    return Array.isArray(arr) ? arr.slice(0, HIST_MAX) : [];
-  } catch { return []; }
-}
-
-function saveHist(items: Hist[]) {
-  try { localStorage.setItem(HIST_KEY, JSON.stringify(items.slice(0, HIST_MAX))); } catch { /* */ }
-}
-
-function roundHash(roundId: number): string {
-  let h = (roundId * 2654435761) >>> 0;
-  return ("00000000" + h.toString(16)).slice(-8);
-}
-
-function fmtTime(ts: number): string {
-  try {
-    return new Date(ts).toLocaleString(undefined, {
-      day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit",
-    });
-  } catch { return String(ts); }
-}
-
 type Hist = {
   mult: number;
   won: boolean;
@@ -53,49 +29,39 @@ type Hist = {
   profit?: number;
   mine?: boolean;
 };
-type Phase = "betting" | "fly" | "crash" | "win" | "result";
 
-type ServerState = {
+type Phase = "betting" | "fly" | "crash" | "win";
+
+type RoundSnap = {
   roundId: number;
   phase: "betting" | "fly" | "result";
-  phaseRemaining: number;
   phaseElapsed: number;
+  phaseRemaining: number;
   crashPoint: number | null;
   serverNow: number;
 };
 
-function localState(offsetMs: number): ServerState {
-  const now = Date.now() + offsetMs;
-  const roundId = Math.floor(now / ROUND_MS);
-  const elapsed = now % ROUND_MS;
-  if (elapsed < BETTING_MS) {
-    return {
-      roundId,
-      phase: "betting",
-      phaseElapsed: elapsed,
-      phaseRemaining: BETTING_MS - elapsed,
-      crashPoint: null,
-      serverNow: now,
-    };
-  }
-  if (elapsed < BETTING_MS + FLY_MS) {
-    return {
-      roundId,
-      phase: "fly",
-      phaseElapsed: elapsed - BETTING_MS,
-      phaseRemaining: BETTING_MS + FLY_MS - elapsed,
-      crashPoint: null,
-      serverNow: now,
-    };
-  }
-  return {
-    roundId,
-    phase: "result",
-    phaseElapsed: elapsed - BETTING_MS - FLY_MS,
-    phaseRemaining: ROUND_MS - elapsed,
-    crashPoint: null,
-    serverNow: now,
-  };
+function loadHist(): Hist[] {
+  try {
+    const raw = localStorage.getItem(HIST_KEY);
+    if (!raw) return [];
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr) ? arr.slice(0, HIST_MAX) : [];
+  } catch { return []; }
+}
+function saveHist(items: Hist[]) {
+  try { localStorage.setItem(HIST_KEY, JSON.stringify(items.slice(0, HIST_MAX))); } catch { /* */ }
+}
+function roundHash(roundId: number): string {
+  const h = (roundId * 2654435761) >>> 0;
+  return ("00000000" + h.toString(16)).slice(-8);
+}
+function fmtTime(ts: number): string {
+  try {
+    return new Date(ts).toLocaleString(undefined, {
+      day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit",
+    });
+  } catch { return String(ts); }
 }
 
 function multAtTime(tSec: number, crash: number): number {
@@ -106,11 +72,60 @@ function multAtTime(tSec: number, crash: number): number {
 function crashTimeSec(crash: number): number {
   const target = Math.max(crash, 1.01);
   let t = 0;
-  for (let i = 0; i < 200; i++) {
+  for (let i = 0; i < 240; i++) {
     if (multAtTime(t, 999) >= target) return t;
-    t += 0.05;
+    t += 0.04;
   }
-  return Math.min(FLY_MS / 1000, t);
+  return Math.min(FLY_MS / 1000 - 0.05, t);
+}
+
+/** Pure schedule from wall clock + offset (same for all clients) */
+function snapFromClock(offsetMs: number, crashByRound: Map<number, number>): RoundSnap {
+  const now = Date.now() + offsetMs;
+  const roundId = Math.floor(now / ROUND_MS);
+  const elapsed = now % ROUND_MS;
+  const crashPoint = crashByRound.get(roundId) ?? null;
+
+  if (elapsed < BETTING_MS) {
+    return {
+      roundId, phase: "betting",
+      phaseElapsed: elapsed,
+      phaseRemaining: BETTING_MS - elapsed,
+      crashPoint: null,
+      serverNow: now,
+    };
+  }
+  if (elapsed < BETTING_MS + FLY_MS) {
+    return {
+      roundId, phase: "fly",
+      phaseElapsed: elapsed - BETTING_MS,
+      phaseRemaining: BETTING_MS + FLY_MS - elapsed,
+      crashPoint,
+      serverNow: now,
+    };
+  }
+  return {
+    roundId, phase: "result",
+    phaseElapsed: elapsed - BETTING_MS - FLY_MS,
+    phaseRemaining: ROUND_MS - elapsed,
+    crashPoint,
+    serverNow: now,
+  };
+}
+
+function buildCurve(tSec: number, crash: number): { t: number; m: number }[] {
+  const crashT = crashTimeSec(crash);
+  const end = Math.min(tSec, crashT);
+  const pts: { t: number; m: number }[] = [{ t: 0, m: 1 }];
+  const steps = Math.max(2, Math.ceil(end / 0.05));
+  for (let i = 1; i <= steps; i++) {
+    const t = (end * i) / steps;
+    pts.push({ t, m: multAtTime(t, crash) });
+  }
+  if (tSec >= crashT) {
+    pts.push({ t: crashT, m: crash });
+  }
+  return pts;
 }
 
 function Row({ label, value, ok, mono }: { label: string; value: string; ok?: boolean; mono?: boolean }) {
@@ -143,16 +158,18 @@ export default function CrashGame({
   const [lockedCashout, setLockedCashout] = useState(2);
   const [roundId, setRoundId] = useState(0);
   const [settling, setSettling] = useState(false);
+  const [ready, setReady] = useState(false);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const pointsRef = useRef<{ t: number; m: number }[]>([{ t: 0, m: 1 }]);
   const offsetRef = useRef(0);
-  const crashRef = useRef<number | null>(null);
-  const settledRoundRef = useRef<number | null>(null);
+  const crashMapRef = useRef<Map<number, number>>(new Map());
+  const activeRoundRef = useRef<number>(-1);
+  const settledRef = useRef<Set<number>>(new Set());
   const betRoundRef = useRef<number | null>(null);
   const betResultRef = useRef<any>(null);
-  const lastPhaseRef = useRef<string>("");
   const wonRef = useRef(false);
+  const readyRef = useRef(false);
 
   const draw = useCallback((current: number, crashed: boolean) => {
     const c = canvasRef.current;
@@ -226,134 +243,217 @@ export default function CrashGame({
     setTimeout(() => setToast(null), 2600);
   };
 
+  /** Apply server state snapshot — join mid-round correctly */
+  const applyServer = useCallback((d: any) => {
+    if (typeof d.serverNow === "number") {
+      offsetRef.current = d.serverNow - Date.now();
+    }
+    const rid = Number(d.roundId);
+    if (Number.isFinite(rid) && d.crashPoint != null) {
+      crashMapRef.current.set(rid, Number(d.crashPoint));
+    }
+    // also seed previous round crash if provided
+    if (d.prevCrashPoint != null && Number.isFinite(d.prevRoundId)) {
+      crashMapRef.current.set(Number(d.prevRoundId), Number(d.prevCrashPoint));
+    }
+  }, []);
+
+  // Bootstrap + periodic sync
   useEffect(() => {
     let alive = true;
-    const sync = async () => {
+    const sync = async (isBoot = false) => {
       try {
         const r = await fetch("/api/mini/games/crash/state");
         const d = await r.json();
         if (!alive) return;
-        if (typeof d.serverNow === "number") {
-          offsetRef.current = d.serverNow - Date.now();
+        applyServer(d);
+        if (isBoot) {
+          readyRef.current = true;
+          setReady(true);
+          // Jump straight into current phase — no replay
+          const st = snapFromClock(offsetRef.current, crashMapRef.current);
+          activeRoundRef.current = st.roundId;
+          setRoundId(st.roundId);
+          if (st.phase === "betting") {
+            pointsRef.current = [{ t: 0, m: 1 }];
+            setMult(1);
+            setPhase("betting");
+            setCountdown(Math.ceil(st.phaseRemaining / 1000));
+            draw(1, false);
+          } else {
+            const crash = st.crashPoint ?? crashMapRef.current.get(st.roundId) ?? 1.5;
+            const tSec = st.phase === "fly" ? st.phaseElapsed / 1000 : FLY_MS / 1000;
+            const crashT = crashTimeSec(crash);
+            const done = tSec >= crashT || st.phase === "result";
+            pointsRef.current = buildCurve(done ? crashT + 0.01 : tSec, crash);
+            setMult(done ? crash : multAtTime(tSec, crash));
+            setPhase(done ? "crash" : "fly");
+            wonRef.current = false;
+            draw(done ? crash : multAtTime(tSec, crash), done);
+          }
         }
-        if (d.crashPoint != null) crashRef.current = Number(d.crashPoint);
-      } catch { /* offline */ }
+      } catch { /* offline: still run on local clock after timeout */
+        if (isBoot && alive) {
+          readyRef.current = true;
+          setReady(true);
+        }
+      }
     };
-    void sync();
-    const id = setInterval(sync, 5000);
+    void sync(true);
+    const id = setInterval(() => void sync(false), 4000);
     return () => { alive = false; clearInterval(id); };
-  }, []);
+  }, [applyServer, draw]);
 
+  // Main render loop — only after ready
   useEffect(() => {
+    if (!ready) return;
     let raf = 0;
+
     const tick = () => {
-      const st = localState(offsetRef.current);
+      if (!readyRef.current) {
+        raf = requestAnimationFrame(tick);
+        return;
+      }
+
+      const st = snapFromClock(offsetRef.current, crashMapRef.current);
+
+      // Round changed → reset visual, never replay old settlement UI
+      if (st.roundId !== activeRoundRef.current) {
+        activeRoundRef.current = st.roundId;
+        wonRef.current = false;
+        pointsRef.current = [{ t: 0, m: 1 }];
+        // clear bet if it belonged to previous round
+        if (betRoundRef.current != null && betRoundRef.current !== st.roundId) {
+          setBetLocked(false);
+          setLockedStake(0);
+          betRoundRef.current = null;
+          betResultRef.current = null;
+        }
+        // fetch crash for new fly/result phase
+        if (st.phase !== "betting") {
+          void fetch("/api/mini/games/crash/state")
+            .then((r) => r.json())
+            .then((d) => applyServer(d))
+            .catch(() => {});
+        }
+      }
+
       setRoundId(st.roundId);
 
       if (st.phase === "betting") {
-        if (lastPhaseRef.current !== "betting") {
-          pointsRef.current = [{ t: 0, m: 1 }];
-          setMult(1);
-          crashRef.current = null;
-          wonRef.current = false;
-          betResultRef.current = null;
-          if (betRoundRef.current !== null && betRoundRef.current !== st.roundId) {
-            setBetLocked(false);
-            setLockedStake(0);
-            betRoundRef.current = null;
-          }
-          draw(1, false);
-        }
         setPhase("betting");
-        setCountdown(Math.ceil(st.phaseRemaining / 1000));
-        lastPhaseRef.current = "betting";
+        setCountdown(Math.max(0, Math.ceil(st.phaseRemaining / 1000)));
+        setMult(1);
+        if (pointsRef.current.length > 1) pointsRef.current = [{ t: 0, m: 1 }];
+        draw(1, false);
       } else if (st.phase === "fly") {
-        const tSec = st.phaseElapsed / 1000;
-        if (lastPhaseRef.current === "betting") {
-          haptic("light");
-          void fetch("/api/mini/games/crash/state")
-            .then((r) => r.json())
-            .then((d) => {
-              if (d.crashPoint != null) crashRef.current = Number(d.crashPoint);
-            })
-            .catch(() => {});
-        }
-        const crash = crashRef.current ?? 2;
-        const crashT = crashTimeSec(crash);
-        const crashed = tSec >= crashT;
-        const m = crashed ? crash : multAtTime(tSec, crash);
-        const rounded = Math.round(m * 100) / 100;
-
-        if (!crashed) {
-          pointsRef.current.push({ t: tSec, m: rounded });
-          if (pointsRef.current.length > 400) pointsRef.current.shift();
-          setMult(rounded);
+        let crash = crashMapRef.current.get(st.roundId) ?? st.crashPoint;
+        if (crash == null) {
+          // still loading crash — mild hold at 1.00
           setPhase("fly");
-          draw(rounded, false);
+          setMult(1);
+          draw(1, false);
         } else {
-          setMult(crash);
-          setPhase(wonRef.current ? "win" : "crash");
-          draw(crash, true);
+          const tSec = st.phaseElapsed / 1000;
+          const crashT = crashTimeSec(crash);
+          const done = tSec >= crashT;
+          pointsRef.current = buildCurve(done ? crashT + 0.01 : tSec, crash);
+          const m = done ? crash : multAtTime(tSec, crash);
+          setMult(m);
+          setPhase(done ? (wonRef.current ? "win" : "crash") : "fly");
+          draw(m, done);
 
-          if (settledRoundRef.current !== st.roundId) {
-            settledRoundRef.current = st.roundId;
-            const res = betResultRef.current;
-            const entry: Hist = {
-              mult: crash,
-              won: false,
-              roundId: st.roundId,
-              at: Date.now(),
-              hash: roundHash(st.roundId),
-              mine: false,
-            };
-            if (res && !res.error) {
-              wonRef.current = !!res.won;
-              entry.won = !!res.won;
-              entry.mult = res.won ? Number(res.cashoutAt) : crash;
-              entry.stake = Number(res.stake) || undefined;
-              entry.cashoutAt = Number(res.cashoutAt) || undefined;
-              entry.profit = Number(res.profit);
-              entry.mine = true;
-              if (res.won) {
-                hapticNotify("success");
-                flash(`+${Number(res.profit).toFixed(3)} TON · ${res.cashoutAt}x`);
-              } else {
-                hapticNotify("error");
-                flash(`CRASH ${crash.toFixed(2)}x`);
+          if (done) {
+            // history once per round (visual only; bet already settled on server at place time)
+            if (!settledRef.current.has(st.roundId)) {
+              settledRef.current.add(st.roundId);
+              const res = betResultRef.current;
+              const entry: Hist = {
+                mult: crash,
+                won: false,
+                roundId: st.roundId,
+                at: Date.now(),
+                hash: roundHash(st.roundId),
+                mine: false,
+              };
+              if (res && !res.error && betRoundRef.current === st.roundId) {
+                wonRef.current = !!res.won;
+                entry.won = !!res.won;
+                entry.mult = res.won ? Number(res.cashoutAt) : crash;
+                entry.stake = Number(res.stake) || undefined;
+                entry.cashoutAt = Number(res.cashoutAt) || undefined;
+                entry.profit = Number(res.profit);
+                entry.mine = true;
+                if (res.won) {
+                  hapticNotify("success");
+                  flash(`+${Number(res.profit).toFixed(3)} TON · ${res.cashoutAt}x`);
+                } else {
+                  hapticNotify("error");
+                  flash(`CRASH ${crash.toFixed(2)}x`);
+                }
               }
-              onBalanceChange();
+              setHistory((h) => {
+                const next = [entry, ...h.filter((x) => x.roundId !== entry.roundId)].slice(0, HIST_MAX);
+                saveHist(next);
+                return next;
+              });
+              setBetLocked(false);
+              setLockedStake(0);
             }
-            setHistory((h) => {
-              const next = [entry, ...h.filter((x) => x.roundId !== entry.roundId)].slice(0, HIST_MAX);
-              saveHist(next);
-              return next;
-            });
-            setBetLocked(false);
-            setLockedStake(0);
-            betRoundRef.current = null;
           }
         }
-        lastPhaseRef.current = crashed ? "crash" : "fly";
       } else {
-        const crash = crashRef.current ?? mult;
-        setPhase(wonRef.current ? "win" : "crash");
+        // result pad — show final crash of THIS round only
+        const crash = crashMapRef.current.get(st.roundId) ?? st.crashPoint ?? 1;
+        const crashT = crashTimeSec(crash);
+        pointsRef.current = buildCurve(crashT + 0.01, crash);
         setMult(crash);
+        setPhase(wonRef.current ? "win" : "crash");
         draw(crash, true);
-        lastPhaseRef.current = "result";
+
+        if (!settledRef.current.has(st.roundId)) {
+          settledRef.current.add(st.roundId);
+          const entry: Hist = {
+            mult: crash,
+            won: false,
+            roundId: st.roundId,
+            at: Date.now(),
+            hash: roundHash(st.roundId),
+            mine: betRoundRef.current === st.roundId,
+          };
+          const res = betResultRef.current;
+          if (res && !res.error && betRoundRef.current === st.roundId) {
+            entry.won = !!res.won;
+            entry.mult = res.won ? Number(res.cashoutAt) : crash;
+            entry.stake = Number(res.stake) || undefined;
+            entry.cashoutAt = Number(res.cashoutAt) || undefined;
+            entry.profit = Number(res.profit);
+            entry.mine = true;
+            wonRef.current = !!res.won;
+          }
+          setHistory((h) => {
+            const next = [entry, ...h.filter((x) => x.roundId !== entry.roundId)].slice(0, HIST_MAX);
+            saveHist(next);
+            return next;
+          });
+          setBetLocked(false);
+          setLockedStake(0);
+        }
       }
 
       raf = requestAnimationFrame(tick);
     };
+
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [draw, onBalanceChange, mult]);
+  }, [ready, draw, applyServer]);
 
   const placeBet = async () => {
     if (phase !== "betting" || betLocked || settling) return;
     if (!telegramId) return;
     if (stake > balance) { flash("Недостаточно TON"); return; }
 
-    const st = localState(offsetRef.current);
+    const st = snapFromClock(offsetRef.current, crashMapRef.current);
     if (st.phase !== "betting") { flash("Ставки закрыты"); return; }
 
     setSettling(true);
@@ -375,6 +475,10 @@ export default function CrashGame({
       }
       betResultRef.current = d;
       betRoundRef.current = st.roundId;
+      // store public crash for this round (same for everyone)
+      if (d.publicCrashPoint != null) {
+        crashMapRef.current.set(st.roundId, Number(d.publicCrashPoint));
+      }
       setBetLocked(true);
       setLockedStake(stake);
       setLockedCashout(Number(d.cashoutAt));
@@ -394,7 +498,15 @@ export default function CrashGame({
         : phase === "fly" ? "#fbbf24"
           : "#e2e8f0";
 
-  const canBet = phase === "betting" && !betLocked && !settling && stake <= balance;
+  const canBet = phase === "betting" && !betLocked && !settling && stake <= balance && ready;
+
+  if (!ready) {
+    return (
+      <div style={{ ...root, padding: 40, textAlign: "center", color: "#64748b", fontWeight: 700 }}>
+        Синхронизация раунда…
+      </div>
+    );
+  }
 
   return (
     <div style={root}>
@@ -475,13 +587,13 @@ export default function CrashGame({
             )}
           </div>
         ) : (
-          <div className={`cm ${phase === "win" ? "win" : phase === "crash" || phase === "result" ? "crash" : "fly"}`} style={{
+          <div className={`cm ${phase === "win" ? "win" : phase === "crash" ? "crash" : "fly"}`} style={{
             position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center",
             pointerEvents: "none", fontSize: 54, fontWeight: 900, letterSpacing: "-0.04em",
             color: multColor, fontVariantNumeric: "tabular-nums",
           }}>{mult.toFixed(2)}x</div>
         )}
-        {(phase === "crash" || phase === "result") && !wonRef.current && <div style={crashBanner}>CRASHED</div>}
+        {phase === "crash" && !wonRef.current && <div style={crashBanner}>CRASHED</div>}
         {phase === "win" && <div style={{ ...crashBanner, color: "#4ade80" }}>CASH OUT</div>}
       </div>
 

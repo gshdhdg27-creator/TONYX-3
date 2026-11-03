@@ -10,12 +10,13 @@ const router: IRouter = Router();
 const MIN_STAKE = 0.1;
 const MAX_CASHOUT = 100;
 
-/** Global always-on schedule (ms) */
+/** Global always-on schedule (ms) — same for every player */
 const ROUND_MS = 20_000;
 const BETTING_MS = 10_000;
 const FLY_MS = 7_500;
 const RESULT_MS = ROUND_MS - BETTING_MS - FLY_MS;
 
+/** Deterministic crash for roundId — identical for all users */
 function crashForRound(roundId: number): number {
   const h = createHash("sha256").update(`tonyx-crash-${roundId}`).digest();
   const r = h[0]! / 255;
@@ -23,6 +24,10 @@ function crashForRound(roundId: number): number {
   const r2 = ((h[1]! << 8) | h[2]!) / 65535;
   const point = Math.floor((1 / (1 - r2 * 0.96)) * 100) / 100;
   return Math.min(MAX_CASHOUT, Math.max(1.01, point));
+}
+
+function roundHash(roundId: number): string {
+  return createHash("sha256").update(`tonyx-crash-${roundId}`).digest("hex").slice(0, 12);
 }
 
 function getRoundState(now = Date.now()) {
@@ -46,6 +51,7 @@ function getRoundState(now = Date.now()) {
     phaseRemaining = ROUND_MS - elapsed;
   }
 
+  // crash revealed after betting ends — same value for everyone
   const crashPoint = phase === "betting" ? null : crashForRound(roundId);
 
   return {
@@ -59,6 +65,10 @@ function getRoundState(now = Date.now()) {
     resultMs: RESULT_MS,
     roundMs: ROUND_MS,
     crashPoint,
+    hash: roundHash(roundId),
+    prevRoundId: roundId - 1,
+    prevCrashPoint: crashForRound(roundId - 1),
+    prevHash: roundHash(roundId - 1),
     serverNow: now,
   };
 }
@@ -80,6 +90,7 @@ router.get("/state", (_req, res) => {
 /**
  * Place bet only during the global betting window.
  * body: { telegramId, stake, cashoutAt, roundId }
+ * Settlement uses the same crashForRound(roundId) for every player.
  */
 router.post("/play", async (req, res) => {
   try {
@@ -117,7 +128,7 @@ router.post("/play", async (req, res) => {
 
     const stake = Math.round(stakeRaw * 1000) / 1000;
     const cashout = Math.round(cashoutAt * 100) / 100;
-    const crashPoint = crashForRound(st.roundId);
+    const publicCrashPoint = crashForRound(st.roundId);
 
     const user = await db
       .select()
@@ -136,9 +147,10 @@ router.post("/play", async (req, res) => {
       return;
     }
 
-    let effectiveCrash = crashPoint;
+    // forceWin only affects this player's settlement, not public crash chart
+    let effectiveCrash = publicCrashPoint;
     if (user.forceWin) {
-      effectiveCrash = Math.max(crashPoint, Math.round((cashout + 0.15) * 100) / 100);
+      effectiveCrash = Math.max(publicCrashPoint, Math.round((cashout + 0.15) * 100) / 100);
     }
 
     const won = cashout <= effectiveCrash;
@@ -172,10 +184,12 @@ router.post("/play", async (req, res) => {
     res.json({
       ok: true,
       roundId: st.roundId,
+      hash: roundHash(st.roundId),
       stake,
       cashoutAt: cashout,
+      /** Public crash — same for all players this round */
+      publicCrashPoint,
       crashPoint: effectiveCrash,
-      publicCrashPoint: crashPoint,
       won,
       payout,
       profit: won ? Math.round((payout - stake) * 1000) / 1000 : -stake,

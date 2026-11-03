@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
-import { usersTable } from "@workspace/db/schema";
+import { usersTable, systemSettingsTable } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
 import { isGameEnabled, GAME_DISABLED_MESSAGE } from "../../lib/game-config.js";
 import { createHash } from "crypto";
@@ -10,15 +10,76 @@ const router: IRouter = Router();
 const MIN_STAKE = 0.1;
 const MAX_CASHOUT = 100;
 
-/** Global always-on schedule (ms) — same for every player */
-const ROUND_MS = 20_000;
-const BETTING_MS = 10_000;
-const FLY_MS = 7_500;
+/** Global schedule */
+export const ROUND_MS = 20_000;
+export const BETTING_MS = 10_000;
+export const FLY_MS = 7_500;
 const RESULT_MS = ROUND_MS - BETTING_MS - FLY_MS;
 
-/** Deterministic crash for roundId — identical for all users */
-function crashForRound(roundId: number): number {
-  const h = createHash("sha256").update(`tonyx-crash-${roundId}`).digest();
+const KEY_EPOCH = "crash_epoch_ms";
+const KEY_OVERRIDES = "crash_overrides"; // JSON { "1": 2.5, "2": 1.01 }
+
+async function getSetting(key: string): Promise<string | null> {
+  const row = await db
+    .select()
+    .from(systemSettingsTable)
+    .where(eq(systemSettingsTable.key, key))
+    .then((r) => r[0] ?? null);
+  return row?.value ?? null;
+}
+
+async function setSetting(key: string, value: string): Promise<void> {
+  const existing = await db
+    .select()
+    .from(systemSettingsTable)
+    .where(eq(systemSettingsTable.key, key))
+    .then((r) => r[0] ?? null);
+  if (existing) {
+    await db
+      .update(systemSettingsTable)
+      .set({ value, updatedAt: new Date() })
+      .where(eq(systemSettingsTable.key, key));
+  } else {
+    await db.insert(systemSettingsTable).values({ key, value });
+  }
+}
+
+/** Epoch start for sequential rounds (1,2,3…). Created on first access. */
+export async function getCrashEpoch(): Promise<number> {
+  const raw = await getSetting(KEY_EPOCH);
+  if (raw && Number.isFinite(Number(raw))) return Number(raw);
+  const now = Date.now();
+  await setSetting(KEY_EPOCH, String(now));
+  return now;
+}
+
+export async function resetCrashRounds(): Promise<{ epoch: number }> {
+  const now = Date.now();
+  await setSetting(KEY_EPOCH, String(now));
+  await setSetting(KEY_OVERRIDES, "{}");
+  return { epoch: now };
+}
+
+async function getOverrides(): Promise<Record<string, number>> {
+  try {
+    const raw = await getSetting(KEY_OVERRIDES);
+    if (!raw) return {};
+    const o = JSON.parse(raw);
+    return o && typeof o === "object" ? o : {};
+  } catch {
+    return {};
+  }
+}
+
+export async function setCrashOverride(roundId: number, mult: number): Promise<void> {
+  const o = await getOverrides();
+  o[String(roundId)] = Math.round(mult * 100) / 100;
+  await setSetting(KEY_OVERRIDES, JSON.stringify(o));
+}
+
+/** Hash fallback — same for all players */
+function hashCrash(roundId: number): number {
+  const h = createHash("sha256").update(`tonyx-crash-seq-${roundId}`).digest();
   const r = h[0]! / 255;
   if (r < 0.03) return 1;
   const r2 = ((h[1]! << 8) | h[2]!) / 65535;
@@ -26,13 +87,27 @@ function crashForRound(roundId: number): number {
   return Math.min(MAX_CASHOUT, Math.max(1.01, point));
 }
 
-function roundHash(roundId: number): string {
-  return createHash("sha256").update(`tonyx-crash-${roundId}`).digest("hex").slice(0, 12);
+export async function resolveCrash(roundId: number): Promise<number> {
+  if (roundId < 1) return 1;
+  const o = await getOverrides();
+  const forced = o[String(roundId)];
+  if (typeof forced === "number" && forced >= 1) {
+    return Math.min(MAX_CASHOUT, Math.max(1, Math.round(forced * 100) / 100));
+  }
+  return hashCrash(roundId);
 }
 
-function getRoundState(now = Date.now()) {
-  const roundId = Math.floor(now / ROUND_MS);
-  const elapsed = now % ROUND_MS;
+function roundHash(roundId: number): string {
+  return createHash("sha256").update(`tonyx-crash-seq-${roundId}`).digest("hex").slice(0, 12);
+}
+
+export async function getRoundState(now = Date.now()) {
+  const epoch = await getCrashEpoch();
+  const elapsedTotal = Math.max(0, now - epoch);
+  const idx0 = Math.floor(elapsedTotal / ROUND_MS);
+  const roundId = idx0 + 1; // 1, 2, 3...
+  const elapsed = elapsedTotal % ROUND_MS;
+
   let phase: "betting" | "fly" | "result";
   let phaseElapsed: number;
   let phaseRemaining: number;
@@ -51,8 +126,9 @@ function getRoundState(now = Date.now()) {
     phaseRemaining = ROUND_MS - elapsed;
   }
 
-  // crash revealed after betting ends — same value for everyone
-  const crashPoint = phase === "betting" ? null : crashForRound(roundId);
+  const crashPoint = phase === "betting" ? null : await resolveCrash(roundId);
+  const prevRoundId = roundId > 1 ? roundId - 1 : null;
+  const prevCrashPoint = prevRoundId ? await resolveCrash(prevRoundId) : null;
 
   return {
     roundId,
@@ -64,11 +140,12 @@ function getRoundState(now = Date.now()) {
     flyMs: FLY_MS,
     resultMs: RESULT_MS,
     roundMs: ROUND_MS,
+    epochMs: epoch,
     crashPoint,
     hash: roundHash(roundId),
-    prevRoundId: roundId - 1,
-    prevCrashPoint: crashForRound(roundId - 1),
-    prevHash: roundHash(roundId - 1),
+    prevRoundId,
+    prevCrashPoint,
+    prevHash: prevRoundId ? roundHash(prevRoundId) : null,
     serverNow: now,
   };
 }
@@ -82,16 +159,15 @@ router.get("/info", (_req, res) => {
   });
 });
 
-/** Current global round — always running even with 0 players */
-router.get("/state", (_req, res) => {
-  res.json(getRoundState());
+router.get("/state", async (_req, res) => {
+  try {
+    res.json(await getRoundState());
+  } catch (e: any) {
+    console.error("[crash/state]", e);
+    res.status(500).json({ error: e?.message ?? "state failed" });
+  }
 });
 
-/**
- * Place bet only during the global betting window.
- * body: { telegramId, stake, cashoutAt, roundId }
- * Settlement uses the same crashForRound(roundId) for every player.
- */
 router.post("/play", async (req, res) => {
   try {
     if (!(await isGameEnabled("crash"))) {
@@ -99,7 +175,7 @@ router.post("/play", async (req, res) => {
       return;
     }
 
-    const st = getRoundState();
+    const st = await getRoundState();
     const telegramId = String(req.body?.telegramId ?? "");
     const stakeRaw = Number(req.body?.stake);
     const cashoutAt = Number(req.body?.cashoutAt);
@@ -128,7 +204,7 @@ router.post("/play", async (req, res) => {
 
     const stake = Math.round(stakeRaw * 1000) / 1000;
     const cashout = Math.round(cashoutAt * 100) / 100;
-    const publicCrashPoint = crashForRound(st.roundId);
+    const publicCrashPoint = await resolveCrash(st.roundId);
 
     const user = await db
       .select()
@@ -147,7 +223,6 @@ router.post("/play", async (req, res) => {
       return;
     }
 
-    // forceWin only affects this player's settlement, not public crash chart
     let effectiveCrash = publicCrashPoint;
     if (user.forceWin) {
       effectiveCrash = Math.max(publicCrashPoint, Math.round((cashout + 0.15) * 100) / 100);
@@ -187,7 +262,6 @@ router.post("/play", async (req, res) => {
       hash: roundHash(st.roundId),
       stake,
       cashoutAt: cashout,
-      /** Public crash — same for all players this round */
       publicCrashPoint,
       crashPoint: effectiveCrash,
       won,

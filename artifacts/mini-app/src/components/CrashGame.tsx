@@ -5,7 +5,7 @@ const PRESETS = [0.1, 0.5, 1, 2, 5, 10];
 const ROUND_MS = 20_000;
 const BETTING_MS = 10_000;
 const FLY_MS = 7_500;
-const HIST_KEY = "tonyx_crash_hist_v3";
+const HIST_KEY = "tonyx_crash_hist_v4";
 const HIST_MAX = 40;
 
 type UiPhase = "betting" | "fly" | "result";
@@ -24,7 +24,6 @@ type RoundSnap = {
   phase: "betting" | "fly" | "result";
   phaseElapsed: number;
   phaseRemaining: number;
-  crashPoint: number | null;
 };
 
 function loadHist(): Hist[] {
@@ -45,22 +44,14 @@ function saveHist(items: Hist[]) {
   }
 }
 
-/** Pure clock math from server epoch — same for every client */
 function snapFromClock(offsetMs: number, epochMs: number): RoundSnap {
   const now = Date.now() + offsetMs;
   const elapsedTotal = Math.max(0, now - epochMs);
   const idx0 = Math.floor(elapsedTotal / ROUND_MS);
   const roundId = idx0 + 1;
   const elapsed = elapsedTotal % ROUND_MS;
-
   if (elapsed < BETTING_MS) {
-    return {
-      roundId,
-      phase: "betting",
-      phaseElapsed: elapsed,
-      phaseRemaining: BETTING_MS - elapsed,
-      crashPoint: null,
-    };
+    return { roundId, phase: "betting", phaseElapsed: elapsed, phaseRemaining: BETTING_MS - elapsed };
   }
   if (elapsed < BETTING_MS + FLY_MS) {
     return {
@@ -68,7 +59,6 @@ function snapFromClock(offsetMs: number, epochMs: number): RoundSnap {
       phase: "fly",
       phaseElapsed: elapsed - BETTING_MS,
       phaseRemaining: BETTING_MS + FLY_MS - elapsed,
-      crashPoint: null,
     };
   }
   return {
@@ -76,7 +66,6 @@ function snapFromClock(offsetMs: number, epochMs: number): RoundSnap {
     phase: "result",
     phaseElapsed: elapsed - BETTING_MS - FLY_MS,
     phaseRemaining: ROUND_MS - elapsed,
-    crashPoint: null,
   };
 }
 
@@ -84,6 +73,13 @@ function multAt(elapsedMs: number, crash: number): number {
   const t = Math.max(0, elapsedMs) / 1000;
   const m = Math.pow(Math.E, 0.06 * t);
   return Math.min(crash, Math.max(1, Math.floor(m * 100) / 100));
+}
+
+function flyProgress(elapsedMs: number, crash: number): number {
+  if (crash <= 1.01) return 1;
+  const targetT = Math.log(crash) / 0.06;
+  const t = Math.max(0, elapsedMs) / 1000;
+  return Math.min(1, t / Math.max(0.01, targetT));
 }
 
 export default function CrashGame({
@@ -115,7 +111,12 @@ export default function CrashGame({
   const activeRoundRef = useRef(-1);
   const betRoundRef = useRef<number | null>(null);
   const settledRef = useRef<Set<number>>(new Set());
-  const readyRef = useRef(false);
+  const phaseRef = useRef<UiPhase>("betting");
+  const multRef = useRef(1);
+  const progressRef = useRef(0);
+  const explodeRef = useRef(0);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const rafRef = useRef(0);
 
   const pushHist = useCallback((item: Hist) => {
     setHist((h) => {
@@ -127,12 +128,8 @@ export default function CrashGame({
 
   const applyServer = useCallback(
     (d: any) => {
-      if (typeof d.serverNow === "number") {
-        offsetRef.current = d.serverNow - Date.now();
-      }
-      if (typeof d.epochMs === "number" && Number.isFinite(d.epochMs)) {
-        epochRef.current = d.epochMs;
-      }
+      if (typeof d.serverNow === "number") offsetRef.current = d.serverNow - Date.now();
+      if (typeof d.epochMs === "number" && Number.isFinite(d.epochMs)) epochRef.current = d.epochMs;
       const rid = Number(d.roundId);
       if (Number.isFinite(rid)) {
         if (d.crashPoint != null) crashMapRef.current.set(rid, Number(d.crashPoint));
@@ -165,28 +162,38 @@ export default function CrashGame({
         const d = await r.json();
         if (!alive || d.error) return;
         applyServer(d);
-
         if (isBoot && epochRef.current > 0) {
           const st = snapFromClock(offsetRef.current, epochRef.current);
           activeRoundRef.current = st.roundId;
           setRoundId(st.roundId);
-
           if (st.phase === "betting") {
+            phaseRef.current = "betting";
             setPhase("betting");
+            multRef.current = 1;
             setMult(1);
+            progressRef.current = 0;
+            explodeRef.current = 0;
             setCountdown(Math.max(1, Math.ceil(st.phaseRemaining / 1000)));
           } else if (st.phase === "fly") {
             const crash = crashMapRef.current.get(st.roundId) ?? Number(d.crashPoint) ?? 2;
             crashMapRef.current.set(st.roundId, crash);
+            phaseRef.current = "fly";
             setPhase("fly");
-            setMult(multAt(st.phaseElapsed, crash));
+            const m = multAt(st.phaseElapsed, crash);
+            multRef.current = m;
+            setMult(m);
+            progressRef.current = flyProgress(st.phaseElapsed, crash);
+            explodeRef.current = 0;
           } else {
             const crash = crashMapRef.current.get(st.roundId) ?? Number(d.crashPoint) ?? 1;
             crashMapRef.current.set(st.roundId, crash);
+            phaseRef.current = "result";
             setPhase("result");
+            multRef.current = crash;
             setMult(crash);
+            progressRef.current = 1;
+            explodeRef.current = 1;
           }
-          readyRef.current = true;
           setReady(true);
         }
       } catch {
@@ -194,7 +201,7 @@ export default function CrashGame({
       }
     };
     void pull(true);
-    const id = setInterval(() => void pull(false), 3000);
+    const id = setInterval(() => void pull(false), 2500);
     return () => {
       alive = false;
       clearInterval(id);
@@ -203,10 +210,8 @@ export default function CrashGame({
 
   useEffect(() => {
     if (!ready || epochRef.current <= 0) return;
-
     const tick = () => {
       const st = snapFromClock(offsetRef.current, epochRef.current);
-
       if (st.roundId !== activeRoundRef.current) {
         const prev = activeRoundRef.current;
         if (prev > 0 && !settledRef.current.has(prev)) {
@@ -224,6 +229,8 @@ export default function CrashGame({
         }
         activeRoundRef.current = st.roundId;
         setRoundId(st.roundId);
+        explodeRef.current = 0;
+        progressRef.current = 0;
         if (betRoundRef.current != null && betRoundRef.current !== st.roundId) {
           setBetActive(false);
           betRoundRef.current = null;
@@ -231,24 +238,35 @@ export default function CrashGame({
       }
 
       if (st.phase === "betting") {
+        phaseRef.current = "betting";
         setPhase("betting");
+        multRef.current = 1;
         setMult(1);
+        progressRef.current = 0;
+        explodeRef.current = 0;
         setCountdown(Math.max(1, Math.ceil(st.phaseRemaining / 1000)));
         return;
       }
 
       if (st.phase === "fly") {
-        let crash = crashMapRef.current.get(st.roundId);
+        const crash = crashMapRef.current.get(st.roundId);
         if (crash == null) {
+          phaseRef.current = "fly";
           setPhase("fly");
-          setMult(multAt(st.phaseElapsed, 100));
           return;
         }
         const m = multAt(st.phaseElapsed, crash);
+        const p = flyProgress(st.phaseElapsed, crash);
+        multRef.current = m;
+        progressRef.current = p;
         setMult(m);
-        if (m >= crash) {
+        if (m >= crash || p >= 0.999) {
+          phaseRef.current = "result";
           setPhase("result");
+          multRef.current = crash;
           setMult(crash);
+          progressRef.current = 1;
+          explodeRef.current = Math.min(1, explodeRef.current + 0.08);
           if (!settledRef.current.has(st.roundId)) {
             settledRef.current.add(st.roundId);
             pushHist({
@@ -260,14 +278,20 @@ export default function CrashGame({
             });
           }
         } else {
+          phaseRef.current = "fly";
           setPhase("fly");
+          explodeRef.current = 0;
         }
         return;
       }
 
       const crash = crashMapRef.current.get(st.roundId) ?? 1;
+      phaseRef.current = "result";
       setPhase("result");
+      multRef.current = crash;
       setMult(crash);
+      progressRef.current = 1;
+      explodeRef.current = Math.min(1, explodeRef.current + 0.05);
       if (!settledRef.current.has(st.roundId) && crashMapRef.current.has(st.roundId)) {
         settledRef.current.add(st.roundId);
         pushHist({
@@ -279,11 +303,74 @@ export default function CrashGame({
         });
       }
     };
-
     tick();
     const id = setInterval(tick, 50);
     return () => clearInterval(id);
   }, [ready, pushHist]);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || !ready) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const draw = () => {
+      const w = canvas.width;
+      const h = canvas.height;
+      ctx.clearRect(0, 0, w, h);
+      const g = ctx.createLinearGradient(0, 0, 0, h);
+      g.addColorStop(0, "#0c1222");
+      g.addColorStop(1, "#1a0a2e");
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, w, h);
+      ctx.strokeStyle = "rgba(56,189,248,0.08)";
+      ctx.lineWidth = 1;
+      for (let i = 0; i < 6; i++) {
+        const y = (h / 6) * i;
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(w, y);
+        ctx.stroke();
+      }
+
+      const ph = phaseRef.current;
+      const p = progressRef.current;
+      const exp = explodeRef.current;
+      const x0 = 28;
+      const y0 = h - 28;
+      const x1 = w - 36;
+      const y1 = 28;
+
+      if (ph === "betting") {
+        drawRocket(ctx, x0, y0, 0, false);
+        ctx.fillStyle = "#64748b";
+        ctx.font = "12px system-ui";
+        ctx.fillText("Ожидание…", w / 2 - 30, 24);
+      } else {
+        ctx.beginPath();
+        ctx.strokeStyle = ph === "result" ? "rgba(248,113,113,0.5)" : "rgba(74,222,128,0.55)";
+        ctx.lineWidth = 2.5;
+        ctx.moveTo(x0, y0);
+        const steps = Math.max(2, Math.floor(40 * Math.min(1, p)));
+        for (let i = 1; i <= steps; i++) {
+          const t = i / 40;
+          const x = x0 + (x1 - x0) * t;
+          const y = y0 + (y1 - y0) * (t * t);
+          ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+        const t = Math.min(1, p);
+        const rx = x0 + (x1 - x0) * t;
+        const ry = y0 + (y1 - y0) * (t * t);
+        const ang = Math.atan2((y1 - y0) * 2 * t, x1 - x0);
+        if (ph === "result" || exp > 0) drawExplosion(ctx, rx, ry, exp);
+        else drawRocket(ctx, rx, ry, ang, true);
+      }
+      rafRef.current = requestAnimationFrame(draw);
+    };
+    rafRef.current = requestAnimationFrame(draw);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [ready]);
 
   const placeBet = async () => {
     if (busy || phase !== "betting" || !telegramId || betActive) return;
@@ -300,9 +387,8 @@ export default function CrashGame({
         body: JSON.stringify({ telegramId, stake, cashoutAt, roundId }),
       });
       const d = await r.json();
-      if (!r.ok) {
-        setMsg(d.error || "Ошибка");
-      } else {
+      if (!r.ok) setMsg(d.error || "Ошибка");
+      else {
         setBetActive(true);
         betRoundRef.current = roundId;
         onBalanceChange();
@@ -334,27 +420,39 @@ export default function CrashGame({
       )}
       {ready && (
         <>
-          <div style={{ ...card, textAlign: "center" }}>
+          <div style={{ ...card, textAlign: "center", paddingBottom: 10 }}>
             <div style={{ fontSize: 12, color: "#64748b", marginBottom: 4 }}>
               Раунд <b style={{ color: "#fbbf24" }}>#{roundId}</b>
-              {betActive && <span style={{ marginLeft: 8, color: "#4ade80" }}>ставка принята</span>}
+              {betActive && <span style={{ marginLeft: 8, color: "#4ade80" }}>ставка</span>}
             </div>
             <div
               style={{
-                fontSize: 48,
+                fontSize: 44,
                 fontWeight: 900,
                 color: phaseColor,
                 fontVariantNumeric: "tabular-nums",
-                lineHeight: 1.1,
+                lineHeight: 1.05,
               }}
             >
               {phase === "betting" ? `${countdown}` : `${mult.toFixed(2)}x`}
             </div>
-            <div style={{ fontSize: 13, color: "#94a3b8", marginTop: 6 }}>
+            <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 8 }}>
               {phase === "betting" && "сек · приём ставок"}
-              {phase === "fly" && "полёт"}
-              {phase === "result" && "краш · ждите следующий"}
+              {phase === "fly" && "🚀 полёт"}
+              {phase === "result" && "💥 краш"}
             </div>
+            <canvas
+              ref={canvasRef}
+              width={360}
+              height={180}
+              style={{
+                width: "100%",
+                height: 160,
+                borderRadius: 12,
+                background: "#0c1222",
+                display: "block",
+              }}
+            />
           </div>
 
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", minHeight: 32 }}>
@@ -412,36 +510,16 @@ export default function CrashGame({
               step={0.1}
               value={stake}
               onChange={(e) => setStake(Math.max(MIN_BET, Number(e.target.value) || MIN_BET))}
-              style={{
-                width: "100%",
-                boxSizing: "border-box",
-                padding: "10px 12px",
-                borderRadius: 10,
-                border: "1px solid rgba(255,255,255,0.1)",
-                background: "#0f172a",
-                color: "#f1f5f9",
-                marginBottom: 10,
-                fontFamily: "inherit",
-              }}
+              style={inp}
             />
-            <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 6 }}>Автокэшаут</div>
+            <div style={{ fontSize: 12, color: "#94a3b8", margin: "8px 0 6px" }}>Автокэшаут</div>
             <input
               type="number"
               min={1.01}
               step={0.1}
               value={cashoutAt}
               onChange={(e) => setCashoutAt(Math.max(1.01, Number(e.target.value) || 1.01))}
-              style={{
-                width: "100%",
-                boxSizing: "border-box",
-                padding: "10px 12px",
-                borderRadius: 10,
-                border: "1px solid rgba(255,255,255,0.1)",
-                background: "#0f172a",
-                color: "#f1f5f9",
-                marginBottom: 12,
-                fontFamily: "inherit",
-              }}
+              style={{ ...inp, marginBottom: 12 }}
             />
             <button
               type="button"
@@ -495,11 +573,7 @@ export default function CrashGame({
             padding: 16,
           }}
         >
-          <div
-            role="dialog"
-            onClick={(e) => e.stopPropagation()}
-            style={{ ...card, width: "100%", maxWidth: 340 }}
-          >
+          <div role="dialog" onClick={(e) => e.stopPropagation()} style={{ ...card, width: "100%", maxWidth: 340 }}>
             <div style={{ fontSize: 17, fontWeight: 900, color: "#f1f5f9", marginBottom: 12 }}>
               Раунд #{detail.roundId}
             </div>
@@ -520,14 +594,6 @@ export default function CrashGame({
               <div>
                 Время: <b style={{ color: "#e2e8f0" }}>{new Date(detail.at).toLocaleString()}</b>
               </div>
-              {detail.won != null && (
-                <div>
-                  Ваш результат:{" "}
-                  <b style={{ color: detail.won ? "#4ade80" : "#f87171" }}>
-                    {detail.won ? `Выигрыш ${detail.payout ?? ""}` : "Проигрыш"}
-                  </b>
-                </div>
-              )}
             </div>
             <button
               type="button"
@@ -552,4 +618,80 @@ export default function CrashGame({
       )}
     </div>
   );
+}
+
+const inp: CSSProperties = {
+  width: "100%",
+  boxSizing: "border-box",
+  padding: "10px 12px",
+  borderRadius: 10,
+  border: "1px solid rgba(255,255,255,0.1)",
+  background: "#0f172a",
+  color: "#f1f5f9",
+  fontFamily: "inherit",
+};
+
+function drawRocket(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  angle: number,
+  thrust: boolean,
+) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(angle - Math.PI / 2);
+  ctx.fillStyle = "#e2e8f0";
+  ctx.beginPath();
+  ctx.moveTo(0, -16);
+  ctx.lineTo(8, 10);
+  ctx.lineTo(-8, 10);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = "#38bdf8";
+  ctx.beginPath();
+  ctx.arc(0, -2, 3.5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#f97316";
+  ctx.beginPath();
+  ctx.moveTo(-8, 8);
+  ctx.lineTo(-14, 14);
+  ctx.lineTo(-6, 12);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(8, 8);
+  ctx.lineTo(14, 14);
+  ctx.lineTo(6, 12);
+  ctx.fill();
+  if (thrust) {
+    ctx.fillStyle = "#fbbf24";
+    ctx.beginPath();
+    ctx.moveTo(-5, 10);
+    ctx.lineTo(0, 22 + Math.random() * 6);
+    ctx.lineTo(5, 10);
+    ctx.fill();
+    ctx.fillStyle = "#ef4444";
+    ctx.beginPath();
+    ctx.moveTo(-3, 10);
+    ctx.lineTo(0, 16 + Math.random() * 4);
+    ctx.lineTo(3, 10);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawExplosion(ctx: CanvasRenderingContext2D, x: number, y: number, t: number) {
+  const n = 12;
+  for (let i = 0; i < n; i++) {
+    const a = (Math.PI * 2 * i) / n;
+    const r = 8 + t * 28;
+    ctx.fillStyle = i % 2 === 0 ? `rgba(251,191,36,${1 - t * 0.5})` : `rgba(239,68,68,${1 - t * 0.4})`;
+    ctx.beginPath();
+    ctx.arc(x + Math.cos(a) * r, y + Math.sin(a) * r, 4 + (1 - t) * 3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.fillStyle = `rgba(255,255,255,${0.7 * (1 - t)})`;
+  ctx.beginPath();
+  ctx.arc(x, y, 6 + t * 10, 0, Math.PI * 2);
+  ctx.fill();
 }

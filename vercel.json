@@ -5,13 +5,25 @@
   "framework": null,
   "installCommand": "pnpm install --no-frozen-lockfile",
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/server" },
-    { "source": "/(.*)", "destination": "/index.html" }
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/server"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
   ],
   "functions": {
     "api/server.ts": {
       "maxDuration": 30,
       "includeFiles": "api/**"
+    }
+  },
+  "git": {
+    "deploymentEnabled": {
+      "pixel-office-cloud": false,
+      "pixel-office-state": false
     }
   }
 }

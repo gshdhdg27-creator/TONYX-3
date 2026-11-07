@@ -1,0 +1,24 @@
+{
+  "name": "tonyx-pixel-office",
+  "version": "0.6.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test tests/*.test.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "description": "Local multi-agent office with private phone access and deployment checks",
+  "main": "index.js",
+  "directories": {
+    "test": "tests"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "playwright": "1.65.0"
+  }
+}

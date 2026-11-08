@@ -28,23 +28,8 @@ function nftFallbacks(id: string, imageUrl?: string | null): string[] {
   return list;
 }
 
-const DESC: Record<string, string> = {
-  hypno_lollipop: "Гипнотический леденец. Официальный Telegram Gift.",
-  liberty_figure: "Статуя Свободы. Классический коллекционный подарок.",
-  bday_candle: "Праздничный торт. Собери пазл и забери NFT.",
-  moon_pendant: "Кулон луны и звезды. Стильный редкий дроп.",
-  telegram_premium: "Кнопка клавиатуры Input Key. Официальный Telegram Gift.",
-  snoop_cigar: "Легендарная сигара. Культовый Telegram Gift.",
-  royal_dogg: "Королевский пёс TONYX. Эксклюзив проекта.",
-  electric_skull: "Электрический череп. Эпический дроп.",
-  neko_helmet: "Неко-шлем. Яркий и редкий коллекционный предмет.",
-  heroic_helmet: "Героический шлем. Один из самых дорогих подарков.",
-};
-
-const PUZZLE_SIZE = 152;
-const SEEN_KEY = "tonyx_collection_seen_v1";
-
 type SeenMap = Record<string, number[]>;
+const SEEN_KEY = "tonyx-collection-seen-v1";
 
 function loadSeen(): SeenMap {
   try {
@@ -64,31 +49,6 @@ function saveSeen(map: SeenMap) {
   }
 }
 
-function useNftSrc(id: string, imageUrl?: string | null) {
-  const short = PHOTO_ALIAS[id] ?? id;
-  const [src, setSrc] = useState(() => `${TG_PHOTOS}${short}.webp`);
-  useEffect(() => {
-    const list = nftFallbacks(id, imageUrl);
-    let cancelled = false;
-    let i = 0;
-    const tryNext = () => {
-      if (cancelled || i >= list.length) return;
-      const url = list[i++];
-      const img = new Image();
-      img.onload = () => {
-        if (!cancelled) setSrc(url);
-      };
-      img.onerror = () => tryNext();
-      img.src = url;
-    };
-    tryNext();
-    return () => {
-      cancelled = true;
-    };
-  }, [id, imageUrl]);
-  return src;
-}
-
 function PuzzleBoard({
   nftId,
   imageUrl,
@@ -100,123 +60,117 @@ function PuzzleBoard({
   pieces: number[];
   animateIdx: Set<number>;
 }) {
-  const src = useNftSrc(nftId, imageUrl);
+  const urls = useMemo(() => nftFallbacks(nftId, imageUrl), [nftId, imageUrl]);
+  const [urlIdx, setUrlIdx] = useState(0);
+  const [ready, setReady] = useState(false);
+  const url = urls[Math.min(urlIdx, urls.length - 1)];
+
+  useEffect(() => {
+    setReady(false);
+    setUrlIdx(0);
+  }, [nftId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const img = new Image();
+    img.onload = () => {
+      if (!cancelled) setReady(true);
+    };
+    img.onerror = () => {
+      if (cancelled) return;
+      if (urlIdx + 1 < urls.length) setUrlIdx((i) => i + 1);
+      else setReady(true);
+    };
+    img.src = url;
+    return () => {
+      cancelled = true;
+    };
+  }, [url, urlIdx, urls.length]);
 
   return (
     <div
       style={{
-        width: PUZZLE_SIZE,
-        height: PUZZLE_SIZE,
-        minWidth: PUZZLE_SIZE,
+        width: 112,
+        height: 112,
+        borderRadius: 14,
+        overflow: "hidden",
+        background: "#0b1020",
         display: "grid",
         gridTemplateColumns: "repeat(3, 1fr)",
         gridTemplateRows: "repeat(3, 1fr)",
         gap: 2,
-        borderRadius: 18,
-        overflow: "hidden",
-        background: "#0b1220",
-        border: "1px solid rgba(148,163,184,0.22)",
-        boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.35), 0 10px 28px rgba(0,0,0,0.35)",
-        position: "relative",
+        flexShrink: 0,
       }}
     >
       {Array.from({ length: 9 }).map((_, i) => {
-        const row = Math.floor(i / 3);
+        const owned = (pieces[i] ?? 0) >= 1;
+        const anim = animateIdx.has(i);
         const col = i % 3;
-        const lit = (pieces[i] ?? 0) >= 1;
-        const isNew = animateIdx.has(i);
-        const posX = col * 50;
-        const posY = row * 50;
-
+        const row = Math.floor(i / 3);
         return (
           <div
             key={i}
             style={{
               position: "relative",
               overflow: "hidden",
-              borderRadius: 3,
-              background: "#111827",
-              animation: isNew
-                ? `pieceInsert 0.65s cubic-bezier(0.22,1,0.36,1) ${i * 0.05}s both`
-                : undefined,
+              background: owned ? "transparent" : "rgba(30,41,59,0.9)",
+              animation: anim ? "pieceInsert 0.55s ease both" : undefined,
             }}
           >
-            <div
-              style={{
-                position: "absolute",
-                inset: 0,
-                backgroundImage: src ? `url("${src}")` : "none",
-                backgroundSize: "300% 300%",
-                backgroundPosition: `${posX}% ${posY}%`,
-                backgroundRepeat: "no-repeat",
-                filter: lit
-                  ? "none"
-                  : "grayscale(0.9) brightness(0.5) saturate(0.35)",
-                opacity: lit ? 1 : 0.75,
-                transition: "filter 0.45s ease, opacity 0.45s ease",
-              }}
-            />
-            {!lit && (
+            {owned && ready && (
               <div
                 style={{
                   position: "absolute",
                   inset: 0,
-                  background: "rgba(15,23,42,0.32)",
-                  pointerEvents: "none",
+                  backgroundImage: `url(${url})`,
+                  backgroundSize: "300% 300%",
+                  backgroundPosition: `${col * 50}% ${row * 50}%`,
                 }}
               />
             )}
-            {isNew && (
-              <>
-                <div
-                  style={{
-                    position: "absolute",
-                    inset: 0,
-                    pointerEvents: "none",
-                    background:
-                      "linear-gradient(105deg, transparent 30%, rgba(255,255,255,0.55) 50%, transparent 70%)",
-                    animation: "pieceShine 0.9s ease-out both",
-                  }}
-                />
-                <div
-                  style={{
-                    position: "absolute",
-                    inset: -2,
-                    borderRadius: 4,
-                    boxShadow: "0 0 14px 3px rgba(168,85,247,0.65)",
-                    animation: "pieceGlow 1.1s ease-out both",
-                    pointerEvents: "none",
-                  }}
-                />
-              </>
+            {!owned && (
+              <div
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  color: "#475569",
+                  fontSize: 10,
+                  fontWeight: 700,
+                }}
+              >
+                ?
+              </div>
             )}
           </div>
         );
       })}
-      {animateIdx.size > 0 && (
-        <>
-          <div className="puzzle-side-fx left" />
-          <div className="puzzle-side-fx right" />
-        </>
-      )}
     </div>
   );
 }
 
+// In-memory cache so re-entering Collection never shows "Загрузка…"
+let _collectionCache: InventoryCollection[] | null = null;
+
 export default function CollectionScreen() {
   const setView = useGameStore((s) => s.setView);
-  const [list, setList] = useState<InventoryCollection[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [list, setList] = useState<InventoryCollection[]>(() => _collectionCache ?? []);
+  // Only show loading spinner on the very first visit when cache is empty
+  const [loading, setLoading] = useState(() => _collectionCache === null);
   const [claimingId, setClaimingId] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [animMap, setAnimMap] = useState<Record<string, number[]>>({});
   const seenRef = useRef<SeenMap>(loadSeen());
 
-  async function load() {
-    setLoading(true);
+  async function load(opts?: { silent?: boolean }) {
+    const silent = opts?.silent || _collectionCache !== null;
+    if (!silent) setLoading(true);
     try {
       const d = await inventoryApi.get();
       const cols = d.collections ?? [];
+      _collectionCache = cols;
       setList(cols);
 
       const nextSeen: SeenMap = { ...seenRef.current };
@@ -241,14 +195,15 @@ export default function CollectionScreen() {
         setTimeout(() => setAnimMap({}), 1600);
       }
     } catch {
-      setMsg("Не удалось загрузить коллекцию");
+      if (!silent) setMsg("Не удалось загрузить коллекцию");
     } finally {
       setLoading(false);
     }
   }
 
   useEffect(() => {
-    load();
+    // If we already have cache — refresh in background without spinner
+    void load({ silent: _collectionCache !== null });
   }, []);
 
   async function onClaim(nftId: string) {
@@ -259,7 +214,7 @@ export default function CollectionScreen() {
       const r = await inventoryApi.claim(nftId);
       hapticNotify("success");
       setMsg(`✨ ${r.nameRu} добавлен в инвентарь`);
-      await load();
+      await load({ silent: true });
     } catch (e) {
       hapticNotify("error");
       setMsg(e instanceof Error ? e.message : "Ошибка");
@@ -279,74 +234,52 @@ export default function CollectionScreen() {
         55% { transform: scale(1.06) translateY(-2px); opacity: 1; filter: brightness(1.25); }
         100% { transform: scale(1) translateY(0); opacity: 1; filter: brightness(1); }
       }
-      @keyframes pieceShine {
-        0% { transform: translateX(-120%); opacity: 0; }
-        30% { opacity: 1; }
-        100% { transform: translateX(120%); opacity: 0; }
-      }
-      @keyframes pieceGlow {
-        0% { opacity: 1; }
-        100% { opacity: 0; }
-      }
-      @keyframes sideSpark {
-        0% { opacity: 0; transform: scaleY(0.3); }
-        40% { opacity: 1; transform: scaleY(1); }
-        100% { opacity: 0; transform: scaleY(0.6); }
-      }
-      .puzzle-side-fx {
-        position: absolute; top: 8%; bottom: 8%; width: 3px; border-radius: 4px;
-        pointer-events: none;
-        background: linear-gradient(180deg, transparent, rgba(168,85,247,0.9), rgba(251,191,36,0.85), rgba(168,85,247,0.9), transparent);
-        box-shadow: 0 0 12px rgba(168,85,247,0.7);
-        animation: sideSpark 1s ease-out both;
-      }
-      .puzzle-side-fx.left { left: -6px; }
-      .puzzle-side-fx.right { right: -6px; animation-delay: 0.08s; }
     `,
     [],
   );
 
   return (
-    <div
-      className="collection-screen"
-      style={{
-        height: "calc(100dvh - 74px)",
-        overflowY: "auto",
-        WebkitOverflowScrolling: "touch",
-        touchAction: "pan-y",
-        paddingBottom: 24,
-      }}
-    >
+    <div style={{ minHeight: "100%", color: "#e2e8f0" }}>
       <style>{styles}</style>
-
       <div
         style={{
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
-          padding: "14px 16px",
-          position: "sticky",
-          top: 0,
-          zIndex: 5,
-          background: "rgba(11,15,20,0.92)",
-          backdropFilter: "blur(8px)",
+          padding: "12px 14px 8px",
         }}
       >
-        <span style={{ fontWeight: 800, fontSize: 17, color: "#f1f5f9" }}>
-          🏆 NFT Collection
-        </span>
-        <button type="button" className="btn btn-ghost btn-sm" onClick={() => setView("home")}>
+        <button
+          type="button"
+          onClick={() => {
+            haptic("light");
+            setView("home");
+          }}
+          style={{
+            background: "rgba(30,41,59,0.8)",
+            border: "1px solid rgba(148,163,184,0.2)",
+            borderRadius: 12,
+            color: "#94a3b8",
+            padding: "8px 12px",
+            fontSize: 13,
+            fontWeight: 600,
+            cursor: "pointer",
+          }}
+        >
           ← Назад
         </button>
+        <div style={{ fontSize: 16, fontWeight: 800 }}>Коллекция</div>
+        <div style={{ width: 72 }} />
       </div>
 
       {msg && (
         <div
           style={{
-            margin: "0 16px 12px",
-            padding: "12px 14px",
-            borderRadius: 14,
-            background: "rgba(34,197,94,0.16)",
+            margin: "0 14px 8px",
+            padding: "8px 12px",
+            borderRadius: 12,
+            background: "rgba(34,197,94,0.12)",
+            border: "1px solid rgba(34,197,94,0.35)",
             color: "#4ade80",
             fontSize: 13,
             fontWeight: 700,
@@ -398,80 +331,46 @@ export default function CollectionScreen() {
                     display: "flex",
                     flexDirection: "column",
                     justifyContent: "space-between",
+                    gap: 8,
                   }}
                 >
                   <div>
-                    <div style={{ fontSize: 15, fontWeight: 800, color: "#f8fafc", marginBottom: 4, lineHeight: 1.25 }}>
-                      {c.nameRu}
-                    </div>
-                    <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.4, marginBottom: 8 }}>
-                      {DESC[c.id] ?? "Коллекционный NFT. Собери 9 частей."}
-                    </div>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
-                      <span
-                        style={{
-                          fontSize: 12,
-                          fontWeight: 800,
-                          color: "#fbbf24",
-                          background: "rgba(251,191,36,0.12)",
-                          border: "1px solid rgba(251,191,36,0.25)",
-                          borderRadius: 8,
-                          padding: "3px 8px",
-                        }}
-                      >
-                        ≈ {c.valueTon} TON
-                      </span>
-                      <span style={{ fontSize: 12, fontWeight: 700, color: "#c4b5fd" }}>
-                        Собрано {c.owned}/9
-                      </span>
-                    </div>
-                  </div>
-
-                  <div style={{ marginTop: 8, marginBottom: 8 }}>
-                    <div style={{ height: 6, borderRadius: 99, background: "rgba(51,65,85,0.6)", overflow: "hidden" }}>
-                      <div
-                        style={{
-                          width: `${progress}%`,
-                          height: "100%",
-                          background: can
-                            ? "linear-gradient(90deg,#16a34a,#22c55e)"
-                            : "linear-gradient(90deg,#7c3aed,#a855f7)",
-                          transition: "width 0.4s ease",
-                        }}
-                      />
+                    <div style={{ fontSize: 15, fontWeight: 800, marginBottom: 4 }}>{c.nameRu}</div>
+                    <div style={{ fontSize: 12, color: "#94a3b8" }}>
+                      {c.owned}/9 фрагментов · {progress}%
                     </div>
                   </div>
 
                   <button
                     type="button"
                     disabled={!can || busy}
-                    onClick={() => {
-                      haptic("light");
-                      onClaim(c.id);
-                    }}
+                    onClick={() => onClaim(c.id)}
                     style={{
-                      width: "100%",
-                      padding: "11px 0",
+                      border: 0,
                       borderRadius: 12,
-                      border: "none",
-                      fontFamily: "inherit",
-                      fontWeight: 800,
+                      padding: "10px 12px",
                       fontSize: 13,
-                      cursor: can ? "pointer" : "not-allowed",
-                      color: can ? "#fff" : "#64748b",
+                      fontWeight: 800,
+                      cursor: can && !busy ? "pointer" : "default",
                       background: can
-                        ? "linear-gradient(135deg,#16a34a,#22c55e)"
-                        : "rgba(51,65,85,0.55)",
-                      animation: can ? "nftPulse 1.6s ease infinite" : "none",
+                        ? "linear-gradient(135deg, #22c55e, #16a34a)"
+                        : "rgba(51,65,85,0.6)",
+                      color: can ? "#052e16" : "#64748b",
                       opacity: busy ? 0.7 : 1,
                     }}
                   >
-                    {busy ? "…" : can ? "Получить" : "Собери 9/9"}
+                    {busy ? "…" : can ? "Собрать NFT" : "Соберите все фрагменты"}
                   </button>
                 </div>
               </div>
             );
           })}
+
+          {!list.length && (
+            <div style={{ padding: 32, textAlign: "center", color: "#64748b", fontSize: 14 }}>
+              Пока нет коллекций
+            </div>
+          )}
         </div>
       )}
     </div>

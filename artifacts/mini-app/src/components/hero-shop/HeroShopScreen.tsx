@@ -187,10 +187,10 @@ export default function HeroShopScreen() {
   const equippedSlots = useGameStore((s) => s.equippedSlots);
   const buyMage = useGameStore((s) => s.buyMage);
   const equipMageToSlot = useGameStore((s) => s.equipMageToSlot);
-  const pendingEquipSlot = useGameStore((s) => s.pendingEquipSlot);
+  const pendingSlotIndex = useGameStore((s) => s.pendingSlotIndex);
 
   const [filter, setFilter] = useState<"all" | "owned" | MageRarity>("all");
-  const selectMode = pendingEquipSlot !== null;
+  const selectMode = pendingSlotIndex !== null;
 
   const ownedIds = new Set(ownedMages.map((m) => m.id));
   const equippedIds = new Set(equippedSlots.filter(Boolean) as string[]);
@@ -228,7 +228,7 @@ export default function HeroShopScreen() {
           </div>
           {selectMode && (
             <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>
-              Слот {(pendingEquipSlot ?? 0) + 1}
+              Слот {(pendingSlotIndex ?? 0) + 1}
             </div>
           )}
         </div>

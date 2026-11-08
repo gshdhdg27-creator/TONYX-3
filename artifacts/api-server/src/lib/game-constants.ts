@@ -54,40 +54,38 @@ export const KILL_TIME_TOLERANCE = 0.15;
 
 // ── Mages ───────────────────────────────────────────────────────────────
 export const MAGES: MageConfig[] = [
-  // Rare
-  { id: "wind-whisperer",        name: "Wind Whisperer",           rarity: "rare",      baseDps: 10,  priceTon: 0,    upgradeCost: 0 },
-  { id: "storm-weaver",          name: "Storm Weaver",             rarity: "rare",      baseDps: 12,  priceTon: 0.5,  upgradeCost: 50 },
-  { id: "frost-weaver",          name: "Frost Weaver",             rarity: "rare",      baseDps: 14,  priceTon: 0.8,  upgradeCost: 80 },
-  { id: "pyreclastic-arcanist",  name: "Pyreclastic Arcanist",     rarity: "rare",      baseDps: 16,  priceTon: 1.2,  upgradeCost: 120 },
-  { id: "aether-scholar",        name: "Aether Scholar",           rarity: "rare",      baseDps: 20,  priceTon: 1.5,  upgradeCost: 150 },
+  // Rare — fixed card DPS (no level scaling)
+  { id: "wind-whisperer",        name: "Wind Whisperer",           rarity: "rare",      baseDps: 0.25, priceTon: 0,    upgradeCost: 0 },
+  { id: "storm-weaver",          name: "Storm Weaver",             rarity: "rare",      baseDps: 0.30, priceTon: 0.5,  upgradeCost: 50 },
+  { id: "frost-weaver",          name: "Frost Weaver",             rarity: "rare",      baseDps: 0.35, priceTon: 0.8,  upgradeCost: 80 },
+  { id: "pyreclastic-arcanist",  name: "Pyreclastic Arcanist",     rarity: "rare",      baseDps: 0.40, priceTon: 1.2,  upgradeCost: 120 },
+  { id: "aether-scholar",        name: "Aether Scholar",           rarity: "rare",      baseDps: 0.50, priceTon: 1.5,  upgradeCost: 150 },
   // Epic
-  { id: "elara-void-weaver",     name: "Elara, Void Weaver",       rarity: "epic",      baseDps: 24,  priceTon: 3.0,  upgradeCost: 300 },
-  { id: "aethel-thunderlord",    name: "Aethel, Thunderlord",      rarity: "epic",      baseDps: 28,  priceTon: 3.8,  upgradeCost: 380 },
-  { id: "korvin-thunderclap",    name: "Korvin, Thunderclap",      rarity: "epic",      baseDps: 32,  priceTon: 4.5,  upgradeCost: 450 },
-  { id: "kaeleda-void-dancer",   name: "Kaeleda, Void Dancer",     rarity: "epic",      baseDps: 36,  priceTon: 5.2,  upgradeCost: 520 },
-  { id: "kalen-inferno-blaze",   name: "Kalen, Inferno Blaze",     rarity: "epic",      baseDps: 40,  priceTon: 6.0,  upgradeCost: 600 },
+  { id: "elara-void-weaver",     name: "Elara, Void Weaver",       rarity: "epic",      baseDps: 0.60, priceTon: 3.0,  upgradeCost: 300 },
+  { id: "aethel-thunderlord",    name: "Aethel, Thunderlord",      rarity: "epic",      baseDps: 0.70, priceTon: 3.8,  upgradeCost: 380 },
+  { id: "korvin-thunderclap",    name: "Korvin, Thunderclap",      rarity: "epic",      baseDps: 0.80, priceTon: 4.5,  upgradeCost: 450 },
+  { id: "kaeleda-void-dancer",   name: "Kaeleda, Void Dancer",     rarity: "epic",      baseDps: 0.90, priceTon: 5.2,  upgradeCost: 520 },
+  { id: "kalen-inferno-blaze",   name: "Kalen, Inferno Blaze",     rarity: "epic",      baseDps: 1.00, priceTon: 6.0,  upgradeCost: 600 },
   // Legendary
-  { id: "silas-starsinger",      name: "Silas, Starsinger",        rarity: "legendary", baseDps: 50,  priceTon: 12.0, upgradeCost: 1200 },
-  { id: "lyra-cosmic-weaver",    name: "Lyra, Cosmic Weaver",      rarity: "legendary", baseDps: 60,  priceTon: 14.0, upgradeCost: 1400 },
-  { id: "aethel-abyss-weaver",   name: "Aethel, Abyss Weaver",     rarity: "legendary", baseDps: 70,  priceTon: 16.0, upgradeCost: 1600 },
-  { id: "solaris-chronos-shaper",name: "Solaris, Chronos Shaper",  rarity: "legendary", baseDps: 80,  priceTon: 18.0, upgradeCost: 1800 },
-  { id: "lyra-emerald-chronomancer", name: "Lyra, Emerald Chronomancer", rarity: "legendary", baseDps: 100, priceTon: 22.0, upgradeCost: 2200 },
+  { id: "silas-starsinger",      name: "Silas, Starsinger",        rarity: "legendary", baseDps: 1.25, priceTon: 12.0, upgradeCost: 1200 },
+  { id: "lyra-cosmic-weaver",    name: "Lyra, Cosmic Weaver",      rarity: "legendary", baseDps: 1.50, priceTon: 14.0, upgradeCost: 1400 },
+  { id: "aethel-abyss-weaver",   name: "Aethel, Abyss Weaver",     rarity: "legendary", baseDps: 1.75, priceTon: 16.0, upgradeCost: 1600 },
+  { id: "solaris-chronos-shaper",name: "Solaris, Chronos Shaper",  rarity: "legendary", baseDps: 2.00, priceTon: 18.0, upgradeCost: 1800 },
+  { id: "lyra-emerald-chronomancer", name: "Lyra, Emerald Chronomancer", rarity: "legendary", baseDps: 2.50, priceTon: 22.0, upgradeCost: 2200 },
 ];
 
 export const MAX_MAGE_LEVEL = 10;
 
 /**
- * Damage multiplier by level:
- * 1 → 1.0x, 2 → 1.1x, 3 → 1.2x ... 9 → 1.8x, 10 → 2.0x (exactly)
+ * Kept for API compatibility. Damage does NOT scale with level.
  */
-export function getMageLevelMultiplier(level: number): number {
-  const lvl = Math.min(Math.max(level, 1), MAX_MAGE_LEVEL);
-  if (lvl >= MAX_MAGE_LEVEL) return 2.0;
-  return 1 + (lvl - 1) * 0.1;
+export function getMageLevelMultiplier(_level: number): number {
+  return 1.0;
 }
 
-export function getMageDps(baseDps: number, level: number): number {
-  return baseDps * getMageLevelMultiplier(level);
+/** Fixed card DPS — level does not change damage. */
+export function getMageDps(baseDps: number, _level?: number): number {
+  return baseDps;
 }
 
 /** Cost to upgrade from currentLevel → currentLevel+1 (+20% each time) */

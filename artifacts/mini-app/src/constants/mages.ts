@@ -1,5 +1,24 @@
 import type { MageConfig } from "../types/game";
 
+export const MAX_MAGE_LEVEL = 10;
+
+/**
+ * Level multiplier — must match server (api-server/src/lib/game-constants.ts):
+ * 1 → 1.0x, 2 → 1.1x, … 9 → 1.8x, 10 → 2.0x
+ */
+export function getMageLevelMultiplier(level: number): number {
+  const lvl = Math.min(Math.max(level, 1), MAX_MAGE_LEVEL);
+  if (lvl >= MAX_MAGE_LEVEL) return 2.0;
+  return 1 + (lvl - 1) * 0.1;
+}
+
+/**
+ * Real DPS of a mage at its level.
+ * Uses baseDps (10–100), NOT the legacy display field `dps` (0.25–2.50).
+ */
+export const getMageDps = (mage: Pick<MageConfig, "baseDps" | "level">): number =>
+  mage.baseDps * getMageLevelMultiplier(mage.level);
+
 export const MAGES: MageConfig[] = [
   // ── RARE ─────────────────────────────────────────────────────────────
   {
@@ -9,7 +28,7 @@ export const MAGES: MageConfig[] = [
     rarity: "rare",
     atk: 1,
     interval: 4,
-    dps: 0.25,
+    dps: 10,
     priceTon: 0,
     image: "/mages/wind-whisperer.jpg",
     baseDps: 10,
@@ -25,7 +44,7 @@ export const MAGES: MageConfig[] = [
     rarity: "rare",
     atk: 3,
     interval: 10,
-    dps: 0.30,
+    dps: 12,
     priceTon: 0.5,
     image: "/mages/storm-weaver.jpg",
     baseDps: 12,
@@ -41,7 +60,7 @@ export const MAGES: MageConfig[] = [
     rarity: "rare",
     atk: 7,
     interval: 20,
-    dps: 0.35,
+    dps: 14,
     priceTon: 0.8,
     image: "/mages/frost-weaver.jpg",
     baseDps: 14,
@@ -57,7 +76,7 @@ export const MAGES: MageConfig[] = [
     rarity: "rare",
     atk: 2,
     interval: 5,
-    dps: 0.40,
+    dps: 16,
     priceTon: 1.2,
     image: "/mages/pyreclastic-arcanist.jpg",
     baseDps: 16,
@@ -73,7 +92,7 @@ export const MAGES: MageConfig[] = [
     rarity: "rare",
     atk: 1,
     interval: 2,
-    dps: 0.50,
+    dps: 20,
     priceTon: 1.5,
     image: "/mages/aether-scholar.jpg",
     baseDps: 20,
@@ -90,7 +109,7 @@ export const MAGES: MageConfig[] = [
     rarity: "epic",
     atk: 3,
     interval: 5,
-    dps: 0.60,
+    dps: 24,
     priceTon: 3.0,
     image: "/mages/elara-void-weaver.jpg",
     baseDps: 24,
@@ -106,7 +125,7 @@ export const MAGES: MageConfig[] = [
     rarity: "epic",
     atk: 7,
     interval: 10,
-    dps: 0.70,
+    dps: 28,
     priceTon: 3.8,
     image: "/mages/aethel-thunderlord.jpg",
     baseDps: 28,
@@ -122,7 +141,7 @@ export const MAGES: MageConfig[] = [
     rarity: "epic",
     atk: 4,
     interval: 5,
-    dps: 0.80,
+    dps: 32,
     priceTon: 4.5,
     image: "/mages/korvin-thunderclap.jpg",
     baseDps: 32,
@@ -138,7 +157,7 @@ export const MAGES: MageConfig[] = [
     rarity: "epic",
     atk: 9,
     interval: 10,
-    dps: 0.90,
+    dps: 36,
     priceTon: 5.2,
     image: "/mages/kaeleda-void-dancer.jpg",
     baseDps: 36,
@@ -154,7 +173,7 @@ export const MAGES: MageConfig[] = [
     rarity: "epic",
     atk: 1,
     interval: 1,
-    dps: 1.00,
+    dps: 40,
     priceTon: 6.0,
     image: "/mages/kalen-inferno-blaze.jpg",
     baseDps: 40,
@@ -171,7 +190,7 @@ export const MAGES: MageConfig[] = [
     rarity: "legendary",
     atk: 5,
     interval: 4,
-    dps: 1.25,
+    dps: 50,
     priceTon: 12.0,
     image: "/mages/silas-starsinger.jpg",
     baseDps: 50,
@@ -187,7 +206,7 @@ export const MAGES: MageConfig[] = [
     rarity: "legendary",
     atk: 3,
     interval: 2,
-    dps: 1.50,
+    dps: 60,
     priceTon: 14.0,
     image: "/mages/lyra-cosmic-weaver.jpg",
     baseDps: 60,
@@ -203,7 +222,7 @@ export const MAGES: MageConfig[] = [
     rarity: "legendary",
     atk: 7,
     interval: 4,
-    dps: 1.75,
+    dps: 70,
     priceTon: 16.0,
     image: "/mages/aethel-abyss-weaver.jpg",
     baseDps: 70,
@@ -219,7 +238,7 @@ export const MAGES: MageConfig[] = [
     rarity: "legendary",
     atk: 2,
     interval: 1,
-    dps: 2.00,
+    dps: 80,
     priceTon: 18.0,
     image: "/mages/solaris-chronos-shaper.jpg",
     baseDps: 80,
@@ -235,7 +254,7 @@ export const MAGES: MageConfig[] = [
     rarity: "legendary",
     atk: 5,
     interval: 2,
-    dps: 2.50,
+    dps: 100,
     priceTon: 22.0,
     image: "/mages/lyra-emerald-chronomancer.jpg",
     baseDps: 100,
@@ -245,6 +264,3 @@ export const MAGES: MageConfig[] = [
     attackColor: "#34d399",
   },
 ];
-
-export const getMageDps = (mage: MageConfig): number =>
-  mage.dps * Math.pow(1.4, mage.level - 1);

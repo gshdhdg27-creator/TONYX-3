@@ -6,7 +6,6 @@ import HomeScreen from "@/components/HomeScreen";
 import ChestScreen from "@/components/chest/ChestScreen";
 import CollectionScreen from "@/components/collection/CollectionScreen";
 import HeroShopScreen from "@/components/hero-shop/HeroShopScreen";
-import LoadingScreen from "@/components/ui/LoadingScreen";
 import { useBattleLoop } from "@/hooks/useBattleLoop";
 import { useBossAnimation } from "@/hooks/useBossAnimation";
 import { loadLiveGameConfig } from "@/lib/liveGameConfig";
@@ -73,9 +72,8 @@ export default function HomePage() {
 
   return (
     <>
-      {/* Only shows if init somehow hasn't finished yet (almost never after splash preload) */}
-      {view === "loading" && <LoadingScreen />}
-      {view === "home" && <HomeScreen />}
+      {/* Never show Boss Dogg Loading after Splash — view starts as "home" and init runs in background */}
+      {(view === "home" || view === "loading") && <HomeScreen />}
       {view === "chest" && <ChestScreen />}
       {view === "collection" && <CollectionScreen />}
       {view === "hero-shop" && <HeroShopScreen />}

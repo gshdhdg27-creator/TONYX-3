@@ -69,23 +69,12 @@ function SoftDeletedScreen() {
   );
 }
 
-type BlockStatus = "loading" | "ok" | "banned" | "soft_deleted";
-
-function AppShell({
-  initialBlockStatus,
-  initialBannedReason,
-}: {
-  initialBlockStatus: BlockStatus;
-  initialBannedReason: string | null;
-}) {
+function AppShell() {
   const { telegramId, username, firstName, lastName, photoUrl, startParam } = useTelegram();
   const register = useRegisterUser();
   const qc = useQueryClient();
-  // Already resolved during Splash — no second spinner
-  const [blockStatus] = useState<BlockStatus>(
-    initialBlockStatus === "loading" ? "ok" : initialBlockStatus
-  );
-  const [bannedReason] = useState<string | null>(initialBannedReason);
+  const [blockStatus, setBlockStatus] = useState<"loading"|"ok"|"banned"|"soft_deleted">("loading");
+  const [bannedReason, setBannedReason] = useState<string|null>(null);
 
   useEffect(() => {
     initTelegram();
@@ -113,8 +102,32 @@ function AppShell({
     );
   }, [telegramId]);
 
+  useEffect(() => {
+    if (!telegramId) {
+      setBlockStatus("ok");
+      return;
+    }
+    fetch(`/api/mini/admin/user-status?telegramId=${telegramId}`)
+      .then(r => r.json())
+      .then((d: { status: string; bannedReason: string | null }) => {
+        setBannedReason(d.bannedReason);
+        if (d.status === "banned") setBlockStatus("banned");
+        else if (d.status === "soft_deleted") setBlockStatus("soft_deleted");
+        else setBlockStatus("ok");
+      })
+      .catch(() => setBlockStatus("ok"));
+  }, [telegramId]);
+
   if (blockStatus === "banned") return <BannedScreen reason={bannedReason} />;
   if (blockStatus === "soft_deleted") return <SoftDeletedScreen />;
+  if (blockStatus === "loading") {
+    return (
+      <div style={{ height: "100dvh", display: "flex", alignItems: "center", justifyContent: "center", background: "hsl(240 16% 4%)" }}>
+        <div style={{ width: 32, height: 32, border: "3px solid rgba(99,102,241,0.3)", borderTopColor: "#6366f1", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+        <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+      </div>
+    );
+  }
 
   return (
     <div style={{
@@ -162,71 +175,18 @@ function App() {
   const [showTour, setShowTour] = useState(false);
   const needsOnboarding = useRef<boolean>(!localStorage.getItem(ONBOARD_KEY));
 
-  // Critical data resolved during Splash so AppShell never shows a spinner
-  const [blockStatus, setBlockStatus] = useState<BlockStatus>("loading");
-  const [bannedReason, setBannedReason] = useState<string | null>(null);
-  const criticalReady = useRef(false);
-  const splashDone = useRef(false);
-
-  // === BACKGROUND PRELOAD WHILE SPLASH PLAYS ===
+  // Preload game state in background while the beautiful SplashScreen is playing.
+  // By the time splash finishes, view is already "home" → no second "Boss Dogg Loading".
   useEffect(() => {
-    // 1) Game state immediately → view becomes "home", no Boss Dogg Loading
-    useGameStore.getState().init();
-
-    // 2) Telegram + ban check in parallel
-    const run = async () => {
-      try {
-        initTelegram();
-        const tg = (window as any).Telegram?.WebApp;
-        const telegramId = tg?.initDataUnsafe?.user?.id
-          ? String(tg.initDataUnsafe.user.id)
-          : null;
-
-        if (!telegramId) {
-          setBlockStatus("ok");
-          criticalReady.current = true;
-          tryAdvance();
-          return;
-        }
-
-        const res = await fetch(`/api/mini/admin/user-status?telegramId=${telegramId}`);
-        const d = (await res.json()) as { status: string; bannedReason: string | null };
-        setBannedReason(d.bannedReason ?? null);
-        if (d.status === "banned") setBlockStatus("banned");
-        else if (d.status === "soft_deleted") setBlockStatus("soft_deleted");
-        else setBlockStatus("ok");
-      } catch {
-        setBlockStatus("ok");
-      } finally {
-        criticalReady.current = true;
-        tryAdvance();
-      }
-    };
-
-    const t = setTimeout(run, 80);
+    const t = setTimeout(() => {
+      useGameStore.getState().init();
+    }, 300);
     return () => clearTimeout(t);
   }, []);
 
-  function tryAdvance() {
-    if (!splashDone.current || !criticalReady.current) return;
-    setStage(needsOnboarding.current ? "rocket" : "app");
-  }
-
   const handleSplashDone = useCallback(() => {
-    splashDone.current = true;
-    // If network already finished → go straight to app/rocket
-    // If not yet → wait a bit more (tryAdvance called from fetch finally)
-    if (criticalReady.current) {
-      setStage(needsOnboarding.current ? "rocket" : "app");
-    } else {
-      // Safety: never stick on splash more than ~1.2s extra
-      setTimeout(() => {
-        criticalReady.current = true;
-        if (blockStatus === "loading") setBlockStatus("ok");
-        setStage(needsOnboarding.current ? "rocket" : "app");
-      }, 1200);
-    }
-  }, [blockStatus]);
+    setStage(needsOnboarding.current ? "rocket" : "app");
+  }, []);
 
   const handleRocketDone = useCallback(() => {
     setStage("app");
@@ -256,10 +216,7 @@ function App() {
             {stage === "rocket" && <RocketScene onDone={handleRocketDone} />}
             {stage === "app" && (
               <>
-                <AppShell
-                  initialBlockStatus={blockStatus}
-                  initialBannedReason={bannedReason}
-                />
+                <AppShell />
                 {showTour && <OnboardingTour onDone={handleOnboardDone} />}
                 {whiteOpacity !== null && (
                   <div

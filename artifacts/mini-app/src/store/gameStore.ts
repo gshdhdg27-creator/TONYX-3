@@ -12,10 +12,8 @@ import { BOSSES } from "../constants/bosses";
 import { MAGES, getMageDps } from "../constants/mages";
 import { battleApi } from "../lib/battleApi";
 
-let _gameDidInit = false;
-
 const initialState: GameState = {
-  view: "home",
+  view: "loading",
   balances: { ton: 0, tonyx: 0 },
   selectedBossLevel: 1,
   battleBossLevel: null,
@@ -130,7 +128,7 @@ export const useGameStore = create<GameStore>()(
   persist(
     (set, get) => ({
       ...initialState,
-      bossAnimState: "idle" as BossAnimState,
+      bossAnimState: "idle",
       activeBattleId: null,
       isSyncing: false,
       lastError: null,
@@ -169,23 +167,22 @@ export const useGameStore = create<GameStore>()(
       },
 
       startBattle: async () => {
-        const { selectedBossLevel, battle } = get();
-        if (battle.active) return;
+        const { selectedBossLevel, equippedSlots } = get();
+        if (!equippedSlots.some(Boolean)) return;
         try {
           set({ lastError: null });
-          const res = await battleApi.startBattle(selectedBossLevel);
+          const res = await battleApi.start(selectedBossLevel);
           set({
+            battleBossLevel: selectedBossLevel,
+            activeBattleId: res.battleId,
             battle: {
               active: true,
-              bossHpPercent: res.bossHpPercent ?? 100,
+              bossHpPercent: 100,
               heroHp: 100,
-              totalDps: res.totalDps ?? get().battle.totalDps,
+              totalDps: res.totalDps,
               lastRewards: null,
               battleStartedAt: Date.now(),
             },
-            battleBossLevel: selectedBossLevel,
-            activeBattleId: res.battleId ?? null,
-            bossAnimState: "idle",
           });
         } catch (e) {
           set({ lastError: e instanceof Error ? e.message : "Start battle failed" });
@@ -193,50 +190,84 @@ export const useGameStore = create<GameStore>()(
       },
 
       tickBattle: (deltaMs) => {
-        const { battle, boost } = get();
-        if (!battle.active || battle.totalDps <= 0) return;
-        const dps = battle.totalDps;
-        const damage = (dps * deltaMs) / 1000;
-        const boss = BOSSES[get().battleBossLevel ?? get().selectedBossLevel];
-        if (!boss) return;
-        const hpLeft = (battle.bossHpPercent / 100) * boss.maxHp - damage;
-        const pct = Math.max(0, (hpLeft / boss.maxHp) * 100);
-        set({ battle: { ...battle, bossHpPercent: pct } });
+        const { battle, battleBossLevel } = get();
+        if (!battle.active || !battleBossLevel) return;
+        const boss = BOSSES[battleBossLevel];
+        const dmgToBoss = battle.totalDps * (deltaMs / 1000);
+        const dmgPercent = (dmgToBoss / boss.maxHp) * 100;
+        const newBossHp = Math.max(0, battle.bossHpPercent - dmgPercent);
+        if (newBossHp <= 0) {
+          get().finishBoss();
+          return;
+        }
+        set({ battle: { ...battle, bossHpPercent: newBossHp } });
       },
 
       finishBoss: () => {
-        const { battle } = get();
-        if (!battle.active) return;
         set({
-          battle: { ...battle, active: false, lastRewards: battle.lastRewards },
-          bossAnimState: "idle",
+          battle: { ...get().battle, active: false, bossHpPercent: 0 },
           view: "chest",
+          battleBossLevel: null,
         });
       },
 
-      finishBossAd: () => {},
+      finishBossAd: () => {
+        const { battle } = get();
+        if (!battle.active || battle.bossHpPercent > 25) return;
+        const newHp = Math.max(0, battle.bossHpPercent - 1);
+        if (newHp <= 0) {
+          get().finishBoss();
+          return;
+        }
+        set({ battle: { ...battle, bossHpPercent: newHp } });
+      },
+
       resetBattle: () => {
+        const { ownedMages, equippedSlots, boost } = get();
+        const dps = calcTotalDps(ownedMages, equippedSlots, boost);
         set({
-          battle: { ...initialState.battle, totalDps: get().battle.totalDps },
-          battleBossLevel: null,
+          battle: { ...initialState.battle, totalDps: dps, battleStartedAt: null },
           activeBattleId: null,
-          bossAnimState: "idle",
+          view: "home",
         });
       },
+
       setBossAnimState: (state) => set({ bossAnimState: state }),
 
       claimChestRewards: async () => {
+        const { activeBattleId } = get();
+        if (!activeBattleId) {
+          set({
+            battle: { ...get().battle, lastRewards: null },
+            view: "home",
+          });
+          return;
+        }
         try {
           set({ lastError: null });
-          const res = await battleApi.claimRewards();
+          const res = await battleApi.claim(activeBattleId);
+          const level = get().selectedBossLevel;
           set({
-            balances: res.balances
-              ? { ton: res.balances.ton, tonyx: res.balances.tonyx }
-              : get().balances,
-            view: "home",
-            battle: { ...initialState.battle, totalDps: get().battle.totalDps },
-            battleBossLevel: null,
+            balances: res.balances,
+            nftInventory: {
+              fragments: {
+                shadow_dogg: res.nftInventory.fragments.shadow_dogg ?? 0,
+                flame_dogg: res.nftInventory.fragments.flame_dogg ?? 0,
+                ice_dogg: res.nftInventory.fragments.ice_dogg ?? 0,
+              },
+              assembled: res.nftInventory.assembled as ("shadow_dogg" | "flame_dogg" | "ice_dogg")[],
+            },
+            bossRespawnAt: {
+              ...get().bossRespawnAt,
+              [level]: res.bossRespawnAt,
+            },
+            battle: {
+              ...get().battle,
+              lastRewards: res.rewards as ChestReward[],
+              active: false,
+            },
             activeBattleId: null,
+            view: "home",
           });
         } catch (e) {
           set({ lastError: e instanceof Error ? e.message : "Claim failed" });
@@ -244,49 +275,139 @@ export const useGameStore = create<GameStore>()(
       },
 
       watchAd: async () => {
-        try {
-          set({ lastError: null });
-          const res = await battleApi.watchAdBoost();
-          set({
-            boost: {
-              ...get().boost,
-              dpsMultiplier: res.dpsMultiplier ?? get().boost.dpsMultiplier,
-              boostExpiresAt: res.boostExpiresAt ?? get().boost.boostExpiresAt,
-              adWatchedCount: res.adWatchedCount ?? get().boost.adWatchedCount,
-            },
-          });
-        } catch (e) {
-          set({ lastError: e instanceof Error ? e.message : "Ad boost failed" });
+        await new Promise<void>((resolve) => setTimeout(resolve, 1500));
+        const { boost, ownedMages, equippedSlots } = get();
+        const newCount = boost.adWatchedCount + 1;
+        let newMultiplier = boost.dpsMultiplier;
+        let expiresAt = boost.boostExpiresAt;
+        if (newCount >= 10 && boost.dpsMultiplier < 1.2) {
+          newMultiplier = 1.2;
+          expiresAt = Date.now() + 24 * 60 * 60 * 1000;
         }
+        const dps = calcTotalDps(ownedMages, equippedSlots, {
+          ...boost,
+          dpsMultiplier: newMultiplier,
+          boostExpiresAt: expiresAt,
+        });
+        set({
+          boost: {
+            ...boost,
+            adWatchedCount: newCount,
+            dpsMultiplier: newMultiplier,
+            boostExpiresAt: expiresAt,
+          },
+          battle: { ...get().battle, totalDps: dps },
+        });
       },
 
       buySpeedBoost: () => {},
 
-      buyDpsBoost: async (multiplier, costTon, tier) => {
+      buyDpsBoost: async (multiplier, _costTon, tierArg) => {
+        let tier: 1 | 2 | 3 | 4 = tierArg ?? 1;
+        if (tierArg == null) {
+          if (multiplier >= 5.5) tier = 4;
+          else if (multiplier >= 3.0) tier = 3;
+          else if (multiplier >= 1.9) tier = 2;
+          else tier = 1;
+        }
         try {
           set({ lastError: null });
-          const res = await battleApi.buyTonBoost(tier ?? 1);
+          const data = await battleApi.buyBoost(tier);
+          const { ownedMages, equippedSlots, boost } = get();
+          const tonMult = data.tonBoostMultiplier;
+          const dps = calcTotalDps(ownedMages, equippedSlots, {
+            ...boost,
+            tonBoostMultiplier: tonMult,
+            tonBoostExpiresAt: data.tonBoostExpiresAt,
+          });
           set({
-            boost: {
-              ...get().boost,
-              tonBoostMultiplier: res.tonBoostMultiplier ?? multiplier,
-              tonBoostExpiresAt: res.tonBoostExpiresAt ?? null,
+            balances: {
+              ...get().balances,
+              ton: data.balances.ton,
             },
-            balances: res.balances
-              ? { ...get().balances, ton: res.balances.ton }
-              : get().balances,
+            boost: {
+              ...boost,
+              tonBoostMultiplier: data.tonBoostMultiplier,
+              tonBoostExpiresAt: data.tonBoostExpiresAt,
+            },
+            battle: { ...get().battle, totalDps: dps },
+            lastError: null,
           });
         } catch (e) {
-          set({ lastError: e instanceof Error ? e.message : "TON boost failed" });
+          const msg = e instanceof Error ? e.message : "Boost buy failed";
+          set({ lastError: msg });
+          throw e;
+        }
+      },
+
+      syncFromServer: async () => {
+        try {
+          set({ isSyncing: true, lastError: null });
+          const data = await battleApi.getGameState();
+          const ownedMages: OwnedMage[] = data.ownedMages.map((m) => {
+            const cfg = MAGES.find((c) => c.id === m.id);
+            return {
+              ...(cfg ?? {
+                id: m.id,
+                name: m.id,
+                type: "wind" as const,
+                rarity: "rare" as const,
+                atk: 1,
+                interval: 4,
+                dps: 10,
+                priceTon: 0,
+                image: "",
+                baseDps: 10,
+                upgradeCost: 0,
+                level: 1,
+                emoji: "🌀",
+                attackColor: "#34d399",
+              }),
+              level: m.level,
+            };
+          });
+          const slots = data.equippedSlots as (string | null)[];
+          const dps = calcTotalDps(ownedMages, slots, data.boost);
+          const bossRespawnAt: Partial<Record<BossLevel, number>> = {};
+          for (const [k, v] of Object.entries(data.bossRespawnAt)) {
+            if (v != null) bossRespawnAt[Number(k) as BossLevel] = v;
+          }
+          set({
+            balances: data.balances,
+            ownedMages,
+            equippedSlots: slots,
+            bossRespawnAt,
+            reviveAdProgress: data.reviveAdProgress as Partial<Record<BossLevel, number>>,
+            boost: {
+              adWatchedCount: data.boost.adWatchedCount,
+              dpsMultiplier: data.boost.dpsMultiplier,
+              boostExpiresAt: data.boost.boostExpiresAt,
+              speedMultiplier: data.boost.speedMultiplier,
+              tonBoostMultiplier: data.boost.tonBoostMultiplier,
+              tonBoostExpiresAt: data.boost.tonBoostExpiresAt,
+            },
+            nftInventory: {
+              fragments: {
+                shadow_dogg: data.nftInventory.fragments.shadow_dogg ?? 0,
+                flame_dogg: data.nftInventory.fragments.flame_dogg ?? 0,
+                ice_dogg: data.nftInventory.fragments.ice_dogg ?? 0,
+              },
+              assembled: data.nftInventory.assembled as ("shadow_dogg" | "flame_dogg" | "ice_dogg")[],
+            },
+            battle: { ...get().battle, totalDps: dps },
+            hasInitializedTonFromBackend: true,
+            isSyncing: false,
+          });
+        } catch (e) {
+          set({
+            isSyncing: false,
+            lastError: e instanceof Error ? e.message : "Sync failed",
+          });
         }
       },
 
       init: () => {
-        if (_gameDidInit) {
-          if (get().view === "loading") set({ view: "home" });
-          return;
-        }
-        _gameDidInit = true;
+        if (get().view !== "loading") return;
         const { boost, ownedMages, equippedSlots } = get();
         let dpsMultiplier = boost.dpsMultiplier;
         let currentBoost = boost;
@@ -311,33 +432,6 @@ export const useGameStore = create<GameStore>()(
         const dps = calcTotalDps(ownedMages, equippedSlots, { ...currentBoost, dpsMultiplier });
         set({ view: "home", battle: { ...get().battle, totalDps: dps } });
         void get().syncFromServer();
-      },
-
-      syncFromServer: async () => {
-        try {
-          set({ isSyncing: true, lastError: null });
-          const data = await battleApi.getState();
-          const ownedMages = data.ownedMages ?? get().ownedMages;
-          const equippedSlots = data.equippedSlots ?? get().equippedSlots;
-          const boost = data.boost ?? get().boost;
-          const dps = calcTotalDps(ownedMages, equippedSlots, boost);
-          set({
-            ownedMages,
-            equippedSlots,
-            boost,
-            balances: data.balances ?? get().balances,
-            bossRespawnAt: data.bossRespawnAt ?? get().bossRespawnAt,
-            reviveAdProgress: data.reviveAdProgress ?? get().reviveAdProgress,
-            battle: { ...get().battle, totalDps: dps },
-            hasInitializedTonFromBackend: true,
-            isSyncing: false,
-          });
-        } catch (e) {
-          set({
-            isSyncing: false,
-            lastError: e instanceof Error ? e.message : "Sync failed",
-          });
-        }
       },
 
       clickSlot: (index) => {
@@ -377,7 +471,7 @@ export const useGameStore = create<GameStore>()(
           if (!cfg) return;
           const { ownedMages, equippedSlots, boost } = get();
           if (ownedMages.find((m) => m.id === mageId)) return;
-          const newOwned = [...ownedMages, { ...cfg, level: res.level ?? 1 }];
+          const newOwned = [...ownedMages, { ...cfg, level: res.level }];
           const dps = calcTotalDps(newOwned, equippedSlots, boost);
           set({
             ownedMages: newOwned,
@@ -389,9 +483,17 @@ export const useGameStore = create<GameStore>()(
         }
       },
 
-      setTonBalance: (ton) => set({ balances: { ...get().balances, ton } }),
-      setTonyxBalance: (tonyx) => set({ balances: { ...get().balances, tonyx } }),
-      markTonInitialized: () => set({ hasInitializedTonFromBackend: true }),
+      setTonBalance: (ton) => {
+        set({ balances: { ...get().balances, ton } });
+      },
+
+      setTonyxBalance: (tonyx) => {
+        set({ balances: { ...get().balances, tonyx } });
+      },
+
+      markTonInitialized: () => {
+        set({ hasInitializedTonFromBackend: true });
+      },
 
       reviveBossWithTon: async (level) => {
         try {

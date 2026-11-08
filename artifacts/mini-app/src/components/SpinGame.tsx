@@ -40,7 +40,7 @@ const SECTOR_COLORS = [
 const COMMISSION = 0.2;
 const MIN_STAKE = 0.1;
 const QUICK_BETS = [0.1, 0.5, 1, 5, 10];
-const SPIN_MS = 9750;
+const SPIN_MS = 12200;
 const AVATAR_MIN_SHARE = 0.03;
 
 const SIZE = 300;
@@ -205,23 +205,70 @@ function PremiumWheel({
       <div style={{ position: "absolute", left: "50%", top: 2, transform: "translateX(-50%)", zIndex: 9, width: 0, height: 0, borderLeft: "8px solid transparent", borderRight: "8px solid transparent", borderTop: "12px solid #f1f5f9" }} />
 
       <div
+        aria-hidden
+        style={{
+          pointerEvents: "none",
+          position: "absolute",
+          left: "50%",
+          top: "50%",
+          width: spinning ? SIZE * 1.55 : SIZE * 0.35,
+          height: spinning ? SIZE * 1.55 : SIZE * 0.35,
+          marginLeft: spinning ? -(SIZE * 1.55) / 2 : -(SIZE * 0.35) / 2,
+          marginTop: spinning ? -(SIZE * 1.55) / 2 : -(SIZE * 0.35) / 2,
+          borderRadius: "50%",
+          background: spinning
+            ? "radial-gradient(circle, rgba(251,191,36,0.45) 0%, rgba(251,191,36,0.22) 25%, rgba(124,92,255,0.2) 50%, transparent 72%)"
+            : "radial-gradient(circle, transparent 0%, transparent 100%)",
+          opacity: spinning ? 1 : 0,
+          transition: spinning
+            ? `width ${SPIN_MS * 0.55}ms cubic-bezier(0.15, 0.7, 0.2, 1), height ${SPIN_MS * 0.55}ms cubic-bezier(0.15, 0.7, 0.2, 1), margin ${SPIN_MS * 0.55}ms cubic-bezier(0.15, 0.7, 0.2, 1), opacity 0.9s ease-out, background ${SPIN_MS * 0.4}ms ease-out`
+            : "width 0.6s ease, height 0.6s ease, margin 0.6s ease, opacity 0.5s ease",
+          zIndex: 0,
+          filter: spinning ? "blur(2px)" : "none",
+        }}
+      />
+      <div
+        aria-hidden
+        style={{
+          pointerEvents: "none",
+          position: "absolute",
+          left: "50%",
+          top: "50%",
+          width: spinning ? SIZE * 1.25 : SIZE * 0.5,
+          height: spinning ? SIZE * 1.25 : SIZE * 0.5,
+          marginLeft: spinning ? -(SIZE * 1.25) / 2 : -(SIZE * 0.5) / 2,
+          marginTop: spinning ? -(SIZE * 1.25) / 2 : -(SIZE * 0.5) / 2,
+          borderRadius: "50%",
+          boxShadow: spinning
+            ? "0 0 0 2px rgba(251,191,36,0.35), 0 0 30px 10px rgba(251,191,36,0.2), 0 0 60px 20px rgba(124,92,255,0.25)"
+            : "0 0 0 0 transparent",
+          opacity: spinning ? 1 : 0,
+          transition: spinning
+            ? `width ${SPIN_MS * 0.65}ms cubic-bezier(0.12, 0.75, 0.15, 1), height ${SPIN_MS * 0.65}ms cubic-bezier(0.12, 0.75, 0.15, 1), margin ${SPIN_MS * 0.65}ms cubic-bezier(0.12, 0.75, 0.15, 1), box-shadow ${SPIN_MS * 0.5}ms ease-out, opacity 0.8s ease-out`
+            : "all 0.5s ease",
+          zIndex: 0,
+        }}
+      />
+
+      <div
         style={{
           width: SIZE,
           height: SIZE,
           borderRadius: "50%",
           transform: `rotate(${rotateDeg}deg)`,
           transition: spinning
-            ? `transform ${SPIN_MS}ms cubic-bezier(0.12, 0.75, 0.08, 1), box-shadow 1.4s ease-out`
+            ? `transform ${SPIN_MS}ms cubic-bezier(0.12, 0.75, 0.08, 1), box-shadow ${SPIN_MS * 0.45}ms ease-out`
             : "box-shadow 0.7s ease-out",
           willChange: "transform",
           boxShadow: spinning
-            ? "0 0 0 4px rgba(251,191,36,0.6), 0 0 24px 6px rgba(251,191,36,0.3), 0 0 55px 14px rgba(124,92,255,0.4), inset 0 0 40px rgba(251,191,36,0.12), 0 20px 50px rgba(0,0,0,0.55)"
+            ? "0 0 0 4px rgba(251,191,36,0.65), 0 0 22px 6px rgba(251,191,36,0.35), inset 0 0 36px rgba(251,191,36,0.15), 0 20px 50px rgba(0,0,0,0.55)"
             : "0 0 0 3px rgba(124,92,255,0.28), 0 0 0 0 transparent, 0 20px 50px rgba(0,0,0,0.55)",
           background: "#12081f",
           position: "relative",
+          zIndex: 2,
         }}
       >
-        <svg width={SIZE} height={SIZE} style={{ display: "block" }}>
+        <svg width={SIZE} height={SIZE} style={{ display: "block", position: "relative", zIndex: 2 }}>
           {!sectors.length && (
             <circle cx={CX} cy={CY} r={OUTER_R} fill="#1e1233" stroke="rgba(124,92,255,0.25)" strokeWidth={2} />
           )}
@@ -266,7 +313,7 @@ function PremiumWheel({
         })}
       </div>
 
-      <div style={{ position: "absolute", left: "50%", top: "50%", transform: "translate(-50%, -50%)", width: INNER_R * 2 - 6, height: INNER_R * 2 - 6, borderRadius: "50%", background: "linear-gradient(160deg, #15101f, #0a0612)", border: "2px solid rgba(255,255,255,0.1)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 6, boxShadow: centerGreen ? "inset 0 0 24px rgba(0,0,0,0.65), 0 0 28px rgba(251,191,36,0.35)" : "inset 0 0 24px rgba(0,0,0,0.65), 0 0 20px rgba(124,92,255,0.15)", transition: "box-shadow 1.2s ease-out" }}>
+      <div style={{ position: "absolute", left: "50%", top: "50%", transform: "translate(-50%, -50%)", width: INNER_R * 2 - 6, height: INNER_R * 2 - 6, borderRadius: "50%", background: "linear-gradient(160deg, #15101f, #0a0612)", border: "2px solid rgba(255,255,255,0.1)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 6, boxShadow: centerGreen ? "inset 0 0 24px rgba(0,0,0,0.65), 0 0 32px rgba(251,191,36,0.45), 0 0 48px rgba(124,92,255,0.25)" : "inset 0 0 24px rgba(0,0,0,0.65), 0 0 20px rgba(124,92,255,0.15)", transition: `box-shadow ${SPIN_MS * 0.4}ms ease-out` }}>
         <span style={{ fontSize: centerLabel.length > 6 ? 13 : 20, fontWeight: 900, color: centerGreen ? "#4ade80" : "#f8fafc", letterSpacing: 0.4, fontVariantNumeric: "tabular-nums", textAlign: "center", lineHeight: 1.15 }}>
           {centerLabel}
         </span>
@@ -294,7 +341,7 @@ export function JackpotWheel({
       const tick = (now: number) => {
         const dt = now - last;
         last = now;
-        currentDegRef.current = (currentDegRef.current + dt * 0.28) % 360;
+        currentDegRef.current = (currentDegRef.current + dt * 0.21) % 360;
         setRotateDeg(currentDegRef.current);
         rafRef.current = requestAnimationFrame(tick);
       };
@@ -691,11 +738,7 @@ export default function SpinGame({
 
       {showHistory && <SpinHistoryModal onClose={() => setShowHistory(false)} onReplay={() => setShowHistory(false)} />}
       {showFairness && round?.fair && (
-        <FairnessModal
-          onClose={() => setShowFairness(false)}
-          data={round.fair}
-          gameType="spin"
-        />
+        <FairnessModal onClose={() => setShowFairness(false)} data={round.fair} gameType="spin" />
       )}
     </div>
   );

@@ -407,7 +407,11 @@ export const useGameStore = create<GameStore>()(
       },
 
       init: () => {
-        if (get().view !== "loading") return;
+        // Always refresh from server so owned cards never stay empty after failed/partial load
+        if (get().view !== "loading") {
+          void get().syncFromServer();
+          return;
+        }
         const { boost, ownedMages, equippedSlots } = get();
         let dpsMultiplier = boost.dpsMultiplier;
         let currentBoost = boost;

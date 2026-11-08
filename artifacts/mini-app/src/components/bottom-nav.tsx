@@ -131,9 +131,9 @@ export default function BottomNav() {
         timer.current = window.setTimeout(() => {
           setFlood(null);
           setBusy(false);
-        }, 280);
-      }, 280);
-    }, 420);
+        }, 560);
+      }, 560);
+    }, 820);
   }
 
   const color = MODE_COLOR[mode];
@@ -158,26 +158,29 @@ export default function BottomNav() {
           position: "fixed", left: origin.x, top: origin.y, width: 80, height: 80,
           borderRadius: "50%", background: flood.color, zIndex: 250, pointerEvents: "none",
           animation: flood.phase === "in"
-            ? "tonyx-flood-in 0.28s ease-out forwards"
-            : "tonyx-flood-out 0.28s ease-in forwards",
+            ? "tonyx-flood-in 0.55s ease-out forwards"
+            : "tonyx-flood-out 0.55s ease-in forwards",
         }} />
       )}
 
       <button
         ref={buttonRef}
         type="button"
-        aria-label="Switch menu mode"
         onClick={switchMode}
+        aria-label="Меню режимов"
         style={{
           position: "fixed",
-          left: 16,
           bottom: bottomOffset,
-          width: 58,
-          height: 58,
+          left: "max(12px, calc(50% - 210px))",
+          width: 52,
+          height: 52,
           borderRadius: "50%",
-          border: "2px solid rgba(255,255,255,0.12)",
-          background: "#0b1020",
-          boxShadow: `0 8px 24px rgba(0,0,0,0.4), 0 0 16px ${color}44`,
+          border: `2.5px solid ${color}`,
+          padding: 0,
+          background: "rgba(12, 14, 24, 0.85)",
+          backdropFilter: "blur(16px)",
+          WebkitBackdropFilter: "blur(16px)",
+          boxShadow: `0 6px 20px rgba(0,0,0,0.4), 0 0 16px ${color}44`,
           cursor: busy ? "default" : "pointer",
           zIndex: 110,
           display: "flex",
@@ -197,7 +200,7 @@ export default function BottomNav() {
           background: "conic-gradient(from 0deg, #2563eb 0 120deg, #dc2626 120deg 240deg, #eab308 240deg 360deg)",
           transform: `rotate(${rotation}deg)`,
           transformOrigin: "center",
-          transition: "transform 0.42s linear",
+          transition: "transform 0.8s linear",
         }} />
         <span style={{
           position: "absolute", inset: 14, borderRadius: "50%", background: "#0b1020", zIndex: 1,
@@ -245,8 +248,28 @@ export default function BottomNav() {
                 transition: "background 0.2s ease",
               }}
             >
-              {icon(active, active ? color : "#94a3b8")}
-              <span style={{ fontSize: 10, fontWeight: 600, color: active ? color : "#94a3b8", lineHeight: 1 }}>{label}</span>
+              <div style={{
+                width: active ? 34 : 26,
+                height: active ? 34 : 26,
+                borderRadius: "50%",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                background: active ? color : "rgba(255,255,255,0.06)",
+                boxShadow: active ? `0 0 14px ${color}88` : "none",
+                transition: "all 0.2s ease",
+              }}>
+                {icon(active, active ? "#0b1020" : "#94a3b8")}
+              </div>
+              <span style={{
+                fontSize: 9,
+                fontWeight: 700,
+                color: active ? color : "#94a3b8",
+                letterSpacing: 0.2,
+                whiteSpace: "nowrap",
+              }}>
+                {label}
+              </span>
             </button>
           );
         })}
@@ -254,34 +277,43 @@ export default function BottomNav() {
 
       <button
         type="button"
-        aria-label="Profile"
         onClick={() => {
-          const now = Date.now();
-          if (now - profileTapAt.current < 400) profileTaps.current += 1;
-          else profileTaps.current = 1;
-          profileTapAt.current = now;
-          if (profileTaps.current >= 5 && String(telegramId) === OWNER_ID) {
-            setLocation("/admin");
-            return;
-          }
           haptic("light");
+          const now = Date.now();
+          if (now - profileTapAt.current > 700) profileTaps.current = 0;
+          profileTapAt.current = now;
+          profileTaps.current += 1;
+          if (profileTaps.current >= 3) {
+            profileTaps.current = 0;
+            if (telegramId === OWNER_ID) {
+              haptic("medium");
+              setLocation("/admin");
+              return;
+            }
+          }
           setLocation("/profile");
         }}
         style={{
           position: "fixed",
-          right: 16,
           bottom: bottomOffset,
-          width: 58,
-          height: 58,
+          right: "max(12px, calc(50% - 210px))",
+          width: 52,
+          height: 52,
           borderRadius: "50%",
-          border: profileActive ? `2px solid ${color}` : "2px solid rgba(255,255,255,0.12)",
-          background: profileActive ? color : "#0b1020",
-          boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
+          border: profileActive ? "2.5px solid #e2e8f0" : "2.5px solid rgba(255,255,255,0.15)",
+          padding: 0,
+          background: profileActive ? "#e2e8f0" : "rgba(12, 14, 24, 0.85)",
+          backdropFilter: "blur(16px)",
+          WebkitBackdropFilter: "blur(16px)",
+          boxShadow: profileActive
+            ? "0 6px 20px rgba(0,0,0,0.4), 0 0 16px rgba(226,232,240,0.35)"
+            : "0 6px 20px rgba(0,0,0,0.4)",
           cursor: "pointer",
           zIndex: 110,
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
+          transition: "all 0.2s ease",
         }}
       >
         <ProfileIcon active={profileActive} />

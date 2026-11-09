@@ -5,14 +5,13 @@ import {
   type InventoryCollection,
 } from "@/lib/inventoryApi";
 import { haptic, hapticNotify } from "@/lib/telegram";
+import { getInventoryCache, setInventoryCache, refreshInventoryInBackground } from "@/lib/dataCache";
 
-/** Same photos as admin panel (TG_Photos). jsDelivr is often 503 — use GitHub raw. */
 const TG_PHOTOS =
   "https://raw.githubusercontent.com/ssamy2/TG_Photos/main/webp/by_name/";
 
-/** Collection id → TG_Photos short name when they differ */
 const PHOTO_ALIAS: Record<string, string> = {
-  telegram_premium: "input_key", // keyboard key gift
+  telegram_premium: "input_key",
   royal_dogg: "snoop_dogg",
 };
 
@@ -205,7 +204,8 @@ function PuzzleBoard({
 
 export default function CollectionScreen() {
   const setView = useGameStore((s) => s.setView);
-  const [list, setList] = useState<InventoryCollection[]>([]);
+  const cached = getInventoryCache();
+  const [list, setList] = useState<InventoryCollection[]>(() => cached?.collections ?? []);
   const [loading, setLoading] = useState(false);
   const [claimingId, setClaimingId] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
@@ -215,6 +215,7 @@ export default function CollectionScreen() {
   async function load() {
     try {
       const d = await inventoryApi.get();
+      setInventoryCache(d);
       const cols = d.collections ?? [];
       setList(cols);
 
@@ -247,7 +248,16 @@ export default function CollectionScreen() {
   }
 
   useEffect(() => {
-    load();
+    const hit = getInventoryCache();
+    if (hit?.collections?.length) {
+      setList(hit.collections);
+      void refreshInventoryInBackground().then(() => {
+        const next = getInventoryCache();
+        if (next?.collections) setList(next.collections);
+      });
+    } else {
+      void load();
+    }
   }, []);
 
   async function onClaim(nftId: string) {

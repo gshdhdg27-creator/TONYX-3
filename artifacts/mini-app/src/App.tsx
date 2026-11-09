@@ -1,6 +1,6 @@
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, type CSSProperties } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Switch, Route, Router as WouterRouter } from "wouter";
+import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { TonConnectUIProvider } from "@tonconnect/ui-react";
 import BottomNav from "@/components/bottom-nav";
@@ -26,13 +26,21 @@ import { SplashScreen } from "@/components/SplashScreen";
 import { RocketScene } from "@/components/RocketScene";
 import { OnboardingTour } from "@/components/OnboardingTour";
 import { useGameStore } from "@/store/gameStore";
+import { prefetchAllSectionData } from "@/lib/dataCache";
 
 const MANIFEST_URL = typeof window !== "undefined"
   ? `${window.location.origin}/tonconnect-manifest.json`
   : "/tonconnect-manifest.json";
 
 const queryClient = new QueryClient({
-  defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },
+  defaultOptions: {
+    queries: {
+      retry: 1,
+      refetchOnWindowFocus: false,
+      staleTime: 60_000,
+      gcTime: 10 * 60_000,
+    },
+  },
 });
 
 function BannedScreen({ reason }: { reason: string | null }) {
@@ -66,6 +74,34 @@ function SoftDeletedScreen() {
         Обратитесь в поддержку для восстановления.
       </div>
     </div>
+  );
+}
+
+function panelStyle(active: boolean): CSSProperties {
+  return active
+    ? { display: "block", height: "100%", minHeight: 0 }
+    : { display: "none" };
+}
+
+/** Keep main sections mounted so switching tabs is instant (data + DOM already warm). */
+function KeepAliveMain() {
+  const [loc] = useLocation();
+  const path = loc.split("?")[0] || "/";
+  return (
+    <main style={{ flex: 1, minHeight: 0, overflowY: "auto", overflowX: "hidden", WebkitOverflowScrolling: "touch", paddingBottom: 90 }}>
+      <div style={panelStyle(path === "/" || path === "")}><HomePage /></div>
+      <div style={panelStyle(path === "/market")}><MarketPage /></div>
+      <div style={panelStyle(path === "/nft-market")}><NftMarketPage /></div>
+      <div style={panelStyle(path === "/inventory")}><InventoryPage /></div>
+      <div style={panelStyle(path === "/games")}><GamesPage /></div>
+      <div style={panelStyle(path === "/cases")}><CasesPage /></div>
+      <div style={panelStyle(path === "/pvp")}><PvpPage /></div>
+      <div style={panelStyle(path === "/solo")}><SoloPage /></div>
+      <div style={panelStyle(path === "/tasks")}><TasksPage /></div>
+      <div style={panelStyle(path === "/profile")}><ProfileWithTasksPage /></div>
+      <div style={panelStyle(path === "/leaderboard")}><LeaderboardPage /></div>
+      <div style={panelStyle(path === "/admin")}><AdminPage /></div>
+    </main>
   );
 }
 
@@ -120,14 +156,6 @@ function AppShell() {
 
   if (blockStatus === "banned") return <BannedScreen reason={bannedReason} />;
   if (blockStatus === "soft_deleted") return <SoftDeletedScreen />;
-  if (blockStatus === "loading") {
-    return (
-      <div style={{ height: "100dvh", display: "flex", alignItems: "center", justifyContent: "center", background: "hsl(240 16% 4%)" }}>
-        <div style={{ width: 32, height: 32, border: "3px solid rgba(99,102,241,0.3)", borderTopColor: "#6366f1", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
-        <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
-      </div>
-    );
-  }
 
   return (
     <div style={{
@@ -144,22 +172,7 @@ function AppShell() {
     }}>
       <LanguageModal />
       <Header />
-      <main style={{ flex: 1, minHeight: 0, overflowY: "auto", overflowX: "hidden", WebkitOverflowScrolling: "touch", paddingBottom: 90 }}>
-        <Switch>
-          <Route path="/" component={HomePage} />
-          <Route path="/market" component={MarketPage} />
-          <Route path="/nft-market" component={NftMarketPage} />
-          <Route path="/inventory" component={InventoryPage} />
-          <Route path="/games" component={GamesPage} />
-          <Route path="/cases" component={CasesPage} />
-          <Route path="/pvp" component={PvpPage} />
-          <Route path="/solo" component={SoloPage} />
-          <Route path="/tasks" component={TasksPage} />
-          <Route path="/profile" component={ProfileWithTasksPage} />
-          <Route path="/leaderboard" component={LeaderboardPage} />
-          <Route path="/admin" component={AdminPage} />
-        </Switch>
-      </main>
+      <KeepAliveMain />
       <BottomNav />
     </div>
   );
@@ -175,12 +188,12 @@ function App() {
   const [showTour, setShowTour] = useState(false);
   const needsOnboarding = useRef<boolean>(!localStorage.getItem(ONBOARD_KEY));
 
-  // Preload game state in background while the beautiful SplashScreen is playing.
-  // By the time splash finishes, view is already "home" → no second "Boss Dogg Loading".
+  // Preload game state + section data in background during SplashScreen.
   useEffect(() => {
     const t = setTimeout(() => {
       useGameStore.getState().init();
-    }, 300);
+      void prefetchAllSectionData();
+    }, 200);
     return () => clearTimeout(t);
   }, []);
 

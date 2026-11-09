@@ -6,14 +6,12 @@ import HomeScreen from "@/components/HomeScreen";
 import ChestScreen from "@/components/chest/ChestScreen";
 import CollectionScreen from "@/components/collection/CollectionScreen";
 import HeroShopScreen from "@/components/hero-shop/HeroShopScreen";
-import LoadingScreen from "@/components/ui/LoadingScreen";
 import { useBattleLoop } from "@/hooks/useBattleLoop";
 import { useBossAnimation } from "@/hooks/useBossAnimation";
 import { loadLiveGameConfig } from "@/lib/liveGameConfig";
 import "@/styles/game.css";
 
 export default function HomePage() {
-  // Battle loop and boss animation run here so they work regardless of sub-view
   useBattleLoop();
   useBossAnimation();
 
@@ -25,11 +23,9 @@ export default function HomePage() {
       const open = sessionStorage.getItem("tonyx-open");
       if (open !== "bosses" && open !== "cards" && open !== "collection") return;
       sessionStorage.removeItem("tonyx-open");
-      window.setTimeout(() => {
-        if (open === "bosses") setView("home");
-        if (open === "cards") setView("hero-shop");
-        if (open === "collection") setView("collection");
-      }, 700);
+      if (open === "bosses") setView("home");
+      if (open === "cards") setView("hero-shop");
+      if (open === "collection") setView("collection");
     };
     apply();
     window.addEventListener("tonyx-open", apply);
@@ -40,7 +36,6 @@ export default function HomePage() {
   const setTonyxBalance = useGameStore((s) => s.setTonyxBalance);
   const markTonInitialized = useGameStore((s) => s.markTonInitialized);
   const bumpConfigVersion = useGameStore((s) => s.bumpConfigVersion);
-  // Force a re-render once config loads so subscribers see it (BOSSES/BOOST_CONFIG are read directly, not from store state)
   useGameStore((s) => s.configVersion);
 
   const { telegramId } = useTelegram();
@@ -52,7 +47,6 @@ export default function HomePage() {
     },
   } as Parameters<typeof useGetUserProfile>[1]);
 
-  // Sync TON + TONYX balances from backend on every profile load
   useEffect(() => {
     if (!profile) return;
     const rawTon = (profile as { ton?: string | number }).ton;
@@ -64,19 +58,13 @@ export default function HomePage() {
     markTonInitialized();
   }, [profile, setTonBalance, setTonyxBalance, markTonInitialized]);
 
-  // init() is now called early from App.tsx during SplashScreen.
-  // Do NOT call it again here — that caused the second "Boss Dogg Loading" screen.
-
-  // Pull the admin-configured boss HP / revive cost / boost % values once on startup
-  // and bump configVersion so views relying on them re-render with the live numbers.
   useEffect(() => {
     loadLiveGameConfig().then(() => bumpConfigVersion());
   }, [bumpConfigVersion]);
 
   return (
     <>
-      {view === "loading" && <LoadingScreen />}
-      {view === "home" && <HomeScreen />}
+      {(view === "home" || view === "loading") && <HomeScreen />}
       {view === "chest" && <ChestScreen />}
       {view === "collection" && <CollectionScreen />}
       {view === "hero-shop" && <HeroShopScreen />}

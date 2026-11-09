@@ -1,1 +1,2 @@
-redeploy 2026-11-03
+redeploy 2026-11-09T10:08+05 after cleanup of duplicate Vercel projects
+spin: SPIN_MS=12200, light from wheel center

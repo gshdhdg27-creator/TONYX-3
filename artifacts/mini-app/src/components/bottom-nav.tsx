@@ -68,7 +68,7 @@ const MODE_TABS: Record<MenuMode, TabDef[]> = {
   ],
   2: [
     { section: "cases", label: "Кейсы", icon: CasesIcon },
-    { section: "pvp", label: "PvP", icon: PvpIcon },
+    { section: "pvp", label: "Арена", icon: PvpIcon },
     { section: "solo", label: "Solo", icon: SoloIcon },
   ],
   3: [
@@ -92,7 +92,6 @@ function openSection(section: Section) {
   window.dispatchEvent(new Event("tonyx-open"));
 }
 
-/** Resolve which section is active from URL + sessionStorage. */
 function sectionFromLocation(location: string): Section | null {
   if (location === "/profile" || location.startsWith("/profile/")) return null;
   if (location === "/admin" || location.startsWith("/admin")) return null;
@@ -238,12 +237,8 @@ export default function BottomNav() {
           -webkit-tap-highlight-color: transparent;
           touch-action: manipulation;
         }
-        .tonyx-tab-btn:active {
-          transform: scale(0.94);
-        }
-        .tonyx-mode-btn:active {
-          transform: scale(0.92);
-        }
+        .tonyx-tab-btn:active { transform: scale(0.94); }
+        .tonyx-mode-btn:active { transform: scale(0.92); }
       `}</style>
 
       {flood && (
@@ -381,18 +376,18 @@ export default function BottomNav() {
               }}
             >
               <div style={{
-                width: active ? 34 : 28,
-                height: active ? 34 : 28,
+                width: active ? 38 : 32,
+                height: active ? 38 : 32,
                 borderRadius: "50%",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
                 background: active
                   ? `linear-gradient(145deg, ${av.from}, ${av.to})`
-                  : `linear-gradient(145deg, ${av.from}22, ${av.to}18)`,
+                  : "rgba(255,255,255,0.03)",
                 boxShadow: active
-                  ? `0 4px 16px ${av.glow}, 0 0 0 1.5px ${av.from}88, inset 0 1px 0 rgba(255,255,255,0.35)`
-                  : `0 0 0 1px ${av.from}33, inset 0 1px 0 rgba(255,255,255,0.06)`,
+                  ? `0 4px 18px ${av.glow}, 0 0 0 2px ${av.from}, inset 0 1px 0 rgba(255,255,255,0.35)`
+                  : `0 0 0 1.5px ${av.from}40`,
                 transition: "all 0.28s cubic-bezier(0.34,1.15,0.64,1)",
                 animation: active ? "tonyx-tab-pop 0.35s ease" : undefined,
               }}>
@@ -508,23 +503,24 @@ function CasesIcon(active: boolean, _c: string) {
   );
 }
 function PvpIcon(active: boolean, _c: string) {
-  const f = active ? "#0b1020" : "#fca5a5";
+  const s = active ? "#0b1020" : "#e2e8f0";
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-      <path d="M13.8 16.2L4.5 6.9V4h2.9l9.3 9.3-2.9 2.9z" fill={f} opacity="0.95"/>
-      <path d="M10.2 7.8L19.5 17.1v2.9h-2.9L7.3 10.7l2.9-2.9z" fill={f} opacity="0.7"/>
-      <path d="M15.5 15.5l3.2 3.2" stroke={f} strokeWidth="2" strokeLinecap="round"/>
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+      <path d="M14.2 4.2l5.6 5.6-1.4 1.4-1.1-1.1-7.5 7.5 1.1 1.1-1.4 1.4-5.6-5.6 1.4-1.4 1.1 1.1 7.5-7.5-1.1-1.1 1.4-1.4z" fill={s} opacity="0.95"/>
+      <path d="M9.8 4.2L4.2 9.8l1.4 1.4 1.1-1.1 7.5 7.5-1.1 1.1 1.4 1.4 5.6-5.6-1.4-1.4-1.1 1.1-7.5-7.5 1.1-1.1-1.4-1.4z" fill={s} opacity="0.75"/>
+      <path d="M6.2 17.2l-2 2M17.8 6.2l2-2M6.2 6.2l-2-2M17.8 17.8l2 2" stroke={s} strokeWidth="1.6" strokeLinecap="round" opacity="0.9"/>
     </svg>
   );
 }
 function SoloIcon(active: boolean, _c: string) {
-  const f = active ? "#0b1020" : "#86efac";
+  const s = active ? "#0b1020" : "#86efac";
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-      <circle cx="12" cy="12" r="8.5" fill={f} opacity="0.35"/>
-      <circle cx="12" cy="12" r="8.5" stroke={f} strokeWidth="2"/>
-      <circle cx="12" cy="12" r="2.2" fill={f}/>
-      <path d="M12 5.5v2.2M12 16.3v2.2M5.5 12h2.2M16.3 12h2.2" stroke={f} strokeWidth="1.8" strokeLinecap="round"/>
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+      <rect x="2.5" y="7.5" width="19" height="11" rx="5.5" fill={s} opacity="0.95"/>
+      <circle cx="8.2" cy="13" r="1.35" fill={active ? "#15803d" : "#0a0612"}/>
+      <circle cx="15.8" cy="12.2" r="1.05" fill={active ? "#15803d" : "#0a0612"}/>
+      <circle cx="17.3" cy="13.8" r="1.05" fill={active ? "#15803d" : "#0a0612"}/>
+      <path d="M7.1 11.2v3.6M5.3 13h3.6" stroke={active ? "#15803d" : "#0a0612"} strokeWidth="1.5" strokeLinecap="round"/>
     </svg>
   );
 }

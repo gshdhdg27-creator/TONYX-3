@@ -2,85 +2,52 @@ import { useEffect, useRef, useState } from "react";
 import { casesApi, type CaseListItem, type CaseRewardPreview } from "@/lib/casesApi";
 import { haptic, hapticNotify } from "@/lib/telegram";
 
-type Lang = "ru" | "en";
-
-type Reward = {
-  type: "ton" | "tonyx" | "nft_fragment";
-  amount?: number;
-  nftId?: string;
-};
-
-const CASE_ART: Record<string, { emoji: string; gradient: string; glow: string; image?: string }> = {
-  boss_1: { emoji: "🌑", gradient: "linear-gradient(145deg,#1e1b4b,#312e81 50%,#0f172a)", glow: "rgba(99,102,241,0.55)", image: "/cases/boss_1.jpg" },
-  boss_2: { emoji: "🔥", gradient: "linear-gradient(145deg,#7f1d1d,#ea580c 50%,#1c1917)", glow: "rgba(249,115,22,0.6)", image: "/cases/boss_2.jpg" },
-  boss_3: { emoji: "🌋", gradient: "linear-gradient(145deg,#7c2d12,#b91c1c 50%,#450a0a)", glow: "rgba(239,68,68,0.6)", image: "/cases/boss_3.jpg" },
-  boss_4: { emoji: "⚡", gradient: "linear-gradient(145deg,#0c4a6e,#0369a1 50%,#082f49)", glow: "rgba(56,189,248,0.55)", image: "/cases/boss_4.jpg" },
-  boss_5: { emoji: "👑", gradient: "linear-gradient(145deg,#713f12,#eab308 45%,#422006)", glow: "rgba(234,179,8,0.65)", image: "/cases/boss_5.jpg" },
-  ton_basic: { emoji: "💎", gradient: "linear-gradient(145deg,#0e7490,#22d3ee 50%,#083344)", glow: "rgba(34,211,238,0.55)" },
-  tonyx_basic: { emoji: "🪙", gradient: "linear-gradient(145deg,#3b0764,#a855f7 50%,#1e1b4b)", glow: "rgba(168,85,247,0.6)" },
-};
-
-function artFor(id: string) {
-  return CASE_ART[id] ?? {
-    emoji: "📦",
-    gradient: "linear-gradient(145deg,#1e293b,#334155)",
-    glow: "rgba(148,163,184,0.4)",
-  };
-}
-
-function caseImage(c: { id: string; imageUrl?: string | null }): string | null {
-  if (c.imageUrl) return c.imageUrl;
-  return CASE_ART[c.id]?.image ?? null;
-}
-
-function costLabel(c: CaseListItem, lang: Lang): string {
-  if (c.costType === "key") {
-    return lang === "en" ? `Boss ${c.costValue} · ${c.have}` : `Босс ${c.costValue} · ${c.have}`;
-  }
-  if (c.costType === "ton") return `${c.costValue} TON`;
-  return `${c.costValue}`;
-}
-
-function rewardLabel(r: Reward, lang: Lang): string {
-  if (r.type === "ton") return `+${r.amount} TON`;
-  if (r.type === "tonyx") return `+${r.amount} TONYX`;
-  return lang === "en" ? `Fragment: ${r.nftId ?? "NFT"}` : `Фрагмент: ${r.nftId ?? "NFT"}`;
-}
-
-function rewardEmoji(r: Reward): string {
-  if (r.type === "ton") return "💎";
-  if (r.type === "tonyx") return "🪙";
-  return "🧩";
-}
+type Reward = { type: string; amount?: number; nftId?: string; name?: string };
 
 const ITEM_W = 88;
 
-function buildStrip(winner: Reward): Reward[] {
-  const fillers: Reward[] = [
-    { type: "tonyx", amount: 10 },
+function caseImage(c: CaseListItem): string | null {
+  return (c as { imageUrl?: string }).imageUrl ?? null;
+}
+
+function artFor(id: string) {
+  return { emoji: "📦", glow: "rgba(168,85,247,0.35)" };
+}
+
+function buildStrip(reward: Reward): Reward[] {
+  const pool: Reward[] = [
     { type: "tonyx", amount: 50 },
-    { type: "ton", amount: 0.1 },
     { type: "tonyx", amount: 100 },
-    { type: "nft_fragment", nftId: "common" },
+    { type: "ton", amount: 0.1 },
+    { type: "tonyx", amount: 200 },
+    { type: "key", amount: 1 },
+    { type: "tonyx", amount: 500 },
     { type: "ton", amount: 0.5 },
-    { type: "tonyx", amount: 25 },
+    { type: "tonyx", amount: 80 },
   ];
-  const strip: Reward[] = [];
-  for (let i = 0; i < 40; i++) {
-    strip.push(i === 34 ? winner : fillers[i % fillers.length]);
-  }
-  return strip;
+  const items: Reward[] = [];
+  for (let i = 0; i < 40; i++) items.push(pool[i % pool.length]!);
+  items[34] = reward;
+  return items;
+}
+
+function rewardLabel(r: Reward) {
+  if (r.type === "ton") return `${r.amount ?? 0} TON`;
+  if (r.type === "tonyx") return `${r.amount ?? 0} TX`;
+  if (r.type === "key") return `🔑 ${r.amount ?? 1}`;
+  return r.name ?? r.nftId ?? r.type;
 }
 
 export default function CasesGame({
-  lang = "ru",
+  lang,
+  onBalanceChange,
   onBalances,
 }: {
-  lang?: Lang;
+  lang: string;
+  onBalanceChange?: () => void;
   onBalances?: (b: { ton: number; tonyx: number }) => void;
 }) {
   const [cases, setCases] = useState<CaseListItem[]>([]);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<CaseListItem | null>(null);
   const [busy, setBusy] = useState(false);
@@ -101,8 +68,6 @@ export default function CasesGame({
     } catch (e) {
       setError(e instanceof Error ? e.message : "Load failed");
       setCases([]);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -168,6 +133,7 @@ export default function CasesGame({
           setSpinning(false);
           setWon(reward);
           hapticNotify("success");
+          onBalanceChange?.();
         }
       };
       animRef.current = requestAnimationFrame(tick);
@@ -179,14 +145,6 @@ export default function CasesGame({
     }
   };
 
-  if (loading) {
-    return (
-      <div style={pageStyle}>
-        <div style={{ textAlign: "center", padding: 40, color: "#64748B" }}>⏳</div>
-      </div>
-    );
-  }
-
   if (selected) {
     const art = artFor(selected.id);
     const heroImg = caseImage(selected);
@@ -195,490 +153,128 @@ export default function CasesGame({
 
     return (
       <div style={pageStyle}>
-        <style>{`
-          @keyframes caseGlowPulse {
-            0%, 100% { opacity: 0.45; transform: scale(1); }
-            50% { opacity: 0.85; transform: scale(1.06); }
-          }
-          .drop-card { transition: transform 0.15s ease; }
-          .drop-card:hover { transform: scale(1.03); }
-          .info-btn { position: relative; }
-          .info-btn:hover .tooltip { opacity: 1; visibility: visible; }
-          .tooltip { opacity: 0; visibility: hidden; transition: opacity 0.15s; }
-        `}</style>
-
-        <button
-          type="button"
-          onClick={() => {
-            if (spinning) return;
-            setSelected(null);
-            setWon(null);
-            setStrip([]);
-          }}
-          style={backBtn}
-        >
-          ← {lang === "en" ? "Back" : "Назад"}
+        <button type="button" onClick={() => { setSelected(null); setWon(null); setSpinning(false); }} style={backBtn}>
+          ← Назад
         </button>
-
-        <div style={{ textAlign: "center", marginBottom: 12 }}>
-          <div style={{ fontWeight: 900, fontSize: 22, color: "#F8FAFC" }}>
-            {lang === "en" ? selected.nameEn : selected.nameRu}
+        <div style={{ textAlign: "center", padding: "8px 16px" }}>
+          <div style={{ fontSize: 22, fontWeight: 900 }}>{selected.nameRu}</div>
+          <div style={{ fontSize: 13, color: "#94a3b8", marginTop: 4 }}>
+            {selected.costType === "key" ? `🔑 ${selected.costValue}` : selected.costType === "ton" ? `${selected.costValue} TON` : `${selected.costValue} TX`}
           </div>
         </div>
 
-        {error && (
-          <div style={errBox} onClick={() => setError(null)}>
-            {error}
-          </div>
-        )}
-
-        {!spinning && !won && (
-          <div style={caseHero}>
-            <div style={{
-              position: "absolute",
-              left: "50%",
-              top: "55%",
-              width: "80%",
-              height: "50%",
-              transform: "translate(-50%, -50%)",
-              borderRadius: "50%",
-              background: art.glow,
-              filter: "blur(36px)",
-              animation: "caseGlowPulse 2.8s ease-in-out infinite",
-              pointerEvents: "none",
-            }} />
-            {heroImg ? (
-              <img
-                src={heroImg}
-                alt=""
-                style={{
-                  position: "relative",
-                  zIndex: 1,
-                  width: "100%",
-                  height: "100%",
-                  objectFit: "contain",
-                  filter: "drop-shadow(0 20px 40px rgba(0,0,0,0.6))",
-                }}
-              />
-            ) : (
-              <span style={{ position: "relative", zIndex: 1, fontSize: 90 }}>{art.emoji}</span>
-            )}
-          </div>
-        )}
-
-        {(spinning || won) && strip.length > 0 && (
-          <div ref={stripRef} style={stripWrap}>
-            <div style={stripMarker} />
-            <div style={{ display: "flex", gap: 8, transform: `translateX(${-offset}px)`, willChange: "transform" }}>
-              {strip.map((r, i) => (
-                <div
-                  key={i}
-                  style={{
-                    ...stripItem,
-                    borderColor: won && i === 34 ? "rgba(250,204,21,0.95)" : "rgba(255,255,255,0.08)",
-                    boxShadow: won && i === 34 ? "0 0 16px rgba(250,204,21,0.5)" : "none",
-                  }}
-                >
-                  <div style={{ fontSize: 28 }}>{rewardEmoji(r)}</div>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: "#E2E8F0", marginTop: 4, textAlign: "center", padding: "0 4px" }}>
-                    {rewardLabel(r, lang)}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {won && (
-          <div style={winBox}>
-            <div style={{ fontSize: 40 }}>{rewardEmoji(won)}</div>
-            <div style={{ fontWeight: 900, fontSize: 18, color: "#FDE68A", marginTop: 6 }}>
-              {rewardLabel(won, lang)}
-            </div>
-          </div>
-        )}
-
-        <div style={{ display: "flex", gap: 8, marginTop: 14, justifyContent: "center" }}>
-          {[1, 2, 3, 4, 5].map((m) => (
-            <button
-              key={m}
-              type="button"
-              onClick={() => setMultiplier(m)}
-              style={{
-                padding: "8px 14px",
-                borderRadius: 8,
-                border: "none",
-                background: multiplier === m ? "#3b82f6" : "rgba(30,41,59,0.8)",
-                color: multiplier === m ? "#fff" : "#94A3B8",
-                fontWeight: 700,
-                fontSize: 14,
-                cursor: "pointer",
-                fontFamily: "inherit",
-              }}
-            >
-              x{m}
-            </button>
-          ))}
-        </div>
-
-        <button
-          type="button"
-          disabled={!selected.canOpen || busy || spinning}
-          onClick={() => openCase(selected)}
-          style={{
-            ...openBtn,
-            background: selected.canOpen
-              ? "linear-gradient(90deg,#16a34a,#22c55e)"
-              : "linear-gradient(90deg,#7f1d1d,#991b1b)",
-            opacity: selected.canOpen && !busy && !spinning ? 1 : 0.7,
-          }}
-        >
-          {spinning
-            ? lang === "en" ? "Opening..." : "Открываем..."
-            : selected.canOpen
-              ? lang === "en" ? "Open case" : "Открыть кейс"
-              : lang === "en" ? "Not enough" : "Не хватает"}
-          {" "}
-          <span style={{ marginLeft: 6 }}>⭐ {selected.costValue * multiplier}</span>
-        </button>
-
-        <div style={{ marginTop: 24 }}>
-          <div style={{ fontWeight: 800, fontSize: 16, color: "#E2E8F0", marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ fontSize: 18 }}>🎁</span>
-            {lang === "en" ? "What's inside?" : "Что в кейсе?"}
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            {rewards.map((r, i) => (
-              <DropCard key={i} r={r} lang={lang} chance={((r.weight / totalWeight) * 100).toFixed(2)} />
+        <div ref={stripRef} style={{ overflow: "hidden", margin: "16px 0", position: "relative", height: 100 }}>
+          <div style={{ display: "flex", transform: `translateX(${-offset}px)`, gap: 8, paddingLeft: 16 }}>
+            {strip.map((r, i) => (
+              <div key={i} style={{ width: ITEM_W, height: 88, borderRadius: 12, background: "rgba(30,41,59,0.9)", border: "1px solid rgba(148,163,184,0.2)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 12, fontWeight: 800, color: "#e2e8f0" }}>
+                {rewardLabel(r)}
+              </div>
             ))}
           </div>
+          <div style={{ position: "absolute", left: "50%", top: 0, bottom: 0, width: 2, background: "#a855f7", transform: "translateX(-50%)", zIndex: 2 }} />
         </div>
+
+        {won && (
+          <div style={{ textAlign: "center", padding: 16, color: "#4ade80", fontWeight: 900, fontSize: 18 }}>
+            Выигрыш: {rewardLabel(won)}
+          </div>
+        )}
+
+        <div style={{ padding: 16 }}>
+          <button
+            type="button"
+            disabled={busy || spinning || !selected.canOpen}
+            onClick={() => void openCase(selected)}
+            style={{
+              width: "100%",
+              padding: "14px 0",
+              borderRadius: 14,
+              border: "none",
+              background: selected.canOpen && !busy && !spinning ? "linear-gradient(135deg,#7c3aed,#a855f7)" : "rgba(51,65,85,0.5)",
+              color: "#fff",
+              fontWeight: 900,
+              fontSize: 15,
+              cursor: selected.canOpen ? "pointer" : "not-allowed",
+              fontFamily: "inherit",
+            }}
+          >
+            {spinning ? "Крутится…" : busy ? "…" : "Открыть"}
+          </button>
+        </div>
+
+        {error && <div style={{ color: "#f87171", textAlign: "center", padding: 8 }}>{error}</div>}
       </div>
     );
   }
 
   return (
     <div style={pageStyle}>
-      <style>{`
-        @keyframes caseGlowPulse {
-          0%, 100% { opacity: 0.4; transform: scale(1); }
-          50% { opacity: 0.8; transform: scale(1.05); }
-        }
-        .tonyx-case-card {
-          transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1), filter 0.2s ease;
-          transform: scale(1);
-        }
-        .tonyx-case-card:hover {
-          transform: scale(1.04);
-          filter: brightness(1.1);
-        }
-        .tonyx-case-card:active {
-          transform: scale(1.08);
-          filter: brightness(1.15);
-        }
-      `}</style>
-
-      <div style={{ fontWeight: 900, fontSize: 22, color: "#F8FAFC", marginBottom: 18, letterSpacing: "-0.02em" }}>
-        {lang === "en" ? "Cases" : "Кейсы"}
+      <div style={{ padding: "16px 16px 8px" }}>
+        <div style={{ fontSize: 24, fontWeight: 900 }}>Кейсы</div>
+        <div style={{ fontSize: 13, color: "#94a3b8", marginTop: 4 }}>Открывай и выигрывай</div>
       </div>
 
-      {error && (
-        <div style={errBox} onClick={() => setError(null)}>
-          {error}
-        </div>
-      )}
+      {error && <div style={{ color: "#f87171", padding: "0 16px 8px" }}>{error}</div>}
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, rowGap: 20 }}>
+      <div style={{ padding: "8px 16px 24px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         {cases.map((c) => {
-          const art = artFor(c.id);
           const img = caseImage(c);
           return (
             <button
               key={c.id}
               type="button"
-              className="tonyx-case-card"
-              onClick={() => {
-                haptic("light");
-                setSelected(c);
-                setWon(null);
-                setStrip([]);
+              onClick={() => setSelected(c)}
+              style={{
+                textAlign: "left",
+                borderRadius: 18,
+                border: "1px solid rgba(168,85,247,0.3)",
+                background: "linear-gradient(160deg, rgba(30,20,50,0.95), rgba(15,23,42,0.98))",
+                padding: 12,
+                cursor: "pointer",
+                fontFamily: "inherit",
+                color: "#e2e8f0",
               }}
-              style={cardBtn}
             >
-              <div style={thumbWrap}>
-                <div style={{
-                  position: "absolute",
-                  left: "50%",
-                  top: "50%",
-                  width: "85%",
-                  height: "55%",
-                  transform: "translate(-50%, -50%)",
-                  borderRadius: "50%",
-                  background: art.glow,
-                  filter: "blur(28px)",
-                  animation: "caseGlowPulse 3s ease-in-out infinite",
-                  pointerEvents: "none",
-                }} />
+              <div style={{ height: 72, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 8 }}>
                 {img ? (
-                  <img
-                    src={img}
-                    alt=""
-                    draggable={false}
-                    style={{
-                      position: "relative",
-                      zIndex: 1,
-                      width: "100%",
-                      height: "100%",
-                      objectFit: "contain",
-                      objectPosition: "center",
-                      filter: "drop-shadow(0 14px 24px rgba(0,0,0,0.5))",
-                      pointerEvents: "none",
-                    }}
-                  />
+                  <img src={img} alt="" style={{ maxHeight: 64, maxWidth: "100%", objectFit: "contain" }} />
                 ) : (
-                  <div style={{
-                    position: "relative",
-                    zIndex: 1,
-                    width: "100%",
-                    height: "100%",
-                    borderRadius: 20,
-                    background: art.gradient,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    boxShadow: `0 0 40px ${art.glow}`,
-                  }}>
-                    <span style={{ fontSize: 56 }}>{art.emoji}</span>
-                  </div>
+                  <span style={{ fontSize: 36 }}>📦</span>
                 )}
               </div>
-
-              <div style={{
-                marginTop: 12,
-                fontWeight: 800,
-                fontSize: 15,
-                lineHeight: 1.3,
-                color: "#F1F5F9",
-                minHeight: 40,
-              }}>
-                {lang === "en" ? c.nameEn : c.nameRu}
-              </div>
-
-              <div style={{
-                marginTop: 10,
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 6,
-                padding: "8px 16px",
-                borderRadius: 12,
-                background: "rgba(15,23,42,0.9)",
-                border: "1px solid rgba(255,255,255,0.1)",
-                color: c.canOpen ? "#FDE68A" : "#64748B",
-                fontSize: 14,
-                fontWeight: 800,
-              }}>
-                <span>⭐</span>
-                {costLabel(c, lang)}
+              <div style={{ fontSize: 13, fontWeight: 800 }}>{c.nameRu}</div>
+              <div style={{ fontSize: 11, color: "#a78bfa", marginTop: 4 }}>
+                {c.costType === "key" ? `🔑 ${c.costValue}` : c.costType === "ton" ? `${c.costValue} TON` : `${c.costValue} TX`}
               </div>
             </button>
           );
         })}
       </div>
-    </div>
-  );
-}
 
-function DropCard({ r, lang, chance }: { r: CaseRewardPreview; lang: Lang; chance: string }) {
-  const label =
-    lang === "en"
-      ? r.labelEn ?? (r.type === "nft_fragment" ? `Fragment ${r.nftId}` : `${r.minAmount}–${r.maxAmount}`)
-      : r.labelRu ?? (r.type === "nft_fragment" ? `Фрагмент ${r.nftId}` : `${r.minAmount}–${r.maxAmount}`);
-  const emoji = r.type === "ton" ? "💎" : r.type === "tonyx" ? "🪙" : "🧩";
-  const tonPrice = r.type === "ton" ? (r.maxAmount ?? r.minAmount ?? 0) : 0;
-  const starPrice = Math.round(tonPrice * 100) || (r.maxAmount ?? 0);
-
-  return (
-    <div className="drop-card" style={{
-      background: "rgba(15,23,42,0.95)",
-      border: "1px solid rgba(51,65,85,0.6)",
-      borderRadius: 16,
-      padding: 12,
-      textAlign: "center",
-      position: "relative",
-    }}>
-      <button
-        type="button"
-        className="info-btn"
-        style={{
-          position: "absolute",
-          top: 8,
-          right: 8,
-          width: 22,
-          height: 22,
-          borderRadius: "50%",
-          border: "1px solid rgba(255,255,255,0.2)",
-          background: "rgba(30,41,59,0.8)",
-          color: "#94A3B8",
-          fontSize: 11,
-          cursor: "pointer",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        i
-        <span className="tooltip" style={{
-          position: "absolute",
-          bottom: "130%",
-          right: 0,
-          background: "rgba(15,23,42,0.95)",
-          border: "1px solid rgba(255,255,255,0.15)",
-          borderRadius: 8,
-          padding: "6px 10px",
-          fontSize: 11,
-          fontWeight: 700,
-          color: "#E2E8F0",
-          whiteSpace: "nowrap",
-          zIndex: 10,
-        }}>
-          {lang === "en" ? "Chance" : "Шанс"}: {chance}%
-        </span>
-      </button>
-
-      {r.imageUrl ? (
-        <img src={r.imageUrl} alt="" style={{ width: 64, height: 64, objectFit: "contain", margin: "8px auto" }} />
-      ) : (
-        <div style={{ fontSize: 40, margin: "8px 0" }}>{emoji}</div>
+      {cases.length === 0 && (
+        <div style={{ textAlign: "center", color: "#64748b", padding: 32, fontSize: 13 }}>Пока нет кейсов</div>
       )}
-      <div style={{ fontSize: 12, fontWeight: 700, color: "#E2E8F0", marginTop: 6, lineHeight: 1.3 }}>{label}</div>
-      <div style={{ fontSize: 11, color: "#94A3B8", marginTop: 6, display: "flex", justifyContent: "center", gap: 8 }}>
-        <span>💎 {tonPrice || "—"}</span>
-        <span>⭐ {starPrice}</span>
-      </div>
     </div>
   );
 }
 
 const pageStyle: React.CSSProperties = {
-  minHeight: "70vh",
-  background: "#0B0F14",
-  padding: "8px 14px 40px",
-  color: "#E5E7EB",
+  minHeight: "100%",
+  background: "radial-gradient(ellipse at 50% 0%, #2e1065 0%, #0a0612 55%)",
+  color: "#e2e8f0",
+  fontFamily: "inherit",
+  paddingBottom: 24,
 };
 
 const backBtn: React.CSSProperties = {
-  background: "transparent",
+  margin: "12px 16px",
+  background: "rgba(255,255,255,0.06)",
   border: "none",
-  color: "#94A3B8",
-  fontWeight: 700,
-  fontSize: 14,
-  padding: "4px 0 12px",
-  cursor: "pointer",
-  fontFamily: "inherit",
-};
-
-const openBtn: React.CSSProperties = {
-  width: "100%",
-  marginTop: 16,
-  padding: "14px 16px",
-  borderRadius: 14,
-  border: "none",
-  color: "#fff",
-  fontWeight: 900,
-  fontSize: 16,
-  fontFamily: "inherit",
-  cursor: "pointer",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-};
-
-const errBox: React.CSSProperties = {
-  background: "rgba(127,29,29,0.4)",
-  border: "1px solid rgba(248,113,113,0.4)",
-  color: "#FECACA",
-  borderRadius: 12,
-  padding: "10px 12px",
-  marginBottom: 12,
+  borderRadius: 10,
+  padding: "8px 14px",
+  color: "#94a3b8",
   fontSize: 13,
-};
-
-const stripWrap: React.CSSProperties = {
-  position: "relative",
-  overflow: "hidden",
-  height: 100,
-  margin: "12px 0",
-  borderRadius: 16,
-  background: "rgba(15,23,42,0.95)",
-  border: "1px solid rgba(51,65,85,0.6)",
-};
-
-const stripMarker: React.CSSProperties = {
-  position: "absolute",
-  left: "50%",
-  top: 0,
-  bottom: 0,
-  width: 3,
-  marginLeft: -1.5,
-  background: "#FBBF24",
-  zIndex: 2,
-  boxShadow: "0 0 12px #FBBF24",
-};
-
-const stripItem: React.CSSProperties = {
-  flex: "0 0 80px",
-  width: 80,
-  height: 84,
-  marginTop: 8,
-  borderRadius: 12,
-  background: "rgba(30,41,59,0.95)",
-  border: "1px solid rgba(255,255,255,0.08)",
-  display: "flex",
-  flexDirection: "column",
-  alignItems: "center",
-  justifyContent: "center",
-};
-
-const winBox: React.CSSProperties = {
-  textAlign: "center",
-  marginTop: 12,
-  padding: 14,
-  borderRadius: 16,
-  background: "rgba(234,179,8,0.12)",
-  border: "1px solid rgba(250,204,21,0.35)",
-};
-
-const cardBtn: React.CSSProperties = {
-  background: "transparent",
-  border: "none",
-  borderRadius: 20,
-  padding: "6px 4px 10px",
-  color: "#E2E8F0",
-  fontFamily: "inherit",
+  fontWeight: 700,
   cursor: "pointer",
-  textAlign: "center",
-  WebkitTapHighlightColor: "transparent",
-};
-
-const thumbWrap: React.CSSProperties = {
-  position: "relative",
-  height: 160,
-  borderRadius: 20,
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  overflow: "visible",
-};
-
-const caseHero: React.CSSProperties = {
-  position: "relative",
-  margin: "16px auto",
-  width: 240,
-  height: 240,
-  borderRadius: 28,
-  background: "transparent",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  overflow: "visible",
+  fontFamily: "inherit",
 };

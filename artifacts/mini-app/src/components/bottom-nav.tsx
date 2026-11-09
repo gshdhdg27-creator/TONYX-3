@@ -23,6 +23,19 @@ const MODE_GLOW: Record<MenuMode, string> = {
   3: "rgba(234,179,8,0.55)",
 };
 
+/** Per-section avatar gradients (inactive ring + active fill) */
+const SECTION_AVATAR: Record<Section, { from: string; to: string; glow: string; icon: string }> = {
+  market:     { from: "#3b82f6", to: "#1d4ed8", glow: "rgba(59,130,246,0.55)", icon: "#dbeafe" },
+  nft:        { from: "#a855f7", to: "#7c3aed", glow: "rgba(168,85,247,0.55)", icon: "#f3e8ff" },
+  inventory:  { from: "#06b6d4", to: "#0891b2", glow: "rgba(6,182,212,0.5)",  icon: "#cffafe" },
+  cases:      { from: "#f59e0b", to: "#d97706", glow: "rgba(245,158,11,0.55)", icon: "#fef3c7" },
+  pvp:        { from: "#ef4444", to: "#b91c1c", glow: "rgba(239,68,68,0.55)",  icon: "#fee2e2" },
+  solo:       { from: "#22c55e", to: "#15803d", glow: "rgba(34,197,94,0.5)",   icon: "#dcfce7" },
+  bosses:     { from: "#eab308", to: "#ca8a04", glow: "rgba(234,179,8,0.55)",  icon: "#fef9c3" },
+  cards:      { from: "#ec4899", to: "#be185d", glow: "rgba(236,72,153,0.5)",  icon: "#fce7f3" },
+  collection: { from: "#8b5cf6", to: "#6d28d9", glow: "rgba(139,92,246,0.55)", icon: "#ede9fe" },
+};
+
 const FIRST: Record<MenuMode, Section> = {
   1: "market",
   2: "cases",
@@ -140,7 +153,6 @@ export default function BottomNav() {
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Keep activeSection + mode in sync with real URL (fixes wrong highlight)
   useEffect(() => {
     const resolved = sectionFromLocation(location);
     if (!resolved) return;
@@ -153,7 +165,6 @@ export default function BottomNav() {
     }
   }, [location]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Sliding pill under active tab
   useEffect(() => {
     const root = tabsRef.current;
     if (!root) return;
@@ -341,6 +352,7 @@ export default function BottomNav() {
 
         {MODE_TABS[mode].map(({ section, label, icon }) => {
           const active = !profileActive && activeSection === section;
+          const av = SECTION_AVATAR[section];
           return (
             <button
               key={section}
@@ -369,31 +381,31 @@ export default function BottomNav() {
               }}
             >
               <div style={{
-                width: active ? 32 : 26,
-                height: active ? 32 : 26,
+                width: active ? 34 : 28,
+                height: active ? 34 : 28,
                 borderRadius: "50%",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
                 background: active
-                  ? `linear-gradient(145deg, ${color}, ${color}cc)`
-                  : "rgba(255,255,255,0.05)",
+                  ? `linear-gradient(145deg, ${av.from}, ${av.to})`
+                  : `linear-gradient(145deg, ${av.from}22, ${av.to}18)`,
                 boxShadow: active
-                  ? `0 4px 14px ${glow}, 0 0 0 1px ${color}66`
-                  : "none",
+                  ? `0 4px 16px ${av.glow}, 0 0 0 1.5px ${av.from}88, inset 0 1px 0 rgba(255,255,255,0.35)`
+                  : `0 0 0 1px ${av.from}33, inset 0 1px 0 rgba(255,255,255,0.06)`,
                 transition: "all 0.28s cubic-bezier(0.34,1.15,0.64,1)",
                 animation: active ? "tonyx-tab-pop 0.35s ease" : undefined,
               }}>
-                {icon(active, active ? "#0b1020" : "#94a3b8")}
+                {icon(active, active ? "#0b1020" : av.icon)}
               </div>
               <span style={{
                 fontSize: 9.5,
                 fontWeight: active ? 800 : 600,
-                color: active ? color : "#64748b",
+                color: active ? av.from : "#64748b",
                 letterSpacing: 0.15,
                 whiteSpace: "nowrap",
                 transition: "color 0.25s ease, font-weight 0.2s ease",
-                textShadow: active ? `0 0 12px ${glow}` : "none",
+                textShadow: active ? `0 0 12px ${av.glow}` : "none",
               }}>
                 {label}
               </span>
@@ -454,34 +466,104 @@ export default function BottomNav() {
   );
 }
 
-function MarketIcon(_active: boolean, c: string) {
-  return <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3h2l2.4 12.2a2 2 0 002 1.6h8.7a2 2 0 002-1.6L22 7H6" /><circle cx="9" cy="21" r="1.4" /><circle cx="18" cy="21" r="1.4" /></svg>;
+function MarketIcon(active: boolean, _c: string) {
+  const f = active ? "#0b1020" : "#93c5fd";
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+      <path d="M4 10h16v9a2 2 0 01-2 2H6a2 2 0 01-2-2v-9z" fill={f} opacity="0.9"/>
+      <path d="M3 10l2.2-5.2A2 2 0 017.05 3.5h9.9a2 2 0 011.85 1.3L21 10H3z" fill={f} opacity="0.55"/>
+      <path d="M9 14.5h6" stroke={active ? "#1d4ed8" : "#1e3a8a"} strokeWidth="1.8" strokeLinecap="round"/>
+    </svg>
+  );
 }
-function NftIcon(_active: boolean, c: string) {
-  return <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="3" /><path d="M3 16l5-5 4 4 3-3 6 6" /></svg>;
+function NftIcon(active: boolean, _c: string) {
+  const f = active ? "#0b1020" : "#d8b4fe";
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+      <rect x="3.5" y="3.5" width="17" height="17" rx="4" fill={f} opacity="0.85"/>
+      <path d="M8 15.5l2.2-2.8 2 1.6 3.3-3.8" stroke={active ? "#6d28d9" : "#5b21b6"} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>
+      <circle cx="9.2" cy="9" r="1.4" fill={active ? "#6d28d9" : "#5b21b6"}/>
+    </svg>
+  );
 }
-function InventoryIcon(_active: boolean, c: string) {
-  return <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z" /><path d="M3.27 6.96L12 12.01l8.73-5.05" /><path d="M12 22.08V12" /></svg>;
+function InventoryIcon(active: boolean, _c: string) {
+  const f = active ? "#0b1020" : "#67e8f9";
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+      <path d="M5 8.5h14v10.5a2 2 0 01-2 2H7a2 2 0 01-2-2V8.5z" fill={f} opacity="0.9"/>
+      <path d="M8 8.5V7a4 4 0 018 0v1.5" stroke={f} strokeWidth="1.9" strokeLinecap="round"/>
+      <path d="M9.5 13h5" stroke={active ? "#0e7490" : "#155e75"} strokeWidth="1.8" strokeLinecap="round"/>
+    </svg>
+  );
 }
-function CasesIcon(_active: boolean, c: string) {
-  return <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round"><path d="M3 8h18v11a2 2 0 01-2 2H5a2 2 0 01-2-2V8z" /><path d="M3 8l2-4h14l2 4" /></svg>;
+function CasesIcon(active: boolean, _c: string) {
+  const f = active ? "#0b1020" : "#fcd34d";
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+      <rect x="3.5" y="8" width="17" height="12" rx="2.5" fill={f} opacity="0.9"/>
+      <path d="M3.5 11.5h17" stroke={active ? "#b45309" : "#92400e"} strokeWidth="1.6"/>
+      <path d="M9 8V6.2A2.2 2.2 0 0111.2 4h1.6A2.2 2.2 0 0115 6.2V8" stroke={f} strokeWidth="1.8" strokeLinecap="round"/>
+      <circle cx="12" cy="14.5" r="1.6" fill={active ? "#b45309" : "#92400e"}/>
+    </svg>
+  );
 }
-function PvpIcon(_active: boolean, c: string) {
-  return <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 17.5L3 6V3h3l11.5 11.5" /><path d="M16 16l4 4" /><path d="M9.5 6.5L21 18v3h-3L6.5 9.5" /></svg>;
+function PvpIcon(active: boolean, _c: string) {
+  const f = active ? "#0b1020" : "#fca5a5";
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+      <path d="M13.8 16.2L4.5 6.9V4h2.9l9.3 9.3-2.9 2.9z" fill={f} opacity="0.95"/>
+      <path d="M10.2 7.8L19.5 17.1v2.9h-2.9L7.3 10.7l2.9-2.9z" fill={f} opacity="0.7"/>
+      <path d="M15.5 15.5l3.2 3.2" stroke={f} strokeWidth="2" strokeLinecap="round"/>
+    </svg>
+  );
 }
-function SoloIcon(_active: boolean, c: string) {
-  return <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="M12 3v18M3 12h18" /></svg>;
+function SoloIcon(active: boolean, _c: string) {
+  const f = active ? "#0b1020" : "#86efac";
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="12" r="8.5" fill={f} opacity="0.35"/>
+      <circle cx="12" cy="12" r="8.5" stroke={f} strokeWidth="2"/>
+      <circle cx="12" cy="12" r="2.2" fill={f}/>
+      <path d="M12 5.5v2.2M12 16.3v2.2M5.5 12h2.2M16.3 12h2.2" stroke={f} strokeWidth="1.8" strokeLinecap="round"/>
+    </svg>
+  );
 }
-function BossIcon(_active: boolean, c: string) {
-  return <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2l2.2 4.8L19 8l-3.5 3.4.8 5.1L12 14.8 7.7 16.5l.8-5.1L5 8l4.8-1.2L12 2z" /></svg>;
+function BossIcon(active: boolean, _c: string) {
+  const f = active ? "#0b1020" : "#fde047";
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+      <path d="M12 2.8l2.4 5.1 5.6.8-4.1 4 1 5.5L12 15.6 7.1 18.2l1-5.5-4.1-4 5.6-.8L12 2.8z" fill={f} opacity="0.95"/>
+      <path d="M12 8.2l.9 1.9 2.1.3-1.5 1.5.4 2.1L12 12.9l-1.9 1.1.4-2.1-1.5-1.5 2.1-.3.9-1.9z" fill={active ? "#a16207" : "#854d0e"} opacity="0.85"/>
+    </svg>
+  );
 }
-function CardsIcon(_active: boolean, c: string) {
-  return <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="12" height="16" rx="2" /><path d="M9 3h10a2 2 0 012 2v14" /></svg>;
+function CardsIcon(active: boolean, _c: string) {
+  const f = active ? "#0b1020" : "#f9a8d4";
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+      <rect x="5" y="4.5" width="11" height="15" rx="2" fill={f} opacity="0.55" transform="rotate(-8 10.5 12)"/>
+      <rect x="7.5" y="4" width="11" height="15.5" rx="2" fill={f} opacity="0.95"/>
+      <path d="M10.5 9.5h5M10.5 12.5h4" stroke={active ? "#9d174d" : "#9f1239"} strokeWidth="1.5" strokeLinecap="round"/>
+    </svg>
+  );
 }
-function CollectionIcon(_active: boolean, c: string) {
-  return <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round"><path d="M4 7h16M4 12h16M4 17h10" /></svg>;
+function CollectionIcon(active: boolean, _c: string) {
+  const f = active ? "#0b1020" : "#c4b5fd";
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+      <rect x="3.5" y="5" width="7" height="7" rx="1.8" fill={f} opacity="0.95"/>
+      <rect x="13.5" y="5" width="7" height="7" rx="1.8" fill={f} opacity="0.7"/>
+      <rect x="3.5" y="14" width="7" height="7" rx="1.8" fill={f} opacity="0.7"/>
+      <rect x="13.5" y="14" width="7" height="7" rx="1.8" fill={f} opacity="0.95"/>
+    </svg>
+  );
 }
 function ProfileIcon({ active }: { active: boolean }) {
   const c = active ? "#0b1020" : "#94a3b8";
-  return <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>;
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" />
+      <circle cx="12" cy="7" r="4" />
+    </svg>
+  );
 }

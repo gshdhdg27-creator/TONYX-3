@@ -58,7 +58,7 @@ async function ensureTonCases() {
   }> = [
     {
       id: "ton_0_1", nameRu: "TON Starter", nameEn: "TON Starter", costType: "ton", costValue: "0.1",
-      imageUrl: "/cases/ton_0_1.jpg", enabled: true, sortOrder: 10,
+      imageUrl: "/cases/ton_0_1.svg", enabled: true, sortOrder: 10,
       rewards: [
         { id: "r1", type: "ton", weight: 45, minAmount: 0.03, maxAmount: 0.12 },
         { id: "r2", type: "ton", weight: 20, minAmount: 0.12, maxAmount: 0.25 },
@@ -68,7 +68,7 @@ async function ensureTonCases() {
     },
     {
       id: "ton_1", nameRu: "TON Silver", nameEn: "TON Silver", costType: "ton", costValue: "1",
-      imageUrl: "/cases/ton_1.jpg", enabled: true, sortOrder: 11,
+      imageUrl: "/cases/ton_1.svg", enabled: true, sortOrder: 11,
       rewards: [
         { id: "r1", type: "ton", weight: 40, minAmount: 0.3, maxAmount: 0.9 },
         { id: "r2", type: "ton", weight: 18, minAmount: 0.9, maxAmount: 1.8 },
@@ -79,7 +79,7 @@ async function ensureTonCases() {
     },
     {
       id: "ton_2_5", nameRu: "TON Gold", nameEn: "TON Gold", costType: "ton", costValue: "2.5",
-      imageUrl: "/cases/ton_2_5.jpg", enabled: true, sortOrder: 12,
+      imageUrl: "/cases/ton_2_5.svg", enabled: true, sortOrder: 12,
       rewards: [
         { id: "r1", type: "ton", weight: 38, minAmount: 0.8, maxAmount: 2.2 },
         { id: "r2", type: "ton", weight: 15, minAmount: 2.2, maxAmount: 4.5 },
@@ -90,7 +90,7 @@ async function ensureTonCases() {
     },
     {
       id: "ton_5", nameRu: "TON Platinum", nameEn: "TON Platinum", costType: "ton", costValue: "5",
-      imageUrl: "/cases/ton_5.jpg", enabled: true, sortOrder: 13,
+      imageUrl: "/cases/ton_5.svg", enabled: true, sortOrder: 13,
       rewards: [
         { id: "r1", type: "ton", weight: 35, minAmount: 1.5, maxAmount: 4.5 },
         { id: "r2", type: "ton", weight: 15, minAmount: 4.5, maxAmount: 9 },
@@ -101,7 +101,7 @@ async function ensureTonCases() {
     },
     {
       id: "ton_10", nameRu: "TON Diamond", nameEn: "TON Diamond", costType: "ton", costValue: "10",
-      imageUrl: "/cases/ton_10.jpg", enabled: true, sortOrder: 14,
+      imageUrl: "/cases/ton_10.svg", enabled: true, sortOrder: 14,
       rewards: [
         { id: "r1", type: "ton", weight: 32, minAmount: 3, maxAmount: 9 },
         { id: "r2", type: "ton", weight: 14, minAmount: 9, maxAmount: 18 },
@@ -113,7 +113,13 @@ async function ensureTonCases() {
     },
   ];
   for (const c of extras) {
-    if (have.has(c.id)) continue;
+    if (have.has(c.id)) {
+      // Keep image paths in sync (e.g. .jpg -> .svg)
+      await db.update(miniCasesConfigTable)
+        .set({ imageUrl: c.imageUrl })
+        .where(eq(miniCasesConfigTable.id, c.id));
+      continue;
+    }
     await db.insert(miniCasesConfigTable).values(c);
   }
 }

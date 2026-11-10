@@ -120,7 +120,7 @@ export const CASES_CSS = `
     will-change: transform;
   }
   .cx-strip-item {
-    flex: 0 0 84px; width: 84px; height: 120px; border-radius: 12px;
+    flex: 0 0 108px; width: 108px; height: 120px; border-radius: 12px;
     background: rgba(15,23,42,0.9); border: 1px solid rgba(255,255,255,0.08);
     display: flex; flex-direction: column; overflow: hidden;
     transition: transform 0.2s ease, opacity 0.25s ease, box-shadow 0.25s ease;
@@ -129,17 +129,22 @@ export const CASES_CSS = `
     flex: 1; display: flex; flex-direction: column; align-items: center;
     justify-content: center; padding: 6px 4px 2px; gap: 4px;
   }
-  .cx-strip-img { width: 52px; height: 52px; object-fit: contain; }
+  .cx-strip-img { width: 56px; height: 56px; object-fit: contain; }
   .cx-strip-lbl {
-    font-size: 9px; font-weight: 700; color: #e2e8f0; text-align: center;
-    line-height: 1.15; max-width: 76px; overflow: hidden;
+    font-size: 10px; font-weight: 700; color: #e2e8f0; text-align: center;
+    line-height: 1.15; max-width: 96px; overflow: hidden;
   }
   .cx-rarity-bar { height: 4px; width: 100%; }
-  .cx-rarity-bar-common { background: #64748b; }
-  .cx-rarity-bar-uncommon { background: #22c55e; }
-  .cx-rarity-bar-rare { background: #3b82f6; }
-  .cx-rarity-bar-epic { background: #a855f7; }
-  .cx-rarity-bar-legendary { background: linear-gradient(90deg,#f59e0b,#ef4444); }
+  .cx-rarity-blue { box-shadow: inset 0 -1px 0 rgba(75,105,255,0.25); }
+  .cx-rarity-purple { box-shadow: inset 0 -1px 0 rgba(136,71,255,0.3); }
+  .cx-rarity-pink { box-shadow: inset 0 -1px 0 rgba(211,44,230,0.35); }
+  .cx-rarity-red { box-shadow: inset 0 -1px 0 rgba(235,75,75,0.4); }
+  .cx-rarity-gold { box-shadow: inset 0 -1px 0 rgba(255,174,0,0.45); }
+  .cx-rarity-bar-blue { background: #4b69ff; }
+  .cx-rarity-bar-purple { background: #8847ff; }
+  .cx-rarity-bar-pink { background: #d32ce6; }
+  .cx-rarity-bar-red { background: #eb4b4b; }
+  .cx-rarity-bar-gold { background: linear-gradient(90deg,#ffae00,#ff6a00); }
   .cx-strip-win {
     transform: scale(1.08); z-index: 2;
     box-shadow: 0 0 24px rgba(168,85,247,0.55);

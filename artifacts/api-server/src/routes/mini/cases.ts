@@ -49,7 +49,77 @@ function pickReward(pool: CaseRewardItem[]): CaseRewardItem & { amount?: number;
   return { ...last, amount: last.minAmount ?? 0 };
 }
 
+async function ensureTonCases() {
+  const rows = await db.select({ id: miniCasesConfigTable.id }).from(miniCasesConfigTable);
+  const have = new Set(rows.map((r) => r.id));
+  const extras: Array<{
+    id: string; nameRu: string; nameEn: string; costType: "ton"; costValue: string;
+    imageUrl: string; enabled: boolean; sortOrder: number; rewards: CaseRewardItem[];
+  }> = [
+    {
+      id: "ton_0_1", nameRu: "TON Starter", nameEn: "TON Starter", costType: "ton", costValue: "0.1",
+      imageUrl: "/cases/ton_0_1.jpg", enabled: true, sortOrder: 10,
+      rewards: [
+        { id: "r1", type: "ton", weight: 45, minAmount: 0.03, maxAmount: 0.12 },
+        { id: "r2", type: "ton", weight: 20, minAmount: 0.12, maxAmount: 0.25 },
+        { id: "r3", type: "tonyx", weight: 25, minAmount: 30, maxAmount: 120 },
+        { id: "r4", type: "nft_fragment", weight: 10, nftId: "hypno_lollipop" },
+      ],
+    },
+    {
+      id: "ton_1", nameRu: "TON Silver", nameEn: "TON Silver", costType: "ton", costValue: "1",
+      imageUrl: "/cases/ton_1.jpg", enabled: true, sortOrder: 11,
+      rewards: [
+        { id: "r1", type: "ton", weight: 40, minAmount: 0.3, maxAmount: 0.9 },
+        { id: "r2", type: "ton", weight: 18, minAmount: 0.9, maxAmount: 1.8 },
+        { id: "r3", type: "tonyx", weight: 25, minAmount: 150, maxAmount: 500 },
+        { id: "r4", type: "nft_fragment", weight: 12, nftId: "moon_pendant" },
+        { id: "r5", type: "nft_fragment", weight: 5, nftId: "snoop_cigar" },
+      ],
+    },
+    {
+      id: "ton_2_5", nameRu: "TON Gold", nameEn: "TON Gold", costType: "ton", costValue: "2.5",
+      imageUrl: "/cases/ton_2_5.jpg", enabled: true, sortOrder: 12,
+      rewards: [
+        { id: "r1", type: "ton", weight: 38, minAmount: 0.8, maxAmount: 2.2 },
+        { id: "r2", type: "ton", weight: 15, minAmount: 2.2, maxAmount: 4.5 },
+        { id: "r3", type: "tonyx", weight: 25, minAmount: 400, maxAmount: 1200 },
+        { id: "r4", type: "nft_fragment", weight: 14, nftId: "electric_skull" },
+        { id: "r5", type: "nft_fragment", weight: 8, nftId: "neko_helmet" },
+      ],
+    },
+    {
+      id: "ton_5", nameRu: "TON Platinum", nameEn: "TON Platinum", costType: "ton", costValue: "5",
+      imageUrl: "/cases/ton_5.jpg", enabled: true, sortOrder: 13,
+      rewards: [
+        { id: "r1", type: "ton", weight: 35, minAmount: 1.5, maxAmount: 4.5 },
+        { id: "r2", type: "ton", weight: 15, minAmount: 4.5, maxAmount: 9 },
+        { id: "r3", type: "tonyx", weight: 22, minAmount: 800, maxAmount: 2500 },
+        { id: "r4", type: "nft_fragment", weight: 16, nftId: "neko_helmet" },
+        { id: "r5", type: "nft_fragment", weight: 12, nftId: "heroic_helmet" },
+      ],
+    },
+    {
+      id: "ton_10", nameRu: "TON Diamond", nameEn: "TON Diamond", costType: "ton", costValue: "10",
+      imageUrl: "/cases/ton_10.jpg", enabled: true, sortOrder: 14,
+      rewards: [
+        { id: "r1", type: "ton", weight: 32, minAmount: 3, maxAmount: 9 },
+        { id: "r2", type: "ton", weight: 14, minAmount: 9, maxAmount: 18 },
+        { id: "r3", type: "tonyx", weight: 20, minAmount: 2000, maxAmount: 6000 },
+        { id: "r4", type: "nft_fragment", weight: 18, nftId: "heroic_helmet" },
+        { id: "r5", type: "nft_fragment", weight: 10, nftId: "royal_dogg" },
+        { id: "r6", type: "nft_fragment", weight: 6, nftId: "electric_skull" },
+      ],
+    },
+  ];
+  for (const c of extras) {
+    if (have.has(c.id)) continue;
+    await db.insert(miniCasesConfigTable).values(c);
+  }
+}
+
 async function loadCasesFromDb() {
+  try { await ensureTonCases(); } catch (e) { console.error("[cases] ensureTonCases", e); }
   return db
     .select()
     .from(miniCasesConfigTable)
@@ -57,7 +127,6 @@ async function loadCasesFromDb() {
     .orderBy(asc(miniCasesConfigTable.sortOrder));
 }
 
-// GET /api/mini/cases/list
 router.get("/list", async (_req: Request, res: Response) => {
   try {
     const telegramId = getTelegramId(res);
@@ -136,6 +205,7 @@ router.get("/list", async (_req: Request, res: Response) => {
             labelRu,
             labelEn,
             imageUrl: r.imageUrl ?? col?.imageUrl ?? null,
+            valueTon: col?.valueTon ?? (r.type === "ton" ? (r.maxAmount ?? r.minAmount ?? 0) : null),
           };
         }),
       };
@@ -157,7 +227,6 @@ router.get("/list", async (_req: Request, res: Response) => {
   }
 });
 
-// POST /api/mini/cases/open  body: { caseId }
 router.post("/open", async (req: Request, res: Response) => {
   try {
     const telegramId = getTelegramId(res);
@@ -246,7 +315,6 @@ router.post("/open", async (req: Request, res: Response) => {
       pieceIndex: picked.pieceIndex ?? null,
     };
 
-    // ensure nft row
     let nftRow = await db
       .select()
       .from(miniNftInventoryTable)
@@ -331,6 +399,7 @@ router.post("/open", async (req: Request, res: Response) => {
 
     res.json({
       reward: rewardPayload,
+      rewards: [rewardPayload],
       balances: { ton: newTon, tonyx: newTonyx },
       nftInventory: { fragments, assembled, collections },
       complete: picked.nftId ? isCollectionComplete(collections[picked.nftId!]?.pieces ?? []) : false,

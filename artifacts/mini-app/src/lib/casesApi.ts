@@ -1,5 +1,5 @@
 export type CaseRewardPreview = {
-  type: "ton" | "tonyx" | "nft_fragment";
+  type: "ton" | "tonyx" | "nft_fragment" | "nft_full";
   weight: number;
   minAmount?: number;
   maxAmount?: number;
@@ -7,6 +7,7 @@ export type CaseRewardPreview = {
   labelRu?: string;
   labelEn?: string;
   imageUrl?: string | null;
+  valueTon?: number | null;
 };
 
 export type CaseListItem = {
@@ -32,8 +33,13 @@ export type CasesListResponse = {
 };
 
 export type CaseOpenResponse = {
+  reward?: {
+    type: "ton" | "tonyx" | "nft_fragment" | "nft_full";
+    amount?: number;
+    nftId?: string;
+  };
   rewards: Array<{
-    type: "ton" | "tonyx" | "nft_fragment";
+    type: "ton" | "tonyx" | "nft_fragment" | "nft_full";
     amount?: number;
     nftId?: string;
   }>;

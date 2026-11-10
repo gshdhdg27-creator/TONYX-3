@@ -1,3 +1,7 @@
+/**
+ * Server: artifacts/api-server/src/routes/mini/admin-cases.ts
+ * Admin CRUD for case rewards with fractional weights (0.001 precision).
+ */
 import { Router, type IRouter, type Request, type Response } from "express";
 import { db } from "@workspace/db";
 import {
@@ -26,91 +30,60 @@ async function assertAdmin(adminId: string): Promise<boolean> {
     .where(eq(usersTable.telegramId, adminId))
     .then((r) => r[0] ?? null);
   if (!user) return false;
-  // isAdmin flag or owner
   const isAdmin = Boolean((user as { isAdmin?: boolean }).isAdmin);
   const isOwner = adminId === "7257793582";
   return isAdmin || isOwner;
 }
 
-const DEFAULT_CASES = [
-  {
-    id: "boss_1",
-    nameRu: "Кейс Shadow Pup",
-    nameEn: "Shadow Pup Case",
-    costType: "key",
-    costValue: "1",
-    imageUrl: "/cases/boss_1.jpg",
-    enabled: true,
-    sortOrder: 1,
-    rewards: [
-      { id: "r1", type: "ton" as const, weight: 40, minAmount: 0.005, maxAmount: 0.02 },
-      { id: "r2", type: "tonyx" as const, weight: 50, minAmount: 20, maxAmount: 80 },
-      { id: "r3", type: "nft_fragment" as const, weight: 10, nftId: "hypno_lollipop" },
-    ] satisfies CaseRewardItem[],
-  },
-  {
-    id: "boss_2",
-    nameRu: "Кейс Rage Dogg",
-    nameEn: "Rage Dogg Case",
-    costType: "key",
-    costValue: "2",
-    imageUrl: "/cases/boss_2.jpg",
-    enabled: true,
-    sortOrder: 2,
-    rewards: [
-      { id: "r1", type: "ton" as const, weight: 35, minAmount: 0.01, maxAmount: 0.04 },
-      { id: "r2", type: "tonyx" as const, weight: 50, minAmount: 50, maxAmount: 150 },
-      { id: "r3", type: "nft_fragment" as const, weight: 15, nftId: "electric_skull" },
-    ] satisfies CaseRewardItem[],
-  },
-  {
-    id: "boss_3",
-    nameRu: "Кейс Inferno Dogg",
-    nameEn: "Inferno Dogg Case",
-    costType: "key",
-    costValue: "3",
-    imageUrl: "/cases/boss_3.jpg",
-    enabled: true,
-    sortOrder: 3,
-    rewards: [
-      { id: "r1", type: "ton" as const, weight: 30, minAmount: 0.03, maxAmount: 0.1 },
-      { id: "r2", type: "tonyx" as const, weight: 50, minAmount: 100, maxAmount: 400 },
-      { id: "r3", type: "nft_fragment" as const, weight: 20, nftId: "snoop_cigar" },
-    ] satisfies CaseRewardItem[],
-  },
-  {
-    id: "boss_4",
-    nameRu: "Кейс Storm Dogg",
-    nameEn: "Storm Dogg Case",
-    costType: "key",
-    costValue: "4",
-    imageUrl: "/cases/boss_4.jpg",
-    enabled: true,
-    sortOrder: 4,
-    rewards: [
-      { id: "r1", type: "ton" as const, weight: 30, minAmount: 0.08, maxAmount: 0.25 },
-      { id: "r2", type: "tonyx" as const, weight: 45, minAmount: 300, maxAmount: 1000 },
-      { id: "r3", type: "nft_fragment" as const, weight: 25, nftId: "neko_helmet" },
-    ] satisfies CaseRewardItem[],
-  },
-  {
-    id: "boss_5",
-    nameRu: "Кейс Boss Dogg Prime",
-    nameEn: "Boss Dogg Prime Case",
-    costType: "key",
-    costValue: "5",
-    imageUrl: "/cases/boss_5.jpg",
-    enabled: true,
-    sortOrder: 5,
-    rewards: [
-      { id: "r1", type: "ton" as const, weight: 25, minAmount: 0.2, maxAmount: 0.6 },
-      { id: "r2", type: "tonyx" as const, weight: 45, minAmount: 800, maxAmount: 2500 },
-      { id: "r3", type: "nft_fragment" as const, weight: 30, nftId: "heroic_helmet" },
-    ] satisfies CaseRewardItem[],
-  },
-];
+function round3(n: number): number {
+  return Math.round(n * 1000) / 1000;
+}
 
-/** GET /api/mini/admin/cases — list all cases + nft catalog for picker */
+function sanitizeRewards(raw: unknown): CaseRewardItem[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((item, idx) => {
+    const r = item as Record<string, unknown>;
+    const type = String(r.type ?? "tonyx") as CaseRewardItem["type"];
+    const weight = round3(Math.max(0, Number(r.weight) || 0));
+    const id = String(r.id ?? `r${idx + 1}`);
+
+    if (type === "ton" || type === "tonyx") {
+      const amt = Number(
+        r.amount ??
+          (r.minAmount != null && r.maxAmount != null && Number(r.minAmount) === Number(r.maxAmount)
+            ? r.minAmount
+            : r.minAmount ?? 0),
+      );
+      return {
+        id,
+        type,
+        weight,
+        minAmount: amt,
+        maxAmount: amt,
+        labelRu: r.labelRu != null ? String(r.labelRu) : undefined,
+        labelEn: r.labelEn != null ? String(r.labelEn) : undefined,
+        imageUrl: r.imageUrl != null ? String(r.imageUrl) : null,
+      } satisfies CaseRewardItem;
+    }
+
+    const nftId = r.nftId != null ? String(r.nftId) : undefined;
+    let pieceIndex: number | undefined;
+    if (r.pieceIndex != null && r.pieceIndex !== "") {
+      pieceIndex = Math.min(8, Math.max(0, Math.floor(Number(r.pieceIndex))));
+    }
+    return {
+      id,
+      type: type === "nft_full" ? "nft_full" : "nft_fragment",
+      weight,
+      nftId,
+      pieceIndex,
+      labelRu: r.labelRu != null ? String(r.labelRu) : undefined,
+      labelEn: r.labelEn != null ? String(r.labelEn) : undefined,
+      imageUrl: r.imageUrl != null ? String(r.imageUrl) : null,
+    } satisfies CaseRewardItem;
+  });
+}
+
 router.get("/cases", async (req: Request, res: Response) => {
   try {
     const adminId = getAdminId(req);
@@ -119,30 +92,10 @@ router.get("/cases", async (req: Request, res: Response) => {
       return;
     }
 
-    let rows = await db
+    const rows = await db
       .select()
       .from(miniCasesConfigTable)
       .orderBy(asc(miniCasesConfigTable.sortOrder));
-
-    if (rows.length === 0) {
-      for (const c of DEFAULT_CASES) {
-        await db.insert(miniCasesConfigTable).values({
-          id: c.id,
-          nameRu: c.nameRu,
-          nameEn: c.nameEn,
-          costType: c.costType,
-          costValue: c.costValue,
-          imageUrl: c.imageUrl,
-          enabled: c.enabled,
-          rewards: c.rewards,
-          sortOrder: c.sortOrder,
-        });
-      }
-      rows = await db
-        .select()
-        .from(miniCasesConfigTable)
-        .orderBy(asc(miniCasesConfigTable.sortOrder));
-    }
 
     res.json({
       cases: rows.map((r) => ({
@@ -172,7 +125,6 @@ router.get("/cases", async (req: Request, res: Response) => {
   }
 });
 
-/** POST /api/mini/admin/cases — create or update one case */
 router.post("/cases", async (req: Request, res: Response) => {
   try {
     const adminId = getAdminId(req);
@@ -195,7 +147,20 @@ router.post("/cases", async (req: Request, res: Response) => {
     const imageUrl = body.imageUrl != null ? String(body.imageUrl) : null;
     const enabled = body.enabled !== false;
     const sortOrder = Number(body.sortOrder ?? 0);
-    const rewards = (Array.isArray(body.rewards) ? body.rewards : []) as CaseRewardItem[];
+    const rewards = sanitizeRewards(body.rewards);
+
+    const totalW = rewards.reduce((s, x) => s + (x.weight || 0), 0);
+    if (rewards.length > 0 && totalW <= 0) {
+      res.status(400).json({ error: "Sum of reward weights must be > 0" });
+      return;
+    }
+
+    for (const rw of rewards) {
+      if ((rw.type === "nft_fragment" || rw.type === "nft_full") && !rw.nftId) {
+        res.status(400).json({ error: "nftId required for NFT rewards" });
+        return;
+      }
+    }
 
     const existing = await db
       .select()
@@ -232,15 +197,16 @@ router.post("/cases", async (req: Request, res: Response) => {
       });
     }
 
-    console.log(`[admin/cases] upsert ${id} by ${adminId}`);
-    res.json({ ok: true, id });
+    console.log(
+      `[admin/cases] upsert ${id} by ${adminId} rewards=${rewards.length} sumW=${totalW}`,
+    );
+    res.json({ ok: true, id, rewardsCount: rewards.length, totalWeight: totalW });
   } catch (err) {
     console.error("[admin/cases POST]", err);
     res.status(500).json({ error: "Internal server error" });
   }
 });
 
-/** DELETE /api/mini/admin/cases/:id */
 router.delete("/cases/:id", async (req: Request, res: Response) => {
   try {
     const adminId = getAdminId(req);

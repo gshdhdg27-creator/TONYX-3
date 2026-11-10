@@ -60,63 +60,74 @@ async function ensureTonCases() {
       id: "ton_0_1", nameRu: "TON Starter", nameEn: "TON Starter", costType: "ton", costValue: "0.1",
       imageUrl: "/cases/ton_0_1.svg", enabled: true, sortOrder: 10,
       rewards: [
-        { id: "r1", type: "ton", weight: 45, minAmount: 0.03, maxAmount: 0.12 },
-        { id: "r2", type: "ton", weight: 20, minAmount: 0.12, maxAmount: 0.25 },
-        { id: "r3", type: "tonyx", weight: 25, minAmount: 30, maxAmount: 120 },
-        { id: "r4", type: "nft_fragment", weight: 10, nftId: "hypno_lollipop" },
+        { id: "r1", type: "ton", weight: 30, minAmount: 0.05, maxAmount: 0.05, labelRu: "0.05 TON", labelEn: "0.05 TON" },
+        { id: "r2", type: "ton", weight: 25, minAmount: 0.08, maxAmount: 0.08, labelRu: "0.08 TON", labelEn: "0.08 TON" },
+        { id: "r3", type: "ton", weight: 20, minAmount: 0.1, maxAmount: 0.1, labelRu: "0.1 TON", labelEn: "0.1 TON" },
+        { id: "r4", type: "ton", weight: 12, minAmount: 0.15, maxAmount: 0.15, labelRu: "0.15 TON", labelEn: "0.15 TON" },
+        { id: "r5", type: "ton", weight: 8, minAmount: 0.25, maxAmount: 0.25, labelRu: "0.25 TON", labelEn: "0.25 TON" },
+        { id: "r6", type: "tonyx", weight: 3, minAmount: 50, maxAmount: 50, labelRu: "50 TONYX", labelEn: "50 TONYX" },
+        { id: "r7", type: "nft_fragment", weight: 2, nftId: "hypno_lollipop" },
       ],
     },
     {
       id: "ton_1", nameRu: "TON Silver", nameEn: "TON Silver", costType: "ton", costValue: "1",
       imageUrl: "/cases/ton_1.svg", enabled: true, sortOrder: 11,
       rewards: [
-        { id: "r1", type: "ton", weight: 40, minAmount: 0.3, maxAmount: 0.9 },
-        { id: "r2", type: "ton", weight: 18, minAmount: 0.9, maxAmount: 1.8 },
-        { id: "r3", type: "tonyx", weight: 25, minAmount: 150, maxAmount: 500 },
-        { id: "r4", type: "nft_fragment", weight: 12, nftId: "moon_pendant" },
-        { id: "r5", type: "nft_fragment", weight: 5, nftId: "snoop_cigar" },
+        { id: "r1", type: "ton", weight: 28, minAmount: 0.3, maxAmount: 0.3, labelRu: "0.3 TON", labelEn: "0.3 TON" },
+        { id: "r2", type: "ton", weight: 24, minAmount: 0.5, maxAmount: 0.5, labelRu: "0.5 TON", labelEn: "0.5 TON" },
+        { id: "r3", type: "ton", weight: 18, minAmount: 0.8, maxAmount: 0.8, labelRu: "0.8 TON", labelEn: "0.8 TON" },
+        { id: "r4", type: "ton", weight: 12, minAmount: 1.2, maxAmount: 1.2, labelRu: "1.2 TON", labelEn: "1.2 TON" },
+        { id: "r5", type: "ton", weight: 8, minAmount: 2, maxAmount: 2, labelRu: "2 TON", labelEn: "2 TON" },
+        { id: "r6", type: "tonyx", weight: 6, minAmount: 200, maxAmount: 200, labelRu: "200 TONYX", labelEn: "200 TONYX" },
+        { id: "r7", type: "nft_fragment", weight: 4, nftId: "moon_pendant" },
       ],
     },
     {
       id: "ton_2_5", nameRu: "TON Gold", nameEn: "TON Gold", costType: "ton", costValue: "2.5",
       imageUrl: "/cases/ton_2_5.svg", enabled: true, sortOrder: 12,
       rewards: [
-        { id: "r1", type: "ton", weight: 38, minAmount: 0.8, maxAmount: 2.2 },
-        { id: "r2", type: "ton", weight: 15, minAmount: 2.2, maxAmount: 4.5 },
-        { id: "r3", type: "tonyx", weight: 25, minAmount: 400, maxAmount: 1200 },
-        { id: "r4", type: "nft_fragment", weight: 14, nftId: "electric_skull" },
-        { id: "r5", type: "nft_fragment", weight: 8, nftId: "neko_helmet" },
+        { id: "r1", type: "ton", weight: 26, minAmount: 0.8, maxAmount: 0.8, labelRu: "0.8 TON", labelEn: "0.8 TON" },
+        { id: "r2", type: "ton", weight: 22, minAmount: 1.2, maxAmount: 1.2, labelRu: "1.2 TON", labelEn: "1.2 TON" },
+        { id: "r3", type: "ton", weight: 18, minAmount: 2, maxAmount: 2, labelRu: "2 TON", labelEn: "2 TON" },
+        { id: "r4", type: "ton", weight: 12, minAmount: 3, maxAmount: 3, labelRu: "3 TON", labelEn: "3 TON" },
+        { id: "r5", type: "ton", weight: 8, minAmount: 5, maxAmount: 5, labelRu: "5 TON", labelEn: "5 TON" },
+        { id: "r6", type: "tonyx", weight: 8, minAmount: 500, maxAmount: 500, labelRu: "500 TONYX", labelEn: "500 TONYX" },
+        { id: "r7", type: "nft_fragment", weight: 6, nftId: "electric_skull" },
       ],
     },
     {
       id: "ton_5", nameRu: "TON Platinum", nameEn: "TON Platinum", costType: "ton", costValue: "5",
       imageUrl: "/cases/ton_5.svg", enabled: true, sortOrder: 13,
       rewards: [
-        { id: "r1", type: "ton", weight: 35, minAmount: 1.5, maxAmount: 4.5 },
-        { id: "r2", type: "ton", weight: 15, minAmount: 4.5, maxAmount: 9 },
-        { id: "r3", type: "tonyx", weight: 22, minAmount: 800, maxAmount: 2500 },
-        { id: "r4", type: "nft_fragment", weight: 16, nftId: "neko_helmet" },
-        { id: "r5", type: "nft_fragment", weight: 12, nftId: "heroic_helmet" },
+        { id: "r1", type: "ton", weight: 26, minAmount: 1.5, maxAmount: 1.5, labelRu: "1.5 TON", labelEn: "1.5 TON" },
+        { id: "r2", type: "ton", weight: 22, minAmount: 2.5, maxAmount: 2.5, labelRu: "2.5 TON", labelEn: "2.5 TON" },
+        { id: "r3", type: "ton", weight: 16, minAmount: 4, maxAmount: 4, labelRu: "4 TON", labelEn: "4 TON" },
+        { id: "r4", type: "ton", weight: 12, minAmount: 6, maxAmount: 6, labelRu: "6 TON", labelEn: "6 TON" },
+        { id: "r5", type: "ton", weight: 8, minAmount: 10, maxAmount: 10, labelRu: "10 TON", labelEn: "10 TON" },
+        { id: "r6", type: "tonyx", weight: 8, minAmount: 1000, maxAmount: 1000, labelRu: "1000 TONYX", labelEn: "1000 TONYX" },
+        { id: "r7", type: "nft_fragment", weight: 8, nftId: "neko_helmet" },
       ],
     },
     {
       id: "ton_10", nameRu: "TON Diamond", nameEn: "TON Diamond", costType: "ton", costValue: "10",
       imageUrl: "/cases/ton_10.svg", enabled: true, sortOrder: 14,
       rewards: [
-        { id: "r1", type: "ton", weight: 32, minAmount: 3, maxAmount: 9 },
-        { id: "r2", type: "ton", weight: 14, minAmount: 9, maxAmount: 18 },
-        { id: "r3", type: "tonyx", weight: 20, minAmount: 2000, maxAmount: 6000 },
-        { id: "r4", type: "nft_fragment", weight: 18, nftId: "heroic_helmet" },
-        { id: "r5", type: "nft_fragment", weight: 10, nftId: "royal_dogg" },
-        { id: "r6", type: "nft_fragment", weight: 6, nftId: "electric_skull" },
+        { id: "r1", type: "ton", weight: 24, minAmount: 3, maxAmount: 3, labelRu: "3 TON", labelEn: "3 TON" },
+        { id: "r2", type: "ton", weight: 20, minAmount: 5, maxAmount: 5, labelRu: "5 TON", labelEn: "5 TON" },
+        { id: "r3", type: "ton", weight: 16, minAmount: 8, maxAmount: 8, labelRu: "8 TON", labelEn: "8 TON" },
+        { id: "r4", type: "ton", weight: 12, minAmount: 12, maxAmount: 12, labelRu: "12 TON", labelEn: "12 TON" },
+        { id: "r5", type: "ton", weight: 8, minAmount: 20, maxAmount: 20, labelRu: "20 TON", labelEn: "20 TON" },
+        { id: "r6", type: "tonyx", weight: 8, minAmount: 2500, maxAmount: 2500, labelRu: "2500 TONYX", labelEn: "2500 TONYX" },
+        { id: "r7", type: "nft_fragment", weight: 8, nftId: "heroic_helmet" },
+        { id: "r8", type: "nft_fragment", weight: 4, nftId: "royal_dogg" },
       ],
     },
   ];
   for (const c of extras) {
     if (have.has(c.id)) {
-      // Keep image paths in sync (e.g. .jpg -> .svg)
+      // Sync image + fixed reward table for existing TON cases
       await db.update(miniCasesConfigTable)
-        .set({ imageUrl: c.imageUrl })
+        .set({ imageUrl: c.imageUrl, rewards: c.rewards })
         .where(eq(miniCasesConfigTable.id, c.id));
       continue;
     }
@@ -190,14 +201,14 @@ router.get("/list", async (_req: Request, res: Response) => {
           let labelRu = r.labelRu ?? "";
           let labelEn = r.labelEn ?? "";
           if (!labelRu) {
-            if (r.type === "ton") labelRu = `${r.minAmount ?? 0}–${r.maxAmount ?? 0} TON`;
-            else if (r.type === "tonyx") labelRu = `${r.minAmount ?? 0}–${r.maxAmount ?? 0} TONYX`;
+            if (r.type === "ton") labelRu = (r.minAmount != null && r.minAmount === r.maxAmount) ? `${r.minAmount} TON` : `${r.minAmount ?? 0}–${r.maxAmount ?? 0} TON`;
+            else if (r.type === "tonyx") labelRu = (r.minAmount != null && r.minAmount === r.maxAmount) ? `${r.minAmount} TONYX` : `${r.minAmount ?? 0}–${r.maxAmount ?? 0} TONYX`;
             else if (r.type === "nft_fragment") labelRu = `Фрагмент ${col?.nameRu ?? r.nftId ?? "NFT"}`;
             else if (r.type === "nft_full") labelRu = col?.nameRu ?? r.nftId ?? "NFT";
           }
           if (!labelEn) {
-            if (r.type === "ton") labelEn = `${r.minAmount ?? 0}–${r.maxAmount ?? 0} TON`;
-            else if (r.type === "tonyx") labelEn = `${r.minAmount ?? 0}–${r.maxAmount ?? 0} TONYX`;
+            if (r.type === "ton") labelEn = (r.minAmount != null && r.minAmount === r.maxAmount) ? `${r.minAmount} TON` : `${r.minAmount ?? 0}–${r.maxAmount ?? 0} TON`;
+            else if (r.type === "tonyx") labelEn = (r.minAmount != null && r.minAmount === r.maxAmount) ? `${r.minAmount} TONYX` : `${r.minAmount ?? 0}–${r.maxAmount ?? 0} TONYX`;
             else if (r.type === "nft_fragment") labelEn = `Fragment ${col?.nameEn ?? r.nftId ?? "NFT"}`;
             else if (r.type === "nft_full") labelEn = col?.nameEn ?? r.nftId ?? "NFT";
           }

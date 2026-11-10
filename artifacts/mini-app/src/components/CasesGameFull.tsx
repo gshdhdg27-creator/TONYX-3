@@ -19,6 +19,21 @@ const TON_IMG = "https://ton.org/download/ton_symbol.png";
 const TONYX_IMG = "/tonyx-coin.png";
 const TG_PHOTOS = "https://raw.githubusercontent.com/ssamy2/TG_Photos/main/webp/by_name/";
 
+const CASE_ART: Record<string, { emoji: string; gradient: string; glow: string; image?: string }> = {
+  boss_1: { emoji: "🌑", gradient: "linear-gradient(145deg,#1e1b4b,#312e81 50%,#0f172a)", glow: "rgba(99,102,241,0.55)", image: "/cases/boss_1.jpg" },
+  boss_2: { emoji: "🔥", gradient: "linear-gradient(145deg,#7f1d1d,#ea580c 50%,#1c1917)", glow: "rgba(249,115,22,0.6)", image: "/cases/boss_2.jpg" },
+  boss_3: { emoji: "🌋", gradient: "linear-gradient(145deg,#7c2d12,#b91c1c 50%,#450a0a)", glow: "rgba(239,68,68,0.6)", image: "/cases/boss_3.jpg" },
+  boss_4: { emoji: "⚡", gradient: "linear-gradient(145deg,#0c4a6e,#0369a1 50%,#082f49)", glow: "rgba(56,189,248,0.55)", image: "/cases/boss_4.jpg" },
+  boss_5: { emoji: "👑", gradient: "linear-gradient(145deg,#713f12,#eab308 45%,#422006)", glow: "rgba(234,179,8,0.65)", image: "/cases/boss_5.jpg" },
+  ton_0_1: { emoji: "💎", gradient: "linear-gradient(145deg,#0e7490,#22d3ee 50%,#083344)", glow: "rgba(34,211,238,0.55)", image: "/cases/ton_0_1.svg" },
+  ton_1: { emoji: "🪙", gradient: "linear-gradient(145deg,#334155,#94a3b8 45%,#1e293b)", glow: "rgba(148,163,184,0.55)", image: "/cases/ton_1.svg" },
+  ton_2_5: { emoji: "✨", gradient: "linear-gradient(145deg,#854d0e,#eab308 45%,#422006)", glow: "rgba(234,179,8,0.6)", image: "/cases/ton_2_5.svg" },
+  ton_5: { emoji: "💠", gradient: "linear-gradient(145deg,#1e3a5f,#67e8f9 45%,#0c4a6e)", glow: "rgba(103,232,249,0.55)", image: "/cases/ton_5.svg" },
+  ton_10: { emoji: "👑", gradient: "linear-gradient(145deg,#4c1d95,#c084fc 40%,#2e1065)", glow: "rgba(192,132,252,0.65)", image: "/cases/ton_10.svg" },
+  ton_basic: { emoji: "💎", gradient: "linear-gradient(145deg,#0e7490,#22d3ee 50%,#083344)", glow: "rgba(34,211,238,0.55)", image: "/cases/ton_0_1.svg" },
+  tonyx_basic: { emoji: "🪙", gradient: "linear-gradient(145deg,#3b0764,#a855f7 50%,#1e1b4b)", glow: "rgba(168,85,247,0.6)", image: "/cases/ton_1.svg" },
+};
+
 function costLabel(c: CaseListItem, lang: Lang): string {
   if (c.costType === "key") {
     return lang === "en" ? `Boss ${c.costValue} · ${c.have}` : `Босс ${c.costValue} · ${c.have}`;
@@ -27,9 +42,9 @@ function costLabel(c: CaseListItem, lang: Lang): string {
   return `${c.costValue} TX`;
 }
 
-function caseImage(c: CaseListItem): string | null {
+function caseImage(c: { id: string; imageUrl?: string | null }): string | null {
   if (c.imageUrl) return c.imageUrl;
-  return null;
+  return CASE_ART[c.id]?.image ?? null;
 }
 
 function rewardImage(r: { type?: string; nftId?: string; imageUrl?: string | null }): string {
@@ -57,17 +72,35 @@ function rarityFromChance(pct: number): string {
   return "legendary";
 }
 
-function stripRarity(r: Reward | CaseRewardPreview): string {
-  if (r.type === "nft_full") return "legendary";
-  if (r.type === "nft_fragment") return "epic";
-  if (r.type === "ton") return "rare";
-  return "uncommon";
+function stripRarity(r: Reward | CaseRewardPreview): "blue" | "purple" | "pink" | "red" | "gold" {
+  if (r.type === "nft_full") return "gold";
+  if (r.type === "nft_fragment") {
+    const v = (r as Reward).valueTon ?? 0;
+    if (v >= 100) return "gold";
+    if (v >= 30) return "red";
+    if (v >= 15) return "pink";
+    if (v >= 7) return "purple";
+    return "blue";
+  }
+  if (r.type === "ton") {
+    const a = (r as Reward).amount ?? 0;
+    if (a >= 5) return "gold";
+    if (a >= 2) return "red";
+    if (a >= 0.5) return "pink";
+    if (a >= 0.15) return "purple";
+    return "blue";
+  }
+  const a = (r as Reward).amount ?? 0;
+  if (a >= 2000) return "red";
+  if (a >= 500) return "pink";
+  if (a >= 100) return "purple";
+  return "blue";
 }
 
-const ITEM_W = 84;
+const ITEM_W = 108;
 const ITEM_GAP = 8;
-const WIN_INDEX = 42;
-const STRIP_LEN = 60;
+const WIN_INDEX = 52;
+const STRIP_LEN = 70;
 
 function buildStrip(win: Reward, pool: CaseRewardPreview[]): Reward[] {
   const items: Reward[] = [];
@@ -99,18 +132,18 @@ function buildStrip(win: Reward, pool: CaseRewardPreview[]): Reward[] {
 }
 
 function cs2EaseFixed(t: number): number {
-  return 1 - Math.pow(1 - t, 3.6);
+  const c1 = 1 - Math.pow(1 - t, 2.8);
+  const c2 = 1 - Math.pow(1 - t, 5.5);
+  const w = t * t;
+  return c1 * (1 - w) + c2 * w;
 }
 
-function artFor(id: string): { emoji: string; gradient: string; glow: string } {
-  const map: Record<string, { emoji: string; gradient: string; glow: string }> = {
-    boss_1: { emoji: "🐶", gradient: "linear-gradient(135deg,#1e1b4b,#312e81)", glow: "#6366f1" },
-    boss_2: { emoji: "🔥", gradient: "linear-gradient(135deg,#7f1d1d,#991b1b)", glow: "#ef4444" },
-    boss_3: { emoji: "⚡", gradient: "linear-gradient(135deg,#7c2d12,#c2410c)", glow: "#f97316" },
-    boss_4: { emoji: "🌪", gradient: "linear-gradient(135deg,#0e7490,#155e75)", glow: "#22d3ee" },
-    boss_5: { emoji: "👑", gradient: "linear-gradient(135deg,#713f12,#a16207)", glow: "#fbbf24" },
+function artFor(id: string) {
+  return CASE_ART[id] ?? {
+    emoji: "📦",
+    gradient: "linear-gradient(145deg,#1e293b,#334155)",
+    glow: "rgba(148,163,184,0.4)",
   };
-  return map[id] ?? { emoji: "📦", gradient: "linear-gradient(135deg,#1e293b,#334155)", glow: "#a855f7" };
 }
 
 export default function CasesGame({
@@ -272,8 +305,7 @@ export default function CasesGame({
         animRef.current = requestAnimationFrame(tick);
       });
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Open failed");
-      hapticNotify("error");
+      setError(e instanceof Error ? e.message : "Open failed\n      hapticNotify("error");
     } finally {
       setBusy(false);
     }

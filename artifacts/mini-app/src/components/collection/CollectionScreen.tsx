@@ -344,9 +344,6 @@ export default function CollectionScreen() {
         <span style={{ fontWeight: 800, fontSize: 17, color: "#f1f5f9" }}>
           🏆 NFT Collection
         </span>
-        <button type="button" className="btn btn-ghost btn-sm" onClick={() => setView("home")}>
-          ← Назад
-        </button>
       </div>
 
       {msg && (

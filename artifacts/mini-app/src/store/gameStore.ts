@@ -89,6 +89,29 @@ function calcTotalDps(
   return raw * getActiveBoostMult(boostOrMult);
 }
 
+
+/** Estimate server unix ms without trusting client wall clock jumps */
+function estimateServerNow(offsetMs: number): number {
+  return performance.now() + offsetMs;
+}
+
+function applyServerClock(serverNow: number): number {
+  // offset such that performance.now() + offset ≈ serverNow
+  return serverNow - performance.now();
+}
+
+function hpFromServerElapsed(
+  startedAtServer: number,
+  totalDps: number,
+  maxHp: number,
+  offsetMs: number,
+): number {
+  if (totalDps <= 0 || maxHp <= 0) return 100;
+  const elapsedSec = Math.max(0, (estimateServerNow(offsetMs) - startedAtServer) / 1000);
+  const requiredSec = maxHp / totalDps;
+  return Math.max(0, Math.min(100, 100 - (elapsedSec / requiredSec) * 100));
+}
+
 interface GameActions {
   setView: (view: ViewName) => void;
   selectBoss: (level: BossLevel) => void;
@@ -96,7 +119,7 @@ interface GameActions {
   upgradeMage: (mageId: string) => Promise<void>;
   startBattle: () => Promise<void>;
   tickBattle: (deltaMs: number) => void;
-  finishBoss: () => void;
+  finishBoss: () => Promise<void>;
   finishBossAd: () => void;
   resetBattle: () => void;
   setBossAnimState: (state: BossAnimState) => void;
@@ -122,6 +145,13 @@ interface GameStore extends GameState, GameActions {
   activeBattleId: number | null;
   isSyncing: boolean;
   lastError: string | null;
+  /** serverNow - performance.now() at last sync — anchors HP to server clock */
+  serverTimeOffsetMs: number;
+  /** server unix ms when battle started (from startedAt ISO) */
+  battleStartedAtServer: number | null;
+  bossMaxHp: number;
+  requiredSec: number;
+  claiming: boolean;
 }
 
 export const useGameStore = create<GameStore>()(
@@ -132,6 +162,11 @@ export const useGameStore = create<GameStore>()(
       activeBattleId: null,
       isSyncing: false,
       lastError: null,
+      serverTimeOffsetMs: 0,
+      battleStartedAtServer: null,
+      bossMaxHp: 0,
+      requiredSec: 0,
+      claiming: false,
 
       setView: (view) => set({ view }),
 
@@ -172,16 +207,26 @@ export const useGameStore = create<GameStore>()(
         try {
           set({ lastError: null });
           const res = await battleApi.start(selectedBossLevel);
+          const serverNow = res.serverNow ?? Date.now();
+          const offset = applyServerClock(serverNow);
+          const startedAtServer = new Date(res.startedAt).getTime();
+          const maxHp = res.bossMaxHp || BOSSES[selectedBossLevel].maxHp;
+          const requiredSec = res.requiredSec ?? (res.totalDps > 0 ? maxHp / res.totalDps : 0);
           set({
             battleBossLevel: selectedBossLevel,
             activeBattleId: res.battleId,
+            serverTimeOffsetMs: offset,
+            battleStartedAtServer: startedAtServer,
+            bossMaxHp: maxHp,
+            requiredSec,
+            claiming: false,
             battle: {
               active: true,
               bossHpPercent: 100,
               heroHp: 100,
               totalDps: res.totalDps,
               lastRewards: null,
-              battleStartedAt: Date.now(),
+              battleStartedAt: startedAtServer,
             },
           });
         } catch (e) {
@@ -189,26 +234,103 @@ export const useGameStore = create<GameStore>()(
         }
       },
 
-      tickBattle: (deltaMs) => {
-        const { battle, battleBossLevel } = get();
-        if (!battle.active || !battleBossLevel) return;
-        const boss = BOSSES[battleBossLevel];
-        const dmgToBoss = battle.totalDps * (deltaMs / 1000);
-        const dmgPercent = (dmgToBoss / boss.maxHp) * 100;
-        const newBossHp = Math.max(0, battle.bossHpPercent - dmgPercent);
+      /** HP from server-anchored elapsed time — clock changes on phone do nothing */
+      tickBattle: (_deltaMs) => {
+        const {
+          battle,
+          battleBossLevel,
+          serverTimeOffsetMs,
+          battleStartedAtServer,
+          bossMaxHp,
+          claiming,
+        } = get();
+        if (!battle.active || !battleBossLevel || claiming) return;
+        const started = battleStartedAtServer ?? battle.battleStartedAt;
+        if (!started) return;
+        const maxHp = bossMaxHp || BOSSES[battleBossLevel].maxHp;
+        const newBossHp = hpFromServerElapsed(
+          started,
+          battle.totalDps,
+          maxHp,
+          serverTimeOffsetMs,
+        );
         if (newBossHp <= 0) {
-          get().finishBoss();
+          // Visual kill — try server claim (authoritative)
+          void get().finishBoss();
           return;
         }
+        // Avoid noisy setState if unchanged at 2 decimals
+        if (Math.abs(newBossHp - battle.bossHpPercent) < 0.05) return;
         set({ battle: { ...battle, bossHpPercent: newBossHp } });
       },
 
-      finishBoss: () => {
-        set({
-          battle: { ...get().battle, active: false, bossHpPercent: 0 },
-          view: "chest",
-          battleBossLevel: null,
-        });
+      finishBoss: async () => {
+        const { activeBattleId, claiming, battle } = get();
+        if (claiming) return;
+        if (!activeBattleId) {
+          set({
+            battle: { ...battle, active: false, bossHpPercent: 0 },
+            view: "chest",
+            battleBossLevel: null,
+          });
+          return;
+        }
+        set({ claiming: true, lastError: null });
+        try {
+          const res = await battleApi.claim(activeBattleId);
+          const level = get().selectedBossLevel;
+          set({
+            balances: res.balances,
+            nftInventory: {
+              fragments: {
+                shadow_dogg: res.nftInventory.fragments.shadow_dogg ?? 0,
+                flame_dogg: res.nftInventory.fragments.flame_dogg ?? 0,
+                ice_dogg: res.nftInventory.fragments.ice_dogg ?? 0,
+              },
+              assembled: res.nftInventory.assembled as ("shadow_dogg" | "flame_dogg" | "ice_dogg")[],
+            },
+            bossRespawnAt: {
+              ...get().bossRespawnAt,
+              [level]: res.bossRespawnAt,
+            },
+            battle: {
+              ...get().battle,
+              active: false,
+              bossHpPercent: 0,
+              lastRewards: res.rewards as import("../types/game").ChestReward[],
+            },
+            activeBattleId: null,
+            battleStartedAtServer: null,
+            claiming: false,
+            view: "chest",
+            battleBossLevel: null,
+          });
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : "Claim failed";
+          // Too early: resync from server progress and keep fighting
+          try {
+            const prog = await battleApi.progress();
+            if (prog.serverNow) {
+              set({ serverTimeOffsetMs: applyServerClock(prog.serverNow) });
+            }
+            if (prog.active && prog.bossHpPercent != null) {
+              set({
+                claiming: false,
+                battle: {
+                  ...get().battle,
+                  active: true,
+                  bossHpPercent: Math.max(0.5, prog.bossHpPercent),
+                  totalDps: prog.totalDps ?? get().battle.totalDps,
+                },
+                lastError: msg.includes("Too early")
+                  ? null
+                  : msg,
+              });
+              return;
+            }
+          } catch { /* ignore */ }
+          set({ claiming: false, lastError: msg });
+        }
       },
 
       finishBossAd: () => {
@@ -235,14 +357,22 @@ export const useGameStore = create<GameStore>()(
       setBossAnimState: (state) => set({ bossAnimState: state }),
 
       claimChestRewards: async () => {
-        const { activeBattleId } = get();
-        if (!activeBattleId) {
+        // Rewards already granted in finishBoss (server claim). Button only dismisses.
+        const { activeBattleId, battle } = get();
+        if (battle.lastRewards) {
           set({
-            battle: { ...get().battle, lastRewards: null },
+            battle: { ...battle, lastRewards: null },
             view: "home",
+            activeBattleId: null,
+            battleStartedAtServer: null,
           });
           return;
         }
+        if (!activeBattleId) {
+          set({ battle: { ...battle, lastRewards: null }, view: "home" });
+          return;
+        }
+        // Fallback: try server claim if somehow not claimed yet
         try {
           set({ lastError: null });
           const res = await battleApi.claim(activeBattleId);
@@ -263,10 +393,11 @@ export const useGameStore = create<GameStore>()(
             },
             battle: {
               ...get().battle,
-              lastRewards: res.rewards as ChestReward[],
+              lastRewards: null,
               active: false,
             },
             activeBattleId: null,
+            battleStartedAtServer: null,
             view: "home",
           });
         } catch (e) {
@@ -372,6 +503,55 @@ export const useGameStore = create<GameStore>()(
           for (const [k, v] of Object.entries(data.bossRespawnAt)) {
             if (v != null) bossRespawnAt[Number(k) as BossLevel] = v;
           }
+          const ab = data.activeBattle;
+          let serverTimeOffsetMs = get().serverTimeOffsetMs;
+          if (typeof data.serverNow === "number") {
+            serverTimeOffsetMs = applyServerClock(data.serverNow);
+          }
+
+          let battlePatch = { ...get().battle, totalDps: dps };
+          let battleBossLevel: BossLevel | null = get().battleBossLevel;
+          let activeBattleId: number | null = get().activeBattleId;
+          let selectedBossLevel = get().selectedBossLevel;
+          let battleStartedAtServer: number | null = get().battleStartedAtServer;
+          let bossMaxHp = get().bossMaxHp;
+          let requiredSec = get().requiredSec;
+
+          if (ab && ab.battleId && ab.totalDps > 0) {
+            const startedAtServer = new Date(ab.startedAt).getTime();
+            const maxHp = ab.bossMaxHp || BOSSES[ab.bossLevel as BossLevel]?.maxHp || 1;
+            const hp =
+              ab.bossHpPercent != null
+                ? ab.bossHpPercent
+                : hpFromServerElapsed(startedAtServer, ab.totalDps, maxHp, serverTimeOffsetMs);
+            battlePatch = {
+              active: true,
+              bossHpPercent: Math.max(0.01, hp),
+              heroHp: 100,
+              totalDps: ab.totalDps,
+              lastRewards: null,
+              battleStartedAt: startedAtServer,
+            };
+            battleBossLevel = ab.bossLevel as BossLevel;
+            activeBattleId = ab.battleId;
+            selectedBossLevel = ab.bossLevel as BossLevel;
+            battleStartedAtServer = startedAtServer;
+            bossMaxHp = maxHp;
+            requiredSec = ab.requiredSec ?? maxHp / ab.totalDps;
+          } else if (!ab && get().battle.active) {
+            battlePatch = {
+              active: false,
+              bossHpPercent: 100,
+              heroHp: 100,
+              totalDps: dps,
+              lastRewards: null,
+              battleStartedAt: null,
+            };
+            battleBossLevel = null;
+            activeBattleId = null;
+            battleStartedAtServer = null;
+          }
+
           set({
             balances: data.balances,
             ownedMages,
@@ -394,7 +574,14 @@ export const useGameStore = create<GameStore>()(
               },
               assembled: data.nftInventory.assembled as ("shadow_dogg" | "flame_dogg" | "ice_dogg")[],
             },
-            battle: { ...get().battle, totalDps: dps },
+            battle: battlePatch,
+            battleBossLevel,
+            activeBattleId,
+            selectedBossLevel,
+            serverTimeOffsetMs,
+            battleStartedAtServer,
+            bossMaxHp,
+            requiredSec,
             hasInitializedTonFromBackend: true,
             isSyncing: false,
           });
@@ -546,6 +733,14 @@ export const useGameStore = create<GameStore>()(
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
         selectedBossLevel: state.selectedBossLevel,
+        battleBossLevel: state.battleBossLevel,
+        activeBattleId: state.activeBattleId,
+        battle: state.battle,
+        battleStartedAtServer: state.battleStartedAtServer,
+        bossMaxHp: state.bossMaxHp,
+        requiredSec: state.requiredSec,
+        // offset re-synced on next server response
+        serverTimeOffsetMs: state.serverTimeOffsetMs,
       }),
     },
   ),

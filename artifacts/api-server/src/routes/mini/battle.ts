@@ -91,7 +91,7 @@ router.get("/game-state", async (_req: Request, res: Response) => {
     const telegramId = getTelegramId(res);
     if (!telegramId) { res.status(401).json({ error: "Unauthorized" }); return; }
     await ensureGameProfile(telegramId);
-    const [user, mages, loadout, bossStates, boosts, nft, keys] = await Promise.all([
+    const [user, mages, loadout, bossStates, boosts, nft, keys, activeBattles] = await Promise.all([
       db.select().from(usersTable).where(eq(usersTable.telegramId, telegramId)).then((r) => r[0] ?? null),
       db.select().from(miniUserMagesTable).where(eq(miniUserMagesTable.telegramId, telegramId)),
       db.select().from(miniUserLoadoutTable).where(eq(miniUserLoadoutTable.telegramId, telegramId)).then((r) => r[0] ?? null),
@@ -99,6 +99,7 @@ router.get("/game-state", async (_req: Request, res: Response) => {
       db.select().from(miniUserBattleBoostsTable).where(eq(miniUserBattleBoostsTable.telegramId, telegramId)).then((r) => r[0] ?? null),
       db.select().from(miniNftInventoryTable).where(eq(miniNftInventoryTable.telegramId, telegramId)).then((r) => r[0] ?? null),
       db.select().from(miniUserBossKeysTable).where(eq(miniUserBossKeysTable.telegramId, telegramId)),
+      db.select().from(miniBattlesTable).where(and(eq(miniBattlesTable.telegramId, telegramId), eq(miniBattlesTable.status, "active"))),
     ]);
     if (!user) { res.status(404).json({ error: "User not found" }); return; }
     const bossRespawnAt: Record<number, number | null> = {};
@@ -107,6 +108,46 @@ router.get("/game-state", async (_req: Request, res: Response) => {
       bossRespawnAt[s.bossLevel] = s.respawnAt ? s.respawnAt.getTime() : null;
       reviveAdProgress[s.bossLevel] = s.reviveAdsWatched;
     }
+
+    const serverNow = Date.now();
+    let activeBattle: null | {
+      battleId: number;
+      bossLevel: number;
+      totalDps: number;
+      bossMaxHp: number;
+      startedAt: string;
+      bossHpPercent: number;
+      canClaim: boolean;
+      requiredSec: number;
+    } = null;
+    const ab = activeBattles
+      .slice()
+      .sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime())[0];
+    if (ab) {
+      const age = serverNow - ab.startedAt.getTime();
+      if (age > BATTLE_MAX_AGE_MS) {
+        await db.update(miniBattlesTable).set({ status: "expired", expiredAt: new Date() }).where(eq(miniBattlesTable.id, ab.id));
+      } else {
+        const bl = ab.bossLevel as BossLevel;
+        const boss = BOSSES[bl];
+        const totalDps = Number(ab.totalDpsSnapshot);
+        const requiredSec = totalDps > 0 ? boss.maxHp / totalDps : Infinity;
+        const elapsedSec = age / 1000;
+        const bossHpPercent = Math.max(0, Math.min(100, 100 - (elapsedSec / requiredSec) * 100));
+        const minSec = requiredSec * (1 - KILL_TIME_TOLERANCE);
+        activeBattle = {
+          battleId: ab.id,
+          bossLevel: bl,
+          totalDps,
+          bossMaxHp: boss.maxHp,
+          startedAt: ab.startedAt.toISOString(),
+          bossHpPercent,
+          canClaim: elapsedSec >= minSec,
+          requiredSec,
+        };
+      }
+    }
+
     res.json({
       balances: { ton: Number(user.ton), tonyx: user.tonyxCoins },
       ownedMages: mages.map((m) => ({ id: m.mageId, level: m.level })),
@@ -123,6 +164,8 @@ router.get("/game-state", async (_req: Request, res: Response) => {
         speedMultiplier: Number(boosts?.speedMultiplier ?? 1),
       },
       nftInventory: { fragments: nft?.fragments ?? {}, assembled: nft?.assembled ?? [] },
+      activeBattle,
+      serverNow,
     });
   } catch (err) {
     console.error("[battle/game-state]", err);
@@ -150,7 +193,15 @@ router.post("/start", async (req: Request, res: Response) => {
     const totalDps = await calcServerDps(telegramId);
     if (totalDps <= 0) { res.status(400).json({ error: "DPS is zero" }); return; }
     const [battle] = await db.insert(miniBattlesTable).values({ telegramId, bossLevel, equippedMageIds, totalDpsSnapshot: String(totalDps), status: "active" }).returning();
-    res.json({ battleId: battle.id, bossLevel, totalDps, bossMaxHp: BOSSES[bossLevel].maxHp, startedAt: battle.startedAt.toISOString() });
+    res.json({
+      battleId: battle.id,
+      bossLevel,
+      totalDps,
+      bossMaxHp: BOSSES[bossLevel].maxHp,
+      startedAt: battle.startedAt.toISOString(),
+      serverNow: Date.now(),
+      requiredSec: totalDps > 0 ? BOSSES[bossLevel].maxHp / totalDps : 0,
+    });
   } catch (err) {
     console.error("[battle/start]", err);
     res.status(500).json({ error: "Internal server error" });
@@ -180,7 +231,13 @@ router.post("/claim", async (req: Request, res: Response) => {
     const requiredSec = boss.maxHp / totalDps;
     const minSec = requiredSec * (1 - KILL_TIME_TOLERANCE);
     if (elapsedMs / 1000 < minSec) {
-      res.status(400).json({ error: "Too early to claim", requiredSec: Math.ceil(minSec), elapsedSec: Math.floor(elapsedMs / 1000) });
+      res.status(400).json({
+        error: "Too early to claim",
+        requiredSec: Math.ceil(minSec),
+        elapsedSec: Math.floor(elapsedMs / 1000),
+        serverNow: now,
+        remainingSec: Math.ceil(minSec - elapsedMs / 1000),
+      });
       return;
     }
     const rewards: Array<{ type: "ton" | "tonyx" | "nft_fragment" | "nft_full"; amount?: number; nftId?: string; fragmentNftId?: string }> = [];
@@ -412,6 +469,55 @@ router.post("/loadout", async (req: Request, res: Response) => {
     res.json({ ok: true, equippedSlots: cleaned });
   } catch (err) {
     console.error("[battle/loadout]", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+
+/** Authoritative HP / canClaim from SERVER clock only — never trust client time */
+router.get("/progress", async (_req: Request, res: Response) => {
+  try {
+    const telegramId = getTelegramId(res);
+    if (!telegramId) { res.status(401).json({ error: "Unauthorized" }); return; }
+    const serverNow = Date.now();
+    const rows = await db
+      .select()
+      .from(miniBattlesTable)
+      .where(and(eq(miniBattlesTable.telegramId, telegramId), eq(miniBattlesTable.status, "active")));
+    const ab = rows.slice().sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime())[0];
+    if (!ab) {
+      res.json({ active: false, serverNow });
+      return;
+    }
+    const age = serverNow - ab.startedAt.getTime();
+    if (age > BATTLE_MAX_AGE_MS) {
+      await db.update(miniBattlesTable).set({ status: "expired", expiredAt: new Date() }).where(eq(miniBattlesTable.id, ab.id));
+      res.json({ active: false, serverNow, expired: true });
+      return;
+    }
+    const bl = ab.bossLevel as BossLevel;
+    const boss = BOSSES[bl];
+    const totalDps = Number(ab.totalDpsSnapshot);
+    const requiredSec = totalDps > 0 ? boss.maxHp / totalDps : Infinity;
+    const elapsedSec = age / 1000;
+    const bossHpPercent = Math.max(0, Math.min(100, 100 - (elapsedSec / requiredSec) * 100));
+    const minSec = requiredSec * (1 - KILL_TIME_TOLERANCE);
+    res.json({
+      active: true,
+      battleId: ab.id,
+      bossLevel: bl,
+      totalDps,
+      bossMaxHp: boss.maxHp,
+      startedAt: ab.startedAt.toISOString(),
+      bossHpPercent,
+      canClaim: elapsedSec >= minSec,
+      requiredSec,
+      elapsedSec,
+      remainingSec: Math.max(0, minSec - elapsedSec),
+      serverNow,
+    });
+  } catch (err) {
+    console.error("[battle/progress]", err);
     res.status(500).json({ error: "Internal server error" });
   }
 });

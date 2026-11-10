@@ -7,6 +7,17 @@ export type ChestReward = {
   fragmentNftId?: string;
 };
 
+export type ActiveBattleInfo = {
+  battleId: number;
+  bossLevel: number;
+  totalDps: number;
+  bossMaxHp: number;
+  startedAt: string;
+  bossHpPercent?: number;
+  canClaim?: boolean;
+  requiredSec?: number;
+};
+
 export type GameStateResponse = {
   balances: { ton: number; tonyx: number };
   ownedMages: { id: string; level: number }[];
@@ -25,6 +36,9 @@ export type GameStateResponse = {
     fragments: Record<string, number>;
     assembled: string[];
   };
+  activeBattle?: ActiveBattleInfo | null;
+  /** Unix ms from server clock — client must anchor to this */
+  serverNow?: number;
 };
 
 export type StartBattleResponse = {
@@ -33,6 +47,24 @@ export type StartBattleResponse = {
   totalDps: number;
   bossMaxHp: number;
   startedAt: string;
+  serverNow?: number;
+  requiredSec?: number;
+};
+
+export type BattleProgressResponse = {
+  active: boolean;
+  battleId?: number;
+  bossLevel?: number;
+  totalDps?: number;
+  bossMaxHp?: number;
+  startedAt?: string;
+  bossHpPercent?: number;
+  canClaim?: boolean;
+  requiredSec?: number;
+  elapsedSec?: number;
+  remainingSec?: number;
+  serverNow: number;
+  expired?: boolean;
 };
 
 export type ClaimBattleResponse = {
@@ -64,6 +96,9 @@ async function api<T>(path: string, options?: RequestInit): Promise<T> {
 
 export const battleApi = {
   getGameState: () => api<GameStateResponse>("/api/mini/battle/game-state"),
+
+  /** Server-clock HP — never use client Date for kill timing */
+  progress: () => api<BattleProgressResponse>("/api/mini/battle/progress"),
 
   start: (bossLevel: number) =>
     api<StartBattleResponse>("/api/mini/battle/start", {

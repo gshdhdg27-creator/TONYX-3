@@ -238,16 +238,6 @@ export default function HeroShopScreen() {
         borderBottom: "1px solid rgba(255,255,255,0.07)",
         marginTop: 56, flexShrink: 0, background: "#08080f",
       }}>
-        <button
-          onClick={handleBack}
-          style={{
-            background: "rgba(255,255,255,0.06)", border: "none", borderRadius: 10,
-            padding: "8px 14px", color: "#a0a0c0", fontSize: 14,
-            fontWeight: 700, cursor: "pointer", marginRight: 12,
-          }}
-        >
-          ←
-        </button>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 17, fontWeight: 900, color: "#f1f1f8", letterSpacing: 0.5 }}>
             {selectMode

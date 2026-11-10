@@ -305,7 +305,8 @@ export default function CasesGame({
         animRef.current = requestAnimationFrame(tick);
       });
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Open failed\n      hapticNotify("error");
+      setError(e instanceof Error ? e.message : "Open failed");
+      hapticNotify("error");
     } finally {
       setBusy(false);
     }

@@ -85,7 +85,7 @@ export default function SoloPage() {
 
   if (tab === "plinko") {
     return (
-      <div style={{ minHeight: "100dvh", padding: "12px 12px 140px", background: "#0a0612" }}>
+      <div style={{ minHeight: "100dvh", padding: "12px 12px 110px", background: "#0a0612" }}>
         <button type="button" onClick={() => setTab("pick")} style={back}>
           ← Назад
         </button>
@@ -116,21 +116,21 @@ export default function SoloPage() {
   return (
     <div style={page}>
       <div style={header}>
-        <div style={title}>Соло</div>
-        <div style={sub}>Выбери режим</div>
+        <div style={title}>Solo</div>
+        <div style={sub}>Выбери игру · TON баланс {tonBalance.toFixed(3)}</div>
       </div>
 
-      <div style={{ display: "grid", gap: 12 }}>
-        {/* wide UPGRADE like reference */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
         <GameCard
           wide
           scene="upgrade"
           name="UPGRADE"
-          badge="NEW"
-          badgeColor="#ec4899"
+          badge="HOT"
+          badgeColor="#f43f5e"
           online={14}
           gradient="linear-gradient(135deg, #fbbf24 0%, #f59e0b 35%, #db2777 100%)"
           accent="rgba(251,191,36,0.45)"
+          enterDelay={0}
           onClick={() => setTab("upgrade")}
         />
 
@@ -143,6 +143,7 @@ export default function SoloPage() {
             online={19}
             gradient="linear-gradient(160deg, #0ea5e9 0%, #0369a1 45%, #0c4a6e 100%)"
             accent="rgba(14,165,233,0.5)"
+            enterDelay={80}
             onClick={() => setTab("plinko")}
           />
           <div style={{ display: "grid", gap: 12 }}>
@@ -154,6 +155,7 @@ export default function SoloPage() {
               online={31}
               gradient="linear-gradient(145deg, #6d28d9 0%, #4c1d95 50%, #1e1b4b 100%)"
               accent="rgba(168,85,247,0.5)"
+              enterDelay={140}
               onClick={() => setTab("mines")}
             />
             <GameCard
@@ -164,6 +166,7 @@ export default function SoloPage() {
               online={27}
               gradient="linear-gradient(145deg, #1d4ed8 0%, #7c3aed 40%, #ea580c 100%)"
               accent="rgba(249,115,22,0.5)"
+              enterDelay={200}
               onClick={() => setTab("crash")}
             />
           </div>
@@ -176,6 +179,7 @@ export default function SoloPage() {
           online={18}
           gradient="linear-gradient(135deg, #fde047 0%, #eab308 40%, #a16207 100%)"
           accent="rgba(234,179,8,0.5)"
+          enterDelay={260}
           onClick={() => setTab("coin")}
         />
       </div>

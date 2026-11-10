@@ -15,8 +15,8 @@ type Reward = {
   label?: string;
 };
 
-const TON_IMG = "https://ton.org/download/ton_symbol.png";
-const TONYX_IMG = "/tonyx-coin.png";
+const TON_IMG = "/toncoin.png";
+const TONYX_IMG = "/tonyx-logo.jpg";
 const TG_PHOTOS = "https://raw.githubusercontent.com/ssamy2/TG_Photos/main/webp/by_name/";
 
 const CASE_ART: Record<string, { emoji: string; gradient: string; glow: string; image?: string }> = {
@@ -562,10 +562,17 @@ export default function CasesGame({
 }
 
 function DropCard({ r, lang, chance }: { r: CaseRewardPreview; lang: Lang; chance: string }) {
+  const fixedAmt =
+    r.minAmount != null && r.maxAmount != null && r.minAmount === r.maxAmount
+      ? r.minAmount
+      : null;
+  const rangeLbl = fixedAmt != null
+    ? String(fixedAmt)
+    : `${r.minAmount ?? 0}–${r.maxAmount ?? 0}`;
   const label =
     lang === "en"
-      ? r.labelEn ?? (r.type === "nft_fragment" ? `Fragment ${r.nftId}` : `${r.minAmount}–${r.maxAmount}`)
-      : r.labelRu ?? (r.type === "nft_fragment" ? `Фрагмент ${r.nftId}` : `${r.minAmount}–${r.maxAmount}`);
+      ? r.labelEn ?? (r.type === "nft_fragment" ? `Fragment ${r.nftId}` : `${rangeLbl} ${r.type === "ton" ? "TON" : "TX"}`)
+      : r.labelRu ?? (r.type === "nft_fragment" ? `Фрагмент ${r.nftId}` : `${rangeLbl} ${r.type === "ton" ? "TON" : "TX"}`);
   const img = rewardImage(r);
   const price =
     r.type === "nft_fragment" || r.type === "nft_full"
@@ -573,8 +580,8 @@ function DropCard({ r, lang, chance }: { r: CaseRewardPreview; lang: Lang; chanc
         ? `≈ ${r.valueTon} TON`
         : null
       : r.type === "ton"
-        ? `${r.minAmount ?? 0}–${r.maxAmount ?? 0} TON`
-        : `${r.minAmount ?? 0}–${r.maxAmount ?? 0} TX`;
+        ? `${rangeLbl} TON`
+        : `${rangeLbl} TX`;
 
   const rarity = rarityFromChance(Number(chance) || 0);
   return (

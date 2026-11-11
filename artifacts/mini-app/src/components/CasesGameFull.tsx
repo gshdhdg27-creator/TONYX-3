@@ -43,11 +43,14 @@ function costLabel(c: CaseListItem, lang: Lang): string {
 }
 
 function caseImage(c: { id: string; imageUrl?: string | null }): string | null {
-  // Prefer local CASE_ART (boss jpg / ton svg). Server may still send missing .jpg paths.
   const art = CASE_ART[c.id]?.image;
   if (art) return art;
   if (c.imageUrl) return c.imageUrl;
   return null;
+}
+
+function imgClass(r: { type?: string }): string {
+  return r.type === "nft_fragment" || r.type === "nft_full" ? "cx-nft" : "cx-coin";
 }
 
 function rewardImage(r: { type?: string; nftId?: string; imageUrl?: string | null }): string {
@@ -409,7 +412,7 @@ export default function CasesGame({
                     ].filter(Boolean).join(" ")}
                   >
                     <div className="cx-strip-body">
-                      <img src={rewardImage(r)} alt="" className="cx-strip-img" onError={(e) => { (e.target as HTMLImageElement).src = TON_IMG; }} />
+                      <img src={rewardImage(r)} alt="" className={`cx-strip-img ${imgClass(r)}`} onError={(e) => { (e.target as HTMLImageElement).src = TON_IMG; }} />
                       <div className="cx-strip-lbl">{rewardLabel(r, lang)}</div>
                     </div>
                     <div className={`cx-rarity-bar cx-rarity-bar-${rar}`} />
@@ -423,7 +426,7 @@ export default function CasesGame({
         {won && (
           <div className={`cx-win cx-win-${stripRarity(won)}`}>
             <div className="cx-win-glow" />
-            <img src={rewardImage(won)} alt="" className="cx-win-img" />
+            <img src={rewardImage(won)} alt="" className={`cx-win-img ${imgClass(won)}`} />
             <div className="cx-win-title">{rewardLabel(won, lang)}</div>
             {won.valueTon != null && (
               <div className="cx-win-price">≈ {won.valueTon} TON</div>
@@ -470,7 +473,7 @@ export default function CasesGame({
               </div>
             ) : (
               rewards.map((r, i) => (
-                <DropCard key={i} r={r} lang={lang} chance={((r.weight / totalWeight) * 100).toFixed(1)} />
+                <DropCard key={i} r={r} lang={lang} chance={((r.weight / totalWeight) * 100).toFixed(3)} />
               ))
             )}
           </div>
@@ -587,7 +590,7 @@ function DropCard({ r, lang, chance }: { r: CaseRewardPreview; lang: Lang; chanc
   return (
     <div className={`cx-drop cx-drop-${rarity}`}>
       <div className="cx-drop-img-wrap">
-        <img src={img} alt="" className="cx-drop-img" onError={(e) => { (e.target as HTMLImageElement).src = TON_IMG; }} />
+        <img src={img} alt="" className={`cx-drop-img ${imgClass(r)}`} onError={(e) => { (e.target as HTMLImageElement).src = TON_IMG; }} />
         {r.type === "nft_fragment" && <span className="cx-frag">🧩</span>}
       </div>
       <div className="cx-drop-label">{label}</div>

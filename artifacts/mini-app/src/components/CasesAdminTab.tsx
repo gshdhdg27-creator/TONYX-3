@@ -253,21 +253,15 @@ export function CasesAdminTab({ adminId }: { adminId: string }) {
   }
 
   const filteredGifts = useMemo(() => {
-
     const q = nftSearch.toLowerCase().trim();
-
     if (!q) return TG_GIFTS;
-
     return TG_GIFTS.filter((g) => g.name.toLowerCase().includes(q) || g.short.includes(q));
-
   }, [nftSearch]);
 
   const totalWeight = useMemo(() => {
     if (!editing) return 0;
     return editing.rewards.reduce((sum, r) => sum + (r.weight || 0), 0);
   }, [editing]);
-
-
 
   if (loading) {
     return <div style={{ color: "#94a3b8", padding: 20 }}>Загрузка...</div>;
@@ -385,7 +379,7 @@ export function CasesAdminTab({ adminId }: { adminId: string }) {
           </label>
 
           <div style={{ marginTop: 14, marginBottom: 8, fontWeight: 800, color: "#94a3b8", fontSize: 12 }}>
-            НАГРАДЫ (вес = шанс)
+            НАГРАДЫ · вес до 0.001 · % = вес/сумма
           </div>
 
           {editing.rewards.map((r, ri) => (
@@ -418,12 +412,17 @@ export function CasesAdminTab({ adminId }: { adminId: string }) {
                   <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                     <input
                       type="number"
+                      step="0.001"
+                      min="0"
                       value={r.weight}
-                      onChange={(e) => updateReward(ri, { weight: Number(e.target.value) })}
+                      onChange={(e) => {
+                        const v = Number(e.target.value);
+                        updateReward(ri, { weight: Number.isFinite(v) ? Math.round(v * 1000) / 1000 : 0 });
+                      }}
                       style={{ ...inp, flex: 1 }}
                     />
-                    <span style={{ fontSize: 12, fontWeight: 700, color: "#4ade80", minWidth: 48, textAlign: "right" }}>
-                      {totalWeight > 0 ? Math.round((r.weight / totalWeight) * 100) : 0}%
+                    <span style={{ fontSize: 12, fontWeight: 700, color: "#4ade80", minWidth: 64, textAlign: "right" }}>
+                      {totalWeight > 0 ? ((r.weight / totalWeight) * 100).toFixed(3) : "0.000"}%
                     </span>
                   </div>
                 </div>
@@ -431,14 +430,20 @@ export function CasesAdminTab({ adminId }: { adminId: string }) {
 
               {(r.type === "ton" || r.type === "tonyx") && (
                 <div style={{ marginTop: 6 }}>
-                  <label style={lab}>Сумма</label>
+                  <label style={lab}>Сумма (фиксированная)</label>
                   <input
                     type="number"
                     step="any"
                     value={r.amount ?? r.minAmount ?? 0}
-                    onChange={(e) => updateReward(ri, { amount: Number(e.target.value), minAmount: undefined, maxAmount: undefined })}
+                    onChange={(e) =>
+                      updateReward(ri, {
+                        amount: Number(e.target.value),
+                        minAmount: Number(e.target.value),
+                        maxAmount: Number(e.target.value),
+                      })
+                    }
                     style={inp}
-                    placeholder={r.type === "ton" ? "1.0" : "100"}
+                    placeholder={r.type === "ton" ? "0.1" : "100"}
                   />
                 </div>
               )}
@@ -516,8 +521,8 @@ export function CasesAdminTab({ adminId }: { adminId: string }) {
                   border: "1px solid rgba(248,113,113,0.4)",
                   color: "#f87171",
                   borderRadius: 8,
-                  padding: "4px 10px",
-                  fontSize: 11,
+                  padding: "6px 10px",
+                  fontSize: 12,
                   cursor: "pointer",
                   fontFamily: "inherit",
                 }}
@@ -532,12 +537,13 @@ export function CasesAdminTab({ adminId }: { adminId: string }) {
             onClick={addReward}
             style={{
               width: "100%",
-              marginBottom: 10,
+              marginTop: 4,
+              marginBottom: 12,
               padding: "10px 0",
               borderRadius: 10,
-              border: "1px dashed rgba(168,85,247,0.5)",
-              background: "rgba(124,58,237,0.12)",
-              color: "#c4b5fd",
+              border: "1px dashed rgba(148,163,184,0.4)",
+              background: "rgba(30,41,59,0.5)",
+              color: "#cbd5e1",
               fontWeight: 700,
               cursor: "pointer",
               fontFamily: "inherit",
@@ -546,122 +552,99 @@ export function CasesAdminTab({ adminId }: { adminId: string }) {
             + Добавить награду
           </button>
 
-          <div style={{ display: "flex", gap: 8 }}>
-            <button
-              type="button"
-              disabled={saving}
-              onClick={() => saveCase(editing)}
-              style={{
-                flex: 1,
-                padding: "12px 0",
-                borderRadius: 10,
-                border: "none",
-                background: "linear-gradient(135deg,#16a34a,#22c55e)",
-                color: "#fff",
-                fontWeight: 800,
-                cursor: "pointer",
-                fontFamily: "inherit",
-              }}
-            >
-              {saving ? "Сохранение..." : "Сохранить"}
-            </button>
+          <div style={{ fontSize: 12, color: "#64748b", marginBottom: 12 }}>
+            Сумма весов: <b style={{ color: "#e2e8f0" }}>{totalWeight.toFixed(3)}</b>
+            {" · "}шанс = вес / сумма × 100 (до 0.001%)
           </div>
-        </div>
-      )}
 
-      {nftPickerOpen !== null && (
-        <div
-          onClick={() => { setNftPickerOpen(null); setNftSearch(""); }}
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,0.9)",
-            zIndex: 9999,
-            display: "flex",
-            flexDirection: "column",
-            padding: 16,
-          }}
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
+          <button
+            type="button"
+            disabled={saving}
+            onClick={() => saveCase(editing)}
             style={{
-              flex: 1,
-              display: "flex",
-              flexDirection: "column",
-              maxWidth: 480,
-              margin: "0 auto",
               width: "100%",
+              padding: "14px 0",
+              borderRadius: 12,
+              border: "none",
+              background: "linear-gradient(135deg,#7c3aed,#a855f7)",
+              color: "#fff",
+              fontWeight: 900,
+              fontSize: 15,
+              cursor: saving ? "wait" : "pointer",
+              fontFamily: "inherit",
+              opacity: saving ? 0.7 : 1,
             }}
           >
-            <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-              <input
-                value={nftSearch}
-                onChange={(e) => setNftSearch(e.target.value)}
-                placeholder="Поиск NFT..."
-                style={{ ...inp, flex: 1 }}
-                autoFocus
-              />
-              <button
-                type="button"
-                onClick={() => { setNftPickerOpen(null); setNftSearch(""); }}
-                style={{
-                  background: "rgba(248,113,113,0.2)",
-                  border: "1px solid rgba(248,113,113,0.4)",
-                  color: "#f87171",
-                  borderRadius: 8,
-                  padding: "8px 16px",
-                  cursor: "pointer",
-                  fontFamily: "inherit",
-                  fontWeight: 700,
-                }}
-              >
-                ✕
-              </button>
-            </div>
+            {saving ? "Сохранение..." : "Сохранить кейс"}
+          </button>
+
+          {nftPickerOpen != null && (
             <div
               style={{
-                flex: 1,
-                overflowY: "auto",
-                display: "grid",
-                gridTemplateColumns: "repeat(3, 1fr)",
-                gap: 8,
-                paddingBottom: 20,
+                position: "fixed",
+                inset: 0,
+                background: "rgba(0,0,0,0.72)",
+                zIndex: 9999,
+                display: "flex",
+                alignItems: "flex-end",
+                justifyContent: "center",
               }}
+              onClick={() => setNftPickerOpen(null)}
             >
-              {filteredGifts.map((g) => (
-                <button
-                  key={g.short}
-                  type="button"
-                  onClick={() => selectNft(nftPickerOpen, g)}
-                  style={{
-                    background: "rgba(15,23,42,0.9)",
-                    border: "1px solid rgba(51,65,85,0.5)",
-                    borderRadius: 12,
-                    padding: 8,
-                    cursor: "pointer",
-                    fontFamily: "inherit",
-                    textAlign: "center",
-                  }}
-                >
-                  <img
-                    src={`${IMG_BASE}${g.short}.webp`}
-                    alt={g.name}
-                    style={{ width: "100%", aspectRatio: "1", objectFit: "contain", borderRadius: 8 }}
-                    loading="lazy"
-                  />
-                  <div style={{ fontSize: 10, fontWeight: 700, color: "#E2E8F0", marginTop: 4, lineHeight: 1.2 }}>
-                    {g.name}
-                  </div>
-                </button>
-              ))}
+              <div
+                onClick={(e) => e.stopPropagation()}
+                style={{
+                  width: "100%",
+                  maxWidth: 480,
+                  maxHeight: "70vh",
+                  background: "#0f172a",
+                  borderTopLeftRadius: 16,
+                  borderTopRightRadius: 16,
+                  padding: 14,
+                  overflow: "auto",
+                }}
+              >
+                <div style={{ fontWeight: 800, color: "#f1f5f9", marginBottom: 8 }}>Выбор NFT подарка</div>
+                <input
+                  value={nftSearch}
+                  onChange={(e) => setNftSearch(e.target.value)}
+                  placeholder="Поиск..."
+                  style={{ ...inp, marginBottom: 10 }}
+                />
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                  {filteredGifts.map((g) => (
+                    <button
+                      key={g.short}
+                      type="button"
+                      onClick={() => selectNft(nftPickerOpen, g)}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                        background: "rgba(30,41,59,0.8)",
+                        border: "1px solid rgba(51,65,85,0.5)",
+                        borderRadius: 10,
+                        padding: 8,
+                        cursor: "pointer",
+                        color: "#e2e8f0",
+                        fontFamily: "inherit",
+                        textAlign: "left",
+                      }}
+                    >
+                      <img
+                        src={`${IMG_BASE}${g.short}.webp`}
+                        alt={g.name}
+                        style={{ width: 36, height: 36, objectFit: "contain" }}
+                      />
+                      <span style={{ fontSize: 12, fontWeight: 700 }}>{g.name}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       )}
     </div>
   );
 }
-
-// deploy 1792042224
-
-// deploy attempt 1792043190

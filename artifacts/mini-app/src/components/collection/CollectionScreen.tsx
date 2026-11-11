@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useGameStore } from "../../store/gameStore";
 import {
   inventoryApi,
+  notifyInventoryUpdated,
   type InventoryCollection,
 } from "@/lib/inventoryApi";
 import { haptic, hapticNotify } from "@/lib/telegram";
@@ -170,16 +171,6 @@ function PuzzleBoard({
                 <div
                   style={{
                     position: "absolute",
-                    inset: 0,
-                    pointerEvents: "none",
-                    background:
-                      "linear-gradient(105deg, transparent 30%, rgba(255,255,255,0.55) 50%, transparent 70%)",
-                    animation: "pieceShine 0.9s ease-out both",
-                  }}
-                />
-                <div
-                  style={{
-                    position: "absolute",
                     inset: -2,
                     borderRadius: 4,
                     boxShadow: "0 0 14px 3px rgba(168,85,247,0.65)",
@@ -268,7 +259,18 @@ export default function CollectionScreen() {
       const r = await inventoryApi.claim(nftId);
       hapticNotify("success");
       setMsg(`✨ ${r.nameRu} добавлен в инвентарь`);
+      if (r.inventory || r.collections) {
+        const prev = getInventoryCache();
+        setInventoryCache({
+          balances: prev?.balances ?? { ton: 0, tonyx: 0 },
+          collections: r.collections ?? prev?.collections ?? [],
+          inventory: r.inventory ?? prev?.inventory ?? [],
+          listed: prev?.listed ?? [],
+        });
+      }
+      notifyInventoryUpdated();
       await load();
+      notifyInventoryUpdated();
     } catch (e) {
       hapticNotify("error");
       setMsg(e instanceof Error ? e.message : "Ошибка");

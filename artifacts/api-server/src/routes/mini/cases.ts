@@ -33,11 +33,8 @@ function pickReward(pool: CaseRewardItem[]): CaseRewardItem & { amount?: number;
     roll -= item.weight || 0;
     if (roll <= 0) {
       if (item.type === "nft_fragment" || item.type === "nft_full") {
-        const pieceIndex =
-          item.pieceIndex != null
-            ? item.pieceIndex
-            : Math.floor(Math.random() * 9);
-        return { ...item, pieceIndex };
+        // pieceIndex is chosen sequentially in /open from user progress
+        return { ...item, pieceIndex: item.pieceIndex };
       }
       const min = item.minAmount ?? 0;
       const max = item.maxAmount ?? min;
@@ -114,12 +111,8 @@ async function ensureBossCases() {
     },
   ];
   for (const c of bosses) {
-    if (have.has(c.id)) {
-      await db.update(miniCasesConfigTable)
-        .set({ imageUrl: c.imageUrl, rewards: c.rewards, nameRu: c.nameRu, nameEn: c.nameEn })
-        .where(eq(miniCasesConfigTable.id, c.id));
-      continue;
-    }
+    // Do NOT overwrite rewards/names — admin panel owns config after seed
+    if (have.has(c.id)) continue;
     await db.insert(miniCasesConfigTable).values(c);
   }
 }
@@ -199,12 +192,8 @@ async function ensureTonCases() {
     },
   ];
   for (const c of extras) {
-    if (have.has(c.id)) {
-      await db.update(miniCasesConfigTable)
-        .set({ imageUrl: c.imageUrl, rewards: c.rewards })
-        .where(eq(miniCasesConfigTable.id, c.id));
-      continue;
-    }
+    // Do NOT overwrite rewards — admin panel owns percentages after seed
+    if (have.has(c.id)) continue;
     await db.insert(miniCasesConfigTable).values(c);
   }
 }
@@ -401,7 +390,7 @@ router.post("/open", async (req: Request, res: Response) => {
     const picked = pickReward(rewardsPool);
 
     let rewardPayload: Record<string, unknown> = {
-      type: picked.type,
+      type: picked.type.type,
       amount: picked.amount ?? null,
       nftId: picked.nftId ?? null,
       pieceIndex: picked.pieceIndex ?? null,
@@ -440,11 +429,16 @@ router.post("/open", async (req: Request, res: Response) => {
       const col = collections[nftId] ?? { pieces: emptyPieces(9), claimed: 0 };
       const pieces = [...col.pieces];
       while (pieces.length < 9) pieces.push(0);
-      const idx = Math.min(8, Math.max(0, picked.pieceIndex ?? Math.floor(Math.random() * 9)));
+      // Sequential fill 1..9 without repeats: first missing slot
+      let idx = pieces.findIndex((p) => p < 1);
+      if (idx < 0) {
+        // Already complete — wait for claim/reset; keep as last piece for UX
+        idx = 8;
+      }
       pieces[idx] = 1;
       collections[nftId] = { pieces, claimed: col.claimed };
       fragments[nftId] = pieces.filter((p) => p >= 1).length;
-      rewardPayload = { ...rewardPayload, pieceIndex: idx, piecesOwned: fragments[nftId] };
+      rewardPayload = { ...rewardPayload, pieceIndex: idx, piecesOwned: fragments[nftId], pieceLabel: `${idx + 1}/9` };
     } else if (picked.type === "nft_full" && picked.nftId) {
       const nftId = picked.nftId;
       await db.insert(miniUserInventoryTable).values({

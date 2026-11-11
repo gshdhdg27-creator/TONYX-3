@@ -45,20 +45,22 @@ function pickFloor(g: PriceSource): number {
 function fmtPrice(n: number): string {
   if (!n || n <= 0) return "—";
   if (n >= 100) return n.toFixed(0);
-  if (n >= 10) return n.toFixed(1);
-  return n.toFixed(2);
+  if (n >= 10) return n.toFixed(1).replace(/\.0$/, "");
+  return n.toFixed(2).replace(/0$/, "").replace(/\.$/, "");
 }
 
 const CARD_BG = [
-  "linear-gradient(160deg,#1a1030 0%,#0d1528 100%)",
-  "linear-gradient(160deg,#0f1a2e 0%,#12203a 100%)",
-  "linear-gradient(160deg,#1a1520 0%,#0e1628 100%)",
-  "linear-gradient(160deg,#121a28 0%,#0a1220 100%)",
-  "linear-gradient(160deg,#1c1430 0%,#101828 100%)",
-  "linear-gradient(160deg,#0e1c24 0%,#0a141c 100%)",
+  "linear-gradient(165deg, #2a3a4a 0%, #1a2838 55%, #121c28 100%)",
+  "linear-gradient(165deg, #2a4a3a 0%, #1a3028 55%, #12201c 100%)",
+  "linear-gradient(165deg, #3a2a4a 0%, #281a38 55%, #1c1228 100%)",
+  "linear-gradient(165deg, #4a3a2a 0%, #38281a 55%, #281c12 100%)",
+  "linear-gradient(165deg, #2a3a5a 0%, #1a2840 55%, #121c30 100%)",
+  "linear-gradient(165deg, #3a2a3a 0%, #281a28 55%, #1c121c 100%)",
+  "linear-gradient(165deg, #2a4a4a 0%, #1a3030 55%, #122020 100%)",
+  "linear-gradient(165deg, #4a2a3a 0%, #381a28 55%, #28121c 100%)",
 ];
 
-type Tab = "items" | "collections";
+type CatTab = "all" | "collections" | "stars" | "craft";
 type Sort = "price_asc" | "price_desc" | "name";
 
 export default function NftMarketPage() {
@@ -68,9 +70,8 @@ export default function NftMarketPage() {
   const [gifts, setGifts] = useState<GiftRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [updatedAt, setUpdatedAt] = useState<string | null>(null);
 
-  const [tab, setTab] = useState<Tab>("items");
+  const [cat, setCat] = useState<CatTab>("all");
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<Sort>("price_asc");
   const [selected, setSelected] = useState<GiftRow | null>(null);
@@ -110,10 +111,7 @@ export default function NftMarketPage() {
             };
           })
           .filter((g) => g.short && g.floor > 0);
-        if (!cancelled) {
-          setGifts(rows);
-          setUpdatedAt(new Date().toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }));
-        }
+        if (!cancelled) setGifts(rows);
       } catch (e) {
         if (!cancelled) setLoadError(e instanceof Error ? e.message : "Ошибка загрузки цен");
       } finally {
@@ -156,10 +154,6 @@ export default function NftMarketPage() {
     return list;
   }, [priced, search, sort, cfg.featured]);
 
-  const collections = useMemo(() => {
-    return [...priced].sort((a, b) => b.price - a.price);
-  }, [priced]);
-
   const flash = (msg: string) => {
     setToast(msg);
     setTimeout(() => setToast(null), 2200);
@@ -173,99 +167,81 @@ export default function NftMarketPage() {
       return;
     }
     setBuying(true);
-    await new Promise((r) => setTimeout(r, 800));
+    await new Promise((r) => setTimeout(r, 700));
     setBuying(false);
     setSelected(null);
     flash("Скоро: покупка NFT будет доступна");
   };
 
+  const cycleSort = () => {
+    setSort((s) => (s === "price_asc" ? "price_desc" : s === "price_desc" ? "name" : "price_asc"));
+  };
+
   return (
     <div style={page}>
-      <style>{`.nft-card:active { transform: scale(0.97); }`}</style>
+      <style>{`
+        .p-card:active { transform: scale(0.97); }
+        .p-scroll::-webkit-scrollbar { display: none; }
+        .p-input::placeholder { color: #6b7280; }
+      `}</style>
 
       {toast && <div style={toastStyle}>{toast}</div>}
 
-      <div style={header}>
-        <div>
-          <div style={{ fontSize: 20, fontWeight: 900, letterSpacing: 0.2 }}>NFT Market</div>
-          <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>
-            {cfg.bannerText}
-            {updatedAt ? ` · ${updatedAt}` : ""}
-          </div>
+      <div style={catRow}>
+        {(
+          [
+            ["all", "🎁", "Все"],
+            ["collections", "👤", "Коллекции"],
+            ["stars", "⭐", "Звёзды"],
+            ["craft", "🔨", "Крафт"],
+          ] as const
+        ).map(([k, icon, label]) => {
+          const on = cat === k;
+          return (
+            <button
+              key={k}
+              type="button"
+              onClick={() => {
+                haptic("light");
+                setCat(k);
+              }}
+              style={catBtn(on)}
+            >
+              <span style={catIconBox(on)}>{icon}</span>
+              <span style={{ fontSize: 11, fontWeight: on ? 700 : 500, color: on ? "#fff" : "#6b7280" }}>
+                {label}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      <div style={{ padding: "0 14px 10px" }}>
+        <div style={searchWrap}>
+          <span style={{ color: "#6b7280", fontSize: 15, marginRight: 8 }}>⌕</span>
+          <input
+            className="p-input"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Быстрый поиск"
+            style={searchInput}
+          />
+          <button type="button" onClick={cycleSort} style={iconRound} title="Сортировка">↕</button>
+          <button type="button" style={iconRound} title="Вид">≡</button>
         </div>
       </div>
 
-      {!cfg.enabled && (
-        <div style={{
-          margin: "0 14px 12px", padding: 20, borderRadius: 16, textAlign: "center",
-          background: "rgba(248,113,113,0.1)", border: "1px solid rgba(248,113,113,0.3)",
-          color: "#fca5a5", fontSize: 13, fontWeight: 700,
-        }}>
-          Маркет временно закрыт
-        </div>
-      )}
+      <div className="p-scroll" style={filterRow}>
+        <button type="button" style={filterChip}>☰</button>
+        <button type="button" onClick={cycleSort} style={filterChip}>↕</button>
+        <button type="button" style={filterPill}>Коллекция ▾</button>
+        <button type="button" style={filterPill}>Модель ▾</button>
+      </div>
 
-      {cfg.enabled && (
-        <div style={banner}>
-          <div style={{ fontSize: 13, fontWeight: 800, color: "#e2e8f0" }}>
-            🎁 {loading ? "…" : listings.length} лотов
-            {cfg.markupPercent ? ` · +${cfg.markupPercent}%` : ""}
-          </div>
-          <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>
-            Цены от Portals floor · управление в админке → NFT
-          </div>
-        </div>
-      )}
-
-      {cfg.enabled && (
-        <>
-          <div style={tabsRow}>
-            <button type="button" onClick={() => setTab("items")} style={tabBtn(tab === "items")}>
-              All items
-            </button>
-            <button type="button" onClick={() => setTab("collections")} style={tabBtn(tab === "collections")}>
-              Collections
-            </button>
-          </div>
-
-          <div style={{ padding: "0 14px 10px" }}>
-            <div style={{ display: "flex", gap: 6, marginBottom: 10, overflowX: "auto" }}>
-              {(
-                [
-                  ["price_asc", "Цена ↑"],
-                  ["price_desc", "Цена ↓"],
-                  ["name", "Имя"],
-                ] as const
-              ).map(([k, label]) => (
-                <button
-                  key={k}
-                  type="button"
-                  onClick={() => setSort(k)}
-                  style={{
-                    ...chip,
-                    borderColor: sort === k ? "rgba(56,189,248,0.5)" : "rgba(255,255,255,0.08)",
-                    background: sort === k ? "rgba(56,189,248,0.15)" : "rgba(255,255,255,0.05)",
-                    color: sort === k ? "#7dd3fc" : "#94a3b8",
-                  }}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by name or ID"
-              style={searchInput}
-            />
-          </div>
-        </>
-      )}
+      {!cfg.enabled && <div style={closedBox}>Маркет временно закрыт</div>}
 
       {loading && cfg.enabled && (
-        <div style={{ textAlign: "center", color: "#64748b", padding: 40, fontSize: 13 }}>
-          Загрузка актуальных цен…
-        </div>
+        <div style={{ textAlign: "center", color: "#6b7280", padding: 48, fontSize: 13 }}>Загрузка…</div>
       )}
 
       {loadError && !loading && cfg.enabled && (
@@ -274,19 +250,23 @@ export default function NftMarketPage() {
         </div>
       )}
 
-      {!loading && !loadError && cfg.enabled && tab === "items" && (
+      {!loading && !loadError && cfg.enabled && cat === "all" && (
         <div style={grid}>
           {listings.map((g, i) => (
             <button
               key={g.short}
               type="button"
-              className="nft-card"
+              className="p-card"
               onClick={() => {
                 haptic("light");
                 setSelected(g);
               }}
               style={{ ...card, background: CARD_BG[i % CARD_BG.length] }}
             >
+              <div style={badgeRow}>
+                <span style={badgeGreen}>☘</span>
+                <span style={badgePurple}>↗</span>
+              </div>
               <div style={imgWrap}>
                 <img
                   src={IMG(g.short)}
@@ -294,120 +274,87 @@ export default function NftMarketPage() {
                   loading="lazy"
                   style={img}
                   onError={(e) => {
-                    (e.target as HTMLImageElement).style.opacity = "0.3";
+                    (e.target as HTMLImageElement).style.opacity = "0.25";
                   }}
                 />
               </div>
               <div style={cardBody}>
-                <div style={cardName}>
-                  {cfg.featured.includes(g.short) ? "★ " : ""}{g.name}
-                </div>
-                <div style={cardId}>#{g.id.slice(-6)}</div>
-                <div style={priceBtn}>
-                  <TonIcon />
-                  <span>{fmtPrice(g.price)}</span>
+                <div style={cardName}>{g.name}</div>
+                <div style={cardId}>#{String(g.id).slice(-5)}</div>
+                <div style={priceRow}>
+                  <div style={priceBtn}>
+                    <TonIcon size={13} />
+                    <span>{fmtPrice(g.price)}</span>
+                  </div>
+                  <span style={cartBtn}>🛒</span>
                 </div>
               </div>
             </button>
           ))}
           {listings.length === 0 && (
-            <div style={{ gridColumn: "1 / -1", textAlign: "center", color: "#64748b", padding: 40 }}>
+            <div style={{ gridColumn: "1 / -1", textAlign: "center", color: "#6b7280", padding: 40 }}>
               Ничего не найдено
             </div>
           )}
         </div>
       )}
 
-      {!loading && !loadError && cfg.enabled && tab === "collections" && (
-        <div style={{ padding: "0 14px 24px", display: "flex", flexDirection: "column", gap: 8 }}>
-          {collections
-            .filter((c) => {
-              const q = search.toLowerCase().trim();
-              if (!q) return true;
-              return c.name.toLowerCase().includes(q) || c.short.includes(q);
-            })
-            .map((c) => (
-              <button
-                key={c.short}
-                type="button"
-                onClick={() => {
-                  setSearch(c.name);
-                  setTab("items");
-                }}
-                style={collectionRow}
-              >
-                <img src={IMG(c.short)} alt="" style={collectionImg} loading="lazy" />
-                <div style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
-                  <div style={{ fontWeight: 800, fontSize: 14, color: "#e2e8f0" }}>{c.name}</div>
-                  <div style={{ fontSize: 11, color: "#64748b", marginTop: 2 }}>
-                    Getgems {fmtPrice(c.getgems)} · Floor {fmtPrice(c.floor)}
-                  </div>
-                </div>
-                <div style={{ textAlign: "right" }}>
-                  <div style={{ fontWeight: 800, fontSize: 14, color: "#e2e8f0", display: "flex", alignItems: "center", gap: 4, justifyContent: "flex-end" }}>
-                    <TonIcon size={12} />
-                    {fmtPrice(c.price)}
-                  </div>
-                  <div style={{ fontSize: 10, color: "#64748b", marginTop: 2 }}>Sale</div>
-                </div>
-              </button>
-            ))}
+      {!loading && cfg.enabled && cat !== "all" && (
+        <div style={{ textAlign: "center", color: "#6b7280", padding: 48, fontSize: 13 }}>
+          {cat === "collections" && "Коллекции скоро"}
+          {cat === "stars" && "Звёзды скоро"}
+          {cat === "craft" && "Крафт скоро"}
         </div>
       )}
 
       {selected && (
         <div style={modalOverlay} onClick={() => setSelected(null)}>
           <div style={modalSheet} onClick={(e) => e.stopPropagation()}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-              <div style={{ fontSize: 16, fontWeight: 900 }}>Купить подарок</div>
-              <button type="button" onClick={() => setSelected(null)} style={closeBtn}>×</button>
-            </div>
-
+            <div style={modalHandle} />
             <div style={modalHero}>
-              <img src={IMG(selected.short)} alt={selected.name} style={{ width: 140, height: 140, objectFit: "contain" }} />
+              <div style={{ position: "absolute", top: 10, right: 10, display: "flex", gap: 8 }}>
+                <span style={miniIcon}>👁</span>
+                <span style={miniIcon}>↗</span>
+              </div>
+              <img src={IMG(selected.short)} alt={selected.name} style={{ width: 160, height: 160, objectFit: "contain" }} />
+              <div style={{ marginTop: 8, fontSize: 17, fontWeight: 800, color: "#fff" }}>{selected.name} ›</div>
+              <div style={{ fontSize: 12, color: "#9ca3af", marginTop: 2 }}>#{String(selected.id).slice(-6)}</div>
             </div>
 
-            <div style={{ textAlign: "center", marginBottom: 14 }}>
-              <div style={{ fontSize: 18, fontWeight: 900 }}>{selected.name}</div>
-              <div style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>#{selected.id}</div>
+            <div style={attrBox}>
+              <AttrRow label="Floor" value={`${fmtPrice(selected.floor)} TON`} />
+              <AttrRow label="Getgems" value={`${fmtPrice(selected.getgems)} TON`} />
+              <AttrRow label="Мин. цена" value={`${fmtPrice(selected.price)} TON`} bold />
             </div>
 
-            <div style={modalStats}>
-              <div style={statCell}>
-                <div style={statLabel}>Цена</div>
-                <div style={statValue}><TonIcon /> {fmtPrice(selected.price)}</div>
-              </div>
-              <div style={statCell}>
-                <div style={statLabel}>Portals floor</div>
-                <div style={statValue}><TonIcon /> {fmtPrice(selected.floor)}</div>
-              </div>
-              <div style={statCell}>
-                <div style={statLabel}>Getgems</div>
-                <div style={statValue}><TonIcon /> {fmtPrice(selected.getgems)}</div>
-              </div>
-              <div style={statCell}>
-                <div style={statLabel}>Сток</div>
-                <div style={statValue}>
-                  {cfg.stock[selected.short] == null ? "∞" : cfg.stock[selected.short]}
-                </div>
-              </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 }}>
+              <button type="button" onClick={() => flash("Крафт скоро")} style={btnPurple}>Lucky Craft</button>
+              <button type="button" onClick={() => flash("Lucky Buy скоро")} style={btnGreen}>Lucky Buy</button>
             </div>
 
-            <button
-              type="button"
-              disabled={buying || !cfg.buyEnabled}
-              onClick={handleBuy}
-              style={{ ...buyBtn, opacity: buying || !cfg.buyEnabled ? 0.55 : 1 }}
-            >
-              {!cfg.buyEnabled
-                ? "Покупка отключена"
-                : buying
-                  ? "Обработка…"
-                  : `Купить · ${fmtPrice(selected.price)} TON`}
-            </button>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1.2fr", gap: 8 }}>
+              <button type="button" onClick={() => flash("Офферы скоро")} style={btnGray}>Сделать оффер</button>
+              <button
+                type="button"
+                disabled={buying || !cfg.buyEnabled}
+                onClick={() => void handleBuy()}
+                style={{ ...btnBlue, opacity: buying || !cfg.buyEnabled ? 0.55 : 1 }}
+              >
+                {!cfg.buyEnabled ? "Покупка отключена" : buying ? "…" : `Купить · ${fmtPrice(selected.price)} TON`}
+              </button>
+            </div>
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function AttrRow({ label, value, bold }: { label: string; value: string; bold?: boolean }) {
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+      <span style={{ fontSize: 13, color: "#9ca3af" }}>{label}</span>
+      <span style={{ fontSize: 13, fontWeight: bold ? 800 : 600, color: bold ? "#fff" : "#e5e7eb" }}>{value}</span>
     </div>
   );
 }
@@ -423,104 +370,138 @@ function TonIcon({ size = 14 }: { size?: number }) {
 }
 
 const page: CSSProperties = {
-  minHeight: "100%",
-  paddingTop: 56,
-  paddingBottom: 20,
-  color: "#e8e8ed",
-  background: "transparent",
+  minHeight: "100%", paddingTop: 52, paddingBottom: 24, color: "#e5e7eb", background: "#0b0b0d",
 };
-const header: CSSProperties = {
-  display: "flex", alignItems: "center", justifyContent: "space-between",
-  padding: "8px 14px 8px",
+const catRow: CSSProperties = {
+  display: "flex", gap: 6, padding: "4px 14px 12px", justifyContent: "space-between",
 };
-const banner: CSSProperties = {
-  margin: "0 14px 12px", padding: "12px 14px", borderRadius: 16,
-  background: "linear-gradient(135deg, rgba(56,189,248,0.15), rgba(99,102,241,0.12))",
-  border: "1px solid rgba(56,189,248,0.25)",
-};
-const tabsRow: CSSProperties = { display: "flex", gap: 8, padding: "0 14px 10px" };
-function tabBtn(active: boolean): CSSProperties {
+function catBtn(_on: boolean): CSSProperties {
   return {
-    flex: 1, padding: "10px 0", borderRadius: 12,
-    border: active ? "1px solid rgba(56,189,248,0.45)" : "1px solid rgba(255,255,255,0.08)",
-    background: active ? "rgba(56,189,248,0.14)" : "rgba(255,255,255,0.04)",
-    color: active ? "#7dd3fc" : "#94a3b8", fontWeight: 800, fontSize: 13,
-    cursor: "pointer", fontFamily: "inherit",
+    flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
+    background: "transparent", border: "none", cursor: "pointer", fontFamily: "inherit", padding: 0,
   };
 }
-const chip: CSSProperties = {
-  flexShrink: 0, padding: "7px 12px", borderRadius: 999, border: "1px solid",
-  fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
+function catIconBox(on: boolean): CSSProperties {
+  return {
+    width: 48, height: 48, borderRadius: 14, display: "flex", alignItems: "center", justifyContent: "center",
+    fontSize: 22, background: on ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.05)",
+    border: on ? "1px solid rgba(255,255,255,0.18)" : "1px solid rgba(255,255,255,0.06)",
+  };
+}
+const searchWrap: CSSProperties = {
+  display: "flex", alignItems: "center", background: "rgba(255,255,255,0.06)", borderRadius: 14,
+  padding: "0 8px 0 14px", height: 42, border: "1px solid rgba(255,255,255,0.06)",
 };
 const searchInput: CSSProperties = {
-  width: "100%", boxSizing: "border-box", background: "rgba(15,23,42,0.8)",
-  border: "1px solid rgba(255,255,255,0.1)", borderRadius: 12, padding: "11px 14px",
-  color: "#e2e8f0", fontSize: 13, fontFamily: "inherit", outline: "none",
+  flex: 1, background: "transparent", border: "none", outline: "none", color: "#f3f4f6",
+  fontSize: 14, fontFamily: "inherit",
 };
-const grid: CSSProperties = { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, padding: "0 14px 24px" };
+const iconRound: CSSProperties = {
+  width: 32, height: 32, borderRadius: 10, border: "none", background: "rgba(255,255,255,0.06)",
+  color: "#9ca3af", fontSize: 14, cursor: "pointer", marginLeft: 4, fontFamily: "inherit",
+};
+const filterRow: CSSProperties = {
+  display: "flex", gap: 8, padding: "0 14px 12px", overflowX: "auto", alignItems: "center",
+};
+const filterChip: CSSProperties = {
+  width: 36, height: 32, borderRadius: 10, border: "1px solid rgba(255,255,255,0.08)",
+  background: "rgba(255,255,255,0.05)", color: "#9ca3af", fontSize: 13, cursor: "pointer",
+  flexShrink: 0, fontFamily: "inherit",
+};
+const filterPill: CSSProperties = {
+  height: 32, padding: "0 12px", borderRadius: 999, border: "1px solid rgba(255,255,255,0.08)",
+  background: "rgba(255,255,255,0.05)", color: "#d1d5db", fontSize: 12, fontWeight: 600,
+  cursor: "pointer", flexShrink: 0, fontFamily: "inherit", whiteSpace: "nowrap",
+};
+const closedBox: CSSProperties = {
+  margin: "0 14px 12px", padding: 20, borderRadius: 16, textAlign: "center",
+  background: "rgba(248,113,113,0.1)", border: "1px solid rgba(248,113,113,0.3)",
+  color: "#fca5a5", fontSize: 13, fontWeight: 700,
+};
+const grid: CSSProperties = {
+  display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, padding: "0 14px 24px",
+};
 const card: CSSProperties = {
-  border: "1px solid rgba(255,255,255,0.08)", borderRadius: 18, padding: 0, overflow: "hidden",
-  cursor: "pointer", fontFamily: "inherit", textAlign: "left",
-  boxShadow: "0 8px 24px rgba(0,0,0,0.35)", transition: "transform 0.15s ease",
+  border: "1px solid rgba(255,255,255,0.06)", borderRadius: 18, padding: 0, overflow: "hidden",
+  cursor: "pointer", fontFamily: "inherit", textAlign: "left", position: "relative",
+  transition: "transform 0.12s ease",
+};
+const badgeRow: CSSProperties = {
+  position: "absolute", top: 8, left: 8, right: 8, display: "flex", justifyContent: "space-between", zIndex: 2,
+};
+const badgeGreen: CSSProperties = {
+  width: 26, height: 26, borderRadius: "50%", background: "rgba(34,197,94,0.25)",
+  border: "1px solid rgba(34,197,94,0.4)", display: "flex", alignItems: "center",
+  justifyContent: "center", fontSize: 12,
+};
+const badgePurple: CSSProperties = {
+  width: 26, height: 26, borderRadius: "50%", background: "rgba(168,85,247,0.25)",
+  border: "1px solid rgba(168,85,247,0.4)", display: "flex", alignItems: "center",
+  justifyContent: "center", fontSize: 12,
 };
 const imgWrap: CSSProperties = {
-  aspectRatio: "1", display: "flex", alignItems: "center", justifyContent: "center", padding: 12,
-  background: "radial-gradient(circle at 50% 40%, rgba(255,255,255,0.06), transparent 70%)",
+  aspectRatio: "1", display: "flex", alignItems: "center", justifyContent: "center", padding: "28px 16px 8px",
 };
-const img: CSSProperties = { width: "88%", height: "88%", objectFit: "contain" };
+const img: CSSProperties = { width: "82%", height: "82%", objectFit: "contain" };
 const cardBody: CSSProperties = { padding: "0 10px 12px" };
 const cardName: CSSProperties = {
-  fontSize: 13, fontWeight: 800, color: "#f1f5f9", lineHeight: 1.2,
+  fontSize: 13, fontWeight: 700, color: "#f9fafb", lineHeight: 1.2,
   whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
 };
-const cardId: CSSProperties = { fontSize: 11, color: "#64748b", marginTop: 2, marginBottom: 8 };
+const cardId: CSSProperties = { fontSize: 11, color: "#6b7280", marginTop: 2, marginBottom: 8 };
+const priceRow: CSSProperties = {
+  display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6,
+};
 const priceBtn: CSSProperties = {
-  display: "inline-flex", alignItems: "center", gap: 5,
-  background: "rgba(0,152,234,0.18)", border: "1px solid rgba(0,152,234,0.35)",
-  borderRadius: 999, padding: "6px 10px", fontSize: 13, fontWeight: 800, color: "#e2e8f0",
+  display: "inline-flex", alignItems: "center", gap: 5, background: "#0098EA", borderRadius: 999,
+  padding: "6px 12px", fontSize: 13, fontWeight: 800, color: "#fff",
 };
-const collectionRow: CSSProperties = {
-  display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", borderRadius: 14,
-  background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)",
-  cursor: "pointer", fontFamily: "inherit", width: "100%",
-};
-const collectionImg: CSSProperties = {
-  width: 48, height: 48, objectFit: "contain", borderRadius: 12, background: "rgba(0,0,0,0.25)",
+const cartBtn: CSSProperties = {
+  width: 30, height: 30, borderRadius: "50%", background: "rgba(255,255,255,0.08)",
+  display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13,
 };
 const modalOverlay: CSSProperties = {
-  position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", zIndex: 200,
+  position: "fixed", inset: 0, background: "rgba(0,0,0,0.72)", zIndex: 200,
   display: "flex", alignItems: "flex-end", justifyContent: "center",
 };
 const modalSheet: CSSProperties = {
-  width: "100%", maxWidth: 480,
-  background: "linear-gradient(180deg,#12141c 0%,#0a0c12 100%)",
-  borderRadius: "22px 22px 0 0", padding: "18px 16px 28px",
-  border: "1px solid rgba(255,255,255,0.08)", borderBottom: "none",
+  width: "100%", maxWidth: 480, background: "#121214", borderRadius: "22px 22px 0 0",
+  padding: "10px 16px 28px", border: "1px solid rgba(255,255,255,0.06)", borderBottom: "none",
 };
-const closeBtn: CSSProperties = {
-  width: 32, height: 32, borderRadius: "50%", border: "none",
-  background: "rgba(255,255,255,0.08)", color: "#94a3b8", fontSize: 20, cursor: "pointer",
+const modalHandle: CSSProperties = {
+  width: 36, height: 4, borderRadius: 2, background: "rgba(255,255,255,0.15)", margin: "0 auto 12px",
 };
 const modalHero: CSSProperties = {
-  display: "flex", justifyContent: "center", padding: "12px 0",
-  background: "radial-gradient(circle, rgba(56,189,248,0.12), transparent 70%)",
-  borderRadius: 16, marginBottom: 8,
+  position: "relative", display: "flex", flexDirection: "column", alignItems: "center",
+  padding: "16px 12px 14px", borderRadius: 18,
+  background: "linear-gradient(165deg, #3a3a2a 0%, #2a2818 100%)", marginBottom: 12,
 };
-const modalStats: CSSProperties = {
-  display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 16,
+const miniIcon: CSSProperties = {
+  width: 28, height: 28, borderRadius: "50%", background: "rgba(0,0,0,0.35)",
+  display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12,
 };
-const statCell: CSSProperties = {
-  background: "rgba(255,255,255,0.04)", borderRadius: 12, padding: "10px 12px",
-  border: "1px solid rgba(255,255,255,0.06)",
+const attrBox: CSSProperties = {
+  background: "rgba(255,255,255,0.03)", borderRadius: 14, padding: "4px 14px", marginBottom: 12,
+  border: "1px solid rgba(255,255,255,0.05)",
 };
-const statLabel: CSSProperties = { fontSize: 11, color: "#64748b", marginBottom: 4 };
-const statValue: CSSProperties = {
-  fontSize: 14, fontWeight: 800, color: "#e2e8f0", display: "flex", alignItems: "center", gap: 4,
+const btnPurple: CSSProperties = {
+  padding: "12px 0", borderRadius: 14, border: "none",
+  background: "linear-gradient(135deg,#7c3aed,#a855f7)", color: "#fff", fontWeight: 800,
+  fontSize: 13, cursor: "pointer", fontFamily: "inherit",
 };
-const buyBtn: CSSProperties = {
-  width: "100%", padding: "14px 0", borderRadius: 14, border: "none",
-  background: "linear-gradient(135deg,#0098EA,#38bdf8)", color: "#fff",
-  fontWeight: 900, fontSize: 15, cursor: "pointer", fontFamily: "inherit",
+const btnGreen: CSSProperties = {
+  padding: "12px 0", borderRadius: 14, border: "none",
+  background: "linear-gradient(135deg,#059669,#34d399)", color: "#fff", fontWeight: 800,
+  fontSize: 13, cursor: "pointer", fontFamily: "inherit",
+};
+const btnGray: CSSProperties = {
+  padding: "13px 0", borderRadius: 14, border: "1px solid rgba(255,255,255,0.1)",
+  background: "rgba(255,255,255,0.06)", color: "#e5e7eb", fontWeight: 700, fontSize: 13,
+  cursor: "pointer", fontFamily: "inherit",
+};
+const btnBlue: CSSProperties = {
+  padding: "13px 0", borderRadius: 14, border: "none", background: "#0098EA", color: "#fff",
+  fontWeight: 800, fontSize: 13, cursor: "pointer", fontFamily: "inherit",
 };
 const toastStyle: CSSProperties = {
   position: "fixed", top: 72, left: "50%", transform: "translateX(-50%)", zIndex: 400,

@@ -33,7 +33,6 @@ function pickReward(pool: CaseRewardItem[]): CaseRewardItem & { amount?: number;
     roll -= item.weight || 0;
     if (roll <= 0) {
       if (item.type === "nft_fragment" || item.type === "nft_full") {
-        // pieceIndex is chosen sequentially in /open from user progress
         return { ...item, pieceIndex: item.pieceIndex };
       }
       const min = item.minAmount ?? 0;
@@ -111,7 +110,6 @@ async function ensureBossCases() {
     },
   ];
   for (const c of bosses) {
-    // Do NOT overwrite rewards/names — admin panel owns config after seed
     if (have.has(c.id)) continue;
     await db.insert(miniCasesConfigTable).values(c);
   }
@@ -192,7 +190,6 @@ async function ensureTonCases() {
     },
   ];
   for (const c of extras) {
-    // Do NOT overwrite rewards — admin panel owns percentages after seed
     if (have.has(c.id)) continue;
     await db.insert(miniCasesConfigTable).values(c);
   }
@@ -390,7 +387,7 @@ router.post("/open", async (req: Request, res: Response) => {
     const picked = pickReward(rewardsPool);
 
     let rewardPayload: Record<string, unknown> = {
-      type: picked.type.type,
+      type: picked.type,
       amount: picked.amount ?? null,
       nftId: picked.nftId ?? null,
       pieceIndex: picked.pieceIndex ?? null,
@@ -429,12 +426,8 @@ router.post("/open", async (req: Request, res: Response) => {
       const col = collections[nftId] ?? { pieces: emptyPieces(9), claimed: 0 };
       const pieces = [...col.pieces];
       while (pieces.length < 9) pieces.push(0);
-      // Sequential fill 1..9 without repeats: first missing slot
       let idx = pieces.findIndex((p) => p < 1);
-      if (idx < 0) {
-        // Already complete — wait for claim/reset; keep as last piece for UX
-        idx = 8;
-      }
+      if (idx < 0) idx = 8;
       pieces[idx] = 1;
       collections[nftId] = { pieces, claimed: col.claimed };
       fragments[nftId] = pieces.filter((p) => p >= 1).length;

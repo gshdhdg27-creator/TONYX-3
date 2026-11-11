@@ -127,9 +127,9 @@ export interface CaseConfig {
   /** For key cases = boss level 1..5; for paid = price amount */
   costValue: number;
   rewards: CaseRewardPoolItem[];
-}\n
+}
+
 export const CASES: CaseConfig[] = [
-  // Boss key cases — fixed amounts (min === max)
   {
     id: "boss_1",
     nameRu: "Кейс Shadow Pup",
@@ -201,7 +201,6 @@ export const CASES: CaseConfig[] = [
       { type: "nft_fragment", weight: 5, nftId: "royal_dogg" },
     ],
   },
-  // Paid cases (legacy ids)
   {
     id: "ton_basic",
     nameRu: "TON Кейс",

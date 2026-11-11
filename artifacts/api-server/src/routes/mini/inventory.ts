@@ -88,8 +88,9 @@ router.get("/", async (_req: Request, res: Response) => {
       };
     });
 
-    const inventory = items.map((it) => {
+    const allItems = items.map((it) => {
       const col = it.itemType === "nft_full" ? getNftCollection(it.itemId) : undefined;
+      const m = (it.meta ?? {}) as Record<string, unknown>;
       return {
         id: it.id,
         itemType: it.itemType,
@@ -101,13 +102,18 @@ router.get("/", async (_req: Request, res: Response) => {
         valueTon: col?.valueTon ?? 0,
         imageUrl: col?.imageUrl ?? null,
         rarity: col?.rarity ?? null,
+        listed: Boolean(m.listed),
+        listPriceTon: m.priceTon != null ? Number(m.priceTon) : null,
       };
     });
+    const inventory = allItems.filter((x) => !x.listed);
+    const listed = allItems.filter((x) => x.listed);
 
     res.json({
       balances: { ton: Number(user.ton), tonyx: user.tonyxCoins },
       collections: collectionList,
       inventory,
+      listed,
     });
   } catch (err) {
     console.error("[inventory GET]", err);
@@ -146,7 +152,6 @@ router.post("/claim", async (req: Request, res: Response) => {
       return;
     }
 
-    // reset puzzle for re-collect, increment claimed
     collections[nftId] = {
       pieces: emptyPieces(9),
       claimed: (prog.claimed ?? 0) + 1,
@@ -156,7 +161,6 @@ router.post("/claim", async (req: Request, res: Response) => {
     fragments[nftId] = 0;
 
     const assembled = [...(nftRow.assembled ?? [])];
-    // keep history of ever assembled ids
     if (!assembled.includes(nftId)) assembled.push(nftId);
 
     await Promise.all([
@@ -180,11 +184,59 @@ router.post("/claim", async (req: Request, res: Response) => {
 
     console.log(`[inventory/claim] ${telegramId} nft=${nftId}`);
 
+    const items = await db
+      .select()
+      .from(miniUserInventoryTable)
+      .where(eq(miniUserInventoryTable.telegramId, telegramId))
+      .orderBy(desc(miniUserInventoryTable.acquiredAt));
+
+    const inventory = items.map((it) => {
+      const meta = getNftCollection(it.itemId);
+      const m = (it.meta ?? {}) as Record<string, unknown>;
+      return {
+        id: it.id,
+        itemType: it.itemType,
+        itemId: it.itemId,
+        quantity: it.quantity,
+        acquiredAt: it.acquiredAt,
+        nameRu: meta?.nameRu ?? it.itemId,
+        nameEn: meta?.nameEn ?? it.itemId,
+        valueTon: meta?.valueTon ?? 0,
+        imageUrl: meta?.imageUrl ?? null,
+        rarity: meta?.rarity ?? null,
+        listed: Boolean(m.listed),
+        listPriceTon: m.priceTon != null ? Number(m.priceTon) : null,
+      };
+    }).filter((x) => !x.listed);
+
+    const newest = inventory.find((x) => x.itemId === nftId) ?? inventory[0] ?? null;
+
     res.json({
       ok: true,
       nftId,
       valueTon: colMeta.valueTon,
       nameRu: colMeta.nameRu,
+      item: newest,
+      inventory,
+      collections: NFT_COLLECTIONS.map((c) => {
+        const prog2 = collections[c.id] ?? { pieces: emptyPieces(9), claimed: 0 };
+        const pcs = [...(prog2.pieces ?? [])];
+        while (pcs.length < 9) pcs.push(0);
+        const o = pcs.filter((p) => p >= 1).length;
+        return {
+          id: c.id,
+          nameRu: c.nameRu,
+          nameEn: c.nameEn,
+          valueTon: c.valueTon,
+          rarity: c.rarity,
+          imageUrl: c.imageUrl ?? null,
+          pieces: pcs,
+          owned: o,
+          total: 9,
+          canClaim: isCollectionComplete(pcs),
+          claimedTimes: prog2.claimed ?? 0,
+        };
+      }),
     });
   } catch (err) {
     console.error("[inventory/claim]", err);
@@ -192,18 +244,21 @@ router.post("/claim", async (req: Request, res: Response) => {
   }
 });
 
-/** POST /api/mini/inventory/sell  body: { inventoryId } — sell NFT for catalog TON */
-router.post("/sell", async (req: Request, res: Response) => {
+router.post("/list", async (req: Request, res: Response) => {
   try {
     const telegramId = getTelegramId(res);
     if (!telegramId) {
       res.status(401).json({ error: "Unauthorized" });
       return;
     }
-
     const inventoryId = Number(req.body?.inventoryId);
+    const priceTon = Number(req.body?.priceTon);
     if (!inventoryId || Number.isNaN(inventoryId)) {
       res.status(400).json({ error: "inventoryId required" });
+      return;
+    }
+    if (!Number.isFinite(priceTon) || priceTon <= 0) {
+      res.status(400).json({ error: "priceTon must be > 0" });
       return;
     }
 
@@ -222,58 +277,228 @@ router.post("/sell", async (req: Request, res: Response) => {
       res.status(404).json({ error: "Item not found" });
       return;
     }
-
     if (item.itemType !== "nft_full") {
-      res.status(400).json({ error: "Only NFT can be sold" });
+      res.status(400).json({ error: "Only NFT can be listed" });
       return;
     }
 
-    const colMeta = getNftCollection(item.itemId);
-    if (!colMeta) {
-      res.status(400).json({ error: "Unknown NFT price" });
+    const meta = { ...(item.meta ?? {}), listed: true, priceTon, listedAt: new Date().toISOString() };
+    await db.update(miniUserInventoryTable).set({ meta }).where(eq(miniUserInventoryTable.id, item.id));
+
+    console.log(`[inventory/list] ${telegramId} item=${item.id} nft=${item.itemId} price=${priceTon}`);
+    res.json({ ok: true, inventoryId: item.id, priceTon, nftId: item.itemId });
+  } catch (err) {
+    console.error("[inventory/list]", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.post("/unlist", async (req: Request, res: Response) => {
+  try {
+    const telegramId = getTelegramId(res);
+    if (!telegramId) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+    const inventoryId = Number(req.body?.inventoryId);
+    const item = await db
+      .select()
+      .from(miniUserInventoryTable)
+      .where(
+        and(
+          eq(miniUserInventoryTable.id, inventoryId),
+          eq(miniUserInventoryTable.telegramId, telegramId),
+        ),
+      )
+      .then((r) => r[0] ?? null);
+    if (!item) {
+      res.status(404).json({ error: "Item not found" });
+      return;
+    }
+    const meta = { ...(item.meta ?? {}) } as Record<string, unknown>;
+    delete meta.listed;
+    delete meta.priceTon;
+    delete meta.listedAt;
+    await db.update(miniUserInventoryTable).set({ meta }).where(eq(miniUserInventoryTable.id, item.id));
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("[inventory/unlist]", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.get("/listings", async (_req: Request, res: Response) => {
+  try {
+    const rows = await db.select().from(miniUserInventoryTable).orderBy(desc(miniUserInventoryTable.acquiredAt));
+    const listings = [];
+    for (const it of rows) {
+      const m = (it.meta ?? {}) as Record<string, unknown>;
+      if (!m.listed) continue;
+      const col = getNftCollection(it.itemId);
+      const priceTon = Number(m.priceTon) || col?.valueTon || 0;
+      listings.push({
+        id: it.id,
+        sellerId: it.telegramId,
+        nftId: it.itemId,
+        nameRu: col?.nameRu ?? it.itemId,
+        nameEn: col?.nameEn ?? it.itemId,
+        imageUrl: col?.imageUrl ?? null,
+        rarity: col?.rarity ?? null,
+        priceTon,
+        listedAt: m.listedAt ?? it.acquiredAt,
+      });
+    }
+    res.json({ listings });
+  } catch (err) {
+    console.error("[inventory/listings]", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.post("/buy", async (req: Request, res: Response) => {
+  try {
+    const telegramId = getTelegramId(res);
+    if (!telegramId) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+    const inventoryId = Number(req.body?.inventoryId);
+    if (!inventoryId || Number.isNaN(inventoryId)) {
+      res.status(400).json({ error: "inventoryId required" });
       return;
     }
 
-    const user = await db
+    const item = await db
+      .select()
+      .from(miniUserInventoryTable)
+      .where(eq(miniUserInventoryTable.id, inventoryId))
+      .then((r) => r[0] ?? null);
+
+    if (!item) {
+      res.status(404).json({ error: "Listing not found" });
+      return;
+    }
+    const m = (item.meta ?? {}) as Record<string, unknown>;
+    if (!m.listed) {
+      res.status(400).json({ error: "Item is not listed" });
+      return;
+    }
+    if (item.telegramId === telegramId) {
+      res.status(400).json({ error: "Cannot buy your own NFT" });
+      return;
+    }
+
+    const priceTon = Number(m.priceTon);
+    if (!Number.isFinite(priceTon) || priceTon <= 0) {
+      res.status(400).json({ error: "Invalid price" });
+      return;
+    }
+
+    const FEE = 0.01;
+    const feeTon = Math.round(priceTon * FEE * 1e8) / 1e8;
+    const sellerGets = Math.round((priceTon - feeTon) * 1e8) / 1e8;
+
+    const buyer = await db
       .select()
       .from(usersTable)
       .where(eq(usersTable.telegramId, telegramId))
       .then((r) => r[0] ?? null);
-
-    if (!user) {
-      res.status(404).json({ error: "User not found" });
+    if (!buyer) {
+      res.status(404).json({ error: "Buyer not found" });
+      return;
+    }
+    const buyerTon = Number(buyer.ton);
+    if (buyerTon < priceTon) {
+      res.status(400).json({ error: "Not enough TON", need: priceTon, have: buyerTon });
       return;
     }
 
-    const sellPrice = colMeta.valueTon;
-    const newTon = Math.round((Number(user.ton) + sellPrice) * 1e8) / 1e8;
+    const seller = await db
+      .select()
+      .from(usersTable)
+      .where(eq(usersTable.telegramId, item.telegramId))
+      .then((r) => r[0] ?? null);
 
-    if (item.quantity > 1) {
-      await db
+    const newBuyerTon = Math.round((buyerTon - priceTon) * 1e8) / 1e8;
+    const newSellerTon = seller ? Math.round((Number(seller.ton) + sellerGets) * 1e8) / 1e8 : null;
+
+    const newMeta = {
+      source: "p2p_buy",
+      boughtAt: new Date().toISOString(),
+      fromSeller: item.telegramId,
+      paidTon: priceTon,
+      feeTon,
+    };
+
+    await Promise.all([
+      db
         .update(miniUserInventoryTable)
-        .set({ quantity: item.quantity - 1 })
-        .where(eq(miniUserInventoryTable.id, item.id));
-    } else {
-      await db.delete(miniUserInventoryTable).where(eq(miniUserInventoryTable.id, item.id));
-    }
-
-    await db
-      .update(usersTable)
-      .set({ ton: String(newTon), updatedAt: new Date() })
-      .where(eq(usersTable.telegramId, telegramId));
+        .set({ telegramId, meta: newMeta, acquiredAt: new Date() })
+        .where(eq(miniUserInventoryTable.id, item.id)),
+      db
+        .update(usersTable)
+        .set({ ton: String(newBuyerTon), updatedAt: new Date() })
+        .where(eq(usersTable.telegramId, telegramId)),
+      seller && newSellerTon != null
+        ? db
+            .update(usersTable)
+            .set({ ton: String(newSellerTon), updatedAt: new Date() })
+            .where(eq(usersTable.telegramId, item.telegramId))
+        : Promise.resolve(),
+    ]);
 
     console.log(
-      `[inventory/sell] ${telegramId} item=${item.id} nft=${item.itemId} +${sellPrice} TON`,
+      `[inventory/buy] buyer=${telegramId} seller=${item.telegramId} item=${item.id} price=${priceTon} fee=${feeTon}`,
     );
 
     res.json({
       ok: true,
-      sold: item.itemId,
-      receivedTon: sellPrice,
-      balances: { ton: newTon, tonyx: user.tonyxCoins },
+      nftId: item.itemId,
+      paidTon: priceTon,
+      feeTon,
+      sellerReceived: sellerGets,
+      balances: { ton: newBuyerTon, tonyx: buyer.tonyxCoins },
     });
   } catch (err) {
-    console.error("[inventory/sell]", err);
+    console.error("[inventory/buy]", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+/** Legacy: list at price instead of instant system sell */
+router.post("/sell", async (req: Request, res: Response) => {
+  try {
+    const telegramId = getTelegramId(res);
+    if (!telegramId) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+    const inventoryId = Number(req.body?.inventoryId);
+    const item = await db
+      .select()
+      .from(miniUserInventoryTable)
+      .where(
+        and(
+          eq(miniUserInventoryTable.id, inventoryId),
+          eq(miniUserInventoryTable.telegramId, telegramId),
+        ),
+      )
+      .then((r) => r[0] ?? null);
+    if (!item) {
+      res.status(404).json({ error: "Item not found" });
+      return;
+    }
+    const col = getNftCollection(item.itemId);
+    const priceTon = Number(req.body?.priceTon) || col?.valueTon || 0;
+    if (priceTon <= 0) {
+      res.status(400).json({ error: "Set priceTon to list on market" });
+      return;
+    }
+    const meta = { ...(item.meta ?? {}), listed: true, priceTon, listedAt: new Date().toISOString() };
+    await db.update(miniUserInventoryTable).set({ meta }).where(eq(miniUserInventoryTable.id, item.id));
+    res.json({ ok: true, listed: true, priceTon, inventoryId: item.id, nftId: item.itemId });
+  } catch (err) {
+    console.error("[inventory/sell->list]", err);
     res.status(500).json({ error: "Internal server error" });
   }
 });

@@ -49,6 +49,81 @@ function pickReward(pool: CaseRewardItem[]): CaseRewardItem & { amount?: number;
   return { ...last, amount: last.minAmount ?? 0 };
 }
 
+async function ensureBossCases() {
+  const rows = await db.select({ id: miniCasesConfigTable.id }).from(miniCasesConfigTable);
+  const have = new Set(rows.map((r) => r.id));
+  const bosses: Array<{
+    id: string; nameRu: string; nameEn: string; costType: "key"; costValue: string;
+    imageUrl: string; enabled: boolean; sortOrder: number; rewards: CaseRewardItem[];
+  }> = [
+    {
+      id: "boss_1", nameRu: "Кейс Shadow Pup", nameEn: "Shadow Pup Case", costType: "key", costValue: "1",
+      imageUrl: "/cases/boss_1.jpg", enabled: true, sortOrder: 1,
+      rewards: [
+        { id: "r1", type: "ton", weight: 30, minAmount: 0.01, maxAmount: 0.01, labelRu: "0.01 TON", labelEn: "0.01 TON" },
+        { id: "r2", type: "ton", weight: 20, minAmount: 0.02, maxAmount: 0.02, labelRu: "0.02 TON", labelEn: "0.02 TON" },
+        { id: "r3", type: "tonyx", weight: 35, minAmount: 50, maxAmount: 50, labelRu: "50 TONYX", labelEn: "50 TONYX" },
+        { id: "r4", type: "tonyx", weight: 10, minAmount: 100, maxAmount: 100, labelRu: "100 TONYX", labelEn: "100 TONYX" },
+        { id: "r5", type: "nft_fragment", weight: 5, nftId: "hypno_lollipop" },
+      ],
+    },
+    {
+      id: "boss_2", nameRu: "Кейс Rage Dogg", nameEn: "Rage Dogg Case", costType: "key", costValue: "2",
+      imageUrl: "/cases/boss_2.jpg", enabled: true, sortOrder: 2,
+      rewards: [
+        { id: "r1", type: "ton", weight: 28, minAmount: 0.02, maxAmount: 0.02, labelRu: "0.02 TON", labelEn: "0.02 TON" },
+        { id: "r2", type: "ton", weight: 18, minAmount: 0.05, maxAmount: 0.05, labelRu: "0.05 TON", labelEn: "0.05 TON" },
+        { id: "r3", type: "tonyx", weight: 35, minAmount: 100, maxAmount: 100, labelRu: "100 TONYX", labelEn: "100 TONYX" },
+        { id: "r4", type: "tonyx", weight: 12, minAmount: 250, maxAmount: 250, labelRu: "250 TONYX", labelEn: "250 TONYX" },
+        { id: "r5", type: "nft_fragment", weight: 7, nftId: "snoop_cigar" },
+      ],
+    },
+    {
+      id: "boss_3", nameRu: "Кейс Inferno Dogg", nameEn: "Inferno Dogg Case", costType: "key", costValue: "3",
+      imageUrl: "/cases/boss_3.jpg", enabled: true, sortOrder: 3,
+      rewards: [
+        { id: "r1", type: "ton", weight: 26, minAmount: 0.05, maxAmount: 0.05, labelRu: "0.05 TON", labelEn: "0.05 TON" },
+        { id: "r2", type: "ton", weight: 16, minAmount: 0.1, maxAmount: 0.1, labelRu: "0.1 TON", labelEn: "0.1 TON" },
+        { id: "r3", type: "tonyx", weight: 34, minAmount: 200, maxAmount: 200, labelRu: "200 TONYX", labelEn: "200 TONYX" },
+        { id: "r4", type: "tonyx", weight: 14, minAmount: 500, maxAmount: 500, labelRu: "500 TONYX", labelEn: "500 TONYX" },
+        { id: "r5", type: "nft_fragment", weight: 10, nftId: "electric_skull" },
+      ],
+    },
+    {
+      id: "boss_4", nameRu: "Кейс Storm Dogg", nameEn: "Storm Dogg Case", costType: "key", costValue: "4",
+      imageUrl: "/cases/boss_4.jpg", enabled: true, sortOrder: 4,
+      rewards: [
+        { id: "r1", type: "ton", weight: 24, minAmount: 0.1, maxAmount: 0.1, labelRu: "0.1 TON", labelEn: "0.1 TON" },
+        { id: "r2", type: "ton", weight: 16, minAmount: 0.25, maxAmount: 0.25, labelRu: "0.25 TON", labelEn: "0.25 TON" },
+        { id: "r3", type: "tonyx", weight: 32, minAmount: 500, maxAmount: 500, labelRu: "500 TONYX", labelEn: "500 TONYX" },
+        { id: "r4", type: "tonyx", weight: 14, minAmount: 1000, maxAmount: 1000, labelRu: "1000 TONYX", labelEn: "1000 TONYX" },
+        { id: "r5", type: "nft_fragment", weight: 14, nftId: "neko_helmet" },
+      ],
+    },
+    {
+      id: "boss_5", nameRu: "Кейс Boss Dogg Prime", nameEn: "Boss Dogg Prime Case", costType: "key", costValue: "5",
+      imageUrl: "/cases/boss_5.jpg", enabled: true, sortOrder: 5,
+      rewards: [
+        { id: "r1", type: "ton", weight: 22, minAmount: 0.25, maxAmount: 0.25, labelRu: "0.25 TON", labelEn: "0.25 TON" },
+        { id: "r2", type: "ton", weight: 14, minAmount: 0.5, maxAmount: 0.5, labelRu: "0.5 TON", labelEn: "0.5 TON" },
+        { id: "r3", type: "tonyx", weight: 30, minAmount: 1000, maxAmount: 1000, labelRu: "1000 TONYX", labelEn: "1000 TONYX" },
+        { id: "r4", type: "tonyx", weight: 14, minAmount: 2500, maxAmount: 2500, labelRu: "2500 TONYX", labelEn: "2500 TONYX" },
+        { id: "r5", type: "nft_fragment", weight: 15, nftId: "heroic_helmet" },
+        { id: "r6", type: "nft_fragment", weight: 5, nftId: "royal_dogg" },
+      ],
+    },
+  ];
+  for (const c of bosses) {
+    if (have.has(c.id)) {
+      await db.update(miniCasesConfigTable)
+        .set({ imageUrl: c.imageUrl, rewards: c.rewards, nameRu: c.nameRu, nameEn: c.nameEn })
+        .where(eq(miniCasesConfigTable.id, c.id));
+      continue;
+    }
+    await db.insert(miniCasesConfigTable).values(c);
+  }
+}
+
 async function ensureTonCases() {
   const rows = await db.select({ id: miniCasesConfigTable.id }).from(miniCasesConfigTable);
   const have = new Set(rows.map((r) => r.id));
@@ -125,7 +200,6 @@ async function ensureTonCases() {
   ];
   for (const c of extras) {
     if (have.has(c.id)) {
-      // Sync image + fixed reward table for existing TON cases
       await db.update(miniCasesConfigTable)
         .set({ imageUrl: c.imageUrl, rewards: c.rewards })
         .where(eq(miniCasesConfigTable.id, c.id));
@@ -136,6 +210,7 @@ async function ensureTonCases() {
 }
 
 async function loadCasesFromDb() {
+  try { await ensureBossCases(); } catch (e) { console.error("[cases] ensureBossCases", e); }
   try { await ensureTonCases(); } catch (e) { console.error("[cases] ensureTonCases", e); }
   return db
     .select()

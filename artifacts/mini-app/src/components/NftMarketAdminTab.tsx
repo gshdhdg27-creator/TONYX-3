@@ -1,368 +1,412 @@
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
-import {
-  loadNftMarketConfig,
-  saveNftMarketConfig,
-  type NftMarketConfig,
-  effectivePrice,
-} from "@/lib/nftMarketConfig";
+import { useCallback, useEffect, useState, type CSSProperties } from "react";
 
-const PRICES_URL =
-  "https://cdn.jsdelivr.net/gh/ssamy2/TelegramGiftsAssests@main/Gifts_Details.json";
-const IMG = (short: string) =>
-  `https://cdn.jsdelivr.net/gh/ssamy2/TG_Photos@main/webp/by_name/${short}.webp`;
-
-type Gift = {
-  name: string;
-  short: string;
-  floor: number;
+type MarketCfg = {
+  enabled: boolean;
+  buyEnabled: boolean;
+  feePercent: number;
 };
 
-export function NftMarketAdminTab() {
-  const [cfg, setCfg] = useState<NftMarketConfig>(() => loadNftMarketConfig());
-  const [gifts, setGifts] = useState<Gift[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
-  const [saved, setSaved] = useState(false);
-  const [editShort, setEditShort] = useState<string | null>(null);
-  const [editPrice, setEditPrice] = useState("");
-  const [editStock, setEditStock] = useState("");
+type Listing = {
+  id: number;
+  sellerId: string;
+  nftId: string;
+  giftName?: string;
+  model?: string | null;
+  backdrop?: string | null;
+  symbol?: string | null;
+  imageUrl?: string | null;
+  priceTon: number;
+  listedAt?: string;
+};
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      setLoading(true);
-      try {
-        const res = await fetch(PRICES_URL, { cache: "no-store" });
-        const data = (await res.json()) as {
-          upgraded?: {
-            full_name: string;
-            short_name: string;
-            portal_price_ton?: number;
-            floor_price_ton?: number;
-          }[];
-        };
-        const rows: Gift[] = (data.upgraded ?? [])
-          .map((g) => ({
-            name: g.full_name,
-            short: g.short_name,
-            floor:
-              Number(g.portal_price_ton) ||
-              Number(g.floor_price_ton) ||
-              0,
-          }))
-          .filter((g) => g.short && g.floor > 0)
-          .sort((a, b) => a.name.localeCompare(b.name));
-        if (!cancelled) setGifts(rows);
-      } catch {
-        if (!cancelled) setGifts([]);
-      } finally {
-        if (!cancelled) setLoading(false);
+function adminHeaders(): HeadersInit {
+  const adminId =
+    typeof window !== "undefined"
+      ? localStorage.getItem("adminId") ||
+        new URLSearchParams(window.location.search).get("adminId") ||
+        ""
+      : "";
+  return {
+    "Content-Type": "application/json",
+    "X-Admin-Id": adminId,
+  };
+}
+
+function adminQs(): string {
+  const adminId =
+    typeof window !== "undefined"
+      ? localStorage.getItem("adminId") ||
+        new URLSearchParams(window.location.search).get("adminId") ||
+        ""
+      : "";
+  return adminId ? `?adminId=${encodeURIComponent(adminId)}` : "";
+}
+
+export function NftMarketAdminTab() {
+  const [cfg, setCfg] = useState<MarketCfg>({ enabled: true, buyEnabled: false, feePercent: 1 });
+  const [listings, setListings] = useState<Listing[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [msgErr, setMsgErr] = useState(false);
+
+  const flash = (text: string, err = false) => {
+    setMsg(text);
+    setMsgErr(err);
+    setTimeout(() => setMsg(null), 3500);
+  };
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [cfgRes, listRes] = await Promise.all([
+        fetch(`/api/mini/admin/settings/nft-market${adminQs()}`, { headers: adminHeaders() }),
+        fetch(`/api/mini/admin/nft-market/listings${adminQs()}`, { headers: adminHeaders() }),
+      ]);
+      if (cfgRes.ok) {
+        const d = await cfgRes.json();
+        setCfg({
+          enabled: d.enabled !== false,
+          buyEnabled: Boolean(d.buyEnabled),
+          feePercent: Number(d.feePercent) || 1,
+        });
       }
-    })();
-    return () => {
-      cancelled = true;
-    };
+      if (listRes.ok) {
+        const d = await listRes.json();
+        setListings(Array.isArray(d.listings) ? d.listings : []);
+      } else {
+        const err = await listRes.json().catch(() => ({}));
+        flash((err as { error?: string }).error || "Failed to load listings", true);
+      }
+    } catch (e) {
+      flash(e instanceof Error ? e.message : String(e), true);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  const filtered = useMemo(() => {
-    const q = search.toLowerCase().trim();
-    if (!q) return gifts;
-    return gifts.filter(
-      (g) => g.name.toLowerCase().includes(q) || g.short.includes(q),
-    );
-  }, [gifts, search]);
+  useEffect(() => {
+    void load();
+  }, [load]);
 
-  const visibleCount = useMemo(() => {
-    if (!cfg.enabled) return 0;
-    return gifts.filter((g) => {
-      if (cfg.hidden.includes(g.short)) return false;
-      if (cfg.whitelist.length && !cfg.whitelist.includes(g.short)) return false;
-      if (cfg.stock[g.short] === 0) return false;
-      return true;
-    }).length;
-  }, [gifts, cfg]);
-
-  const patch = (partial: Partial<NftMarketConfig>) => {
-    setCfg((prev) => ({ ...prev, ...partial }));
-  };
-
-  const persist = (next?: NftMarketConfig) => {
-    const toSave = next ?? cfg;
-    saveNftMarketConfig(toSave);
-    setCfg(toSave);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 1800);
-  };
-
-  const toggleHidden = (short: string) => {
-    const hidden = cfg.hidden.includes(short)
-      ? cfg.hidden.filter((s) => s !== short)
-      : [...cfg.hidden, short];
-    setCfg({ ...cfg, hidden });
-  };
-
-  const toggleFeatured = (short: string) => {
-    const featured = cfg.featured.includes(short)
-      ? cfg.featured.filter((s) => s !== short)
-      : [...cfg.featured, short];
-    setCfg({ ...cfg, featured });
-  };
-
-  const toggleWhitelist = (short: string) => {
-    const whitelist = cfg.whitelist.includes(short)
-      ? cfg.whitelist.filter((s) => s !== short)
-      : [...cfg.whitelist, short];
-    setCfg({ ...cfg, whitelist });
-  };
-
-  const applyPriceEdit = () => {
-    if (!editShort) return;
-    const n = parseFloat(editPrice.replace(",", "."));
-    const overrides = { ...cfg.priceOverrides };
-    if (!Number.isFinite(n) || n <= 0) delete overrides[editShort];
-    else overrides[editShort] = n;
-    const stock = { ...cfg.stock };
-    if (editStock.trim() === "") delete stock[editShort];
-    else {
-      const s = parseInt(editStock, 10);
-      if (Number.isFinite(s) && s >= 0) stock[editShort] = s;
+  const saveCfg = async (patch: Partial<MarketCfg>) => {
+    const next = { ...cfg, ...patch };
+    setCfg(next);
+    setBusy(true);
+    try {
+      const r = await fetch(`/api/mini/admin/settings/nft-market${adminQs()}`, {
+        method: "POST",
+        headers: adminHeaders(),
+        body: JSON.stringify(next),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error((d as { error?: string }).error || `HTTP ${r.status}`);
+      setCfg({
+        enabled: (d as MarketCfg).enabled !== false,
+        buyEnabled: Boolean((d as MarketCfg).buyEnabled),
+        feePercent: Number((d as MarketCfg).feePercent) || next.feePercent,
+      });
+      flash("Saved on server");
+    } catch (e) {
+      flash(e instanceof Error ? e.message : String(e), true);
+      void load();
+    } finally {
+      setBusy(false);
     }
-    setCfg({ ...cfg, priceOverrides: overrides, stock });
-    setEditShort(null);
   };
 
-  const hideAll = () => setCfg({ ...cfg, hidden: gifts.map((g) => g.short) });
-  const showAll = () => setCfg({ ...cfg, hidden: [], whitelist: [] });
+  const unlistOne = async (id: number) => {
+    if (!confirm(`Unlist #${id}?`)) return;
+    setBusy(true);
+    try {
+      const r = await fetch(`/api/mini/admin/nft-market/unlist${adminQs()}`, {
+        method: "POST",
+        headers: adminHeaders(),
+        body: JSON.stringify({ inventoryId: id }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error((d as { error?: string }).error || `HTTP ${r.status}`);
+      flash("Unlisted");
+      await load();
+    } catch (e) {
+      flash(e instanceof Error ? e.message : String(e), true);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const deleteOne = async (id: number) => {
+    if (!confirm(`DELETE listing #${id} forever?`)) return;
+    setBusy(true);
+    try {
+      const r = await fetch(`/api/mini/admin/nft-market/listing/${id}${adminQs()}`, {
+        method: "DELETE",
+        headers: adminHeaders(),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error((d as { error?: string }).error || `HTTP ${r.status}`);
+      flash("Deleted");
+      await load();
+    } catch (e) {
+      flash(e instanceof Error ? e.message : String(e), true);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const hideAll = async () => {
+    if (!confirm(`Unlist ALL (${listings.length})?`)) return;
+    setBusy(true);
+    try {
+      const r = await fetch(`/api/mini/admin/nft-market/unlist-all${adminQs()}`, {
+        method: "POST",
+        headers: adminHeaders(),
+        body: JSON.stringify({}),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error((d as { error?: string }).error || `HTTP ${r.status}`);
+      flash((d as { message?: string }).message || "All unlisted");
+      await load();
+    } catch (e) {
+      flash(e instanceof Error ? e.message : String(e), true);
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
-    <div style={{ padding: "0 0 40px", color: "#e2e8f0" }}>
+    <div style={{ paddingBottom: 40, color: "#e2e8f0" }}>
       <div style={card}>
-        <div style={{ fontSize: 16, fontWeight: 900, marginBottom: 4 }}>NFT Market · управление</div>
+        <div style={{ fontSize: 16, fontWeight: 900, marginBottom: 4 }}>NFT Market control</div>
         <div style={{ fontSize: 12, color: "#64748b", marginBottom: 14 }}>
-          Лоты, цены, сток, покупка. После правок нажми «Сохранить».
+          Server settings. Enable Buy to allow real P2P purchases.
         </div>
 
         <Toggle
-          label="Маркет включён"
-          hint={cfg.enabled ? `${visibleCount} лотов видно` : "Пользователи видят пусто"}
+          label="Market enabled"
+          hint={cfg.enabled ? "Market is open" : "Market closed for users"}
           on={cfg.enabled}
-          onChange={(v) => patch({ enabled: v })}
+          disabled={busy}
+          onChange={(v) => void saveCfg({ enabled: v })}
         />
         <Toggle
-          label="Покупка доступна"
-          hint={cfg.buyEnabled ? "Кнопка Купить активна" : "Только просмотр"}
+          label="Buy enabled"
+          hint={cfg.buyEnabled ? "Buy button works" : "View only — purchase blocked"}
           on={cfg.buyEnabled}
-          onChange={(v) => patch({ buyEnabled: v })}
+          disabled={busy}
+          onChange={(v) => void saveCfg({ buyEnabled: v })}
         />
 
         <div style={{ marginTop: 12 }}>
-          <label style={label}>Наценка к floor Portals, %</label>
-          <input
-            type="number"
-            value={cfg.markupPercent}
-            onChange={(e) => patch({ markupPercent: Number(e.target.value) || 0 })}
-            style={input}
-          />
-        </div>
-
-        <div style={{ marginTop: 12 }}>
-          <label style={label}>Текст баннера</label>
-          <input
-            value={cfg.bannerText}
-            onChange={(e) => patch({ bannerText: e.target.value })}
-            style={input}
-          />
+          <label style={label}>Fee %</label>
+          <div style={{ display: "flex", gap: 8 }}>
+            <input
+              type="number"
+              min={0}
+              max={20}
+              step={0.1}
+              value={cfg.feePercent}
+              onChange={(e) => setCfg({ ...cfg, feePercent: Number(e.target.value) || 0 })}
+              style={input}
+            />
+            <button type="button" disabled={busy} onClick={() => void saveCfg({ feePercent: cfg.feePercent })} style={btnPrimary}>
+              OK
+            </button>
+          </div>
         </div>
 
         <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
-          <button type="button" onClick={() => persist()} style={btnPrimary}>
-            {saved ? "✓ Сохранено" : "Сохранить"}
+          <button type="button" disabled={busy} onClick={() => void load()} style={btnGhost}>
+            Refresh
           </button>
-          <button type="button" onClick={showAll} style={btnGhost}>Показать все</button>
-          <button type="button" onClick={hideAll} style={btnGhost}>Скрыть все</button>
-          <button
-            type="button"
-            onClick={() =>
-              setCfg({
-                ...cfg,
-                priceOverrides: {},
-                stock: {},
-                featured: [],
-                markupPercent: 0,
-              })
-            }
-            style={btnGhost}
-          >
-            Сброс цен/стока
+          <button type="button" disabled={busy || !listings.length} onClick={() => void hideAll()} style={btnDanger}>
+            Hide all listings
           </button>
         </div>
       </div>
 
-      <div style={{ ...card, marginTop: 12 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-          <div style={{ fontSize: 14, fontWeight: 800 }}>Каталог ({gifts.length})</div>
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Поиск…"
-            style={{ ...input, width: 140, margin: 0 }}
-          />
-        </div>
-
-        {loading && <div style={{ color: "#64748b", fontSize: 13 }}>Загрузка каталога…</div>}
-
-        <div style={{ display: "flex", flexDirection: "column", gap: 8, maxHeight: 480, overflowY: "auto" }}>
-          {filtered.map((g) => {
-            const hidden = cfg.hidden.includes(g.short);
-            const featured = cfg.featured.includes(g.short);
-            const inWhite = cfg.whitelist.includes(g.short);
-            const price = effectivePrice(g.short, g.floor, cfg);
-            const stock = cfg.stock[g.short];
-            return (
-              <div
-                key={g.short}
-                style={{
-                  display: "flex",
-                  gap: 10,
-                  alignItems: "center",
-                  padding: "10px 10px",
-                  borderRadius: 14,
-                  background: hidden ? "rgba(248,113,113,0.08)" : "rgba(255,255,255,0.04)",
-                  border: `1px solid ${hidden ? "rgba(248,113,113,0.25)" : "rgba(255,255,255,0.08)"}`,
-                  opacity: hidden ? 0.7 : 1,
-                }}
-              >
-                <img
-                  src={IMG(g.short)}
-                  alt=""
-                  style={{ width: 44, height: 44, objectFit: "contain", borderRadius: 10, background: "rgba(0,0,0,0.25)" }}
-                  loading="lazy"
-                />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 800, fontSize: 13, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                    {g.name}{featured ? " ★" : ""}
-                  </div>
-                  <div style={{ fontSize: 11, color: "#64748b", marginTop: 2 }}>
-                    floor {g.floor.toFixed(2)} → <b style={{ color: "#7dd3fc" }}>{price.toFixed(2)} TON</b>
-                    {stock != null ? ` · stock ${stock}` : ""}
-                    {cfg.priceOverrides[g.short] != null ? " · custom" : ""}
-                  </div>
-                </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                  <button type="button" style={miniBtn} onClick={() => toggleHidden(g.short)}>
-                    {hidden ? "Показать" : "Скрыть"}
-                  </button>
-                  <button type="button" style={miniBtn} onClick={() => toggleFeatured(g.short)}>
-                    {featured ? "★" : "☆"}
-                  </button>
-                  <button
-                    type="button"
-                    style={miniBtn}
-                    onClick={() => {
-                      setEditShort(g.short);
-                      setEditPrice(String(cfg.priceOverrides[g.short] ?? ""));
-                      setEditStock(stock != null ? String(stock) : "");
-                    }}
-                  >
-                    Цена
-                  </button>
-                  <button type="button" style={miniBtn} onClick={() => toggleWhitelist(g.short)}>
-                    {inWhite ? "WL✓" : "WL"}
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        {cfg.whitelist.length > 0 && (
-          <div style={{ marginTop: 10, fontSize: 11, color: "#fbbf24" }}>
-            Whitelist активен: только {cfg.whitelist.length} подарков. «Показать все» сбрасывает WL.
-          </div>
-        )}
-      </div>
-
-      {editShort && (
-        <div style={modalBg} onClick={() => setEditShort(null)}>
-          <div style={modal} onClick={(e) => e.stopPropagation()}>
-            <div style={{ fontWeight: 900, fontSize: 15, marginBottom: 12 }}>Цена / stock · {editShort}</div>
-            <label style={label}>Своя цена TON (пусто = floor+наценка)</label>
-            <input value={editPrice} onChange={(e) => setEditPrice(e.target.value)} style={input} placeholder="например 12.5" />
-            <label style={{ ...label, marginTop: 10 }}>Сток (пусто = ∞, 0 = sold out)</label>
-            <input value={editStock} onChange={(e) => setEditStock(e.target.value)} style={input} placeholder="∞" />
-            <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
-              <button type="button" style={btnPrimary} onClick={applyPriceEdit}>Применить</button>
-              <button type="button" style={btnGhost} onClick={() => setEditShort(null)}>Отмена</button>
-            </div>
-          </div>
+      {msg && (
+        <div
+          style={{
+            margin: "10px 0",
+            padding: 10,
+            borderRadius: 10,
+            fontSize: 12,
+            fontWeight: 700,
+            background: msgErr ? "rgba(239,68,68,0.15)" : "rgba(34,197,94,0.15)",
+            color: msgErr ? "#fca5a5" : "#86efac",
+          }}
+        >
+          {msg}
         </div>
       )}
+
+      <div style={{ ...card, marginTop: 12 }}>
+        <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 8 }}>
+          Live listings ({loading ? "..." : listings.length})
+        </div>
+        {loading && <div style={{ color: "#64748b", fontSize: 13 }}>Loading...</div>}
+        {!loading && !listings.length && (
+          <div style={{ color: "#64748b", fontSize: 13, padding: 12 }}>No active listings</div>
+        )}
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {listings.map((L) => (
+            <div key={L.id} style={lotRow}>
+              {L.imageUrl ? (
+                <img src={L.imageUrl} alt="" style={{ width: 48, height: 48, objectFit: "contain", borderRadius: 8 }} />
+              ) : (
+                <div style={{ width: 48, height: 48, borderRadius: 8, background: "rgba(255,255,255,0.06)" }} />
+              )}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 800, fontSize: 13 }}>{L.giftName || L.nftId}</div>
+                <div style={{ fontSize: 11, color: "#94a3b8" }}>
+                  {[L.model, L.backdrop, L.symbol].filter(Boolean).join(" · ") || L.nftId}
+                </div>
+                <div style={{ fontSize: 11, color: "#64748b" }}>
+                  #{L.id} · seller {L.sellerId} · <b style={{ color: "#7dd3fc" }}>{L.priceTon} TON</b>
+                </div>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                <button type="button" disabled={busy} onClick={() => void unlistOne(L.id)} style={btnSmall}>
+                  Hide
+                </button>
+                <button type="button" disabled={busy} onClick={() => void deleteOne(L.id)} style={{ ...btnSmall, color: "#fca5a5" }}>
+                  Delete
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
 
 function Toggle({
-  label, hint, on, onChange,
-}: { label: string; hint: string; on: boolean; onChange: (v: boolean) => void }) {
+  label,
+  hint,
+  on,
+  onChange,
+  disabled,
+}: {
+  label: string;
+  hint: string;
+  on: boolean;
+  onChange: (v: boolean) => void;
+  disabled?: boolean;
+}) {
   return (
     <button
       type="button"
+      disabled={disabled}
       onClick={() => onChange(!on)}
       style={{
-        width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
-        padding: "12px 14px", borderRadius: 14, marginBottom: 8,
-        border: `1px solid ${on ? "rgba(34,197,94,0.4)" : "rgba(255,255,255,0.1)"}`,
-        background: on ? "rgba(34,197,94,0.12)" : "rgba(255,255,255,0.04)",
-        cursor: "pointer", fontFamily: "inherit", color: "#e2e8f0", textAlign: "left",
+        width: "100%",
+        display: "flex",
+        alignItems: "center",
+        gap: 12,
+        padding: "12px 0",
+        border: "none",
+        borderBottom: "1px solid rgba(255,255,255,0.06)",
+        background: "transparent",
+        cursor: disabled ? "wait" : "pointer",
+        textAlign: "left",
+        fontFamily: "inherit",
+        color: "inherit",
       }}
     >
-      <div>
+      <div style={{ flex: 1 }}>
         <div style={{ fontWeight: 800, fontSize: 13 }}>{label}</div>
-        <div style={{ fontSize: 11, color: "#64748b", marginTop: 2 }}>{hint}</div>
+        <div style={{ fontSize: 11, color: "#64748b" }}>{hint}</div>
       </div>
-      <div style={{
-        width: 44, height: 26, borderRadius: 999, padding: 3,
-        background: on ? "#22c55e" : "rgba(255,255,255,0.15)",
-      }}>
-        <div style={{
-          width: 20, height: 20, borderRadius: "50%", background: "#fff",
-          transform: on ? "translateX(18px)" : "translateX(0)", transition: "transform 0.2s",
-        }} />
+      <div
+        style={{
+          width: 46,
+          height: 26,
+          borderRadius: 13,
+          background: on ? "rgba(34,197,94,0.35)" : "rgba(255,255,255,0.1)",
+          border: on ? "1px solid rgba(34,197,94,0.5)" : "1px solid rgba(255,255,255,0.12)",
+          position: "relative",
+        }}
+      >
+        <div
+          style={{
+            position: "absolute",
+            top: 2,
+            left: on ? 22 : 2,
+            width: 20,
+            height: 20,
+            borderRadius: 10,
+            background: on ? "#22c55e" : "#94a3b8",
+            transition: "left 0.15s",
+          }}
+        />
       </div>
     </button>
   );
 }
 
 const card: CSSProperties = {
-  background: "rgba(15,23,42,0.7)", border: "1px solid rgba(255,255,255,0.08)",
-  borderRadius: 18, padding: 14,
+  background: "rgba(255,255,255,0.04)",
+  border: "1px solid rgba(255,255,255,0.08)",
+  borderRadius: 14,
+  padding: 14,
 };
-const label: CSSProperties = { display: "block", fontSize: 11, color: "#64748b", fontWeight: 700, marginBottom: 6 };
+const label: CSSProperties = { display: "block", fontSize: 11, color: "#94a3b8", marginBottom: 6 };
 const input: CSSProperties = {
-  width: "100%", boxSizing: "border-box", background: "rgba(0,0,0,0.35)",
-  border: "1px solid rgba(255,255,255,0.12)", borderRadius: 12, padding: "10px 12px",
-  color: "#e2e8f0", fontSize: 13, fontFamily: "inherit", outline: "none",
+  flex: 1,
+  padding: "10px 12px",
+  borderRadius: 10,
+  border: "1px solid rgba(255,255,255,0.1)",
+  background: "rgba(0,0,0,0.35)",
+  color: "#e2e8f0",
+  fontSize: 13,
+  fontFamily: "inherit",
 };
 const btnPrimary: CSSProperties = {
-  padding: "10px 16px", borderRadius: 12, border: "none",
-  background: "linear-gradient(135deg,#0891b2,#22d3ee)", color: "#fff",
-  fontWeight: 800, fontSize: 13, cursor: "pointer", fontFamily: "inherit",
+  padding: "10px 14px",
+  borderRadius: 10,
+  border: "none",
+  background: "linear-gradient(135deg,#0369a1,#38bdf8)",
+  color: "#fff",
+  fontWeight: 800,
+  fontSize: 12,
+  cursor: "pointer",
+  fontFamily: "inherit",
 };
 const btnGhost: CSSProperties = {
-  padding: "10px 12px", borderRadius: 12,
-  border: "1px solid rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.05)",
-  color: "#94a3b8", fontWeight: 700, fontSize: 12, cursor: "pointer", fontFamily: "inherit",
+  padding: "10px 14px",
+  borderRadius: 10,
+  border: "1px solid rgba(255,255,255,0.12)",
+  background: "rgba(255,255,255,0.05)",
+  color: "#cbd5e1",
+  fontWeight: 700,
+  fontSize: 12,
+  cursor: "pointer",
+  fontFamily: "inherit",
 };
-const miniBtn: CSSProperties = {
-  padding: "4px 8px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.12)",
-  background: "rgba(255,255,255,0.06)", color: "#cbd5e1", fontSize: 10, fontWeight: 700,
-  cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap",
+const btnDanger: CSSProperties = {
+  ...btnGhost,
+  border: "1px solid rgba(239,68,68,0.35)",
+  color: "#fca5a5",
 };
-const modalBg: CSSProperties = {
-  position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", zIndex: 300,
-  display: "flex", alignItems: "center", justifyContent: "center", padding: 20,
+const btnSmall: CSSProperties = {
+  padding: "6px 10px",
+  borderRadius: 8,
+  border: "1px solid rgba(255,255,255,0.12)",
+  background: "rgba(0,0,0,0.25)",
+  color: "#e2e8f0",
+  fontSize: 11,
+  fontWeight: 700,
+  cursor: "pointer",
+  fontFamily: "inherit",
 };
-const modal: CSSProperties = {
-  width: "100%", maxWidth: 360, background: "#0f172a", borderRadius: 18,
-  border: "1px solid rgba(255,255,255,0.1)", padding: 16,
+const lotRow: CSSProperties = {
+  display: "flex",
+  gap: 10,
+  alignItems: "center",
+  padding: 10,
+  borderRadius: 12,
+  border: "1px solid rgba(255,255,255,0.08)",
+  background: "rgba(0,0,0,0.2)",
 };

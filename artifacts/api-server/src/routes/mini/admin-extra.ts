@@ -63,7 +63,7 @@ router.post("/settings/ad-config", async (req, res) => {
   }
 });
 
-/** Credit / debit TON or TONYX only (no points) */
+/** Credit / debit / set TON, TONYX or coins */
 router.post("/users/:telegramId/adjust-balance", async (req, res) => {
   const adminId = extractAdminId(req, res);
   if (!adminId) {
@@ -79,16 +79,20 @@ router.post("/users/:telegramId/adjust-balance", async (req, res) => {
     const currency = String(req.body?.currency ?? "").toLowerCase();
     const action = String(req.body?.action ?? "add").toLowerCase();
     const amount = Number(req.body?.amount);
-    if (!Number.isFinite(amount) || amount <= 0) {
+    if (!Number.isFinite(amount) || amount < 0) {
+      res.status(400).json({ error: "Сумма должна быть >= 0" });
+      return;
+    }
+    if (action !== "set" && amount <= 0) {
       res.status(400).json({ error: "Сумма должна быть > 0" });
       return;
     }
-    if (currency !== "ton" && currency !== "tonyx") {
-      res.status(400).json({ error: "currency: ton | tonyx" });
+    if (currency !== "ton" && currency !== "tonyx" && currency !== "coins") {
+      res.status(400).json({ error: "currency: ton | tonyx | coins" });
       return;
     }
+    const isSet = action === "set";
     const sign = action === "sub" || action === "subtract" || action === "remove" || action === "deduct" ? -1 : 1;
-    const delta = amount * sign;
 
     const user = await db.select().from(usersTable).where(eq(usersTable.telegramId, targetId)).then((r) => r[0] ?? null);
     if (!user) {
@@ -98,17 +102,27 @@ router.post("/users/:telegramId/adjust-balance", async (req, res) => {
 
     if (currency === "ton") {
       const cur = Number(user.ton ?? 0);
-      const next = Math.max(0, Math.round((cur + delta) * 1e8) / 1e8);
+      const next = Math.max(0, Math.round((isSet ? amount : cur + amount * sign) * 1e8) / 1e8);
       await db.update(usersTable).set({ ton: String(next), updatedAt: new Date() }).where(eq(usersTable.telegramId, targetId));
-      console.log(`[Admin] ${adminId} ton ${delta >= 0 ? "+" : ""}${delta} → ${targetId} = ${next}`);
+      console.log(`[Admin] ${adminId} ton ${isSet ? "set" : (sign > 0 ? "+" : "-")}${amount} → ${targetId} = ${next}`);
       res.json({ ok: true, message: `TON: ${next}`, ton: next, currency: "ton" });
       return;
     }
 
+    if (currency === "coins") {
+      const cur = Number(user.coins ?? 0);
+      const next = Math.max(0, Math.floor(isSet ? amount : cur + amount * sign));
+      await db.update(usersTable).set({ coins: next, updatedAt: new Date() }).where(eq(usersTable.telegramId, targetId));
+      console.log(`[Admin] ${adminId} coins ${isSet ? "set" : (sign > 0 ? "+" : "-")}${amount} → ${targetId} = ${next}`);
+      res.json({ ok: true, message: `Pts: ${next}`, coins: next, currency: "coins" });
+      return;
+    }
+
+    // tonyx
     const cur = Number(user.tonyxCoins ?? 0);
-    const next = Math.max(0, Math.floor(cur + delta));
+    const next = Math.max(0, Math.floor(isSet ? amount : cur + amount * sign));
     await db.update(usersTable).set({ tonyxCoins: next, updatedAt: new Date() }).where(eq(usersTable.telegramId, targetId));
-    console.log(`[Admin] ${adminId} tonyx ${delta >= 0 ? "+" : ""}${delta} → ${targetId} = ${next}`);
+    console.log(`[Admin] ${adminId} tonyx ${isSet ? "set" : (sign > 0 ? "+" : "-")}${amount} → ${targetId} = ${next}`);
     res.json({ ok: true, message: `TONYX: ${next}`, tonyxCoins: next, currency: "tonyx" });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);

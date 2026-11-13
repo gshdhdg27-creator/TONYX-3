@@ -1,1 +1,1 @@
-FILE_CONTENT_TOO_LARGE_USE_ALT
+SEE_FILE_/tmp/tabs-a-mini.tsx

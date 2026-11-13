@@ -23,6 +23,10 @@ interface Stats {
   admins: { telegramId: string; username: string | null }[];
 }
 
+function normalizeId(raw: string | null | undefined): string {
+  return raw != null ? String(raw).trim() : "";
+}
+
 async function apiCall(path: string, opts: RequestInit & { adminId: string }) {
   const { adminId, ...rest } = opts;
   const headers: Record<string, string> = {
@@ -115,7 +119,7 @@ function BalanceAdjuster({ userId, adminId, onDone }: { userId: string; adminId:
   );
 }
 
-function UserCard({ user, adminId, isSuperAdmin, onRefresh }: { user: UserInfo; adminId: string; isSuperAdmin: boolean; onRefresh: () => void }) {
+function UserCard({ user, adminId, onRefresh }: { user: UserInfo; adminId: string; onRefresh: () => void }) {
   const { toast, flash } = useToast();
   const [expanded, setExpanded] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -174,25 +178,60 @@ function UserCard({ user, adminId, isSuperAdmin, onRefresh }: { user: UserInfo; 
 }
 
 export default function AdminPage() {
-  const { user } = useTelegram();
-  const adminId = String(user?.id ?? "");
-  const { toast, flash } = useToast();
+  const { telegramId: tgId } = useTelegram();
+  const [adminId, setAdminId] = useState("");
+  const [manualId, setManualId] = useState("");
+  const [authed, setAuthed] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [checking, setChecking] = useState(false);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [stats, setStats] = useState<Stats | null>(null);
   const [users, setUsers] = useState<UserInfo[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
-  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [onlineCount, setOnlineCount] = useState<number | null>(null);
+  const { toast, flash } = useToast();
+  const autoAuthRef = useRef(false);
 
   const fetchStats = useCallback(async (id: string) => {
     try {
       const r = await apiCall("stats", { adminId: id });
-      if (!r.ok) return;
-      const d = await r.json();
-      setStats(d);
-      setIsSuperAdmin(!!d.isSuperAdmin || id === OWNER_ID);
+      if (r.ok) {
+        const d = await r.json();
+        setStats(d);
+        setIsSuperAdmin(!!d.isSuperAdmin || id === OWNER_ID);
+      }
+    } catch { /* */ }
+    try {
+      const r = await fetch(`/api/mini/admin/online-count`, { headers: { "X-Admin-Id": id } });
+      if (r.ok) { const d = await r.json(); setOnlineCount(d.count ?? 0); }
     } catch { /* */ }
   }, []);
+
+  const doAuth = useCallback(async (rawId: string) => {
+    const id = normalizeId(rawId);
+    if (!id) { setAuthError("Нет Telegram ID"); return; }
+    if (id === OWNER_ID) {
+      setAdminId(id); setIsSuperAdmin(true); setAuthed(true);
+      fetchStats(id); return;
+    }
+    setChecking(true); setAuthError(null);
+    try {
+      const r = await fetch(`/api/mini/admin/check?telegramId=${encodeURIComponent(id)}`);
+      const d = await r.json() as { isAdmin: boolean; isSuperAdmin: boolean };
+      if (!d.isAdmin) { setAuthError(`Нет доступа. Ваш ID: ${id}`); return; }
+      setAdminId(id); setIsSuperAdmin(d.isSuperAdmin); setAuthed(true); fetchStats(id);
+    } catch (e) { setAuthError(`Ошибка сети: ${String(e)}`); }
+    finally { setChecking(false); }
+  }, [fetchStats]);
+
+  useEffect(() => {
+    if (autoAuthRef.current) return;
+    if (tgId) {
+      autoAuthRef.current = true;
+      doAuth(tgId);
+    }
+  }, [tgId, doAuth]);
 
   const loadUsers = useCallback(async () => {
     if (!adminId) return;
@@ -208,14 +247,33 @@ export default function AdminPage() {
   }, [adminId, search, flash]);
 
   useEffect(() => {
-    if (!adminId) return;
-    fetchStats(adminId);
-    loadUsers();
-    fetch(`/api/mini/admin/online-count?adminId=${adminId}`).then(r => r.json()).then(d => setOnlineCount(d.count ?? 0)).catch(() => {});
-  }, [adminId, fetchStats, loadUsers]);
+    if (authed && adminId) loadUsers();
+  }, [authed, adminId, loadUsers]);
 
-  if (!adminId) {
-    return <div style={{ padding: 24, color: "#94a3b8" }}>Откройте в Telegram</div>;
+  if (!authed) {
+    return (
+      <div style={{ minHeight: "100%", background: "#0a0e1a", color: "#e2e8f0", padding: 24, fontFamily: "system-ui,-apple-system,sans-serif" }}>
+        <div style={{ fontSize: 20, fontWeight: 900, marginBottom: 8 }}>Admin</div>
+        <div style={{ fontSize: 13, color: "#64748b", marginBottom: 16 }}>Авторизация</div>
+        {checking && <div style={{ color: "#60a5fa", marginBottom: 12 }}>Проверка доступа…</div>}
+        {authError && <div style={{ color: "#f87171", marginBottom: 12, fontSize: 13 }}>{authError}</div>}
+        {!tgId && (
+          <div>
+            <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 8 }}>Telegram ID не получен. Введите вручную:</div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <input value={manualId} onChange={(e) => setManualId(e.target.value)} placeholder="Telegram ID"
+                style={{ flex: 1, background: "rgba(30,45,69,0.7)", border: "1px solid rgba(30,58,143,0.4)", borderRadius: 10, padding: "10px 12px", color: "#f1f5f9", fontFamily: "inherit", fontSize: 14, outline: "none" }} />
+              <button type="button" onClick={() => doAuth(manualId)} disabled={checking} style={{
+                padding: "10px 16px", borderRadius: 10, border: "none", background: "linear-gradient(135deg,#1d4ed8,#3b82f6)", color: "#fff", fontWeight: 800, cursor: "pointer", fontFamily: "inherit",
+              }}>Войти</button>
+            </div>
+          </div>
+        )}
+        {tgId && !checking && !authError && (
+          <div style={{ color: "#64748b", fontSize: 13 }}>Вход… ID {tgId}</div>
+        )}
+      </div>
+    );
   }
 
   return (
@@ -224,7 +282,7 @@ export default function AdminPage() {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
         <div>
           <div style={{ fontSize: 20, fontWeight: 900 }}>Admin</div>
-          <div style={{ fontSize: 11, color: "#64748b" }}>TONYX панель</div>
+          <div style={{ fontSize: 11, color: "#64748b" }}>ID {adminId}{isSuperAdmin ? " · super" : ""}</div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <div style={{ background: "rgba(34,197,94,0.12)", border: "1px solid rgba(34,197,94,0.3)", borderRadius: 10, padding: "6px 10px", fontWeight: 800, color: "#4ade80", fontSize: 14 }}>
@@ -265,14 +323,14 @@ export default function AdminPage() {
           <div style={{ color: "#64748b", fontSize: 13, textAlign: "center", padding: 20 }}>Нет игроков</div>
         )}
         {users.map((u) => (
-          <UserCard key={u.telegramId} user={u} adminId={adminId} isSuperAdmin={isSuperAdmin} onRefresh={loadUsers} />
+          <UserCard key={u.telegramId} user={u} adminId={adminId} onRefresh={loadUsers} />
         ))}
       </div>
 
-      <div style={{ marginTop: 16, opacity: 0.7 }}>
+      <div style={{ marginTop: 16 }}>
         <CasesAdminTab adminId={adminId} />
       </div>
-      <div style={{ marginTop: 12, opacity: 0.7 }}>
+      <div style={{ marginTop: 12 }}>
         <NftGiftsTab />
       </div>
     </div>

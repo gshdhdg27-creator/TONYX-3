@@ -218,7 +218,8 @@ export function BalanceAdjuster({ userId, adminId, onDone }: { userId: string; a
 
   const submit = async () => {
     const num = parseFloat(amount);
-    if (!num || num <= 0) { flash("Введите сумму > 0", "error"); return; }
+    if (action !== "set" && (!num || num <= 0)) { flash("Введите сумму > 0", "error"); return; }
+    if (action === "set" && (!Number.isFinite(num) || num < 0)) { flash("Введите сумму >= 0", "error"); return; }
     setLoading(true);
     try {
       const r = await apiCall(`users/${userId}/adjust-balance`, {
@@ -226,7 +227,12 @@ export function BalanceAdjuster({ userId, adminId, onDone }: { userId: string; a
       });
       const d = await r.json();
       if (!r.ok) flash(d.error || "Ошибка", "error");
-      else { flash(`✅ ${action === "add" ? "Начислено" : "Списано"}: ${num} ${currency.toUpperCase()}`, "success"); setAmount(""); onDone(); }
+      else {
+        const label = action === "set" ? "Установлено" : action === "add" ? "Начислено" : "Списано";
+        flash(`✅ ${label}: ${num} ${currency.toUpperCase()}`, "success");
+        setAmount("");
+        onDone();
+      }
     } catch { flash("Ошибка сети", "error"); }
     finally { setLoading(false); }
   };
@@ -234,6 +240,7 @@ export function BalanceAdjuster({ userId, adminId, onDone }: { userId: string; a
   const CURRENCIES = [
     { key: "ton" as Currency, label: "TON", color: "#fbbf24" },
     { key: "tonyx" as Currency, label: "TONYX", color: "#a78bfa" },
+    { key: "coins" as Currency, label: "Pts", color: "#34d399" },
   ];
 
   return (
@@ -251,12 +258,16 @@ export function BalanceAdjuster({ userId, adminId, onDone }: { userId: string; a
         ))}
       </div>
       <div style={{ display: "flex", background: "rgba(30,45,69,0.6)", borderRadius: 10, padding: 3, gap: 3, marginBottom: 8 }}>
-        {(["add", "deduct"] as Action[]).map((a) => (
+        {(["add", "deduct", "set"] as Action[]).map((a) => (
           <button key={a} type="button" onClick={() => setAction(a)} style={{
-            flex: 1, padding: "8px 0", borderRadius: 8, border: "none", fontFamily: "inherit", fontSize: 12, fontWeight: 700, cursor: "pointer",
-            background: action === a ? (a === "add" ? "rgba(34,197,94,0.25)" : "rgba(239,68,68,0.25)") : "transparent",
-            color: action === a ? (a === "add" ? "#4ade80" : "#f87171") : "#64748b",
-          }}>{a === "add" ? "✅ Начислить" : "➖ Списать"}</button>
+            flex: 1, padding: "8px 0", borderRadius: 8, border: "none", fontFamily: "inherit", fontSize: 11, fontWeight: 700, cursor: "pointer",
+            background: action === a
+              ? (a === "add" ? "rgba(34,197,94,0.25)" : a === "deduct" ? "rgba(239,68,68,0.25)" : "rgba(59,130,246,0.25)")
+              : "transparent",
+            color: action === a
+              ? (a === "add" ? "#4ade80" : a === "deduct" ? "#f87171" : "#60a5fa")
+              : "#64748b",
+          }}>{a === "add" ? "✅ +" : a === "deduct" ? "➖ −" : "✏️ Set"}</button>
         ))}
       </div>
       <div style={{ display: "flex", gap: 8 }}>
@@ -264,8 +275,9 @@ export function BalanceAdjuster({ userId, adminId, onDone }: { userId: string; a
           style={{ flex: 1, background: "rgba(30,45,69,0.7)", border: "1px solid rgba(30,58,143,0.4)", borderRadius: 8, padding: "10px 12px", color: "#f1f5f9", fontFamily: "inherit", fontSize: 14, outline: "none" }} />
         <button type="button" onClick={submit} disabled={loading} style={{
           padding: "10px 16px", borderRadius: 8, border: "none", fontFamily: "inherit", fontSize: 13, fontWeight: 800, cursor: "pointer",
-          background: action === "add" ? "linear-gradient(135deg,#15803d,#22c55e)" : "linear-gradient(135deg,#b91c1c,#ef4444)", color: "#fff", opacity: loading ? 0.6 : 1,
-        }}>{loading ? "…" : action === "add" ? "+" : "−"}</button>
+          background: action === "add" ? "linear-gradient(135deg,#15803d,#22c55e)" : action === "deduct" ? "linear-gradient(135deg,#b91c1c,#ef4444)" : "linear-gradient(135deg,#1d4ed8,#3b82f6)",
+          color: "#fff", opacity: loading ? 0.6 : 1,
+        }}>{loading ? "…" : action === "add" ? "+" : action === "deduct" ? "−" : "Set"}</button>
       </div>
     </div>
   );

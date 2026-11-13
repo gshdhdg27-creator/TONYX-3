@@ -36,8 +36,8 @@ export interface AdminTopup {
   status: string; createdAt: string;
   userFirstName: string | null; userUsername: string | null;
 }
-export type Currency = "ton" | "tonyx";
-export type Action = "add" | "deduct";
+export type Currency = "ton" | "tonyx" | "coins";
+export type Action = "add" | "deduct" | "set";
 
 export function normalizeId(raw: string | null | undefined): string {
   return raw != null ? String(raw).trim() : "";

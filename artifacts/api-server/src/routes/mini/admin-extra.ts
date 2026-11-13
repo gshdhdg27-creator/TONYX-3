@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
-import { usersTable, systemSettingsTable, miniTasksTable } from "@workspace/db/schema";
+import { usersTable, systemSettingsTable, miniTasksTable, miniUserInventoryTable } from "@workspace/db/schema";
 import { eq, desc } from "drizzle-orm";
 
 const router: IRouter = Router();
@@ -127,6 +127,85 @@ router.post("/users/:telegramId/adjust-balance", async (req, res) => {
     const msg = e instanceof Error ? e.message : String(e);
     console.error("[Admin] adjust-balance FAILED:", msg);
     res.status(500).json({ error: msg });
+  }
+});
+
+/** Admin: grant assembled Telegram gift NFT to a user (optionally list on market) */
+router.post("/users/:telegramId/grant-gift", async (req, res) => {
+  const adminId = extractAdminId(req, res);
+  if (!adminId) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+  try {
+    const targetId = normalizeId(req.params.telegramId);
+    if (!targetId) {
+      res.status(400).json({ error: "telegramId required" });
+      return;
+    }
+
+    const short = String(req.body?.short ?? req.body?.itemId ?? "").trim();
+    const giftName = String(req.body?.giftName ?? short).trim();
+    const model = String(req.body?.model ?? "").trim();
+    const backdrop = String(req.body?.backdrop ?? "").trim();
+    const symbol = String(req.body?.symbol ?? "").trim();
+    const imageUrl = req.body?.imageUrl ? String(req.body.imageUrl) : null;
+    const list = Boolean(req.body?.list);
+    const priceTon = Number(req.body?.priceTon);
+
+    if (!short || !model || !backdrop || !symbol) {
+      res.status(400).json({ error: "short, model, backdrop, symbol required" });
+      return;
+    }
+    if (list && (!Number.isFinite(priceTon) || priceTon <= 0)) {
+      res.status(400).json({ error: "priceTon > 0 required when listing" });
+      return;
+    }
+
+    const user = await db.select().from(usersTable).where(eq(usersTable.telegramId, targetId)).then((r) => r[0] ?? null);
+    if (!user) {
+      res.status(404).json({ error: "Пользователь не найден" });
+      return;
+    }
+
+    const meta: Record<string, unknown> = {
+      source: "admin_grant",
+      grantedBy: adminId,
+      grantedAt: new Date().toISOString(),
+      giftName,
+      short,
+      model,
+      backdrop,
+      symbol,
+      imageUrl,
+      kind: "tg_gift",
+    };
+    if (list) {
+      meta.listed = true;
+      meta.priceTon = priceTon;
+      meta.listedAt = new Date().toISOString();
+    }
+
+    const inserted = await db.insert(miniUserInventoryTable).values({
+      telegramId: targetId,
+      itemType: "nft_full",
+      itemId: short,
+      quantity: 1,
+      meta,
+    }).returning();
+
+    const item = inserted[0] ?? null;
+    console.log(`[Admin] ${adminId} grant-gift → ${targetId} ${short} / ${model} / ${backdrop} / ${symbol} list=${list}`);
+    res.json({
+      ok: true,
+      message: list
+        ? `NFT выдан и выставлен на маркет за ${priceTon} TON`
+        : `NFT выдан пользователю ${targetId}`,
+      item,
+    });
+  } catch (e) {
+    console.error("[Admin] grant-gift", e);
+    res.status(500).json({ error: String(e) });
   }
 });
 

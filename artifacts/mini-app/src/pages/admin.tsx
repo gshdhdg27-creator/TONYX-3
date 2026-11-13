@@ -1,181 +1,12 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { NftGiftsTab } from "@/components/NftGiftsTab";
 import { useTelegram } from "@/lib/telegram";
 import { CasesAdminTab } from "@/components/CasesAdminTab";
-
-const OWNER_ID = "7257793582";
-
-type Currency = "ton" | "tonyx";
-type Action = "add" | "deduct";
-
-interface UserInfo {
-  id: number; telegramId: string; username: string | null; firstName: string | null; lastName: string | null;
-  coins: number; ton: number; tonyxCoins: number; totalTonDeposited: number;
-  totalAdsWatched: number; totalGamesPlayed: number; wins: number; losses: number;
-  isBlocked: boolean; isAdmin: boolean; isOnline: boolean; forceWin: boolean;
-  lastIp: string | null; twinCount: number; lastLoginAt: string | null; createdAt: string;
-  userStatus?: string; bannedReason?: string | null; winRateModifier?: number | null;
-}
-interface Stats {
-  totalUsers: number; totalCoinsSold: number; totalTonVolume: number;
-  activeOrders: number; isMarketActive: boolean; canActivate: boolean; poolProgress: string;
-  isSuperAdmin: boolean;
-  admins: { telegramId: string; username: string | null }[];
-}
-
-function normalizeId(raw: string | null | undefined): string {
-  return raw != null ? String(raw).trim() : "";
-}
-
-async function apiCall(path: string, opts: RequestInit & { adminId: string }) {
-  const { adminId, ...rest } = opts;
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json", "X-Admin-Id": adminId,
-    ...(rest.headers as Record<string, string> | undefined),
-  };
-  let url = `/api/mini/admin/${path}`;
-  if (!rest.method || rest.method === "GET") {
-    url += (url.includes("?") ? "&" : "?") + `adminId=${encodeURIComponent(adminId)}`;
-  } else {
-    if (rest.body && typeof rest.body === "string") {
-      try { const p = JSON.parse(rest.body); rest.body = JSON.stringify({ adminId, ...p }); } catch { /* */ }
-    } else if (!rest.body) { rest.body = JSON.stringify({ adminId }); }
-  }
-  return fetch(url, { ...rest, headers });
-}
-
-function Toast({ msg, type }: { msg: string; type: "success"|"error"|"info" }) {
-  const bg = type==="success" ? "rgba(22,163,74,0.95)" : type==="error" ? "rgba(220,38,38,0.95)" : "rgba(30,64,175,0.95)";
-  return <div style={{ position:"fixed", top:16, left:"50%", transform:"translateX(-50%)", background:bg, color:"#fff", padding:"12px 20px", borderRadius:12, fontSize:14, fontWeight:600, zIndex:9999, maxWidth:"calc(100% - 32px)", boxShadow:"0 8px 28px rgba(0,0,0,0.5)" }}>{msg}</div>;
-}
-
-function useToast() {
-  const [toast, setToast] = useState<{ msg: string; type: "success"|"error"|"info" } | null>(null);
-  const flash = useCallback((msg: string, type: "success"|"error"|"info" = "info") => {
-    setToast({ msg, type }); setTimeout(() => setToast(null), 3000);
-  }, []);
-  return { toast, flash };
-}
-
-function BalanceAdjuster({ userId, adminId, onDone }: { userId: string; adminId: string; onDone: ()=>void }) {
-  const { toast, flash } = useToast();
-  const [currency, setCurrency] = useState<Currency>("ton");
-  const [action, setAction] = useState<Action>("add");
-  const [amount, setAmount] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  const submit = async () => {
-    const num = parseFloat(amount);
-    if (!num || num <= 0) { flash("Введите сумму > 0", "error"); return; }
-    setLoading(true);
-    try {
-      const r = await apiCall(`users/${userId}/adjust-balance`, {
-        adminId, method: "POST", body: JSON.stringify({ currency, amount: num, action }),
-      });
-      const d = await r.json();
-      if (!r.ok) flash(d.error || "Ошибка", "error");
-      else { flash(`✅ ${action === "add" ? "Начислено" : "Списано"}: ${num} ${currency.toUpperCase()}`, "success"); setAmount(""); onDone(); }
-    } catch { flash("Ошибка сети", "error"); }
-    finally { setLoading(false); }
-  };
-
-  const CURRENCIES = [
-    { key: "ton" as Currency, label: "TON", color: "#fbbf24" },
-    { key: "tonyx" as Currency, label: "TONYX", color: "#a78bfa" },
-  ];
-
-  return (
-    <div style={{ background: "rgba(15,23,42,0.8)", border: "1px solid rgba(30,58,143,0.3)", borderRadius: 12, padding: 14, marginTop: 10 }}>
-      {toast && <Toast msg={toast.msg} type={toast.type} />}
-      <div style={{ fontSize: 10, color: "#475569", fontWeight: 700, marginBottom: 10, letterSpacing: "0.1em" }}>УПРАВЛЕНИЕ БАЛАНСОМ</div>
-      <div style={{ display: "flex", gap: 5, marginBottom: 8 }}>
-        {CURRENCIES.map(({ key, label, color }) => (
-          <button key={key} type="button" onClick={() => setCurrency(key)} style={{
-            flex: 1, padding: "8px 0", borderRadius: 8,
-            border: `1px solid ${currency === key ? color : color + "30"}`,
-            background: currency === key ? color + "20" : "transparent",
-            color: currency === key ? color : "#475569", fontFamily: "inherit", fontSize: 12, fontWeight: 700, cursor: "pointer",
-          }}>{label}</button>
-        ))}
-      </div>
-      <div style={{ display: "flex", background: "rgba(30,45,69,0.6)", borderRadius: 10, padding: 3, gap: 3, marginBottom: 8 }}>
-        {(["add", "deduct"] as Action[]).map((a) => (
-          <button key={a} type="button" onClick={() => setAction(a)} style={{
-            flex: 1, padding: "8px 0", borderRadius: 8, border: "none", fontFamily: "inherit", fontSize: 12, fontWeight: 700, cursor: "pointer",
-            background: action === a ? (a === "add" ? "rgba(34,197,94,0.25)" : "rgba(239,68,68,0.25)") : "transparent",
-            color: action === a ? (a === "add" ? "#4ade80" : "#f87171") : "#64748b",
-          }}>{a === "add" ? "✅ Начислить" : "➖ Списать"}</button>
-        ))}
-      </div>
-      <div style={{ display: "flex", gap: 8 }}>
-        <input value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal" placeholder="Сумма"
-          style={{ flex: 1, background: "rgba(30,45,69,0.7)", border: "1px solid rgba(30,58,143,0.4)", borderRadius: 8, padding: "10px 12px", color: "#f1f5f9", fontFamily: "inherit", fontSize: 14, outline: "none" }} />
-        <button type="button" onClick={submit} disabled={loading} style={{
-          padding: "10px 16px", borderRadius: 8, border: "none", fontFamily: "inherit", fontSize: 13, fontWeight: 800, cursor: "pointer",
-          background: action === "add" ? "linear-gradient(135deg,#15803d,#22c55e)" : "linear-gradient(135deg,#b91c1c,#ef4444)", color: "#fff", opacity: loading ? 0.6 : 1,
-        }}>{loading ? "…" : action === "add" ? "+" : "−"}</button>
-      </div>
-    </div>
-  );
-}
-
-function UserCard({ user, adminId, onRefresh }: { user: UserInfo; adminId: string; onRefresh: () => void }) {
-  const { toast, flash } = useToast();
-  const [expanded, setExpanded] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const name = user.firstName ?? user.username ?? user.telegramId ?? "?";
-  const isOwnerUser = user.telegramId === OWNER_ID;
-
-  const post = async (action: string, body?: object) => {
-    setLoading(true);
-    try {
-      const r = await apiCall(`users/${user.telegramId}/${action}`, { adminId, method: "POST", body: body ? JSON.stringify(body) : undefined });
-      const d = await r.json();
-      if (!r.ok) flash(d.error || "Ошибка", "error");
-      else { flash(d.message || "✅ Готово", "success"); onRefresh(); }
-    } catch { flash("Ошибка сети", "error"); }
-    finally { setLoading(false); }
-  };
-
-  return (
-    <div style={{ background: "rgba(15,23,42,0.95)", border: "1px solid rgba(30,58,143,0.25)", borderRadius: 16, padding: 14, marginBottom: 10 }}>
-      {toast && <Toast msg={toast.msg} type={toast.type} />}
-      <div style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }} onClick={() => setExpanded(!expanded)}>
-        <div style={{
-          width: 44, height: 44, borderRadius: "50%", background: isOwnerUser ? "linear-gradient(135deg,#92400e,#b45309)" : "#1d4ed8",
-          display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, fontWeight: 800, color: "#fff", flexShrink: 0,
-        }}>{name.slice(0, 1).toUpperCase()}</div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontWeight: 800, fontSize: 14, color: "#e2e8f0" }}>{name}{user.isAdmin ? " ⭐" : ""}</div>
-          <div style={{ fontSize: 11, color: "#64748b" }}>ID {user.telegramId}</div>
-          <div style={{ fontSize: 12, marginTop: 2 }}>
-            <span style={{ color: "#fbbf24", fontWeight: 700 }}>{Number(user.ton).toFixed(3)} TON</span>
-            <span style={{ color: "#a78bfa", fontWeight: 700, marginLeft: 10 }}>{user.tonyxCoins} TONYX</span>
-          </div>
-        </div>
-        <div style={{ color: "#64748b", fontSize: 18 }}>{expanded ? "▲" : "▼"}</div>
-      </div>
-      {expanded && (
-        <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
-          {!isOwnerUser && <BalanceAdjuster userId={user.telegramId} adminId={adminId} onDone={onRefresh} />}
-          {!isOwnerUser && (
-            <div style={{ display: "flex", gap: 8 }}>
-              {user.userStatus === "banned" || user.isBlocked ? (
-                <button type="button" disabled={loading} onClick={() => post("unban")} style={{
-                  flex: 1, padding: "10px 0", borderRadius: 8, border: "none", background: "rgba(34,197,94,0.2)", color: "#4ade80", fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
-                }}>Разбанить</button>
-              ) : (
-                <button type="button" disabled={loading} onClick={() => post("ban", { reason: "Banned by admin" })} style={{
-                  flex: 1, padding: "10px 0", borderRadius: 8, border: "none", background: "rgba(239,68,68,0.2)", color: "#f87171", fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
-                }}>Бан</button>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
+import { NftGiftsTab } from "@/components/NftGiftsTab";
+import {
+  OWNER_ID, apiCall, Toast, useToast, TabNav, normalizeId, type Stats,
+} from "./admin-shared";
+import { GameConfigTab, MarketTab, GamesTab, TasksTab } from "./admin-tabs-a";
+import { GeneralTab, PlayersTab } from "./admin-tabs-b";
 
 export default function AdminPage() {
   const { telegramId: tgId } = useTelegram();
@@ -186,27 +17,36 @@ export default function AdminPage() {
   const [checking, setChecking] = useState(false);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [stats, setStats] = useState<Stats | null>(null);
-  const [users, setUsers] = useState<UserInfo[]>([]);
-  const [search, setSearch] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [activating, setActivating] = useState(false);
   const [onlineCount, setOnlineCount] = useState<number | null>(null);
+  const [tab, setTab] = useState(4);
   const { toast, flash } = useToast();
-  const autoAuthRef = useRef(false);
 
-  const fetchStats = useCallback(async (id: string) => {
-    try {
-      const r = await apiCall("stats", { adminId: id });
-      if (r.ok) {
-        const d = await r.json();
-        setStats(d);
-        setIsSuperAdmin(!!d.isSuperAdmin || id === OWNER_ID);
-      }
-    } catch { /* */ }
+  const fetchOnlineCount = useCallback(async (id: string) => {
     try {
       const r = await fetch(`/api/mini/admin/online-count`, { headers: { "X-Admin-Id": id } });
       if (r.ok) { const d = await r.json(); setOnlineCount(d.count ?? 0); }
     } catch { /* */ }
   }, []);
+
+  const fetchStats = useCallback(async (id: string) => {
+    fetchOnlineCount(id);
+    try {
+      const r = await apiCall("stats", { adminId: id });
+      if (r.ok) { const d = await r.json(); setStats(d); }
+    } catch { /* */ }
+  }, [fetchOnlineCount]);
+
+  const handleMarketAction = async (action: "activate" | "deactivate" | "force-activate") => {
+    setActivating(true);
+    try {
+      const r = await apiCall(`market/${action}`, { adminId, method: "POST" });
+      const d = await r.json();
+      if (!r.ok) flash(d.error || "Ошибка", "error");
+      else { flash(d.message || "Готово", "success"); fetchStats(adminId); }
+    } catch { flash("Ошибка сети", "error"); }
+    finally { setActivating(false); }
+  };
 
   const doAuth = useCallback(async (rawId: string) => {
     const id = normalizeId(rawId);
@@ -225,53 +65,57 @@ export default function AdminPage() {
     finally { setChecking(false); }
   }, [fetchStats]);
 
+  const autoAuthRef = useRef(false);
   useEffect(() => {
-    if (autoAuthRef.current) return;
-    if (tgId) {
-      autoAuthRef.current = true;
-      doAuth(tgId);
-    }
+    if (!tgId || autoAuthRef.current) return;
+    autoAuthRef.current = true;
+    doAuth(tgId);
   }, [tgId, doAuth]);
 
-  const loadUsers = useCallback(async () => {
-    if (!adminId) return;
-    setLoading(true);
-    try {
-      const q = search.trim() ? `&search=${encodeURIComponent(search.trim())}` : "";
-      const r = await apiCall(`users?page=1&limit=40${q}`, { adminId });
-      const d = await r.json();
-      if (r.ok) setUsers(d.users ?? []);
-      else flash(d.error || "Ошибка загрузки", "error");
-    } catch { flash("Ошибка сети", "error"); }
-    finally { setLoading(false); }
-  }, [adminId, search, flash]);
-
   useEffect(() => {
-    if (authed && adminId) loadUsers();
-  }, [authed, adminId, loadUsers]);
+    if (!authed || !adminId) return;
+    const t = setInterval(() => fetchStats(adminId), 20000);
+    return () => clearInterval(t);
+  }, [authed, adminId, fetchStats]);
 
   if (!authed) {
     return (
-      <div style={{ minHeight: "100%", background: "#0a0e1a", color: "#e2e8f0", padding: 24, fontFamily: "system-ui,-apple-system,sans-serif" }}>
-        <div style={{ fontSize: 20, fontWeight: 900, marginBottom: 8 }}>Admin</div>
-        <div style={{ fontSize: 13, color: "#64748b", marginBottom: 16 }}>Авторизация</div>
-        {checking && <div style={{ color: "#60a5fa", marginBottom: 12 }}>Проверка доступа…</div>}
-        {authError && <div style={{ color: "#f87171", marginBottom: 12, fontSize: 13 }}>{authError}</div>}
-        {!tgId && (
-          <div>
-            <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 8 }}>Telegram ID не получен. Введите вручную:</div>
-            <div style={{ display: "flex", gap: 8 }}>
-              <input value={manualId} onChange={(e) => setManualId(e.target.value)} placeholder="Telegram ID"
-                style={{ flex: 1, background: "rgba(30,45,69,0.7)", border: "1px solid rgba(30,58,143,0.4)", borderRadius: 10, padding: "10px 12px", color: "#f1f5f9", fontFamily: "inherit", fontSize: 14, outline: "none" }} />
-              <button type="button" onClick={() => doAuth(manualId)} disabled={checking} style={{
-                padding: "10px 16px", borderRadius: 10, border: "none", background: "linear-gradient(135deg,#1d4ed8,#3b82f6)", color: "#fff", fontWeight: 800, cursor: "pointer", fontFamily: "inherit",
-              }}>Войти</button>
-            </div>
+      <div style={{ padding: "24px 16px", minHeight: "80vh", display: "flex", flexDirection: "column" }}>
+        {toast && <Toast msg={toast.msg} type={toast.type} />}
+        <div style={{ textAlign: "center", marginBottom: 28 }}>
+          <div style={{ fontSize: 48, marginBottom: 8 }}>🔐</div>
+          <div style={{ fontSize: 20, fontWeight: 900, color: "#f1f5f9" }}>Панель управления</div>
+          <div style={{ fontSize: 12, color: "#475569", marginTop: 4 }}>TONYX Admin</div>
+        </div>
+        {checking && <div style={{ textAlign: "center", padding: "16px 0", color: "#60a5fa", fontSize: 14 }}>⏳ Проверяем доступ…</div>}
+        {tgId && !authed && !checking && (
+          <div style={{ background: "rgba(30,45,69,0.5)", borderRadius: 12, padding: "10px 14px", marginBottom: 14, fontSize: 12, color: "#475569", textAlign: "center" }}>
+            Ваш ID: <b style={{ color: "#60a5fa" }}>{tgId}</b>
           </div>
         )}
-        {tgId && !checking && !authError && (
-          <div style={{ color: "#64748b", fontSize: 13 }}>Вход… ID {tgId}</div>
+        {authError && (
+          <div style={{ background: "rgba(220,38,38,0.12)", border: "1px solid rgba(220,38,38,0.3)", borderRadius: 12, padding: "12px 16px", marginBottom: 16, fontSize: 13, color: "#f87171" }}>
+            {authError}
+          </div>
         )}
+        <div style={{ background: "rgba(15,23,42,0.9)", border: "1px solid rgba(30,58,143,0.3)", borderRadius: 16, padding: 16 }}>
+          <div style={{ fontSize: 12, color: "#475569", marginBottom: 10 }}>Введите ваш Telegram ID вручную:</div>
+          <input
+            value={manualId}
+            onChange={(e) => setManualId(e.target.value)}
+            type="text"
+            placeholder="Telegram ID"
+            style={{ width: "100%", boxSizing: "border-box", background: "rgba(30,45,69,0.7)", border: "1px solid rgba(30,58,143,0.4)", borderRadius: 10, padding: "12px 14px", color: "#f1f5f9", fontFamily: "inherit", fontSize: 14, outline: "none", marginBottom: 10 }}
+          />
+          <button
+            type="button"
+            onClick={() => doAuth(manualId)}
+            disabled={checking}
+            style={{ width: "100%", padding: "12px 0", borderRadius: 10, border: "none", background: "linear-gradient(135deg,#1d4ed8,#3b82f6)", color: "#fff", fontWeight: 800, cursor: "pointer", fontFamily: "inherit", fontSize: 14 }}
+          >
+            Войти
+          </button>
+        </div>
       </div>
     );
   }
@@ -288,7 +132,7 @@ export default function AdminPage() {
           <div style={{ background: "rgba(34,197,94,0.12)", border: "1px solid rgba(34,197,94,0.3)", borderRadius: 10, padding: "6px 10px", fontWeight: 800, color: "#4ade80", fontSize: 14 }}>
             {onlineCount ?? "—"} online
           </div>
-          <button type="button" onClick={() => { fetchStats(adminId); loadUsers(); }} style={{
+          <button type="button" onClick={() => fetchStats(adminId)} style={{
             padding: "7px 12px", borderRadius: 10, border: "1px solid rgba(30,58,143,0.3)", background: "rgba(30,45,69,0.5)", color: "#60a5fa", fontSize: 11, fontWeight: 700, fontFamily: "inherit", cursor: "pointer",
           }}>🔄</button>
         </div>
@@ -310,29 +154,32 @@ export default function AdminPage() {
         </div>
       )}
 
-      <div style={{ marginBottom: 12 }}>
-        <div style={{ fontSize: 13, fontWeight: 800, marginBottom: 8 }}>Игроки · начисление баланса</div>
-        <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Поиск ID / username"
-            style={{ flex: 1, background: "rgba(30,45,69,0.7)", border: "1px solid rgba(30,58,143,0.4)", borderRadius: 10, padding: "10px 12px", color: "#f1f5f9", fontFamily: "inherit", fontSize: 13, outline: "none" }} />
-          <button type="button" onClick={loadUsers} disabled={loading} style={{
-            padding: "10px 14px", borderRadius: 10, border: "none", background: "linear-gradient(135deg,#1d4ed8,#3b82f6)", color: "#fff", fontWeight: 800, fontSize: 13, cursor: "pointer", fontFamily: "inherit",
-          }}>{loading ? "…" : "Найти"}</button>
-        </div>
-        {users.length === 0 && !loading && (
-          <div style={{ color: "#64748b", fontSize: 13, textAlign: "center", padding: 20 }}>Нет игроков</div>
-        )}
-        {users.map((u) => (
-          <UserCard key={u.telegramId} user={u} adminId={adminId} onRefresh={loadUsers} />
-        ))}
-      </div>
+      <TabNav active={tab} onChange={setTab} />
 
-      <div style={{ marginTop: 16 }}>
-        <CasesAdminTab adminId={adminId} />
-      </div>
-      <div style={{ marginTop: 12 }}>
-        <NftGiftsTab />
-      </div>
+      {tab === 0 && <GameConfigTab adminId={adminId} />}
+      {tab === 1 && (
+        <MarketTab
+          adminId={adminId}
+          stats={stats}
+          isSuperAdmin={isSuperAdmin}
+          onRefresh={() => fetchStats(adminId)}
+          activating={activating}
+          onMarketAction={handleMarketAction}
+        />
+      )}
+      {tab === 2 && <GamesTab adminId={adminId} />}
+      {tab === 3 && <TasksTab adminId={adminId} isSuperAdmin={isSuperAdmin} />}
+      {tab === 4 && <GeneralTab adminId={adminId} isSuperAdmin={isSuperAdmin} />}
+      {tab === 5 && (
+        <PlayersTab
+          adminId={adminId}
+          isSuperAdmin={isSuperAdmin}
+          stats={stats}
+          onRefresh={() => fetchStats(adminId)}
+        />
+      )}
+      {tab === 6 && <CasesAdminTab adminId={adminId} />}
+      {tab === 7 && <NftGiftsTab />}
     </div>
   );
 }

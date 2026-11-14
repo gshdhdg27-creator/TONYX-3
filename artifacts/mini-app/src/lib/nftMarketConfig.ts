@@ -1,23 +1,16 @@
-/** Shared NFT Market admin config — stored in localStorage until API is wired */
+/** NFT Market config: server switches (enabled/buyEnabled) + local catalog prefs */
 
 export type NftMarketConfig = {
-  /** Master switch: hide all listings when false */
+  /** Master switch from server */
   enabled: boolean;
-  /** Allow users to press Buy */
+  /** Allow users to press Buy — from server */
   buyEnabled: boolean;
-  /** Markup on Portals floor, e.g. 5 = +5% */
   markupPercent: number;
-  /** short_name → custom TON price (overrides floor+markup) */
   priceOverrides: Record<string, number>;
-  /** short_name set to hide from market */
   hidden: string[];
-  /** short_name pinned to top */
   featured: string[];
-  /** Only show these (empty = all except hidden) */
   whitelist: string[];
-  /** Optional stock per short_name (0 = sold out, undefined = unlimited) */
   stock: Record<string, number>;
-  /** Banner text under title */
   bannerText: string;
   updatedAt: string;
 };
@@ -33,7 +26,7 @@ export const defaultNftMarketConfig = (): NftMarketConfig => ({
   featured: [],
   whitelist: [],
   stock: {},
-  bannerText: "Реальные цены Portals / Getgems",
+  bannerText: "\u0420\u0435\u0430\u043b\u044c\u043d\u044b\u0435 \u0446\u0435\u043d\u044b Portals / Getgems",
   updatedAt: new Date().toISOString(),
 });
 
@@ -52,6 +45,30 @@ export function saveNftMarketConfig(cfg: NftMarketConfig): void {
   const next = { ...cfg, updatedAt: new Date().toISOString() };
   localStorage.setItem(NFT_MARKET_CFG_KEY, JSON.stringify(next));
   window.dispatchEvent(new Event("tonyx-nft-cfg"));
+}
+
+/** Pull enabled/buyEnabled from API and merge into local config + notify listeners */
+export async function syncNftMarketConfigFromServer(): Promise<NftMarketConfig> {
+  const local = loadNftMarketConfig();
+  try {
+    const r = await fetch("/api/mini/admin/settings/nft-market", { cache: "no-store" });
+    if (!r.ok) return local;
+    const d = (await r.json()) as {
+      enabled?: boolean;
+      buyEnabled?: boolean;
+      feePercent?: number;
+    };
+    const next: NftMarketConfig = {
+      ...local,
+      enabled: d.enabled !== false,
+      buyEnabled: Boolean(d.buyEnabled),
+      updatedAt: new Date().toISOString(),
+    };
+    saveNftMarketConfig(next);
+    return next;
+  } catch {
+    return local;
+  }
 }
 
 export function effectivePrice(

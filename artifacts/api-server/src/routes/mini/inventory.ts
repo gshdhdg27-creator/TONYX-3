@@ -5,20 +5,26 @@ import {
   miniNftInventoryTable,
   miniUserInventoryTable,
   systemSettingsTable,
-  type NftCollections,
 } from "@workspace/db/schema";
 import { eq, and, desc } from "drizzle-orm";
-import {
-  NFT_COLLECTIONS,
-  getNftCollection,
-  emptyPieces,
-  isCollectionComplete,
-} from "../../lib/nft-catalog.js";
+import { getNftCollection } from "../../lib/nft-catalog.js";
 
 const router: IRouter = Router();
 
 function getTelegramId(res: Response): string | null {
   return (res.locals as Record<string, unknown>)["verifiedTelegramId"] as string | null;
+}
+
+function isListedMeta(m: Record<string, unknown>): boolean {
+  const v = m.listed;
+  if (v === true || v === 1 || v === "1" || v === "true" || v === "yes") return true;
+  if (m.listedAt && m.priceTon != null && Number(m.priceTon) > 0) return true;
+  return false;
+}
+
+function isListableType(itemType: string): boolean {
+  const t = (itemType || "").toLowerCase();
+  return t === "nft_full" || t === "nft" || t === "gift" || t === "tg_gift" || t.includes("nft");
 }
 
 async function ensureNftRow(telegramId: string) {
@@ -60,6 +66,7 @@ router.get("/", async (_req: Request, res: Response) => {
     const mapped = allItems.map((it) => {
       const m = (it.meta ?? {}) as Record<string, unknown>;
       const col = getNftCollection(it.itemId);
+      const listed = isListedMeta(m);
       return {
         id: it.id,
         itemType: it.itemType,
@@ -71,7 +78,7 @@ router.get("/", async (_req: Request, res: Response) => {
         valueTon: Number(m.priceTon) || col?.valueTon || 0,
         imageUrl: (m.imageUrl as string) || col?.imageUrl || null,
         rarity: col?.rarity ?? null,
-        listed: Boolean(m.listed),
+        listed,
         listPriceTon: m.priceTon != null ? Number(m.priceTon) : null,
         meta: m,
       };
@@ -101,13 +108,15 @@ router.get("/listings", async (_req: Request, res: Response) => {
         res.json({ listings: [], buyEnabled: false, enabled: false });
         return;
       }
-    } catch { /* */ }
+    } catch {
+      /* */
+    }
 
     const rows = await db.select().from(miniUserInventoryTable).orderBy(desc(miniUserInventoryTable.acquiredAt));
     const listings = [];
     for (const it of rows) {
       const m = (it.meta ?? {}) as Record<string, unknown>;
-      if (!m.listed) continue;
+      if (!isListedMeta(m)) continue;
       const col = getNftCollection(it.itemId);
       const priceTon = Number(m.priceTon) || col?.valueTon || 0;
       listings.push({
@@ -132,15 +141,17 @@ router.get("/listings", async (_req: Request, res: Response) => {
       const s: Record<string, string> = {};
       for (const r of srows) s[r.key] = r.value;
       buyEnabled = (s["nft_market_buy_enabled"] ?? "0") === "1";
-    } catch { /* */ }
-    res.json({ listings, buyEnabled, enabled: true });
+    } catch {
+      /* */
+    }
+    res.json({ listings, buyEnabled, enabled: true, count: listings.length });
   } catch (err) {
     console.error("[inventory/listings]", err);
     res.status(500).json({ error: "Internal server error" });
   }
 });
 
-router.post("/list", async (req: Request, res: Response) => {
+async function listItem(req: Request, res: Response) {
   try {
     const telegramId = getTelegramId(res);
     if (!telegramId) {
@@ -166,18 +177,28 @@ router.post("/list", async (req: Request, res: Response) => {
       res.status(404).json({ error: "Item not found" });
       return;
     }
-    if (item.itemType !== "nft_full") {
-      res.status(400).json({ error: "Only NFT can be listed" });
+    if (!isListableType(item.itemType)) {
+      res.status(400).json({ error: `Only NFT can be listed (got ${item.itemType})` });
       return;
     }
-    const meta = { ...(item.meta ?? {}), listed: true, priceTon, listedAt: new Date().toISOString() };
+    const meta = {
+      ...(item.meta ?? {}),
+      listed: true,
+      priceTon,
+      listedAt: new Date().toISOString(),
+    };
     await db.update(miniUserInventoryTable).set({ meta }).where(eq(miniUserInventoryTable.id, item.id));
-    res.json({ ok: true, inventoryId: item.id, priceTon, nftId: item.itemId });
+    console.log(`[inventory/list] id=${item.id} seller=${telegramId} price=${priceTon} type=${item.itemType}`);
+    res.json({ ok: true, inventoryId: item.id, priceTon, nftId: item.itemId, listed: true });
   } catch (err) {
     console.error("[inventory/list]", err);
     res.status(500).json({ error: "Internal server error" });
   }
-});
+}
+
+router.post("/list", listItem);
+/** Alias used by older profile UI */
+router.post("/sell", listItem);
 
 router.post("/unlist", async (req: Request, res: Response) => {
   try {
@@ -228,7 +249,9 @@ router.post("/buy", async (req: Request, res: Response) => {
         res.status(403).json({ error: "NFT purchase disabled by admin" });
         return;
       }
-    } catch { /* fail-open */ }
+    } catch {
+      /* fail-open */
+    }
 
     const inventoryId = Number(req.body?.inventoryId);
     if (!inventoryId || Number.isNaN(inventoryId)) {
@@ -247,7 +270,7 @@ router.post("/buy", async (req: Request, res: Response) => {
       return;
     }
     const m = (item.meta ?? {}) as Record<string, unknown>;
-    if (!m.listed) {
+    if (!isListedMeta(m)) {
       res.status(400).json({ error: "Item is not listed" });
       return;
     }
@@ -277,7 +300,11 @@ router.post("/buy", async (req: Request, res: Response) => {
       return;
     }
 
-    const seller = await db.select().from(usersTable).where(eq(usersTable.telegramId, item.telegramId)).then((r) => r[0] ?? null);
+    const seller = await db
+      .select()
+      .from(usersTable)
+      .where(eq(usersTable.telegramId, item.telegramId))
+      .then((r) => r[0] ?? null);
     const newBuyerTon = Math.round((buyerTon - priceTon) * 1e8) / 1e8;
     const newSellerTon = seller ? Math.round((Number(seller.ton) + sellerGets) * 1e8) / 1e8 : null;
 
@@ -297,10 +324,16 @@ router.post("/buy", async (req: Request, res: Response) => {
     };
 
     await Promise.all([
-      db.update(miniUserInventoryTable).set({ telegramId, meta: newMeta, acquiredAt: new Date() }).where(eq(miniUserInventoryTable.id, item.id)),
+      db
+        .update(miniUserInventoryTable)
+        .set({ telegramId, meta: newMeta, acquiredAt: new Date() })
+        .where(eq(miniUserInventoryTable.id, item.id)),
       db.update(usersTable).set({ ton: String(newBuyerTon), updatedAt: new Date() }).where(eq(usersTable.telegramId, telegramId)),
       seller && newSellerTon != null
-        ? db.update(usersTable).set({ ton: String(newSellerTon), updatedAt: new Date() }).where(eq(usersTable.telegramId, item.telegramId))
+        ? db
+            .update(usersTable)
+            .set({ ton: String(newSellerTon), updatedAt: new Date() })
+            .where(eq(usersTable.telegramId, item.telegramId))
         : Promise.resolve(),
     ]);
 

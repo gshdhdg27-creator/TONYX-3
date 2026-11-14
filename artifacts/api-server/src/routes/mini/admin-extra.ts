@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
-import { usersTable, systemSettingsTable, miniTasksTable, miniUserInventoryTable } from "@workspace/db/schema";
+import { usersTable, systemSettingsTable, miniUserInventoryTable } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
 
 const router: IRouter = Router();
@@ -17,6 +17,19 @@ function extractAdminId(req: import("express").Request, res: import("express").R
     return normalizeId((res.locals as Record<string, unknown>)["verifiedTelegramId"]);
   }
   return normalizeId(req.query.adminId ?? req.body?.adminId ?? req.headers["x-admin-id"]);
+}
+
+async function ensureUser(telegramId: string) {
+  let user = await db.select().from(usersTable).where(eq(usersTable.telegramId, telegramId)).then((r) => r[0] ?? null);
+  if (user) return user;
+  await db.insert(usersTable).values({
+    telegramId,
+    ton: "0",
+    tonyxCoins: 0,
+    coins: 0,
+  });
+  user = await db.select().from(usersTable).where(eq(usersTable.telegramId, telegramId)).then((r) => r[0] ?? null);
+  return user;
 }
 
 router.get("/settings/ad-config", async (_req, res) => {
@@ -92,9 +105,9 @@ router.post("/users/:telegramId/adjust-balance", async (req, res) => {
     }
     const isSet = action === "set";
     const sign = action === "sub" || action === "subtract" || action === "remove" || action === "deduct" ? -1 : 1;
-    const user = await db.select().from(usersTable).where(eq(usersTable.telegramId, targetId)).then((r) => r[0] ?? null);
+    const user = await ensureUser(targetId);
     if (!user) {
-      res.status(404).json({ error: "user not found" });
+      res.status(500).json({ error: "failed to ensure user" });
       return;
     }
     if (currency === "ton") {
@@ -138,6 +151,11 @@ router.post("/users/:telegramId/grant-gift", async (req, res) => {
     const backdrop = String(req.body?.backdrop ?? "").trim();
     const symbol = String(req.body?.symbol ?? "").trim();
     const imageUrl = req.body?.imageUrl ? String(req.body.imageUrl) : null;
+    const giftNumberRaw = req.body?.giftNumber ?? req.body?.number ?? null;
+    const giftNumber =
+      giftNumberRaw != null && String(giftNumberRaw).trim() !== ""
+        ? Number(String(giftNumberRaw).replace(/[^0-9]/g, ""))
+        : null;
     const list = Boolean(req.body?.list);
     const priceTon = Number(req.body?.priceTon);
     if (!short || !model || !backdrop || !symbol) {
@@ -148,61 +166,112 @@ router.post("/users/:telegramId/grant-gift", async (req, res) => {
       res.status(400).json({ error: "priceTon > 0 required when listing" });
       return;
     }
-    const user = await db.select().from(usersTable).where(eq(usersTable.telegramId, targetId)).then((r) => r[0] ?? null);
-    if (!user) {
-      res.status(404).json({ error: "user not found" });
+    if (giftNumber != null && (!Number.isFinite(giftNumber) || giftNumber <= 0)) {
+      res.status(400).json({ error: "giftNumber must be positive integer" });
       return;
     }
+
+    const user = await ensureUser(targetId);
+    if (!user) {
+      res.status(500).json({ error: "failed to ensure user" });
+      return;
+    }
+
+    const displayName =
+      giftNumber != null && Number.isFinite(giftNumber)
+        ? `${giftName} #${giftNumber}`
+        : giftName;
+
     const meta: Record<string, unknown> = {
       source: "admin_grant",
       grantedBy: adminId,
       grantedAt: new Date().toISOString(),
-      giftName,
+      giftName: displayName,
+      collectionName: giftName,
       short,
       model,
       backdrop,
       symbol,
       imageUrl,
       kind: "tg_gift",
+      real: true,
     };
+    if (giftNumber != null && Number.isFinite(giftNumber)) {
+      meta.giftNumber = giftNumber;
+      meta.number = giftNumber;
+    }
     if (list) {
       meta.listed = true;
       meta.priceTon = priceTon;
       meta.listedAt = new Date().toISOString();
     }
-    const inserted = await db.insert(miniUserInventoryTable).values({
-      telegramId: targetId,
-      itemType: "nft_full",
-      itemId: short,
-      quantity: 1,
-      meta,
-    }).returning();
-    res.json({ ok: true, message: list ? `listed ${priceTon} TON` : `granted to ${targetId}`, item: inserted[0] ?? null });
+
+    const itemId = giftNumber != null ? `${short}#${giftNumber}` : short;
+
+    const inserted = await db
+      .insert(miniUserInventoryTable)
+      .values({
+        telegramId: targetId,
+        itemType: "nft_full",
+        itemId,
+        quantity: 1,
+        meta,
+      })
+      .returning();
+
+    res.json({
+      ok: true,
+      message: list
+        ? `listed ${priceTon} TON → ${targetId}`
+        : `granted ${displayName} → ${targetId}`,
+      item: inserted[0] ?? null,
+      inventoryId: inserted[0]?.id ?? null,
+    });
   } catch (e) {
+    console.error("[grant-gift]", e);
     res.status(500).json({ error: String(e) });
   }
 });
 
 router.post("/users/:telegramId/ban", async (req, res) => {
   const adminId = extractAdminId(req, res);
-  if (!adminId) { res.status(401).json({ error: "Unauthorized" }); return; }
+  if (!adminId) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
   try {
     const targetId = normalizeId(req.params.telegramId);
-    if (!targetId || targetId === OWNER_ID) { res.status(400).json({ error: "invalid target" }); return; }
+    if (!targetId || targetId === OWNER_ID) {
+      res.status(400).json({ error: "invalid target" });
+      return;
+    }
     const reason = String(req.body?.reason ?? "banned by admin");
-    await db.update(usersTable).set({ isBanned: true, banReason: reason, updatedAt: new Date() }).where(eq(usersTable.telegramId, targetId));
+    await db
+      .update(usersTable)
+      .set({ isBanned: true, banReason: reason, updatedAt: new Date() })
+      .where(eq(usersTable.telegramId, targetId));
     res.json({ ok: true, message: "banned" });
-  } catch (e) { res.status(500).json({ error: String(e) }); }
+  } catch (e) {
+    res.status(500).json({ error: String(e) });
+  }
 });
 
 router.post("/users/:telegramId/unban", async (req, res) => {
   const adminId = extractAdminId(req, res);
-  if (!adminId) { res.status(401).json({ error: "Unauthorized" }); return; }
+  if (!adminId) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
   try {
     const targetId = normalizeId(req.params.telegramId);
-    await db.update(usersTable).set({ isBanned: false, banReason: null, updatedAt: new Date() }).where(eq(usersTable.telegramId, targetId));
+    await db
+      .update(usersTable)
+      .set({ isBanned: false, banReason: null, updatedAt: new Date() })
+      .where(eq(usersTable.telegramId, targetId));
     res.json({ ok: true, message: "unbanned" });
-  } catch (e) { res.status(500).json({ error: String(e) }); }
+  } catch (e) {
+    res.status(500).json({ error: String(e) });
+  }
 });
 
 export default router;

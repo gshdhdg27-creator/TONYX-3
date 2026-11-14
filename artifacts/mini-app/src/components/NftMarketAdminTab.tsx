@@ -191,6 +191,26 @@ export function NftMarketAdminTab() {
     }
   };
 
+  const deleteAllListed = async () => {
+    if (!confirm(`DELETE FOREVER all listed NFTs (${listings.length})? This cannot be undone.`)) return;
+    setBusy(true);
+    try {
+      const r = await fetch(`/api/mini/admin/nft-market/delete-all-listed${adminQs()}`, {
+        method: "POST",
+        headers: adminHeaders(),
+        body: JSON.stringify({}),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error((d as { error?: string }).error || `HTTP ${r.status}`);
+      flash((d as { message?: string }).message || "All listed deleted");
+      await load();
+    } catch (e) {
+      flash(e instanceof Error ? e.message : String(e), true);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <div style={{ paddingBottom: 40, color: "#e2e8f0" }}>
       <div style={card}>
@@ -248,6 +268,14 @@ export function NftMarketAdminTab() {
             style={btnDanger}
           >
             Hide all lots
+          </button>
+          <button
+            type="button"
+            disabled={busy || !listings.length}
+            onClick={() => void deleteAllListed()}
+            style={btnDanger}
+          >
+            Delete all listed
           </button>
         </div>
       </div>

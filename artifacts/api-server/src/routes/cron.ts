@@ -3,43 +3,37 @@
  * These routes bypass telegramAuthMiddleware entirely.
  * Protected by CRON_SECRET environment variable.
  *
- * Vercel calls POST /api/cron/scan-deposits on the schedule
+ * Vercel Cron sends GET /api/cron/scan-deposits on the schedule
  * defined in vercel.json → crons[].
+ * We also accept POST for manual triggers.
  */
 
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Request, type Response } from "express";
 import { scanOnce } from "../services/depositScanner.js";
 
 const router: IRouter = Router();
 
-/* ─────────────────────────────────────────────────────────────────
-   POST /cron/scan-deposits
-   Triggered by Vercel Cron every minute (see vercel.json).
-   Runs one deposit-scan pass: fetches recent TON blockchain txs,
-   deduplicates by txHash, and credits matching user balances.
-
-   Security: Bearer token from CRON_SECRET env var.
-   Vercel automatically sends the secret as:
-     Authorization: Bearer <CRON_SECRET>
-   when CRON_SECRET is set in Project → Settings → Environment Variables.
-──────────────────────────────────────────────────────────────────── */
-router.post("/scan-deposits", async (req, res) => {
+async function handleScanDeposits(req: Request, res: Response): Promise<void> {
   const cronSecret = process.env.CRON_SECRET;
 
-  if (!cronSecret) {
-    console.warn("[Cron] /scan-deposits: CRON_SECRET not set — endpoint disabled");
+  // Prefer explicit CRON_SECRET. Vercel also sends x-vercel-cron: 1 on scheduled runs.
+  const authHeader = String(req.headers["authorization"] ?? "");
+  const isVercelCron = String(req.headers["x-vercel-cron"] ?? "") === "1";
+
+  if (cronSecret) {
+    if (authHeader !== `Bearer ${cronSecret}` && !isVercelCron) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+  } else if (!isVercelCron) {
+    // No secret configured and not a Vercel cron invocation — refuse external calls.
+    console.warn("[Cron] /scan-deposits: CRON_SECRET not set and not x-vercel-cron — endpoint disabled");
     res.status(503).json({ error: "Cron not configured (CRON_SECRET missing)" });
     return;
   }
 
-  const authHeader = String(req.headers["authorization"] ?? "");
-  if (authHeader !== `Bearer ${cronSecret}`) {
-    res.status(401).json({ error: "Unauthorized" });
-    return;
-  }
-
   const startedAt = Date.now();
-  console.log("[Cron] scan-deposits triggered");
+  console.log("[Cron] scan-deposits triggered", { method: req.method, isVercelCron });
 
   try {
     await scanOnce();
@@ -51,6 +45,16 @@ router.post("/scan-deposits", async (req, res) => {
     console.error("[Cron] scan-deposits error:", msg);
     res.status(500).json({ error: msg });
   }
+}
+
+/* GET — Vercel Cron default method */
+router.get("/scan-deposits", (req, res) => {
+  void handleScanDeposits(req, res);
+});
+
+/* POST — manual / legacy triggers */
+router.post("/scan-deposits", (req, res) => {
+  void handleScanDeposits(req, res);
 });
 
 export default router;

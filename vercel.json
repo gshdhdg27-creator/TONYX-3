@@ -13,5 +13,11 @@
       "maxDuration": 30,
       "includeFiles": "api/**"
     }
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/cron/scan-deposits",
+      "schedule": "* * * * *"
+    }
+  ]
 }

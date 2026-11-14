@@ -10,7 +10,10 @@ const router: IRouter = Router();
 
 const MIN_WITHDRAWAL_TON = 0.1;
 const COMMISSION_PCT = 0.05;
-const PROJECT_WALLET = process.env.PROJECT_WALLET_ADDRESS ?? "UQA8d39yaqa-CGw6BUCQw6U3LGelzpS3GxFaVwVDY3BnCDwe";
+// MUST match frontend TOPUP_WALLET and depositScanner PROJECT_WALLET default
+const PROJECT_WALLET =
+  process.env.PROJECT_WALLET_ADDRESS ??
+  "UQBDrAxyWlMMmtSgq5TjQyO1nKacS_nA0_7ZQ88m8eMmU1jO";
 
 // Per-user withdrawal lock — prevents concurrent /withdraw requests for the
 // same telegramId from both passing the balance check before either commits.
@@ -290,14 +293,17 @@ router.post("/topup/verify", async (req, res) => {
 
     // Build list of all valid memos for this user
     const validMemos = new Set<string>();
-    if (user.depositCode) validMemos.add(user.depositCode);
+    if (user.depositCode) {
+      validMemos.add(user.depositCode);
+      validMemos.add(String(user.depositCode).toUpperCase());
+    }
     validMemos.add(`TONYX-${telegramId}`);
     validMemos.add(`TOPUP_${telegramId}`);
 
     const txs = await queryProjectWalletTxs();
 
     const matchingTx = txs.find(tx => {
-      const comment  = tx.in_msg?.decoded_body?.comment ?? "";
+      const comment  = (tx.in_msg?.decoded_body?.comment ?? "").trim();
       const valueTon = Number(tx.in_msg?.value ?? 0) / 1e9;
       return validMemos.has(comment) && valueTon >= minTon;
     });
@@ -308,38 +314,54 @@ router.post("/topup/verify", async (req, res) => {
     }
 
     const memo       = matchingTx.in_msg?.decoded_body?.comment ?? "";
-    const txKey      = `${matchingTx.hash}-${String(matchingTx.lt)}`;
+    // MUST match depositScanner txKey format: hash:lt (colon)
+    const txKey      = `${matchingTx.hash}:${String(matchingTx.lt)}`;
     const receivedTon = Number(matchingTx.in_msg?.value ?? 0) / 1e9;
 
-    // Dedup: check if this txKey was already credited
-    const alreadyDone = await db.select().from(miniTopupRequestsTable)
-      .where(and(
-        eq(miniTopupRequestsTable.telegramId, String(telegramId)),
-        eq(miniTopupRequestsTable.status, "completed"),
-      )).then(rows => rows.some(r => r.txHash === txKey));
+    // Global dedup by txHash (same unique index the scanner uses)
+    const alreadyByHash = await db.select().from(miniTopupRequestsTable)
+      .where(eq(miniTopupRequestsTable.txHash, txKey))
+      .then(rows => rows[0] ?? null);
 
-    if (alreadyDone) {
+    if (alreadyByHash) {
       res.json({ found: true, alreadyCredited: true, message: "Транзакция уже была зачислена ранее" });
       return;
     }
 
     const newTon = parseFloat((Number(user.ton ?? 0) + receivedTon).toFixed(8));
 
+    try {
+      await db.insert(miniTopupRequestsTable).values({
+        telegramId: String(telegramId),
+        tonAmount: String(receivedTon),
+        memo,
+        txBoc: null,
+        txHash: txKey,
+        walletAddress: null,
+        status: "completed",
+      });
+    } catch (insertErr: unknown) {
+      const msg = insertErr instanceof Error ? insertErr.message : String(insertErr);
+      if (msg.includes("unique") || msg.includes("duplicate") || msg.includes("23505")) {
+        res.json({ found: true, alreadyCredited: true, message: "Транзакция уже была зачислена ранее" });
+        return;
+      }
+      throw insertErr;
+    }
+
     await db.update(usersTable)
       .set({ ton: String(newTon), updatedAt: new Date() })
       .where(eq(usersTable.telegramId, String(telegramId)));
 
-    await db.insert(miniTopupRequestsTable).values({
-      telegramId: String(telegramId),
-      tonAmount: String(receivedTon),
-      memo,
-      txBoc: null,
-      txHash: txKey,
-      walletAddress: null,
-      status: "completed",
-    });
-
     console.log(`[Topup] Verified & credited ${receivedTon} TON → ${telegramId}, txKey=${txKey}`);
+
+    void notifyUser(
+      String(telegramId),
+      `💎 <b>Пополнение получено!</b>\n\n` +
+      `Зачислено: <b>+${receivedTon.toFixed(4)} TON</b>\n` +
+      `Ваш баланс обновлён. Хорошей игры! 🎮`,
+    );
+
     res.json({
       found: true,
       credited: true,
@@ -490,4 +512,3 @@ router.get("/withdrawals/:telegramId", async (req, res) => {
 });
 
 export default router;
-

@@ -1,5 +1,6 @@
 import app from "./app";
 import { logger } from "./lib/logger";
+import { startDepositScanner } from "./services/depositScanner.js";
 
 const rawPort = process.env["PORT"];
 
@@ -22,4 +23,12 @@ app.listen(port, (err) => {
   }
 
   logger.info({ port }, "Server listening");
+
+  // Long-running process (Replit / dedicated server): scan deposits every 15s.
+  // On Vercel serverless this path is unused — cron hits /api/cron/scan-deposits instead.
+  try {
+    startDepositScanner();
+  } catch (e) {
+    logger.error({ err: e }, "Failed to start deposit scanner");
+  }
 });

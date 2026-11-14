@@ -18,6 +18,26 @@ function extractAdminId(req: import("express").Request, res: import("express").R
   return normalizeId(req.query.adminId ?? req.body?.adminId ?? req.headers["x-admin-id"]);
 }
 
+async function upsertSetting(key: string, value: string) {
+  const existing = await db.select().from(systemSettingsTable).where(eq(systemSettingsTable.key, key));
+  if (existing.length > 0) {
+    await db.update(systemSettingsTable).set({ value, updatedAt: new Date() }).where(eq(systemSettingsTable.key, key));
+  } else {
+    await db.insert(systemSettingsTable).values({ key, value });
+  }
+}
+
+async function readNftMarketSettings() {
+  const rows = await db.select().from(systemSettingsTable);
+  const s: Record<string, string> = {};
+  for (const r of rows) s[r.key] = r.value;
+  return {
+    enabled: (s["nft_market_enabled"] ?? "1") !== "0",
+    buyEnabled: (s["nft_market_buy_enabled"] ?? "0") === "1",
+    feePercent: parseFloat(s["nft_market_fee_pct"] ?? "1") || 1,
+  };
+}
+
 router.post("/users/:telegramId/soft-delete", async (req, res) => {
   const adminId = extractAdminId(req, res);
   if (!adminId) { res.status(401).json({ error: "Unauthorized" }); return; }
@@ -167,15 +187,11 @@ router.post("/twins/ban-group", async (req, res) => {
   }
 });
 
+/** NFT Market global switches — MUST include buyEnabled (UI + inventory/buy gate) */
 router.get("/settings/nft-market", async (_req, res) => {
   try {
-    const rows = await db.select().from(systemSettingsTable);
-    const s: Record<string, string> = {};
-    for (const r of rows) s[r.key] = r.value;
-    res.json({
-      feePercent: parseFloat(s["nft_market_fee_pct"] ?? "1") || 1,
-      enabled: (s["nft_market_enabled"] ?? "1") !== "0",
-    });
+    const settings = await readNftMarketSettings();
+    res.json(settings);
   } catch (e) {
     res.status(500).json({ error: String(e) });
   }
@@ -185,23 +201,29 @@ router.post("/settings/nft-market", async (req, res) => {
   const adminId = extractAdminId(req, res);
   if (!adminId) { res.status(401).json({ error: "Unauthorized" }); return; }
   try {
-    const fee = Number(req.body?.feePercent);
-    const enabled = req.body?.enabled;
-    const upsert = async (key: string, value: string) => {
-      const existing = await db.select().from(systemSettingsTable).where(eq(systemSettingsTable.key, key));
-      if (existing.length > 0) {
-        await db.update(systemSettingsTable).set({ value, updatedAt: new Date() }).where(eq(systemSettingsTable.key, key));
-      } else {
-        await db.insert(systemSettingsTable).values({ key, value });
+    const body = req.body ?? {};
+
+    if (typeof body.enabled === "boolean") {
+      await upsertSetting("nft_market_enabled", body.enabled ? "1" : "0");
+      // Turning market ON also turns purchases ON unless buyEnabled explicitly false
+      if (body.enabled === true && body.buyEnabled === undefined) {
+        await upsertSetting("nft_market_buy_enabled", "1");
       }
-    };
+    }
+    if (typeof body.buyEnabled === "boolean") {
+      await upsertSetting("nft_market_buy_enabled", body.buyEnabled ? "1" : "0");
+    }
+    const fee = Number(body.feePercent);
     if (Number.isFinite(fee) && fee >= 0 && fee <= 50) {
-      await upsert("nft_market_fee_pct", String(fee));
+      await upsertSetting("nft_market_fee_pct", String(fee));
     }
-    if (typeof enabled === "boolean") {
-      await upsert("nft_market_enabled", enabled ? "1" : "0");
-    }
-    res.json({ message: "✅ NFT market settings saved" });
+
+    const settings = await readNftMarketSettings();
+    res.json({
+      ok: true,
+      message: "✅ NFT Market сохранён",
+      ...settings,
+    });
   } catch (e) {
     res.status(500).json({ error: String(e) });
   }

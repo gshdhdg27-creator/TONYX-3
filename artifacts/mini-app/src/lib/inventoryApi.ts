@@ -36,12 +36,16 @@ export type InventoryResponse = {
 
 export type MarketListing = {
   id: number;
+  inventoryId?: number;
   sellerId: string;
   nftId: string;
   nameRu: string;
   nameEn: string;
   imageUrl: string | null;
   rarity: string | null;
+  model?: string | null;
+  backdrop?: string | null;
+  symbol?: string | null;
   priceTon: number;
   listedAt: string;
 };
@@ -65,6 +69,7 @@ async function api<T>(path: string, options?: RequestInit): Promise<T> {
 export function notifyInventoryUpdated() {
   try {
     window.dispatchEvent(new CustomEvent("tonyx-inventory-updated"));
+    window.dispatchEvent(new CustomEvent("tonyx-market-updated"));
   } catch {
     /* ignore */
   }
@@ -84,18 +89,30 @@ export const inventoryApi = {
     }>("/api/mini/inventory/claim", {
       method: "POST",
       body: JSON.stringify({ nftId }),
+    }).then((r) => {
+      notifyInventoryUpdated();
+      return r;
     }),
   list: (inventoryId: number, priceTon: number) =>
     api<{ ok: boolean; inventoryId: number; priceTon: number; nftId: string }>(
       "/api/mini/inventory/list",
       { method: "POST", body: JSON.stringify({ inventoryId, priceTon }) },
-    ),
+    ).then((r) => {
+      notifyInventoryUpdated();
+      return r;
+    }),
   unlist: (inventoryId: number) =>
     api<{ ok: boolean }>("/api/mini/inventory/unlist", {
       method: "POST",
       body: JSON.stringify({ inventoryId }),
+    }).then((r) => {
+      notifyInventoryUpdated();
+      return r;
     }),
-  listings: () => api<{ listings: MarketListing[] }>("/api/mini/inventory/listings"),
+  listings: () =>
+    api<{ listings: MarketListing[]; buyEnabled?: boolean; enabled?: boolean }>(
+      "/api/mini/inventory/listings",
+    ),
   buy: (inventoryId: number) =>
     api<{
       ok: boolean;
@@ -107,10 +124,16 @@ export const inventoryApi = {
     }>("/api/mini/inventory/buy", {
       method: "POST",
       body: JSON.stringify({ inventoryId }),
+    }).then((r) => {
+      notifyInventoryUpdated();
+      return r;
     }),
   sell: (inventoryId: number, priceTon?: number) =>
     api<{ ok: boolean; listed?: boolean; priceTon?: number; inventoryId?: number }>(
       "/api/mini/inventory/sell",
       { method: "POST", body: JSON.stringify({ inventoryId, priceTon }) },
-    ),
+    ).then((r) => {
+      notifyInventoryUpdated();
+      return r;
+    }),
 };

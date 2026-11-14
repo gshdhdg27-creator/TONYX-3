@@ -17,6 +17,13 @@ function extractAdminId(req: import("express").Request, res: import("express").R
   return normalizeId(req.query.adminId ?? req.body?.adminId ?? req.headers["x-admin-id"]);
 }
 
+function isListedMeta(m: Record<string, unknown>): boolean {
+  const v = m.listed;
+  if (v === true || v === 1 || v === "1" || v === "true" || v === "yes") return true;
+  if (m.listedAt && m.priceTon != null && Number(m.priceTon) > 0) return true;
+  return false;
+}
+
 async function getSettingMap(): Promise<Record<string, string>> {
   const rows = await db.select().from(systemSettingsTable);
   const s: Record<string, string> = {};
@@ -56,6 +63,9 @@ router.post("/settings/nft-market", async (req, res) => {
     const body = req.body ?? {};
     if (body.enabled !== undefined) {
       await upsertSetting("nft_market_enabled", body.enabled ? "1" : "0");
+      if (body.enabled === true && body.buyEnabled === undefined) {
+        await upsertSetting("nft_market_buy_enabled", "1");
+      }
     }
     if (body.buyEnabled !== undefined) {
       await upsertSetting("nft_market_buy_enabled", body.buyEnabled ? "1" : "0");
@@ -88,7 +98,7 @@ router.get("/nft-market/listings", async (req, res) => {
     const listings = [];
     for (const it of rows) {
       const m = (it.meta ?? {}) as Record<string, unknown>;
-      if (!m.listed) continue;
+      if (!isListedMeta(m)) continue;
       listings.push({
         id: it.id,
         sellerId: it.telegramId,
@@ -139,7 +149,7 @@ router.post("/nft-market/unlist", async (req, res) => {
     meta.adminUnlistedBy = adminId;
     meta.adminUnlistedAt = new Date().toISOString();
     await db.update(miniUserInventoryTable).set({ meta }).where(eq(miniUserInventoryTable.id, item.id));
-    res.json({ ok: true, message: "Снято с продажи", id: item.id });
+    res.json({ ok: true, message: "Removed from sale", id: item.id });
   } catch (e) {
     res.status(500).json({ error: String(e) });
   }
@@ -156,7 +166,7 @@ router.post("/nft-market/unlist-all", async (req, res) => {
     let n = 0;
     for (const it of rows) {
       const m = (it.meta ?? {}) as Record<string, unknown>;
-      if (!m.listed) continue;
+      if (!isListedMeta(m)) continue;
       const meta = { ...m };
       delete meta.listed;
       delete meta.priceTon;
@@ -166,7 +176,30 @@ router.post("/nft-market/unlist-all", async (req, res) => {
       await db.update(miniUserInventoryTable).set({ meta }).where(eq(miniUserInventoryTable.id, it.id));
       n++;
     }
-    res.json({ ok: true, message: `Снято с продажи: ${n}`, count: n });
+    res.json({ ok: true, message: `Removed from sale: ${n}`, count: n });
+  } catch (e) {
+    res.status(500).json({ error: String(e) });
+  }
+});
+
+/** Permanently delete every inventory item that is currently listed */
+router.post("/nft-market/delete-all-listed", async (req, res) => {
+  const adminId = extractAdminId(req, res);
+  if (!adminId) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+  try {
+    const rows = await db.select().from(miniUserInventoryTable);
+    let n = 0;
+    for (const it of rows) {
+      const m = (it.meta ?? {}) as Record<string, unknown>;
+      if (!isListedMeta(m)) continue;
+      await db.delete(miniUserInventoryTable).where(eq(miniUserInventoryTable.id, it.id));
+      n++;
+    }
+    console.log(`[Admin] ${adminId} delete-all-listed count=${n}`);
+    res.json({ ok: true, message: `Deleted listed NFTs: ${n}`, count: n });
   } catch (e) {
     res.status(500).json({ error: String(e) });
   }
@@ -195,7 +228,7 @@ router.delete("/nft-market/listing/:id", async (req, res) => {
     }
     await db.delete(miniUserInventoryTable).where(eq(miniUserInventoryTable.id, id));
     console.log(`[Admin] ${adminId} deleted inventory item ${id} nft=${item.itemId} seller=${item.telegramId}`);
-    res.json({ ok: true, message: "Удалено", id });
+    res.json({ ok: true, message: "Deleted", id });
   } catch (e) {
     res.status(500).json({ error: String(e) });
   }

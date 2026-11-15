@@ -75,42 +75,67 @@ function isNativeTonTextDeposit(tx: {
   return Number(im.value ?? 0) / 1e9 > 0;
 }
 
-async function autoSendTon(toAddress: string, amountTon: number): Promise<string | null> {
+async function autoSendTon(toAddress: string, amountTon: number): Promise<string> {
   const mnemonic = process.env.PROJECT_WALLET_MNEMONIC?.trim();
-  if (!mnemonic) return null;
-  const words = mnemonic.split(/\s+/);
-  if (words.length < 12) {
-    console.error("[Wallet] PROJECT_WALLET_MNEMONIC invalid");
-    return null;
-  }
+  if (!mnemonic) throw new Error("PROJECT_WALLET_MNEMONIC не задан в env");
+  const words = mnemonic.split(/\s+/).filter(Boolean);
+  if (words.length < 12) throw new Error("PROJECT_WALLET_MNEMONIC некорректна (мало слов)");
+
   const key = await mnemonicToWalletKey(words);
   const endpoint = process.env.TON_RPC_URL ?? "https://toncenter.com/api/v2/jsonRPC";
   const apiKey = process.env.TONCENTER_API_KEY ?? process.env.TONAPI_KEY;
   const client = new TonClient({ endpoint, ...(apiKey ? { apiKey } : {}) });
-  const version = (process.env.PROJECT_WALLET_VERSION ?? "v5r1").toLowerCase();
+
   const msg = internal({
     to: toAddress,
     value: toNano(amountTon.toFixed(9)),
     bounce: false,
     body: "TONYX Withdrawal",
   });
-  if (version === "v4") {
-    const walletContract = WalletContractV4.create({ publicKey: key.publicKey, workchain: 0 });
-    const contract = client.open(walletContract);
-    const seqno = await contract.getSeqno();
-    await contract.sendTransfer({ secretKey: key.secretKey, seqno, messages: [msg] });
-    return `v4-seqno-${seqno}-${Date.now()}`;
+
+  const preferred = (process.env.PROJECT_WALLET_VERSION ?? "v5r1").toLowerCase();
+  const order = preferred === "v4" ? (["v4", "v5r1"] as const) : (["v5r1", "v4"] as const);
+
+  let lastErr: unknown = null;
+  for (const ver of order) {
+    try {
+      if (ver === "v5r1") {
+        const walletContract = WalletContractV5R1.create({ publicKey: key.publicKey, workchain: 0 });
+        console.log(`[Wallet] V5R1 derived=${walletContract.address.toString({ urlSafe: true, bounceable: false }).slice(0, 14)}…`);
+        const contract = client.open(walletContract);
+        const bal = await contract.getBalance();
+        const need = BigInt(Math.floor(amountTon * 1e9)) + 50_000_000n;
+        if (bal < need) {
+          throw new Error(`Недостаточно TON на hot-wallet: ${(Number(bal) / 1e9).toFixed(4)} TON, нужно ≥ ${(Number(need) / 1e9).toFixed(4)}`);
+        }
+        const seqno = await contract.getSeqno();
+        await contract.sendTransfer({
+          secretKey: key.secretKey,
+          seqno,
+          messages: [msg],
+          sendMode: SendMode.PAY_GAS_SEPARATELY + SendMode.IGNORE_ERRORS,
+        });
+        console.log(`[Wallet] ✅ Auto-send V5R1 seqno=${seqno} amount=${amountTon}`);
+        return `v5r1-seqno-${seqno}-${Date.now()}`;
+      }
+
+      const walletContract = WalletContractV4.create({ publicKey: key.publicKey, workchain: 0 });
+      const contract = client.open(walletContract);
+      const bal = await contract.getBalance();
+      const need = BigInt(Math.floor(amountTon * 1e9)) + 50_000_000n;
+      if (bal < need) {
+        throw new Error(`Недостаточно TON на hot-wallet (v4): ${(Number(bal) / 1e9).toFixed(4)} TON`);
+      }
+      const seqno = await contract.getSeqno();
+      await contract.sendTransfer({ secretKey: key.secretKey, seqno, messages: [msg] });
+      console.log(`[Wallet] ✅ Auto-send V4 seqno=${seqno} amount=${amountTon}`);
+      return `v4-seqno-${seqno}-${Date.now()}`;
+    } catch (e) {
+      lastErr = e;
+      console.warn(`[Wallet] autoSend ${ver} failed:`, e instanceof Error ? e.message : e);
+    }
   }
-  const walletContract = WalletContractV5R1.create({ publicKey: key.publicKey, workchain: 0 });
-  const contract = client.open(walletContract);
-  const seqno = await contract.getSeqno();
-  await contract.sendTransfer({
-    secretKey: key.secretKey,
-    seqno,
-    messages: [msg],
-    sendMode: SendMode.PAY_GAS_SEPARATELY + SendMode.IGNORE_ERRORS,
-  });
-  return `v5r1-seqno-${seqno}-${Date.now()}`;
+  throw lastErr instanceof Error ? lastErr : new Error(String(lastErr ?? "autoSend failed"));
 }
 
 interface TonApiTx {

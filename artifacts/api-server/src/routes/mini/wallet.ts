@@ -5,6 +5,7 @@ import { notifyUser } from "../../services/botNotify.js";
 import { eq, desc } from "drizzle-orm";
 import { mnemonicToWalletKey } from "@ton/crypto";
 import { WalletContractV4, TonClient, internal, toNano } from "@ton/ton";
+import { scanOnce } from "../../services/depositScanner.js";
 
 const router: IRouter = Router();
 
@@ -255,6 +256,9 @@ router.post("/topup", async (req, res) => {
       status: "pending",
     });
 
+    // Best-effort background scan (does not block response)
+    void scanOnce().catch((e) => console.warn("[Topup] scanOnce after intent:", e));
+
     console.log(`[Topup] Intent: ${telegramId} → ${tonAmount} TON, wallet=${walletAddress ?? "?"}`);
     res.json({ ok: true, message: "Пополнение зарегистрировано. Проверяем транзакцию..." });
   } catch (e) {
@@ -270,6 +274,9 @@ router.post("/topup/verify", async (req, res) => {
   const minTon = expectedAmount ? Number(expectedAmount) * 0.99 : 0.05;
 
   try {
+    // Also run full scanner so other pending deposits get credited
+    void scanOnce().catch((e) => console.warn("[Topup] scanOnce during verify:", e));
+
     const user = await db.select().from(usersTable)
       .where(eq(usersTable.telegramId, String(telegramId))).then(r => r[0] ?? null);
     if (!user) { res.status(404).json({ error: "Пользователь не найден" }); return; }

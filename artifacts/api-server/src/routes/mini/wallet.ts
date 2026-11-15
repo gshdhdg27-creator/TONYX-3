@@ -4,7 +4,7 @@ import { usersTable, miniWithdrawalsTable, miniTopupRequestsTable } from "@works
 import { notifyUser } from "../../services/botNotify.js";
 import { eq, desc } from "drizzle-orm";
 import { mnemonicToWalletKey } from "@ton/crypto";
-import { WalletContractV4, WalletContractV5R1, TonClient, internal, toNano, SendMode } from "@ton/ton";
+import { WalletContractV4, WalletContractV5R1, TonClient, internal, toNano, SendMode, Address } from "@ton/ton";
 import { scanOnce } from "../../services/depositScanner.js";
 
 const router: IRouter = Router();
@@ -43,6 +43,14 @@ function normalizeOp(op: string | number | null | undefined): string {
   return s.startsWith("0x") ? s : `0x${s.replace(/^0x/, "")}`;
 }
 
+function addrEqual(a: string, b: string): boolean {
+  try {
+    return Address.parse(a).equals(Address.parse(b));
+  } catch {
+    return a.trim().toLowerCase() === b.trim().toLowerCase();
+  }
+}
+
 function isNativeTonTextDeposit(tx: {
   success?: boolean;
   in_msg?: {
@@ -77,7 +85,7 @@ function isNativeTonTextDeposit(tx: {
 
 async function autoSendTon(toAddress: string, amountTon: number): Promise<string> {
   const mnemonic = process.env.PROJECT_WALLET_MNEMONIC?.trim();
-  if (!mnemonic) throw new Error("PROJECT_WALLET_MNEMONIC не задан в env");
+  if (!mnemonic) throw new Error("PROJECT_WALLET_MNEMONIC не задан в env Vercel");
   const words = mnemonic.split(/\s+/).filter(Boolean);
   if (words.length < 12) throw new Error("PROJECT_WALLET_MNEMONIC некорректна (мало слов)");
 
@@ -94,19 +102,32 @@ async function autoSendTon(toAddress: string, amountTon: number): Promise<string
   });
 
   const preferred = (process.env.PROJECT_WALLET_VERSION ?? "v5r1").toLowerCase();
-  const order = preferred === "v4" ? (["v4", "v5r1"] as const) : (["v5r1", "v4"] as const);
+  const order = preferred === "v4" ? (["v5r1", "v4"] as const) : (["v5r1", "v4"] as const);
 
   let lastErr: unknown = null;
   for (const ver of order) {
     try {
       if (ver === "v5r1") {
-        const walletContract = WalletContractV5R1.create({ publicKey: key.publicKey, workchain: 0 });
-        console.log(`[Wallet] V5R1 derived=${walletContract.address.toString({ urlSafe: true, bounceable: false }).slice(0, 14)}…`);
+        const walletContract = WalletContractV5R1.create({
+          publicKey: key.publicKey,
+          workchain: 0,
+          walletId: { networkGlobalId: -239 },
+        });
+        const derived = walletContract.address.toString({ urlSafe: true, bounceable: false });
+        console.log(`[Wallet] V5R1 derived=${derived}`);
+        if (!addrEqual(derived, PROJECT_WALLET)) {
+          console.warn(`[Wallet] V5R1 address mismatch: derived=${derived} expected=${PROJECT_WALLET}`);
+          throw new Error(
+            `Мнемоника не соответствует PROJECT_WALLET. derived=${derived.slice(0, 12)}… expected=${PROJECT_WALLET.slice(0, 12)}…`,
+          );
+        }
         const contract = client.open(walletContract);
         const bal = await contract.getBalance();
-        const need = BigInt(Math.floor(amountTon * 1e9)) + 50_000_000n;
+        const need = BigInt(Math.floor(amountTon * 1e9)) + 80_000_000n;
         if (bal < need) {
-          throw new Error(`Недостаточно TON на hot-wallet: ${(Number(bal) / 1e9).toFixed(4)} TON, нужно ≥ ${(Number(need) / 1e9).toFixed(4)}`);
+          throw new Error(
+            `Недостаточно TON на hot-wallet: ${(Number(bal) / 1e9).toFixed(4)} TON, нужно ≥ ${(Number(need) / 1e9).toFixed(4)}. Пополните ${PROJECT_WALLET.slice(0, 10)}…`,
+          );
         }
         const seqno = await contract.getSeqno();
         await contract.sendTransfer({
@@ -115,14 +136,19 @@ async function autoSendTon(toAddress: string, amountTon: number): Promise<string
           messages: [msg],
           sendMode: SendMode.PAY_GAS_SEPARATELY + SendMode.IGNORE_ERRORS,
         });
-        console.log(`[Wallet] ✅ Auto-send V5R1 seqno=${seqno} amount=${amountTon}`);
+        console.log(`[Wallet] ✅ Auto-send V5R1 seqno=${seqno} amount=${amountTon} → ${toAddress.slice(0, 12)}…`);
         return `v5r1-seqno-${seqno}-${Date.now()}`;
       }
 
       const walletContract = WalletContractV4.create({ publicKey: key.publicKey, workchain: 0 });
+      const derived = walletContract.address.toString({ urlSafe: true, bounceable: false });
+      console.log(`[Wallet] V4 derived=${derived}`);
+      if (!addrEqual(derived, PROJECT_WALLET)) {
+        throw new Error(`V4 address mismatch: ${derived.slice(0, 12)}…`);
+      }
       const contract = client.open(walletContract);
       const bal = await contract.getBalance();
-      const need = BigInt(Math.floor(amountTon * 1e9)) + 50_000_000n;
+      const need = BigInt(Math.floor(amountTon * 1e9)) + 80_000_000n;
       if (bal < need) {
         throw new Error(`Недостаточно TON на hot-wallet (v4): ${(Number(bal) / 1e9).toFixed(4)} TON`);
       }
@@ -174,6 +200,71 @@ async function queryProjectWalletTxs(): Promise<TonApiTx[]> {
     return [];
   }
 }
+
+router.get("/status", async (_req, res) => {
+  try {
+    const hasMnemonic = Boolean(process.env.PROJECT_WALLET_MNEMONIC?.trim());
+    const version = process.env.PROJECT_WALLET_VERSION ?? "v5r1";
+    let hotBalanceTon: number | null = null;
+    let derivedMatch: boolean | null = null;
+    let derivedAddress: string | null = null;
+    let diagError: string | null = null;
+
+    try {
+      const r = await fetch(`https://tonapi.io/v2/accounts/${encodeURIComponent(PROJECT_WALLET)}`);
+      if (r.ok) {
+        const d = (await r.json()) as { balance?: number | string };
+        hotBalanceTon = Number(d.balance ?? 0) / 1e9;
+      }
+    } catch (e) {
+      diagError = e instanceof Error ? e.message : String(e);
+    }
+
+    if (hasMnemonic) {
+      try {
+        const words = process.env.PROJECT_WALLET_MNEMONIC!.trim().split(/\s+/).filter(Boolean);
+        const key = await mnemonicToWalletKey(words);
+        const w = WalletContractV5R1.create({
+          publicKey: key.publicKey,
+          workchain: 0,
+          walletId: { networkGlobalId: -239 },
+        });
+        derivedAddress = w.address.toString({ urlSafe: true, bounceable: false });
+        derivedMatch = addrEqual(derivedAddress, PROJECT_WALLET);
+      } catch (e) {
+        diagError = e instanceof Error ? e.message : String(e);
+      }
+    }
+
+    const ready =
+      hasMnemonic &&
+      derivedMatch === true &&
+      hotBalanceTon != null &&
+      hotBalanceTon >= MIN_WITHDRAWAL_TON + 0.08;
+
+    res.json({
+      ready,
+      projectWallet: PROJECT_WALLET,
+      hasMnemonic,
+      version,
+      hotBalanceTon,
+      derivedAddress,
+      derivedMatch,
+      minWithdrawal: MIN_WITHDRAWAL_TON,
+      commissionPct: COMMISSION_PCT * 100,
+      diagError,
+      hint: !hasMnemonic
+        ? "Добавь PROJECT_WALLET_MNEMONIC в Vercel env и Redeploy"
+        : derivedMatch === false
+          ? "Мнемоника не от этого кошелька — проверь seed UQBDrAxy…"
+          : (hotBalanceTon ?? 0) < MIN_WITHDRAWAL_TON + 0.08
+            ? `Пополни hot-wallet минимум до ~${(MIN_WITHDRAWAL_TON + 0.15).toFixed(2)} TON`
+            : "Автовывод готов",
+    });
+  } catch (e) {
+    res.status(500).json({ error: e instanceof Error ? e.message : "status error" });
+  }
+});
 
 router.post("/withdraw", async (req, res) => {
   const { telegramId, tonAmount, address } = req.body ?? {};
@@ -261,7 +352,7 @@ router.post("/withdraw", async (req, res) => {
         .where(eq(miniWithdrawalsTable.id, withdrawal.id));
       void notifyUser(
         String(telegramId),
-        `⏳ <b>Заявка на вывод принята</b>\n\nСумма: <b>${netAmount.toFixed(4)} TON</b> (после комиссии 5%)\nАдрес: <code>${cleanAddress}</code>\n\nЗаявка будет обработана в течение 24 часов.`,
+        `⏳ <b>Заявка на вывод принята</b>\n\nСумма: <b>${netAmount.toFixed(4)} TON</b> (после комиссии 5%)\nАдрес: <code>${cleanAddress}</code>\n\nЗаявка будет обработана вручную (нет PROJECT_WALLET_MNEMONIC).`,
       );
       res.json({
         id: withdrawal.id,
@@ -271,7 +362,7 @@ router.post("/withdraw", async (req, res) => {
         commission,
         commissionPct: COMMISSION_PCT * 100,
         newBalance: newTon,
-        message: `Заявка принята. К выплате: ${netAmount.toFixed(4)} TON (комиссия 5%). Обработка до 24ч.`,
+        message: `Заявка принята (автовывод выключен — нет мнемоники). К выплате: ${netAmount.toFixed(4)} TON.`,
       });
     } else {
       const revertTon = parseFloat((newTon + amount).toFixed(8));

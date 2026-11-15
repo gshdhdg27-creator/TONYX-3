@@ -11,22 +11,79 @@ const router: IRouter = Router();
 
 const MIN_WITHDRAWAL_TON = 0.1;
 const COMMISSION_PCT = 0.05;
-// MUST match frontend TOPUP_WALLET and depositScanner PROJECT_WALLET default
 const PROJECT_WALLET =
   process.env.PROJECT_WALLET_ADDRESS ??
   "UQBDrAxyWlMMmtSgq5TjQyO1nKacS_nA0_7ZQ88m8eMmU1jO";
 
 const _withdrawalInProgress = new Set<string>();
 
+const REJECT_OP_CODES = new Set([
+  "0x7362d09c", "7362d09c",
+  "0xf8a7ea5", "f8a7ea5", "0x0f8a7ea5", "0f8a7ea5",
+  "0x178d4519", "178d4519",
+  "0x7369676e", "7369676e",
+]);
+
 function isValidTonAddress(addr: string): boolean {
   const cleaned = addr.trim();
   return /^[EUk][Qq][\w\-+/]{46,48}$/.test(cleaned) || /^0:[0-9a-fA-F]{64}$/.test(cleaned);
 }
 
-/** TonAPI text_comment lives in decoded_body.text (not .comment). */
 function extractComment(decoded: { text?: string; comment?: string } | null | undefined): string {
   if (!decoded) return "";
   return String(decoded.text ?? decoded.comment ?? "").trim();
+}
+
+function normalizeOp(op: string | number | null | undefined): string {
+  if (op === null || op === undefined || op === "") return "";
+  if (typeof op === "number") return `0x${op.toString(16)}`;
+  const s = String(op).trim().toLowerCase();
+  if (s.startsWith("0x")) return s;
+  if (/^\d+$/.test(s)) return `0x${Number(s).toString(16)}`;
+  return s.startsWith("0x") ? s : `0x${s.replace(/^0x/, "")}`;
+}
+
+/** Only pure native TON + text comment deposits. */
+function isNativeTonTextDeposit(tx: {
+  success?: boolean;
+  in_msg?: {
+    msg_type?: string;
+    bounced?: boolean;
+    value?: string | number;
+    op_code?: string | number;
+    decoded_op_name?: string;
+    decoded_body?: Record<string, unknown> | null;
+  } | null;
+}): boolean {
+  if (tx.success === false) return false;
+  const im = tx.in_msg;
+  if (!im) return false;
+  if (im.bounced === true) return false;
+
+  const msgType = String(im.msg_type ?? "").toLowerCase();
+  if (msgType && msgType !== "int_msg" && msgType !== "internal") return false;
+
+  const opName = String(im.decoded_op_name ?? "").toLowerCase();
+  if (opName.includes("jetton") || opName.includes("token")) return false;
+  if (opName && !["", "text_comment", "comment"].includes(opName)) return false;
+
+  const op = normalizeOp(im.op_code);
+  if (op && REJECT_OP_CODES.has(op)) return false;
+  if (op && op !== "0x0" && op !== "0x00" && op !== "0x00000000") return false;
+
+  const body = im.decoded_body;
+  if (body && typeof body === "object") {
+    const keys = Object.keys(body).map(k => k.toLowerCase());
+    if (keys.some(k => k.includes("jetton") || k.includes("forward_payload") || k.includes("forward_ton"))) {
+      return false;
+    }
+    if (!("text" in body) && !("comment" in body) && ("amount" in body || "query_id" in body)) {
+      return false;
+    }
+  }
+
+  const valueTon = Number(im.value ?? 0) / 1e9;
+  return valueTon > 0;
 }
 
 async function autoSendTon(toAddress: string, amountTon: number): Promise<string | null> {
@@ -64,9 +121,14 @@ interface TonApiTx {
   hash: string;
   lt: string | number;
   utime: number;
+  success?: boolean;
   in_msg?: {
+    msg_type?: string;
+    bounced?: boolean;
     value?: string | number;
-    decoded_body?: { text?: string; comment?: string } | null;
+    op_code?: string | number;
+    decoded_op_name?: string;
+    decoded_body?: { text?: string; comment?: string } & Record<string, unknown> | null;
   } | null;
 }
 
@@ -171,7 +233,6 @@ router.post("/withdraw", async (req, res) => {
         .set({ status: "completed", txHash: txRef })
         .where(eq(miniWithdrawalsTable.id, withdrawal.id));
 
-      console.log(`[Wallet] Auto-sent ${netAmount} TON → ${cleanAddress}, ref=${txRef}`);
       void notifyUser(
         String(telegramId),
         `💸 <b>Вывод TON выполнен!</b>\n\n` +
@@ -223,7 +284,6 @@ router.post("/withdraw", async (req, res) => {
         .where(eq(miniWithdrawalsTable.id, withdrawal.id));
 
       const errMsg = sendErr instanceof Error ? sendErr.message : String(sendErr);
-      console.error(`[Wallet] Reverted balance for ${telegramId}: ${errMsg}`);
       res.status(500).json({ error: `Ошибка отправки: ${errMsg}. Баланс восстановлен.` });
     }
   } catch (e) {
@@ -256,10 +316,8 @@ router.post("/topup", async (req, res) => {
       status: "pending",
     });
 
-    // Best-effort background scan (does not block response)
     void scanOnce().catch((e) => console.warn("[Topup] scanOnce after intent:", e));
 
-    console.log(`[Topup] Intent: ${telegramId} → ${tonAmount} TON, wallet=${walletAddress ?? "?"}`);
     res.json({ ok: true, message: "Пополнение зарегистрировано. Проверяем транзакцию..." });
   } catch (e) {
     console.error("[Topup] POST error:", e);
@@ -274,7 +332,6 @@ router.post("/topup/verify", async (req, res) => {
   const minTon = expectedAmount ? Number(expectedAmount) * 0.99 : 0.05;
 
   try {
-    // Also run full scanner so other pending deposits get credited
     void scanOnce().catch((e) => console.warn("[Topup] scanOnce during verify:", e));
 
     const user = await db.select().from(usersTable)
@@ -292,6 +349,7 @@ router.post("/topup/verify", async (req, res) => {
     const txs = await queryProjectWalletTxs();
 
     const matchingTx = txs.find(tx => {
+      if (!isNativeTonTextDeposit(tx)) return false;
       const comment = extractComment(tx.in_msg?.decoded_body);
       const valueTon = Number(tx.in_msg?.value ?? 0) / 1e9;
       return validMemos.has(comment) && valueTon >= minTon;
@@ -303,7 +361,6 @@ router.post("/topup/verify", async (req, res) => {
     }
 
     const memo = extractComment(matchingTx.in_msg?.decoded_body);
-    // MUST match depositScanner: hash:lt
     const txKey = `${matchingTx.hash}:${String(matchingTx.lt)}`;
     const receivedTon = Number(matchingTx.in_msg?.value ?? 0) / 1e9;
 
@@ -340,8 +397,6 @@ router.post("/topup/verify", async (req, res) => {
     await db.update(usersTable)
       .set({ ton: String(newTon), updatedAt: new Date() })
       .where(eq(usersTable.telegramId, String(telegramId)));
-
-    console.log(`[Topup] Verified & credited ${receivedTon} TON → ${telegramId}, txKey=${txKey}`);
 
     void notifyUser(
       String(telegramId),

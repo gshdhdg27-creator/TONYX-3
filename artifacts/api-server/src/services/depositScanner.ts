@@ -1,10 +1,8 @@
 /**
- * Background deposit scanner — runs every 15 seconds (long-running)
- * or via Vercel Cron /api/cron/scan-deposits.
+ * Background deposit scanner — native TON only.
  *
- * Strategy:
- *   1. Try TonAPI v2 (with or without TONAPI_KEY)
- *   2. Fallback to Toncenter v2
+ * Credits ONLY real on-chain TON (in_msg.value in nanotons).
+ * Jettons / fake "TON" tokens / contract spam are rejected.
  *
  * Memo formats:
  *   - 12-char deposit code (users.deposit_code)
@@ -34,9 +32,11 @@ interface NormTx {
   utime: number;
   valueTon: number;
   comment: string;
+  /** False → never credit (jetton / external / bounced / failed) */
+  isNativeTonDeposit: boolean;
+  skipReason?: string;
 }
 
-/** 12-char deposit codes: uppercase alphanumeric (exclude 0/1/I/O ambiguity optional — allow all A-Z2-9) */
 const DEPOSIT_CODE_RE = /^[A-Z2-9]{12}$/;
 
 interface ParsedMemo {
@@ -44,11 +44,116 @@ interface ParsedMemo {
   value: string;
 }
 
-/** Extract text comment from TonAPI decoded_body (field is `text`, not `comment`). */
+/** Known non-native / jetton opcodes (hex lowercase, with or without 0x). */
+const REJECT_OP_CODES = new Set([
+  "0x7362d09c", // jetton transfer notification
+  "7362d09c",
+  "0xf8a7ea5",  // jetton transfer
+  "f8a7ea5",
+  "0x0f8a7ea5",
+  "0f8a7ea5",
+  "0x178d4519", // jetton internal transfer
+  "178d4519",
+  "0x7369676e", // wallet external signed (not an incoming deposit)
+  "7369676e",
+]);
+
+const REJECT_OP_NAMES = new Set([
+  "jetton_notify",
+  "jetton_transfer",
+  "jetton_transfer_notification",
+  "jetton_internal_transfer",
+  "excess",
+  "excesses",
+  "wallet_signed_external_v5_r1",
+  "wallet_signed_external_v4",
+  "wallet_signed_internal",
+]);
+
 function extractTonApiComment(decoded: { text?: string; comment?: string } | null | undefined): string {
   if (!decoded) return "";
-  const raw = decoded.text ?? decoded.comment ?? "";
-  return String(raw).trim();
+  return String(decoded.text ?? decoded.comment ?? "").trim();
+}
+
+function normalizeOp(op: string | number | null | undefined): string {
+  if (op === null || op === undefined || op === "") return "";
+  if (typeof op === "number") return `0x${op.toString(16)}`;
+  const s = String(op).trim().toLowerCase();
+  if (s.startsWith("0x")) return s;
+  // numeric string
+  if (/^\d+$/.test(s)) return `0x${Number(s).toString(16)}`;
+  return s.startsWith("0x") ? s : `0x${s.replace(/^0x/, "")}`;
+}
+
+/**
+ * Accept only simple internal messages that carry native TON + text comment.
+ * Jettons attach gas TON but are NOT native deposits.
+ */
+function classifyNativeDeposit(args: {
+  success?: boolean;
+  msgType?: string | null;
+  bounced?: boolean | null;
+  opCode?: string | number | null;
+  opName?: string | null;
+  decodedBody?: Record<string, unknown> | null;
+  valueTon: number;
+}): { ok: boolean; reason?: string } {
+  if (args.success === false) return { ok: false, reason: "tx_failed" };
+  if (args.bounced === true) return { ok: false, reason: "bounced" };
+
+  const msgType = String(args.msgType ?? "").toLowerCase();
+  // Only internal inbound messages (real transfers to our wallet)
+  if (msgType && msgType !== "int_msg" && msgType !== "internal") {
+    return { ok: false, reason: `msg_type=${msgType}` };
+  }
+
+  const opName = String(args.opName ?? "").toLowerCase();
+  if (opName && REJECT_OP_NAMES.has(opName)) {
+    return { ok: false, reason: `op_name=${opName}` };
+  }
+  // jetton in name
+  if (opName.includes("jetton") || opName.includes("token")) {
+    return { ok: false, reason: `op_name=${opName}` };
+  }
+
+  const op = normalizeOp(args.opCode);
+  if (op && REJECT_OP_CODES.has(op)) {
+    return { ok: false, reason: `op_code=${op}` };
+  }
+  // any jetton-like hex we might have missed: reject non-zero ops that are not text_comment
+  // text_comment is 0x00000000 or empty
+  const isTextComment =
+    !op ||
+    op === "0x0" ||
+    op === "0x00" ||
+    op === "0x00000000" ||
+    opName === "text_comment" ||
+    opName === "comment";
+
+  if (op && !isTextComment) {
+    // Unknown contract payload — do not credit (safer than accepting fake tokens)
+    return { ok: false, reason: `non_simple_op=${op || opName}` };
+  }
+
+  const body = args.decodedBody;
+  if (body && typeof body === "object") {
+    const keys = Object.keys(body).map(k => k.toLowerCase());
+    // Jetton notification bodies usually have query_id + amount + sender / forward_payload
+    const jettonHints = ["jetton", "forward_payload", "forward_ton_amount", "response_destination"];
+    if (jettonHints.some(h => keys.some(k => k.includes(h)))) {
+      return { ok: false, reason: "jetton_body_fields" };
+    }
+    // If body has amount as bigint-like AND text is missing → suspicious non-comment payload
+    if (!("text" in body) && !("comment" in body) && ("amount" in body || "query_id" in body)) {
+      return { ok: false, reason: "contract_payload_no_text" };
+    }
+  }
+
+  if (!(args.valueTon > 0)) {
+    return { ok: false, reason: "zero_value" };
+  }
+
+  return { ok: true };
 }
 
 function tryBase64DecodeIfLooksLike(comment: string): string {
@@ -110,21 +215,41 @@ async function fetchViaTonApi(): Promise<NormTx[] | null> {
         hash: string;
         lt: string | number;
         utime: number;
+        success?: boolean;
         in_msg?: {
+          msg_type?: string;
+          bounced?: boolean;
           value?: string | number;
-          decoded_body?: { text?: string; comment?: string } | null;
+          op_code?: string | number;
+          decoded_op_name?: string;
+          decoded_body?: Record<string, unknown> | null;
         } | null;
       }>;
     };
 
-    return (data.transactions ?? []).map(tx => ({
-      hash: tx.hash,
-      lt: String(tx.lt),
-      utime: tx.utime,
-      valueTon: Number(tx.in_msg?.value ?? 0) / 1e9,
-      // CRITICAL: TonAPI text_comment uses decoded_body.text (not .comment)
-      comment: extractTonApiComment(tx.in_msg?.decoded_body),
-    }));
+    return (data.transactions ?? []).map(tx => {
+      const im = tx.in_msg;
+      const valueTon = Number(im?.value ?? 0) / 1e9;
+      const comment = extractTonApiComment(im?.decoded_body as { text?: string; comment?: string } | null);
+      const cls = classifyNativeDeposit({
+        success: tx.success,
+        msgType: im?.msg_type,
+        bounced: im?.bounced,
+        opCode: im?.op_code,
+        opName: im?.decoded_op_name,
+        decodedBody: im?.decoded_body ?? null,
+        valueTon,
+      });
+      return {
+        hash: tx.hash,
+        lt: String(tx.lt),
+        utime: tx.utime,
+        valueTon,
+        comment,
+        isNativeTonDeposit: cls.ok,
+        skipReason: cls.reason,
+      };
+    });
   } catch (e) {
     clearTimeout(timer);
     if ((e as Error)?.name !== "AbortError") {
@@ -167,6 +292,9 @@ async function fetchViaToncenter(): Promise<NormTx[]> {
         in_msg?: {
           value?: string;
           message?: string;
+          source?: string;
+          destination?: string;
+          msg_data?: { "@type"?: string; text?: string; body?: string };
         } | null;
       }>;
     };
@@ -190,12 +318,25 @@ async function fetchViaToncenter(): Promise<NormTx[]> {
           /* use as-is */
         }
       }
+      const valueTon = Number(tx.in_msg?.value ?? 0) / 1e9;
+      // Toncenter rarely exposes jetton opcodes clearly; still require positive native value + memo
+      const cls = classifyNativeDeposit({
+        success: true,
+        msgType: "int_msg",
+        bounced: false,
+        opCode: comment ? "0x00000000" : null,
+        opName: comment ? "text_comment" : null,
+        decodedBody: comment ? { text: comment } : null,
+        valueTon,
+      });
       return {
         hash: tx.transaction_id.hash,
         lt: tx.transaction_id.lt,
         utime: tx.utime,
-        valueTon: Number(tx.in_msg?.value ?? 0) / 1e9,
+        valueTon,
         comment,
+        isNativeTonDeposit: cls.ok,
+        skipReason: cls.reason,
       };
     });
   } catch (e) {
@@ -208,7 +349,6 @@ async function fetchViaToncenter(): Promise<NormTx[]> {
 }
 
 async function fetchRecentTxs(): Promise<NormTx[]> {
-  // Prefer TonAPI even without key (public rate limits still work for small traffic)
   const tonApiResult = await fetchViaTonApi();
   if (tonApiResult !== null) {
     console.log(`[DepositScanner] TonAPI returned ${tonApiResult.length} tx(s)`);
@@ -256,7 +396,6 @@ async function findUser(parsed: ParsedMemo) {
       .where(sql`upper(${usersTable.depositCode}) = ${code}`)
       .then(r => r[0] ?? null);
     if (byUpper) return byUpper;
-    // fallback exact match
     return db
       .select()
       .from(usersTable)
@@ -343,7 +482,15 @@ export async function scanOnce(): Promise<void> {
     let credited = 0;
     for (const tx of txs) {
       const txKey = `${tx.hash}:${tx.lt}`;
-      console.log(`[DepositScanner] TX: ${txKey} value=${tx.valueTon} comment="${tx.comment}"`);
+      console.log(
+        `[DepositScanner] TX: ${txKey} value=${tx.valueTon} comment="${tx.comment}" native=${tx.isNativeTonDeposit}`,
+      );
+
+      // Hard rule: only native TON simple transfers
+      if (!tx.isNativeTonDeposit) {
+        console.log(`[DepositScanner] SKIP ${txKey} reason=not_native_ton (${tx.skipReason ?? "filtered"})`);
+        continue;
+      }
 
       if (!tx.comment || !tx.comment.trim()) {
         console.log(`[DepositScanner] SKIP ${txKey} reason=no_comment`);
@@ -399,7 +546,7 @@ export function startDepositScanner(): void {
     `[DepositScanner] Starting — wallet: ${walletShort}… ` +
     `interval: ${SCAN_INTERVAL_MS / 1000}s ` +
     `API: ${hasTonApi ? "TonAPI(keyed)+Toncenter" : "TonAPI(public)+Toncenter"} ` +
-    `MIN_TON=${MIN_TON}`,
+    `MIN_TON=${MIN_TON} (native TON only)`,
   );
 
   void scanOnce();

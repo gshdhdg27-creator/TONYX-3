@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import { usersTable, miniWithdrawalsTable, miniTopupRequestsTable } from "@workspace/db/schema";
 import { notifyUser } from "../../services/botNotify.js";
-import { eq, desc, and } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm";
 import { mnemonicToWalletKey } from "@ton/crypto";
 import { WalletContractV4, TonClient, internal, toNano } from "@ton/ton";
 
@@ -15,9 +15,6 @@ const PROJECT_WALLET =
   process.env.PROJECT_WALLET_ADDRESS ??
   "UQBDrAxyWlMMmtSgq5TjQyO1nKacS_nA0_7ZQ88m8eMmU1jO";
 
-// Per-user withdrawal lock — prevents concurrent /withdraw requests for the
-// same telegramId from both passing the balance check before either commits.
-// Node.js is single-threaded, so a Set is safe as a process-level mutex.
 const _withdrawalInProgress = new Set<string>();
 
 function isValidTonAddress(addr: string): boolean {
@@ -25,7 +22,12 @@ function isValidTonAddress(addr: string): boolean {
   return /^[EUk][Qq][\w\-+/]{46,48}$/.test(cleaned) || /^0:[0-9a-fA-F]{64}$/.test(cleaned);
 }
 
-/* ─── Auto-send TON from project wallet via @ton/ton ─── */
+/** TonAPI text_comment lives in decoded_body.text (not .comment). */
+function extractComment(decoded: { text?: string; comment?: string } | null | undefined): string {
+  if (!decoded) return "";
+  return String(decoded.text ?? decoded.comment ?? "").trim();
+}
+
 async function autoSendTon(toAddress: string, amountTon: number): Promise<string | null> {
   const mnemonic = process.env.PROJECT_WALLET_MNEMONIC?.trim();
   if (!mnemonic) return null;
@@ -35,11 +37,11 @@ async function autoSendTon(toAddress: string, amountTon: number): Promise<string
   const walletContract = WalletContractV4.create({ publicKey: key.publicKey, workchain: 0 });
 
   const endpoint = process.env.TON_RPC_URL ?? "https://toncenter.com/api/v2/jsonRPC";
-  const apiKey   = process.env.TONCENTER_API_KEY;
-  const client   = new TonClient({ endpoint, ...(apiKey ? { apiKey } : {}) });
+  const apiKey = process.env.TONCENTER_API_KEY;
+  const client = new TonClient({ endpoint, ...(apiKey ? { apiKey } : {}) });
 
   const contract = client.open(walletContract);
-  const seqno    = await contract.getSeqno();
+  const seqno = await contract.getSeqno();
 
   await contract.sendTransfer({
     secretKey: key.secretKey,
@@ -57,21 +59,19 @@ async function autoSendTon(toAddress: string, amountTon: number): Promise<string
   return `seqno-${seqno}-${Date.now()}`;
 }
 
-/* ─── TonAPI transaction type ─── */
 interface TonApiTx {
   hash: string;
   lt: string | number;
   utime: number;
   in_msg?: {
     value?: string | number;
-    decoded_body?: { comment?: string } | null;
+    decoded_body?: { text?: string; comment?: string } | null;
   } | null;
 }
 
-/* ─── Query TonAPI for project wallet transactions ─── */
 async function queryProjectWalletTxs(): Promise<TonApiTx[]> {
   const encodedAddr = encodeURIComponent(PROJECT_WALLET);
-  const apiKey      = process.env.TONAPI_KEY;
+  const apiKey = process.env.TONAPI_KEY;
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (apiKey) headers["Authorization"] = `Bearer ${apiKey}`;
 
@@ -92,10 +92,6 @@ async function queryProjectWalletTxs(): Promise<TonApiTx[]> {
   }
 }
 
-/* ─────────────────────────────────────────────────────────
-   POST /withdraw — deducts balance + auto-sends via blockchain
-   Falls back to "pending" if PROJECT_WALLET_MNEMONIC not set
-───────────────────────────────────────────────────────── */
 router.post("/withdraw", async (req, res) => {
   const { telegramId, tonAmount, address } = req.body ?? {};
 
@@ -105,7 +101,6 @@ router.post("/withdraw", async (req, res) => {
   }
 
   const amount = Number(tonAmount);
-  // Explicit guard: amount must be strictly positive and at least MIN
   if (!isFinite(amount) || amount <= 0) {
     res.status(400).json({ error: "Некорректная сумма вывода" });
     return;
@@ -119,7 +114,6 @@ router.post("/withdraw", async (req, res) => {
     return;
   }
 
-  // Anti-spam / race-condition guard: one withdrawal at a time per user.
   const userKey = String(telegramId);
   if (_withdrawalInProgress.has(userKey)) {
     res.status(429).json({ error: "Предыдущий запрос на вывод ещё обрабатывается. Подождите." });
@@ -134,7 +128,7 @@ router.post("/withdraw", async (req, res) => {
   }
 
   const commission = parseFloat((amount * COMMISSION_PCT).toFixed(8));
-  const netAmount  = parseFloat((amount - commission).toFixed(8));
+  const netAmount = parseFloat((amount - commission).toFixed(8));
 
   try {
     const user = await db.select().from(usersTable)
@@ -162,7 +156,6 @@ router.post("/withdraw", async (req, res) => {
       status: "processing",
     }).returning();
 
-    // Attempt blockchain auto-send
     let txRef: string | null = null;
     let sendErr: unknown = null;
     try {
@@ -198,7 +191,6 @@ router.post("/withdraw", async (req, res) => {
         message: `✅ ${netAmount.toFixed(4)} TON отправлено на ${cleanAddress.slice(0, 8)}… (комиссия 5%)`,
       });
     } else if (!process.env.PROJECT_WALLET_MNEMONIC) {
-      // Mnemonic not configured — leave as pending for admin
       await db.update(miniWithdrawalsTable)
         .set({ status: "pending" })
         .where(eq(miniWithdrawalsTable.id, withdrawal.id));
@@ -221,7 +213,6 @@ router.post("/withdraw", async (req, res) => {
         message: `Заявка принята. К выплате: ${netAmount.toFixed(4)} TON (комиссия 5%). Обработка до 24ч.`,
       });
     } else {
-      // Mnemonic set but send failed — revert user balance
       const revertTon = parseFloat((newTon + amount).toFixed(8));
       await db.update(usersTable)
         .set({ ton: String(revertTon), updatedAt: new Date() })
@@ -238,14 +229,10 @@ router.post("/withdraw", async (req, res) => {
     console.error("[Wallet] POST /withdraw error:", e);
     res.status(500).json({ error: "Ошибка базы данных" });
   } finally {
-    // Always release the lock so the user can retry after an error.
     _withdrawalInProgress.delete(userKey);
   }
 });
 
-/* ─────────────────────────────────────────────────────────
-   POST /topup — register intent (called after TON Connect tx)
-───────────────────────────────────────────────────────── */
 router.post("/topup", async (req, res) => {
   try {
     const { telegramId, amount, memo, txBoc, walletAddress } = req.body ?? {};
@@ -276,9 +263,6 @@ router.post("/topup", async (req, res) => {
   }
 });
 
-/* ─────────────────────────────────────────────────────────
-   POST /topup/verify — check blockchain, auto-credit if found
-───────────────────────────────────────────────────────── */
 router.post("/topup/verify", async (req, res) => {
   const { telegramId, expectedAmount } = req.body ?? {};
   if (!telegramId) { res.status(400).json({ error: "telegramId required" }); return; }
@@ -286,16 +270,14 @@ router.post("/topup/verify", async (req, res) => {
   const minTon = expectedAmount ? Number(expectedAmount) * 0.99 : 0.05;
 
   try {
-    // Load user to get their deposit code
     const user = await db.select().from(usersTable)
       .where(eq(usersTable.telegramId, String(telegramId))).then(r => r[0] ?? null);
     if (!user) { res.status(404).json({ error: "Пользователь не найден" }); return; }
 
-    // Build list of all valid memos for this user
     const validMemos = new Set<string>();
     if (user.depositCode) {
-      validMemos.add(user.depositCode);
-      validMemos.add(String(user.depositCode).toUpperCase());
+      validMemos.add(String(user.depositCode).trim());
+      validMemos.add(String(user.depositCode).trim().toUpperCase());
     }
     validMemos.add(`TONYX-${telegramId}`);
     validMemos.add(`TOPUP_${telegramId}`);
@@ -303,7 +285,7 @@ router.post("/topup/verify", async (req, res) => {
     const txs = await queryProjectWalletTxs();
 
     const matchingTx = txs.find(tx => {
-      const comment  = (tx.in_msg?.decoded_body?.comment ?? "").trim();
+      const comment = extractComment(tx.in_msg?.decoded_body);
       const valueTon = Number(tx.in_msg?.value ?? 0) / 1e9;
       return validMemos.has(comment) && valueTon >= minTon;
     });
@@ -313,12 +295,11 @@ router.post("/topup/verify", async (req, res) => {
       return;
     }
 
-    const memo       = matchingTx.in_msg?.decoded_body?.comment ?? "";
-    // MUST match depositScanner txKey format: hash:lt (colon)
-    const txKey      = `${matchingTx.hash}:${String(matchingTx.lt)}`;
+    const memo = extractComment(matchingTx.in_msg?.decoded_body);
+    // MUST match depositScanner: hash:lt
+    const txKey = `${matchingTx.hash}:${String(matchingTx.lt)}`;
     const receivedTon = Number(matchingTx.in_msg?.value ?? 0) / 1e9;
 
-    // Global dedup by txHash (same unique index the scanner uses)
     const alreadyByHash = await db.select().from(miniTopupRequestsTable)
       .where(eq(miniTopupRequestsTable.txHash, txKey))
       .then(rows => rows[0] ?? null);
@@ -375,7 +356,6 @@ router.post("/topup/verify", async (req, res) => {
   }
 });
 
-/* ─── GET /history?telegramId=X — combined deposits + withdrawals ─── */
 router.get("/history", async (req, res) => {
   const telegramId = req.query.telegramId as string | undefined;
   if (!telegramId) { res.status(400).json({ error: "telegramId required" }); return; }
@@ -394,21 +374,21 @@ router.get("/history", async (req, res) => {
 
     res.json({
       deposits: deps.map(d => ({
-        id:        d.id,
-        type:      "deposit" as const,
+        id: d.id,
+        type: "deposit" as const,
         tonAmount: d.tonAmount ? Number(d.tonAmount) : null,
-        memo:      d.memo   ?? null,
-        txHash:    d.txHash ?? null,
-        status:    d.status,
+        memo: d.memo ?? null,
+        txHash: d.txHash ?? null,
+        status: d.status,
         createdAt: d.createdAt.toISOString(),
       })),
       withdrawals: wds.map(w => ({
-        id:        w.id,
-        type:      "withdrawal" as const,
+        id: w.id,
+        type: "withdrawal" as const,
         tonAmount: w.tonAmount ? Number(w.tonAmount) : null,
-        address:   w.address   ?? null,
-        txHash:    w.txHash    ?? null,
-        status:    w.status,
+        address: w.address ?? null,
+        txHash: w.txHash ?? null,
+        status: w.status,
         createdAt: w.createdAt.toISOString(),
       })),
     });
@@ -418,7 +398,6 @@ router.get("/history", async (req, res) => {
   }
 });
 
-/* ─── GET /history/:telegramId — route-param version (used by frontend) ─── */
 router.get("/history/:telegramId", async (req, res) => {
   const { telegramId } = req.params;
 
@@ -436,21 +415,21 @@ router.get("/history/:telegramId", async (req, res) => {
 
     res.json({
       deposits: deps.map(d => ({
-        id:        d.id,
-        type:      "deposit" as const,
+        id: d.id,
+        type: "deposit" as const,
         tonAmount: d.tonAmount ? Number(d.tonAmount) : null,
-        memo:      d.memo   ?? null,
-        txHash:    d.txHash ?? null,
-        status:    d.status,
+        memo: d.memo ?? null,
+        txHash: d.txHash ?? null,
+        status: d.status,
         createdAt: d.createdAt.toISOString(),
       })),
       withdrawals: wds.map(w => ({
-        id:        w.id,
-        type:      "withdrawal" as const,
+        id: w.id,
+        type: "withdrawal" as const,
         tonAmount: w.tonAmount ? Number(w.tonAmount) : null,
-        address:   w.address   ?? null,
-        txHash:    w.txHash    ?? null,
-        status:    w.status,
+        address: w.address ?? null,
+        txHash: w.txHash ?? null,
+        status: w.status,
         createdAt: w.createdAt.toISOString(),
       })),
     });
@@ -460,7 +439,6 @@ router.get("/history/:telegramId", async (req, res) => {
   }
 });
 
-/* ─── GET /deposits/:telegramId ─── */
 router.get("/deposits/:telegramId", async (req, res) => {
   const { telegramId } = req.params;
   try {
@@ -471,11 +449,11 @@ router.get("/deposits/:telegramId", async (req, res) => {
 
     res.json({
       deposits: rows.map(d => ({
-        id:        d.id,
+        id: d.id,
         tonAmount: d.tonAmount ? Number(d.tonAmount) : null,
-        memo:      d.memo      ?? null,
-        txHash:    d.txHash    ?? null,
-        status:    d.status,
+        memo: d.memo ?? null,
+        txHash: d.txHash ?? null,
+        status: d.status,
         createdAt: d.createdAt.toISOString(),
       })),
     });
@@ -485,7 +463,6 @@ router.get("/deposits/:telegramId", async (req, res) => {
   }
 });
 
-/* ─── GET /withdrawals/:telegramId ─── */
 router.get("/withdrawals/:telegramId", async (req, res) => {
   const { telegramId } = req.params;
   try {
@@ -495,13 +472,13 @@ router.get("/withdrawals/:telegramId", async (req, res) => {
 
     res.json({
       withdrawals: rows.map(w => ({
-        id:        w.id,
-        amount:    w.amount,
-        address:   w.address,
+        id: w.id,
+        amount: w.amount,
+        address: w.address,
         tonAmount: w.tonAmount ? Number(w.tonAmount) : null,
-        tonPrice:  w.tonPrice  ? Number(w.tonPrice)  : null,
-        txHash:    w.txHash ?? null,
-        status:    w.status,
+        tonPrice: w.tonPrice ? Number(w.tonPrice) : null,
+        txHash: w.txHash ?? null,
+        status: w.status,
         createdAt: w.createdAt.toISOString(),
       })),
     });

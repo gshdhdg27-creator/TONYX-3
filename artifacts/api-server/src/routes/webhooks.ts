@@ -4,6 +4,7 @@ import {
   saveBusinessConnection,
   getBusinessConnection,
   parseUniqueGiftPayload,
+  scanBusinessGifts,
 } from "../services/giftDeposit.js";
 
 const router: IRouter = Router();
@@ -42,6 +43,8 @@ async function handleUniqueGiftMsg(
   if (!parsed) return;
 
   const bc = await getBusinessConnection();
+  // Gifts on MY profile → my inventory.
+  // Gift sent to the bot chat → sender's inventory.
   const creditTo =
     source === "business_profile"
       ? bc.ownerId || ADMIN_CHAT_ID
@@ -82,7 +85,27 @@ async function handleUniqueGiftMsg(
   }
 }
 
-/** Telegram Bot API webhook — gifts, business connection */
+async function runScanAndNotify(chatId: string) {
+  await sendTelegram(chatId, "🔍 Сканирую подарки на профиле…");
+  const result = await scanBusinessGifts();
+  if (!result.ok) {
+    await sendTelegram(chatId, `❌ Скан: ${result.error ?? "ошибка"}`);
+    return;
+  }
+  const unk =
+    result.unknown.length > 0
+      ? `\nℹ️ Вне каталога: ${[...new Set(result.unknown)].slice(0, 10).join(", ")}`
+      : "";
+  await sendTelegram(
+    chatId,
+    `✅ Скан готов\n` +
+      `🎁 В инвентарь: <b>${result.credited}</b>\n` +
+      `⏭ Пропущено: ${result.skipped}` +
+      unk,
+  );
+}
+
+/** Telegram Bot API webhook */
 router.post("/telegram", async (req: Request, res: Response) => {
   try {
     if (WEBHOOK_SECRET) {
@@ -99,7 +122,7 @@ router.post("/telegram", async (req: Request, res: Response) => {
       return;
     }
 
-    // Business connection established
+    // Business connection
     const bc = update.business_connection as
       | { id?: string; user?: { id?: number }; is_enabled?: boolean }
       | undefined;
@@ -113,17 +136,31 @@ router.post("/telegram", async (req: Request, res: Response) => {
           ADMIN_CHAT_ID,
           `✅ <b>Профиль подключён</b>\n👤 <code>${ownerId}</code>\n🔗 <code>${bc.id}</code>`,
         );
+        // Immediately pull existing gifts on profile → owner inventory
+        void runScanAndNotify(ADMIN_CHAT_ID);
       }
     }
 
-    // Private message with unique gift
+    // Admin commands from private chat
     const message = update.message as Record<string, unknown> | undefined;
-    if (message && (message.unique_gift || message.uniqueGift)) {
+    if (message) {
       const from = message.from as { id?: number } | undefined;
-      await handleUniqueGiftMsg(message, "bot_chat", from?.id != null ? String(from.id) : null);
+      const text = String(message.text ?? "").trim();
+      const fromId = from?.id != null ? String(from.id) : "";
+
+      if (fromId === ADMIN_CHAT_ID && (text === "/scangifts" || text.startsWith("/scangifts@"))) {
+        // Answer Telegram quickly, then scan
+        res.json({ ok: true });
+        void runScanAndNotify(ADMIN_CHAT_ID);
+        return;
+      }
+
+      if (message.unique_gift || message.uniqueGift) {
+        await handleUniqueGiftMsg(message, "bot_chat", fromId || null);
+      }
     }
 
-    // Business message with unique gift
+    // Business message with unique gift → profile owner inventory
     const bmsg = update.business_message as Record<string, unknown> | undefined;
     if (bmsg && (bmsg.unique_gift || bmsg.uniqueGift)) {
       await handleUniqueGiftMsg(bmsg, "business_profile", null);
@@ -132,7 +169,7 @@ router.post("/telegram", async (req: Request, res: Response) => {
     res.json({ ok: true });
   } catch (err) {
     console.error("[webhook/telegram]", err);
-    res.status(200).json({ ok: true }); // always 200 to Telegram
+    res.status(200).json({ ok: true });
   }
 });
 

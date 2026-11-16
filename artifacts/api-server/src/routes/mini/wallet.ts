@@ -125,6 +125,26 @@ router.post("/topup", async (req, res) => {
   }
 });
 
+router.post("/topup/verify", async (req, res) => {
+  const { telegramId } = req.body ?? {};
+  if (!telegramId) { res.status(400).json({ error: "telegramId required" }); return; }
+  try {
+    await scanOnce().catch(() => undefined);
+    const user = await db.select().from(usersTable).where(eq(usersTable.telegramId, String(telegramId))).then(r => r[0] ?? null);
+    if (!user) { res.status(404).json({ error: "Пользователь не найден" }); return; }
+    const recent = await db.select().from(miniTopupRequestsTable).where(eq(miniTopupRequestsTable.telegramId, String(telegramId))).orderBy(desc(miniTopupRequestsTable.createdAt)).limit(5);
+    const done = recent.find(r => r.status === "completed");
+    if (done) {
+      res.json({ found: true, credited: true, alreadyCredited: true, message: "✅ TON зачислено" });
+      return;
+    }
+    res.json({ found: false, message: "Транзакция ещё не найдена. Ожидайте подтверждения..." });
+  } catch (e) {
+    console.error("[Topup] /verify error:", e);
+    res.status(500).json({ error: "Ошибка проверки транзакции" });
+  }
+});
+
 router.get("/status", async (_req, res) => {
   try {
     const hasMnemonic = Boolean(process.env.PROJECT_WALLET_MNEMONIC?.trim());

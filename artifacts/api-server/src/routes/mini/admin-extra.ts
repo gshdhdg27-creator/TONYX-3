@@ -151,6 +151,11 @@ router.post("/users/:telegramId/grant-gift", async (req, res) => {
     const backdrop = String(req.body?.backdrop ?? "").trim();
     const symbol = String(req.body?.symbol ?? "").trim();
     const imageUrl = req.body?.imageUrl ? String(req.body.imageUrl) : null;
+    const modelImageUrl = req.body?.modelImageUrl ? String(req.body.modelImageUrl) : null;
+    const symbolImageUrl = req.body?.symbolImageUrl ? String(req.body.symbolImageUrl) : null;
+    const patternImageUrl = req.body?.patternImageUrl ? String(req.body.patternImageUrl) : null;
+    const backdropCenter = req.body?.backdropCenter ? String(req.body.backdropCenter) : null;
+    const backdropEdge = req.body?.backdropEdge ? String(req.body.backdropEdge) : null;
     const giftNumberRaw = req.body?.giftNumber ?? req.body?.number ?? null;
     const giftNumber =
       giftNumberRaw != null && String(giftNumberRaw).trim() !== ""
@@ -192,7 +197,13 @@ router.post("/users/:telegramId/grant-gift", async (req, res) => {
       model,
       backdrop,
       symbol,
-      imageUrl,
+      imageUrl: modelImageUrl || imageUrl,
+      modelImageUrl: modelImageUrl || imageUrl,
+      symbolImageUrl,
+      patternImageUrl,
+      backdropCenter,
+      backdropEdge,
+      tgBaseName: giftName,
       kind: "tg_gift",
       real: true,
     };

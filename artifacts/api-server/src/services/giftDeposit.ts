@@ -49,7 +49,6 @@ export function matchGiftToCatalog(opts: {
 }): { id: string; nameRu: string; nameEn: string; valueTon: number; rarity: string; imageUrl: string | null } | null {
   const candidates = [opts.baseName, opts.name, opts.giftId].filter(Boolean) as string[];
   for (const raw of candidates) {
-    // strip " #12345" suffix from unique gift names
     const stripped = raw.replace(/\s*#\d+\s*$/, "").trim();
     const n = norm(stripped);
     const compact = n.replace(/\s+/g, "");
@@ -171,6 +170,16 @@ export async function creditGiftToInventory(params: {
 
   await ensureUser(params.creditToTelegramId);
 
+  const giftBase = params.baseName || matched.nameEn;
+  const modelImageUrl =
+    params.model && giftBase
+      ? `https://api.changes.tg/model/${encodeURIComponent(String(giftBase))}/${encodeURIComponent(params.model)}.png?size=256`
+      : null;
+  const symbolImageUrl =
+    params.symbol && giftBase
+      ? `https://api.changes.tg/symbol/${encodeURIComponent(String(giftBase))}/${encodeURIComponent(params.symbol)}.png?size=128`
+      : null;
+
   const [row] = await db
     .insert(miniUserInventoryTable)
     .values({
@@ -181,13 +190,15 @@ export async function creditGiftToInventory(params: {
       meta: {
         source: params.source,
         giftName: matched.nameRu,
-        imageUrl: matched.imageUrl,
+        imageUrl: modelImageUrl || matched.imageUrl,
+        modelImageUrl,
+        symbolImageUrl,
         number: params.number ?? null,
         model: params.model ?? null,
         backdrop: params.backdrop ?? null,
         symbol: params.symbol ?? null,
         ownedGiftId: params.ownedGiftId ?? null,
-        tgBaseName: params.baseName ?? null,
+        tgBaseName: params.baseName ?? matched.nameEn ?? null,
         tgName: params.name ?? null,
         senderId: params.senderId ?? null,
         depositedAt: new Date().toISOString(),
@@ -275,7 +286,6 @@ export function parseUniqueGiftPayload(msg: Record<string, unknown>): {
 /**
  * Scan gifts on the connected Business profile.
  * Everything currently owned on THAT profile → owner's inventory.
- * If gift was transferred away, it no longer appears here.
  */
 export async function scanBusinessGifts(): Promise<{
   ok: boolean;
@@ -346,7 +356,6 @@ export async function scanBusinessGifts(): Promise<{
     const name = (gift.name as string) ?? null;
 
     const result = await creditGiftToInventory({
-      // Owner of the profile owns the gift in-app
       creditToTelegramId: ownerId,
       baseName,
       name,

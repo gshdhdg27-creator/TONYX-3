@@ -39,7 +39,14 @@ import referralsRouter from "../referrals.js";
 
 const router: IRouter = Router();
 
-router.use(telegramAuthMiddleware);
+// Public diagnostic: no Telegram auth (does not expose secrets)
+router.use((req, res, next) => {
+  if (req.method === "GET" && (req.path === "/wallet/status" || req.path.endsWith("/wallet/status"))) {
+    next();
+    return;
+  }
+  return telegramAuthMiddleware(req, res, next);
+});
 
 router.use((req, res, next) => {
   const verifiedId = (res.locals as Record<string, unknown>)["verifiedTelegramId"] as

@@ -697,64 +697,125 @@ export default function SpinGame({
             </button>
           ))}
         </div>
-        <input
-          type="number"
-          min={MIN_STAKE}
-          step={0.1}
-          value={customBet || stake}
-          onChange={(e) => {
-            setCustomBet(e.target.value);
-            const n = Number(e.target.value);
-            if (Number.isFinite(n)) setStake(n);
-          }}
-          style={{
-            width: "100%",
-            boxSizing: "border-box",
-            padding: "10px 12px",
-            borderRadius: 10,
-            border: "1px solid rgba(255,255,255,0.1)",
-            background: "#0f172a",
-            color: "#f1f5f9",
-            marginBottom: 10,
-            fontFamily: "inherit",
-          }}
-        />
+        <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+          <input
+            type="number"
+            min={MIN_STAKE}
+            step="0.1"
+            value={customBet}
+            onChange={(e) => setCustomBet(e.target.value)}
+            placeholder="Своя ставка"
+            style={{
+              flex: 1,
+              padding: "10px 12px",
+              borderRadius: 10,
+              border: "1px solid rgba(255,255,255,0.12)",
+              background: "rgba(0,0,0,0.35)",
+              color: "#f1f5f9",
+              fontSize: 14,
+              fontFamily: "inherit",
+            }}
+          />
+          <button
+            type="button"
+            disabled={!canBet || busy || !customBet}
+            onClick={() => {
+              const v = parseFloat(customBet);
+              if (Number.isFinite(v)) placeBet(v);
+            }}
+            style={{
+              padding: "10px 14px",
+              borderRadius: 10,
+              border: "none",
+              background: "rgba(124,92,255,0.35)",
+              color: "#fff",
+              fontWeight: 800,
+              cursor: canBet ? "pointer" : "not-allowed",
+              fontFamily: "inherit",
+            }}
+          >
+            OK
+          </button>
+        </div>
         <button
           type="button"
           disabled={!canBet || busy}
-          onClick={() => void placeBet(stake)}
+          onClick={() => placeBet(stake)}
           style={{
             width: "100%",
             padding: "14px 0",
-            borderRadius: 12,
+            borderRadius: 14,
             border: "none",
-            background: canBet ? "linear-gradient(135deg,#6d28d9,#a78bfa)" : "rgba(100,116,139,0.3)",
+            background: canBet
+              ? "linear-gradient(135deg,#7c5cff,#a78bfa)"
+              : "rgba(100,100,120,0.3)",
             color: "#fff",
             fontWeight: 900,
             fontSize: 15,
             cursor: canBet ? "pointer" : "not-allowed",
             fontFamily: "inherit",
+            boxShadow: canBet ? "0 8px 24px rgba(124,92,255,0.35)" : "none",
           }}
         >
-          {busy ? "…" : me ? `Добавить ${stake} TON` : `Ставка ${stake} TON`}
+          {busy ? "…" : me ? `+${stake} TON` : `Ставка ${stake} TON`}
         </button>
+        {me && (
+          <div style={{ marginTop: 8, fontSize: 12, color: "#94a3b8", textAlign: "center" }}>
+            Твоя ставка: <b style={{ color: "#e2e8f0" }}>{me.stake.toFixed(2)} TON</b> · шанс {" "}
+            <b style={{ color: "#a78bfa" }}>{me.chance.toFixed(1)}%</b>
+          </div>
+        )}
       </div>
 
       {players.length > 0 && (
-        <div style={{ margin: "12px 16px 0", fontSize: 12, color: "#94a3b8" }}>
-          Игроки ({players.length}):{" "}
-          {players.map((p) => `${p.username || p.telegramId} ${p.chance.toFixed(0)}%`).join(" · ")}
+        <div style={{ margin: "14px 16px 0" }}>
+          <div style={{ fontSize: 12, color: "#64748b", fontWeight: 700, marginBottom: 8 }}>Игроки · {players.length}</div>
+          {players.map((p) => (
+            <div
+              key={p.telegramId}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                padding: "8px 10px",
+                borderRadius: 12,
+                background: p.telegramId === telegramId ? "rgba(124,92,255,0.12)" : "rgba(255,255,255,0.03)",
+                marginBottom: 6,
+              }}
+            >
+              <div style={{ width: 32, height: 32, borderRadius: "50%", overflow: "hidden", background: "#333", flexShrink: 0 }}>
+                {(p.photoUrl || (p.telegramId === telegramId ? photoUrl : null)) ? (
+                  <img src={(p.photoUrl || photoUrl)!} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                ) : (
+                  <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 800, color: "#fff" }}>
+                    {initials(p.username, p.telegramId)}
+                  </div>
+                )}
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 700, fontSize: 13, color: "#f1f5f9" }}>@{p.username || p.telegramId}</div>
+                <div style={{ fontSize: 11, color: "#64748b" }}>{p.stake.toFixed(2)} TON</div>
+              </div>
+              <div style={{ fontWeight: 800, fontSize: 13, color: "#a78bfa" }}>{p.chance.toFixed(1)}%</div>
+            </div>
+          ))}
         </div>
       )}
 
-      {lastWinner && !winnerBanner && !spinning && (
-        <div style={{ margin: "12px 16px", fontSize: 12, color: "#64748b", textAlign: "center" }}>
-          Последний: {lastWinner.username || lastWinner.telegramId} · {lastWinner.payout} TON
+      {lastWinner && (
+        <div style={{ margin: "14px 16px 0", padding: 12, borderRadius: 14, background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.2)", fontSize: 12, color: "#94a3b8" }}>
+          Последний победитель: <b style={{ color: "#4ade80" }}>@{lastWinner.username || lastWinner.telegramId}</b>
+          {" "}· {lastWinner.payout} TON
         </div>
       )}
 
       {toast && (
-        <div style={{ position: "fixed", bottom: 24, left: 16, right: 16, padding: 12, borderRadius: 12, background: toast.type === "ok" ? "rgba(34,197,94,0.9)" : "rgba(239,68,68,0.9)", color: "#fff", textAlign: "center", fontWeight: 700, zIndex: 50 }}>
+        <div style={{
+          position: "fixed", left: 16, right: 16, bottom: 24, zIndex: 50,
+          padding: "12px 16px", borderRadius: 14, textAlign: "center", fontWeight: 800, fontSize: 14,
+          background: toast.type === "ok" ? "rgba(34,197,94,0.95)" : "rgba(239,68,68,0.95)",
+          color: "#fff", boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
+        }}>
           {toast.msg}
         </div>
       )}
@@ -763,10 +824,7 @@ export default function SpinGame({
         <SpinHistoryModal
           telegramId={telegramId}
           onClose={() => setShowHistory(false)}
-          onReplay={(item) => {
-            setShowHistory(false);
-            void item;
-          }}
+          onReplay={() => setShowHistory(false)}
         />
       )}
       {showFairness && round?.fair && (

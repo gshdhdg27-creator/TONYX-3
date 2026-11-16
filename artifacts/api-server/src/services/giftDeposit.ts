@@ -49,7 +49,9 @@ export function matchGiftToCatalog(opts: {
 }): { id: string; nameRu: string; nameEn: string; valueTon: number; rarity: string; imageUrl: string | null } | null {
   const candidates = [opts.baseName, opts.name, opts.giftId].filter(Boolean) as string[];
   for (const raw of candidates) {
-    const n = norm(raw);
+    // strip " #12345" suffix from unique gift names
+    const stripped = raw.replace(/\s*#\d+\s*$/, "").trim();
+    const n = norm(stripped);
     const compact = n.replace(/\s+/g, "");
     const snake = n.replace(/\s+/g, "_");
 
@@ -81,7 +83,10 @@ export function matchGiftToCatalog(opts: {
     }
 
     const byName = NFT_COLLECTIONS.find(
-      (c) => norm(c.nameEn) === n || norm(c.nameRu) === n || norm(c.nameEn).replace(/\s+/g, "") === compact,
+      (c) =>
+        norm(c.nameEn) === n ||
+        norm(c.nameRu) === n ||
+        norm(c.nameEn).replace(/\s+/g, "") === compact,
     );
     if (byName) {
       return {
@@ -117,7 +122,6 @@ async function ensureUser(telegramId: string) {
     .then((r) => r[0]!);
 }
 
-/** Dedup: already credited this owned_gift_id? */
 async function alreadyCredited(ownedGiftId: string | null | undefined): Promise<boolean> {
   if (!ownedGiftId) return false;
   try {
@@ -135,10 +139,6 @@ export type GiftDepositResult =
   | { ok: true; nftId: string; nameRu: string; inventoryId: number; telegramId: string }
   | { ok: false; reason: string };
 
-/**
- * Credit a Telegram unique gift into in-app inventory if it matches catalog.
- * @param creditToTelegramId — user who receives the item in bot inventory
- */
 export async function creditGiftToInventory(params: {
   creditToTelegramId: string;
   baseName?: string | null;
@@ -239,7 +239,6 @@ export async function getBusinessConnection(): Promise<{
   };
 }
 
-/** Parse UniqueGift-like object from Telegram update */
 export function parseUniqueGiftPayload(msg: Record<string, unknown>): {
   baseName?: string;
   name?: string;
@@ -271,4 +270,104 @@ export function parseUniqueGiftPayload(msg: Record<string, unknown>): {
     ownedGiftId: (ug.owned_gift_id as string) ?? (ug.ownedGiftId as string) ?? undefined,
     senderId: sender?.id != null ? String(sender.id) : undefined,
   };
+}
+
+/**
+ * Scan gifts on the connected Business profile.
+ * Everything currently owned on THAT profile → owner's inventory.
+ * If gift was transferred away, it no longer appears here.
+ */
+export async function scanBusinessGifts(): Promise<{
+  ok: boolean;
+  credited: number;
+  skipped: number;
+  unknown: string[];
+  error?: string;
+  ownerId?: string | null;
+}> {
+  const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+  const { connectionId, ownerId } = await getBusinessConnection();
+
+  if (!connectionId || !ownerId) {
+    return {
+      ok: false,
+      credited: 0,
+      skipped: 0,
+      unknown: [],
+      error: "No business connection — reconnect bot in Telegram Business",
+    };
+  }
+  if (!BOT_TOKEN) {
+    return { ok: false, credited: 0, skipped: 0, unknown: [], error: "TELEGRAM_BOT_TOKEN missing" };
+  }
+
+  const tgRes = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getBusinessAccountGifts`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      business_connection_id: connectionId,
+      exclude_unsaved: false,
+      limit: 100,
+    }),
+  });
+  const data = (await tgRes.json()) as {
+    ok?: boolean;
+    result?: { gifts?: Array<Record<string, unknown>> };
+    description?: string;
+  };
+
+  if (!data.ok) {
+    return {
+      ok: false,
+      credited: 0,
+      skipped: 0,
+      unknown: [],
+      error: data.description ?? "getBusinessAccountGifts failed",
+      ownerId,
+    };
+  }
+
+  let credited = 0;
+  let skipped = 0;
+  const unknown: string[] = [];
+
+  for (const g of data.result?.gifts ?? []) {
+    if ((g.type as string) !== "unique") {
+      skipped++;
+      continue;
+    }
+    const gift = (g.gift as Record<string, unknown>) ?? {};
+    const model = gift.model as Record<string, unknown> | undefined;
+    const backdrop = gift.backdrop as Record<string, unknown> | undefined;
+    const symbol = gift.symbol as Record<string, unknown> | undefined;
+    const sender = g.sender_user as { id?: number } | undefined;
+
+    const baseName = (gift.base_name as string) ?? null;
+    const name = (gift.name as string) ?? null;
+
+    const result = await creditGiftToInventory({
+      // Owner of the profile owns the gift in-app
+      creditToTelegramId: ownerId,
+      baseName,
+      name,
+      number: typeof gift.number === "number" ? gift.number : null,
+      model: (model?.name as string) ?? null,
+      backdrop: (backdrop?.name as string) ?? null,
+      symbol: (symbol?.name as string) ?? null,
+      ownedGiftId: (g.owned_gift_id as string) ?? null,
+      senderId: sender?.id != null ? String(sender.id) : null,
+      source: "scan",
+    });
+
+    if (result.ok) {
+      credited++;
+    } else if (result.reason.startsWith("Gift not in catalog")) {
+      unknown.push(baseName ?? name ?? "?");
+      skipped++;
+    } else {
+      skipped++;
+    }
+  }
+
+  return { ok: true, credited, skipped, unknown, ownerId };
 }

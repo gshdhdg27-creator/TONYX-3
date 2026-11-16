@@ -5,9 +5,15 @@ import {
   miniNftInventoryTable,
   miniUserInventoryTable,
   systemSettingsTable,
+  type NftCollections,
 } from "@workspace/db/schema";
 import { eq, and, desc } from "drizzle-orm";
-import { getNftCollection } from "../../lib/nft-catalog.js";
+import {
+  getNftCollection,
+  NFT_COLLECTIONS,
+  emptyPieces,
+  isCollectionComplete,
+} from "../../lib/nft-catalog.js";
 
 const router: IRouter = Router();
 
@@ -49,6 +55,32 @@ async function ensureNftRow(telegramId: string) {
   return row;
 }
 
+/** Build UI-ready collections list from DB progress + catalog */
+function buildCollections(progress: NftCollections | null | undefined) {
+  const map = progress ?? {};
+  return NFT_COLLECTIONS.map((cat) => {
+    const prog = map[cat.id] ?? { pieces: emptyPieces(cat.piecesCount || 9), claimed: 0 };
+    let pieces = Array.isArray(prog.pieces) ? [...prog.pieces] : emptyPieces(9);
+    while (pieces.length < 9) pieces.push(0);
+    pieces = pieces.slice(0, 9).map((p) => (p >= 1 ? 1 : 0));
+    const owned = pieces.filter((p) => p >= 1).length;
+    const canClaim = isCollectionComplete(pieces);
+    return {
+      id: cat.id,
+      nameRu: cat.nameRu,
+      nameEn: cat.nameEn,
+      valueTon: cat.valueTon,
+      rarity: cat.rarity,
+      imageUrl: cat.imageUrl ?? null,
+      pieces,
+      owned,
+      total: 9,
+      canClaim,
+      claimedTimes: Number(prog.claimed) || 0,
+    };
+  });
+}
+
 router.get("/", async (_req: Request, res: Response) => {
   try {
     const telegramId = getTelegramId(res);
@@ -56,12 +88,15 @@ router.get("/", async (_req: Request, res: Response) => {
       res.status(401).json({ error: "Unauthorized" });
       return;
     }
-    const user = await db.select().from(usersTable).where(eq(usersTable.telegramId, telegramId)).then((r) => r[0] ?? null);
-    const allItems = await db
-      .select()
-      .from(miniUserInventoryTable)
-      .where(eq(miniUserInventoryTable.telegramId, telegramId))
-      .orderBy(desc(miniUserInventoryTable.acquiredAt));
+    const [user, nftRow, allItems] = await Promise.all([
+      db.select().from(usersTable).where(eq(usersTable.telegramId, telegramId)).then((r) => r[0] ?? null),
+      ensureNftRow(telegramId),
+      db
+        .select()
+        .from(miniUserInventoryTable)
+        .where(eq(miniUserInventoryTable.telegramId, telegramId))
+        .orderBy(desc(miniUserInventoryTable.acquiredAt)),
+    ]);
 
     const mapped = allItems.map((it) => {
       const m = (it.meta ?? {}) as Record<string, unknown>;
@@ -85,15 +120,156 @@ router.get("/", async (_req: Request, res: Response) => {
     });
     const inventory = mapped.filter((x) => !x.listed);
     const listed = mapped.filter((x) => x.listed);
+    const collections = buildCollections(nftRow.collections as NftCollections);
 
     res.json({
       balances: { ton: Number(user?.ton ?? 0), tonyx: Number(user?.tonyxCoins ?? 0) },
       inventory,
       listed,
-      collections: [],
+      collections,
     });
   } catch (err) {
     console.error("[inventory]", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+/** Claim completed collection → full NFT in inventory, reset pieces for re-collect */
+router.post("/claim", async (req: Request, res: Response) => {
+  try {
+    const telegramId = getTelegramId(res);
+    if (!telegramId) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+
+    const nftId = String(req.body?.nftId ?? "").trim();
+    if (!nftId) {
+      res.status(400).json({ error: "nftId required" });
+      return;
+    }
+
+    const cat = getNftCollection(nftId);
+    if (!cat) {
+      res.status(400).json({ error: "Unknown NFT collection" });
+      return;
+    }
+
+    const nftRow = await ensureNftRow(telegramId);
+    const collections: NftCollections = { ...((nftRow.collections as NftCollections) ?? {}) };
+    const prog = collections[nftId] ?? { pieces: emptyPieces(9), claimed: 0 };
+    let pieces = Array.isArray(prog.pieces) ? [...prog.pieces] : emptyPieces(9);
+    while (pieces.length < 9) pieces.push(0);
+    pieces = pieces.slice(0, 9);
+
+    if (!isCollectionComplete(pieces)) {
+      const owned = pieces.filter((p) => p >= 1).length;
+      res.status(400).json({ error: "Collection incomplete", owned, total: 9 });
+      return;
+    }
+
+    // Add full NFT to user inventory
+    const [inserted] = await db
+      .insert(miniUserInventoryTable)
+      .values({
+        telegramId,
+        itemType: "nft_full",
+        itemId: nftId,
+        quantity: 1,
+        meta: {
+          source: "collection_claim",
+          claimedAt: new Date().toISOString(),
+          giftName: cat.nameRu,
+          imageUrl: cat.imageUrl ?? null,
+        },
+      })
+      .returning();
+
+    // Reset pieces, bump claimed counter (can re-collect)
+    const claimedTimes = (Number(prog.claimed) || 0) + 1;
+    collections[nftId] = {
+      pieces: emptyPieces(9),
+      claimed: claimedTimes,
+    };
+
+    const fragments = { ...(nftRow.fragments as Record<string, number>) };
+    fragments[nftId] = 0;
+
+    let assembled = Array.isArray(nftRow.assembled) ? [...nftRow.assembled] : [];
+    if (!assembled.includes(nftId)) assembled.push(nftId);
+
+    await db
+      .update(miniNftInventoryTable)
+      .set({
+        collections,
+        fragments,
+        assembled,
+        updatedAt: new Date(),
+      })
+      .where(eq(miniNftInventoryTable.telegramId, telegramId));
+
+    const user = await db
+      .select()
+      .from(usersTable)
+      .where(eq(usersTable.telegramId, telegramId))
+      .then((r) => r[0] ?? null);
+
+    const allItems = await db
+      .select()
+      .from(miniUserInventoryTable)
+      .where(eq(miniUserInventoryTable.telegramId, telegramId))
+      .orderBy(desc(miniUserInventoryTable.acquiredAt));
+
+    const mapped = allItems.map((it) => {
+      const m = (it.meta ?? {}) as Record<string, unknown>;
+      const c = getNftCollection(it.itemId);
+      const listed = isListedMeta(m);
+      return {
+        id: it.id,
+        itemType: it.itemType,
+        itemId: it.itemId,
+        quantity: it.quantity,
+        acquiredAt: it.acquiredAt,
+        nameRu: (m.giftName as string) || c?.nameRu || it.itemId,
+        nameEn: c?.nameEn ?? it.itemId,
+        valueTon: Number(m.priceTon) || c?.valueTon || 0,
+        imageUrl: (m.imageUrl as string) || c?.imageUrl || null,
+        rarity: c?.rarity ?? null,
+        listed,
+        listPriceTon: m.priceTon != null ? Number(m.priceTon) : null,
+      };
+    });
+
+    const inventory = mapped.filter((x) => !x.listed);
+    const uiCollections = buildCollections(collections);
+
+    console.log(`[inventory/claim] ${telegramId} nft=${nftId} claimedTimes=${claimedTimes}`);
+
+    res.json({
+      ok: true,
+      nftId,
+      valueTon: cat.valueTon,
+      nameRu: cat.nameRu,
+      item: inserted
+        ? {
+            id: inserted.id,
+            itemType: inserted.itemType,
+            itemId: inserted.itemId,
+            quantity: inserted.quantity,
+            acquiredAt: inserted.acquiredAt,
+            nameRu: cat.nameRu,
+            nameEn: cat.nameEn,
+            valueTon: cat.valueTon,
+            imageUrl: cat.imageUrl ?? null,
+            rarity: cat.rarity,
+          }
+        : null,
+      inventory,
+      collections: uiCollections,
+      balances: { ton: Number(user?.ton ?? 0), tonyx: Number(user?.tonyxCoins ?? 0) },
+    });
+  } catch (err) {
+    console.error("[inventory/claim]", err);
     res.status(500).json({ error: "Internal server error" });
   }
 });

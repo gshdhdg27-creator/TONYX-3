@@ -25,6 +25,17 @@ export type InventoryItem = {
   rarity: string | null;
   listed?: boolean;
   listPriceTon?: number | null;
+  /** TG unique gift attrs */
+  model?: string | null;
+  backdrop?: string | null;
+  symbol?: string | null;
+  number?: number | null;
+  giftName?: string | null;
+  tgBaseName?: string | null;
+  modelImageUrl?: string | null;
+  symbolImageUrl?: string | null;
+  backdropCenter?: string | null;
+  backdropEdge?: string | null;
 };
 
 export type InventoryResponse = {

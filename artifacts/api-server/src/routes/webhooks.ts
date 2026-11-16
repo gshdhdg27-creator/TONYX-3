@@ -1,13 +1,20 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Request, type Response } from "express";
+import {
+  creditGiftToInventory,
+  saveBusinessConnection,
+  getBusinessConnection,
+  parseUniqueGiftPayload,
+} from "../services/giftDeposit.js";
 
 const router: IRouter = Router();
 
 const ADMIN_CHAT_ID = "7257793582";
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+const WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET ?? "";
 
-async function sendTelegram(text: string) {
+async function sendTelegram(chatId: string, text: string) {
   if (!BOT_TOKEN) {
-    console.warn("[webhook] TELEGRAM_BOT_TOKEN not set — cannot send notification");
+    console.warn("[webhook] TELEGRAM_BOT_TOKEN not set");
     return;
   }
   const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`;
@@ -15,7 +22,7 @@ async function sendTelegram(text: string) {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      chat_id: ADMIN_CHAT_ID,
+      chat_id: chatId,
       text,
       parse_mode: "HTML",
     }),
@@ -25,6 +32,109 @@ async function sendTelegram(text: string) {
     console.error("[webhook] Telegram send failed:", err);
   }
 }
+
+async function handleUniqueGiftMsg(
+  msg: Record<string, unknown>,
+  source: "business_profile" | "bot_chat",
+  fallbackCreditId: string | null,
+) {
+  const parsed = parseUniqueGiftPayload(msg);
+  if (!parsed) return;
+
+  const bc = await getBusinessConnection();
+  const creditTo =
+    source === "business_profile"
+      ? bc.ownerId || ADMIN_CHAT_ID
+      : parsed.senderId || fallbackCreditId || ADMIN_CHAT_ID;
+
+  const result = await creditGiftToInventory({
+    creditToTelegramId: creditTo,
+    baseName: parsed.baseName,
+    name: parsed.name,
+    number: parsed.number,
+    model: parsed.model,
+    backdrop: parsed.backdrop,
+    symbol: parsed.symbol,
+    ownedGiftId: parsed.ownedGiftId,
+    senderId: parsed.senderId,
+    source,
+  });
+
+  if (result.ok) {
+    await sendTelegram(
+      ADMIN_CHAT_ID,
+      `🎁 <b>NFT → инвентарь</b>\n` +
+        `📦 ${result.nameRu} (<code>${result.nftId}</code>)\n` +
+        `👤 <code>${result.telegramId}</code>\n` +
+        `📥 ${source}`,
+    );
+    if (creditTo !== ADMIN_CHAT_ID) {
+      await sendTelegram(
+        creditTo,
+        `🎁 NFT <b>${result.nameRu}</b> добавлен в инвентарь TONYX!`,
+      );
+    }
+  } else if (result.reason.includes("not in catalog")) {
+    await sendTelegram(
+      ADMIN_CHAT_ID,
+      `ℹ️ Подарок вне каталога: <b>${parsed.baseName ?? parsed.name ?? "?"}</b>`,
+    );
+  }
+}
+
+/** Telegram Bot API webhook — gifts, business connection */
+router.post("/telegram", async (req: Request, res: Response) => {
+  try {
+    if (WEBHOOK_SECRET) {
+      const hdr = String(req.headers["x-telegram-bot-api-secret-token"] ?? "");
+      if (hdr !== WEBHOOK_SECRET) {
+        res.status(401).json({ error: "bad secret" });
+        return;
+      }
+    }
+
+    const update = req.body as Record<string, unknown>;
+    if (!update || typeof update !== "object") {
+      res.json({ ok: true });
+      return;
+    }
+
+    // Business connection established
+    const bc = update.business_connection as
+      | { id?: string; user?: { id?: number }; is_enabled?: boolean }
+      | undefined;
+    if (bc?.id && bc.user?.id) {
+      if (bc.is_enabled === false) {
+        await sendTelegram(ADMIN_CHAT_ID, `🔌 Business connection off: <code>${bc.id}</code>`);
+      } else {
+        const ownerId = String(bc.user.id);
+        await saveBusinessConnection(bc.id, ownerId);
+        await sendTelegram(
+          ADMIN_CHAT_ID,
+          `✅ <b>Профиль подключён</b>\n👤 <code>${ownerId}</code>\n🔗 <code>${bc.id}</code>`,
+        );
+      }
+    }
+
+    // Private message with unique gift
+    const message = update.message as Record<string, unknown> | undefined;
+    if (message && (message.unique_gift || message.uniqueGift)) {
+      const from = message.from as { id?: number } | undefined;
+      await handleUniqueGiftMsg(message, "bot_chat", from?.id != null ? String(from.id) : null);
+    }
+
+    // Business message with unique gift
+    const bmsg = update.business_message as Record<string, unknown> | undefined;
+    if (bmsg && (bmsg.unique_gift || bmsg.uniqueGift)) {
+      await handleUniqueGiftMsg(bmsg, "business_profile", null);
+    }
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("[webhook/telegram]", err);
+    res.status(200).json({ ok: true }); // always 200 to Telegram
+  }
+});
 
 router.post("/vercel", async (req, res) => {
   try {
@@ -43,7 +153,8 @@ router.post("/vercel", async (req, res) => {
     const eventType = body?.type ?? "unknown";
     const deployment = body?.payload?.deployment;
     const appName = deployment?.name ?? "TONYX";
-    const deployUrl = body?.payload?.links?.deployment ?? (deployment?.url ? `https://${deployment.url}` : null);
+    const deployUrl =
+      body?.payload?.links?.deployment ?? (deployment?.url ? `https://${deployment.url}` : null);
     const branch = deployment?.meta?.githubCommitRef ?? "main";
     const commitMsg = deployment?.meta?.githubCommitMessage ?? "";
 
@@ -66,12 +177,11 @@ router.post("/vercel", async (req, res) => {
         (commitMsg ? `💬 Коммит: ${commitMsg}\n` : "") +
         (deployUrl ? `🔗 <a href="${deployUrl}">Подробности</a>` : "");
     } else {
-      // Ignore other event types silently
       res.json({ ok: true, ignored: true });
       return;
     }
 
-    await sendTelegram(message);
+    await sendTelegram(ADMIN_CHAT_ID, message);
     res.json({ ok: true });
   } catch (err) {
     console.error("[webhook] Error handling Vercel webhook:", err);

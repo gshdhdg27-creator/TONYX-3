@@ -12,10 +12,8 @@ function normalizeId(raw: unknown): string {
   return String(raw).trim();
 }
 function extractAdminId(req: import("express").Request, res: import("express").Response): string {
-  const botToken = process.env["TELEGRAM_BOT_TOKEN"];
-  if (botToken) {
-    return normalizeId((res.locals as Record<string, unknown>)["verifiedTelegramId"]);
-  }
+  const verified = normalizeId((res.locals as Record<string, unknown>)["verifiedTelegramId"]);
+  if (verified) return verified;
   return normalizeId(req.query.adminId ?? req.body?.adminId ?? req.headers["x-admin-id"]);
 }
 
@@ -25,6 +23,24 @@ async function ensureUser(telegramId: string) {
   await db.insert(usersTable).values({ telegramId, ton: "0", tonyxCoins: 0, coins: 0 });
   user = await db.select().from(usersTable).where(eq(usersTable.telegramId, telegramId)).then((r) => r[0] ?? null);
   return user;
+}
+
+async function deleteInventoryItem(targetId: string, inventoryId: number) {
+  let item = await db
+    .select()
+    .from(miniUserInventoryTable)
+    .where(and(eq(miniUserInventoryTable.id, inventoryId), eq(miniUserInventoryTable.telegramId, targetId)))
+    .then((r) => r[0] ?? null);
+  if (!item) {
+    item = await db
+      .select()
+      .from(miniUserInventoryTable)
+      .where(eq(miniUserInventoryTable.id, inventoryId))
+      .then((r) => r[0] ?? null);
+  }
+  if (!item) return null;
+  await db.delete(miniUserInventoryTable).where(eq(miniUserInventoryTable.id, item.id));
+  return item;
 }
 
 router.get("/settings/ad-config", async (_req, res) => {
@@ -243,18 +259,37 @@ router.post("/users/:telegramId/inventory/remove", async (req, res) => {
   if (!adminId) { res.status(401).json({ error: "Unauthorized" }); return; }
   try {
     const targetId = normalizeId(req.params.telegramId);
-    const inventoryId = Number(req.body?.inventoryId ?? req.body?.id);
-    if (!targetId || !inventoryId || Number.isNaN(inventoryId)) {
-      res.status(400).json({ error: "telegramId + inventoryId required" }); return;
+    const rawId = req.body?.inventoryId ?? req.body?.id ?? req.query.inventoryId;
+    const inventoryId = typeof rawId === "string" ? parseInt(rawId, 10) : Number(rawId);
+    if (!targetId || !Number.isFinite(inventoryId) || inventoryId <= 0) {
+      res.status(400).json({ error: "telegramId + inventoryId required", got: { targetId, rawId } }); return;
     }
-    const item = await db.select().from(miniUserInventoryTable)
-      .where(and(eq(miniUserInventoryTable.id, inventoryId), eq(miniUserInventoryTable.telegramId, targetId)))
-      .then((r) => r[0] ?? null);
-    if (!item) { res.status(404).json({ error: "Item not found" }); return; }
-    await db.delete(miniUserInventoryTable).where(eq(miniUserInventoryTable.id, inventoryId));
-    res.json({ ok: true, message: `Удалено #${inventoryId} (${item.itemId})` });
+    const item = await deleteInventoryItem(targetId, inventoryId);
+    if (!item) { res.status(404).json({ error: "Item not found", inventoryId, targetId }); return; }
+    console.log(`[admin/inventory/remove] admin=${adminId} removed #${item.id} ${item.itemId} from ${item.telegramId}`);
+    res.json({ ok: true, message: `Удалено #${item.id} (${item.itemId})`, deletedId: item.id });
   } catch (e) {
     console.error("[admin/inventory/remove]", e);
+    res.status(500).json({ error: String(e) });
+  }
+});
+
+router.post("/users/:telegramId/remove-item", async (req, res) => {
+  const adminId = extractAdminId(req, res);
+  if (!adminId) { res.status(401).json({ error: "Unauthorized" }); return; }
+  try {
+    const targetId = normalizeId(req.params.telegramId);
+    const rawId = req.body?.inventoryId ?? req.body?.id;
+    const inventoryId = typeof rawId === "string" ? parseInt(rawId, 10) : Number(rawId);
+    if (!targetId || !Number.isFinite(inventoryId) || inventoryId <= 0) {
+      res.status(400).json({ error: "telegramId + inventoryId required" }); return;
+    }
+    const item = await deleteInventoryItem(targetId, inventoryId);
+    if (!item) { res.status(404).json({ error: "Item not found" }); return; }
+    console.log(`[admin/remove-item] admin=${adminId} removed #${item.id} ${item.itemId} from ${item.telegramId}`);
+    res.json({ ok: true, message: `Удалено #${item.id} (${item.itemId})`, deletedId: item.id });
+  } catch (e) {
+    console.error("[admin/remove-item]", e);
     res.status(500).json({ error: String(e) });
   }
 });

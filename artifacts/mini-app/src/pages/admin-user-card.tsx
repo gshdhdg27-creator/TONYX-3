@@ -71,6 +71,7 @@ function UserAssetsPanel({ userId, adminId, onDone }: { userId: string; adminId:
   const { toast, flash } = useToast();
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<number | null>(null);
   const [inventory, setInventory] = useState<InvItem[]>([]);
   const [collections, setCollections] = useState<CollectionProg[]>([]);
   const [keys, setKeys] = useState<KeyRow[]>([]);
@@ -128,8 +129,19 @@ function UserAssetsPanel({ userId, adminId, onDone }: { userId: string; adminId:
                 <div style={{ fontSize: 12, fontWeight: 700, color: "#e2e8f0", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{it.name}</div>
                 <div style={{ fontSize: 10, color: "#64748b" }}>#{it.id} · {it.itemId}{it.listed ? ` · listed ${it.priceTon ?? ""} TON` : ""}</div>
               </div>
-              <button type="button" disabled={busy} onClick={() => { if (!confirm(`Удалить ${it.name}?`)) return; void act("inventory/remove", { inventoryId: it.id }); }}
-                style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid rgba(239,68,68,0.4)", background: "rgba(239,68,68,0.12)", color: "#fca5a5", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>Удалить</button>
+              <button type="button" disabled={busy} onClick={() => {
+                  if (pendingDelete !== it.id) {
+                    setPendingDelete(it.id);
+                    setTimeout(() => setPendingDelete((cur) => (cur === it.id ? null : cur)), 3000);
+                    flash("Нажми ещё раз чтобы удалить", "error");
+                    return;
+                  }
+                  setPendingDelete(null);
+                  void act("remove-item", { inventoryId: it.id });
+                }}
+                style={{ padding: "6px 10px", borderRadius: 8, border: `1px solid ${pendingDelete === it.id ? "rgba(239,68,68,0.8)" : "rgba(239,68,68,0.4)"}`, background: pendingDelete === it.id ? "rgba(220,38,38,0.35)" : "rgba(239,68,68,0.12)", color: "#fca5a5", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
+                {pendingDelete === it.id ? "Точно?" : "Удалить"}
+              </button>
             </div>
           ))}
         </div>

@@ -66,15 +66,20 @@ void timeAgo;
 export async function apiCall(path: string, opts: RequestInit & { adminId: string }) {
   const { adminId, ...rest } = opts;
   const headers: Record<string, string> = {
-    "Content-Type": "application/json", "X-Admin-Id": adminId,
+    "Content-Type": "application/json",
+    "X-Admin-Id": adminId,
     ...(rest.headers as Record<string, string> | undefined),
   };
+  try {
+    const initData = (window as unknown as { Telegram?: { WebApp?: { initData?: string } } }).Telegram?.WebApp?.initData;
+    if (initData) headers["x-telegram-init-data"] = initData;
+  } catch { /* */ }
   let url = `/api/mini/admin/${path}`;
   if (!rest.method || rest.method === "GET") {
     url += (url.includes("?") ? "&" : "?") + `adminId=${encodeURIComponent(adminId)}`;
   } else {
     if (rest.body && typeof rest.body === "string") {
-      try { const p = JSON.parse(rest.body); rest.body = JSON.stringify({ adminId, ...p }); } catch { /* */ }
+      try { const parsed = JSON.parse(rest.body); rest.body = JSON.stringify({ adminId, ...parsed }); } catch { /* */ }
     } else if (!rest.body) { rest.body = JSON.stringify({ adminId }); }
   }
   return fetch(url, { ...rest, headers });

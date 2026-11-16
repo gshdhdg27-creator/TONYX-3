@@ -3,6 +3,13 @@ import type { Update } from "telegraf/types";
 import { db } from "@workspace/db";
 import { usersTable, adViewsTable } from "@workspace/db/schema";
 import { eq, gte, sql, asc } from "drizzle-orm";
+import {
+  creditGiftToInventory,
+  saveBusinessConnection,
+  getBusinessConnection,
+  parseUniqueGiftPayload,
+  matchGiftToCatalog,
+} from "./services/giftDeposit.js";
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const WEBAPP_URL =
@@ -40,18 +47,24 @@ async function sendDailyStats(bot: Telegraf<Context<Update>>) {
     ]);
 
     const totalUsers = totalUsersRow.rows[0]?.cnt ?? 0;
-    const newUsers   = newUsersRow.rows[0]?.cnt ?? 0;
+    const newUsers = newUsersRow.rows[0]?.cnt ?? 0;
     const adsWatched = adsRow.rows[0]?.cnt ?? 0;
-    const tonEarned  = parseFloat(adsRow.rows[0]?.ton ?? "0");
+    const tonEarned = parseFloat(adsRow.rows[0]?.ton ?? "0");
 
-    const dateStr = new Date().toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" });
+    const dateStr = new Date().toLocaleDateString("ru-RU", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      timeZone: "UTC",
+    });
 
-    await notifyAdmin(bot,
+    await notifyAdmin(
+      bot,
       `📊 <b>Утренняя статистика TONYX</b> — ${dateStr}\n\n` +
-      `👥 Новых пользователей за день: <b>${newUsers}</b>\n` +
-      `👤 Всего пользователей: <b>${totalUsers}</b>\n` +
-      `📺 Просмотров рекламы: <b>${adsWatched}</b>\n` +
-      `💰 TON заработано: <b>${tonEarned.toFixed(4)} TON</b>`
+        `👥 Новых пользователей за день: <b>${newUsers}</b>\n` +
+        `👤 Всего пользователей: <b>${totalUsers}</b>\n` +
+        `📺 Просмотров рекламы: <b>${adsWatched}</b>\n` +
+        `💰 TON заработано: <b>${tonEarned.toFixed(4)} TON</b>`,
     );
     console.log("[bot] Daily stats sent to admin");
   } catch (err) {
@@ -59,16 +72,9 @@ async function sendDailyStats(bot: Telegraf<Context<Update>>) {
   }
 }
 
-/** Delay helper for rate-limit compliance */
-const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
-/**
- * Sends a message to every non-blocked user.
- * Rate limit: Telegram allows ~30 msg/s. We send ~20/s (50ms gap) to stay safe.
- * Reports progress every 100 users and a final summary to admin.
- */
 async function broadcastMessage(bot: Telegraf<Context<Update>>, text: string): Promise<void> {
-  // Fetch all non-blocked user telegram IDs, oldest first
   const users = await db
     .select({ telegramId: usersTable.telegramId })
     .from(usersTable)
@@ -88,10 +94,10 @@ async function broadcastMessage(bot: Telegraf<Context<Update>>, text: string): P
       await bot.telegram.sendMessage(telegramId, text, { parse_mode: "HTML" });
       sent++;
     } catch (err) {
-      // 403 = user blocked the bot, 400 = invalid chat — mark as blocked in DB silently
       const code = (err as { response?: { error_code?: number } })?.response?.error_code;
       if (code === 403 || code === 400) {
-        await db.update(usersTable)
+        await db
+          .update(usersTable)
           .set({ isBlocked: true })
           .where(eq(usersTable.telegramId, telegramId))
           .catch(() => {});
@@ -99,21 +105,20 @@ async function broadcastMessage(bot: Telegraf<Context<Update>>, text: string): P
       failed++;
     }
 
-    // Progress update every 100 users
     if ((i + 1) % 100 === 0) {
       await notifyAdmin(bot, `⏳ Рассылка: <b>${i + 1}/${total}</b> — ✅ ${sent} / ❌ ${failed}`);
     }
 
-    // 50ms gap ≈ 20 msg/s — well within Telegram's limit
     await sleep(50);
   }
 
   console.log(`[broadcast] Done — sent: ${sent}, failed: ${failed}`);
-  await notifyAdmin(bot,
+  await notifyAdmin(
+    bot,
     `✅ <b>Рассылка завершена!</b>\n\n` +
-    `👤 Всего: <b>${total}</b>\n` +
-    `📨 Доставлено: <b>${sent}</b>\n` +
-    `❌ Ошибок: <b>${failed}</b>`
+      `👤 Всего: <b>${total}</b>\n` +
+      `📨 Доставлено: <b>${sent}</b>\n` +
+      `❌ Ошибок: <b>${failed}</b>`,
   );
 }
 
@@ -126,10 +131,131 @@ function scheduleDailyStats(bot: Telegraf<Context<Update>>) {
   }, delay);
 }
 
+/** Handle unique gift payload → inventory */
+async function handleIncomingGift(
+  bot: Telegraf<Context<Update>>,
+  rawMsg: Record<string, unknown>,
+  fallbackCreditId: string | null,
+  source: "business_profile" | "bot_chat",
+) {
+  const parsed = parseUniqueGiftPayload(rawMsg);
+  if (!parsed) return;
+
+  const bc = await getBusinessConnection();
+  // Gifts on connected profile → credit profile owner (admin)
+  // Gifts sent to the bot chat → credit the sender (deposit)
+  const creditTo =
+    source === "business_profile"
+      ? bc.ownerId || ADMIN_CHAT_ID
+      : parsed.senderId || fallbackCreditId || ADMIN_CHAT_ID;
+
+  const result = await creditGiftToInventory({
+    creditToTelegramId: creditTo,
+    baseName: parsed.baseName,
+    name: parsed.name,
+    number: parsed.number,
+    model: parsed.model,
+    backdrop: parsed.backdrop,
+    symbol: parsed.symbol,
+    ownedGiftId: parsed.ownedGiftId,
+    senderId: parsed.senderId,
+    source,
+  });
+
+  if (result.ok) {
+    await notifyAdmin(
+      bot,
+      `🎁 <b>NFT подарок → инвентарь</b>\n\n` +
+        `📦 ${result.nameRu} (<code>${result.nftId}</code>)\n` +
+        `👤 В инвентарь: <code>${result.telegramId}</code>\n` +
+        `📥 Источник: ${source}\n` +
+        (parsed.number != null ? `🔢 #${parsed.number}\n` : "") +
+        (parsed.model ? `🎨 ${parsed.model}\n` : ""),
+    );
+    try {
+      if (creditTo !== ADMIN_CHAT_ID) {
+        await bot.telegram.sendMessage(
+          creditTo,
+          `🎁 NFT <b>${result.nameRu}</b> добавлен в инвентарь TONYX!\nОткрой приложение → Инвентарь.`,
+          { parse_mode: "HTML" },
+        );
+      }
+    } catch {
+      /* ignore */
+    }
+  } else {
+    console.log(`[gift] skip: ${result.reason}`);
+    if (!result.reason.includes("Already") && !result.reason.includes("not in catalog")) {
+      await notifyAdmin(bot, `⚠️ Подарок не зачислен: ${result.reason}`);
+    } else if (result.reason.includes("not in catalog")) {
+      await notifyAdmin(
+        bot,
+        `ℹ️ Получен подарок вне каталога: <b>${parsed.baseName ?? parsed.name ?? "?"}</b>\n` +
+          `Он не добавлен в инвентарь (нет в NFT_COLLECTIONS).`,
+      );
+    }
+  }
+}
+
+/** Poll business account gifts and credit new ones */
+async function scanBusinessGifts(bot: Telegraf<Context<Update>>) {
+  const { connectionId, ownerId } = await getBusinessConnection();
+  if (!connectionId || !ownerId || !BOT_TOKEN) return;
+
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getBusinessAccountGifts`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        business_connection_id: connectionId,
+        exclude_unsaved: false,
+        limit: 50,
+      }),
+    });
+    const data = (await res.json()) as {
+      ok?: boolean;
+      result?: { gifts?: Array<Record<string, unknown>> };
+      description?: string;
+    };
+    if (!data.ok || !data.result?.gifts) {
+      if (data.description) console.warn("[gift-scan]", data.description);
+      return;
+    }
+
+    for (const g of data.result.gifts) {
+      if ((g.type as string) !== "unique") continue;
+      const gift = (g.gift as Record<string, unknown>) ?? {};
+      const model = gift.model as Record<string, unknown> | undefined;
+      const backdrop = gift.backdrop as Record<string, unknown> | undefined;
+      const symbol = gift.symbol as Record<string, unknown> | undefined;
+      const sender = g.sender_user as { id?: number } | undefined;
+
+      const result = await creditGiftToInventory({
+        creditToTelegramId: ownerId,
+        baseName: (gift.base_name as string) ?? null,
+        name: (gift.name as string) ?? null,
+        number: typeof gift.number === "number" ? gift.number : null,
+        model: (model?.name as string) ?? null,
+        backdrop: (backdrop?.name as string) ?? null,
+        symbol: (symbol?.name as string) ?? null,
+        ownedGiftId: (g.owned_gift_id as string) ?? null,
+        senderId: sender?.id != null ? String(sender.id) : null,
+        source: "scan",
+      });
+
+      if (result.ok) {
+        await notifyAdmin(
+          bot,
+          `🎁 <b>Скан профиля</b>: ${result.nameRu} → инвентарь <code>${ownerId}</code>`,
+        );
+      }
+    }
+  } catch (err) {
+    console.error("[gift-scan]", err);
+  }
+}
+
 export function startBot(): Telegraf<Context<Update>> | null | void {
-  // Only run bot polling in production OR when explicitly enabled in dev.
-  // Telegram allows only ONE getUpdates consumer per token — if both dev and
-  // prod poll, both get 409 Conflict and the bot stops responding.
   const isProd = process.env.NODE_ENV === "production";
   const forceEnable = process.env.BOT_ENABLED === "true";
   if (!isProd && !forceEnable) {
@@ -143,7 +269,6 @@ export function startBot(): Telegraf<Context<Update>> | null | void {
 
   const bot = new Telegraf(BOT_TOKEN);
 
-  // /start — registers user, handles referral, sends welcome with WebApp button
   bot.start(async (ctx) => {
     const user = ctx.from;
     const startParam = ctx.startPayload;
@@ -157,7 +282,6 @@ export function startBot(): Telegraf<Context<Update>> | null | void {
         .where(eq(usersTable.telegramId, user.id.toString()))
         .then((rows) => rows[0] ?? null);
 
-      // Fetch profile photo (best-effort)
       let photoUrl: string | null = null;
       try {
         const photos = await bot.telegram.getUserProfilePhotos(user.id, 0, 1);
@@ -174,7 +298,6 @@ export function startBot(): Telegraf<Context<Update>> | null | void {
 
       if (!existingUser) {
         isNewUser = true;
-        // New user — register and handle referral
         await db.insert(usersTable).values({
           telegramId: user.id.toString(),
           username: user.username ?? null,
@@ -187,7 +310,6 @@ export function startBot(): Telegraf<Context<Update>> | null | void {
           isBlocked: false,
         });
 
-        // Bonus coins to referrer
         if (startParam && startParam !== user.id.toString()) {
           const referrer = await db
             .select()
@@ -205,18 +327,19 @@ export function startBot(): Telegraf<Context<Update>> | null | void {
           }
         }
 
-        // Notify admin about new registration
-        const displayName = [user.first_name, user.last_name].filter(Boolean).join(" ") || user.username || "Unknown";
-        const refLine = startParam && startParam !== user.id.toString()
-          ? `\n👥 Реферал от: <code>${startParam}</code>`
-          : "";
-        await notifyAdmin(bot,
+        const displayName =
+          [user.first_name, user.last_name].filter(Boolean).join(" ") || user.username || "Unknown";
+        const refLine =
+          startParam && startParam !== user.id.toString()
+            ? `\n👥 Реферал от: <code>${startParam}</code>`
+            : "";
+        await notifyAdmin(
+          bot,
           `🆕 <b>Новый пользователь!</b>\n\n` +
-          `👤 ${displayName}${user.username ? ` (@${user.username})` : ""}\n` +
-          `🆔 <code>${user.id}</code>${refLine}`
+            `👤 ${displayName}${user.username ? ` (@${user.username})` : ""}\n` +
+            `🆔 <code>${user.id}</code>${refLine}`,
         );
       } else {
-        // Existing user — update profile info
         await db
           .update(usersTable)
           .set({
@@ -232,7 +355,6 @@ export function startBot(): Telegraf<Context<Update>> | null | void {
       console.error("Error registering user on /start:", err);
     }
 
-    // Send welcome message with WebApp launch button
     const name = user.first_name ?? user.username ?? "friend";
     const greeting = isNewUser
       ? `🎉 Welcome to TONYX, ${name}!\n\n💰 Watch ads → earn pts\n💎 100 pts = 1 TON\n🎮 Play games · 👥 Invite friends\n\nTap the button below to launch the app:`
@@ -253,7 +375,6 @@ export function startBot(): Telegraf<Context<Update>> | null | void {
     }
   });
 
-  // /broadcast <text> — admin-only mass mailing
   bot.command("broadcast", async (ctx) => {
     const senderId = ctx.from?.id?.toString();
     if (senderId !== ADMIN_CHAT_ID) {
@@ -261,26 +382,22 @@ export function startBot(): Telegraf<Context<Update>> | null | void {
       return;
     }
 
-    // Everything after "/broadcast " is the message text
     const text = ctx.message.text.replace(/^\/broadcast\s*/i, "").trim();
     if (!text) {
-      await ctx.reply(
-        "✏️ <b>Использование:</b>\n<code>/broadcast Ваш текст сообщения</code>\n\n" +
-        "Поддерживается HTML-разметка: <b>жирный</b>, <i>курсив</i>, <code>моно</code>",
-        { parse_mode: "HTML" }
-      ).catch(() => {});
+      await ctx
+        .reply(
+          "✏️ <b>Использование:</b>\n<code>/broadcast Ваш текст сообщения</code>\n\n" +
+            "Поддерживается HTML-разметка: <b>жирный</b>, <i>курсив</i>, <code>моно</code>",
+          { parse_mode: "HTML" },
+        )
+        .catch(() => {});
       return;
     }
 
-    // Run in background so handler returns immediately (broadcast can take minutes)
-    broadcastMessage(bot, text).catch(err =>
-      console.error("[broadcast] Fatal error:", err)
-    );
-
+    broadcastMessage(bot, text).catch((err) => console.error("[broadcast] Fatal error:", err));
     await ctx.reply("📣 Рассылка запущена! Прогресс будет приходить сообщениями.").catch(() => {});
   });
 
-  // /stats — admin-only on-demand statistics
   bot.command("stats", async (ctx) => {
     const senderId = ctx.from?.id?.toString();
     if (senderId !== ADMIN_CHAT_ID) {
@@ -290,18 +407,101 @@ export function startBot(): Telegraf<Context<Update>> | null | void {
     await sendDailyStats(bot);
   });
 
+  // Admin: force scan gifts on connected profile
+  bot.command("scangifts", async (ctx) => {
+    const senderId = ctx.from?.id?.toString();
+    if (senderId !== ADMIN_CHAT_ID) {
+      await ctx.reply("⛔ Нет доступа").catch(() => {});
+      return;
+    }
+    await ctx.reply("🔍 Сканирую подарки на Business-профиле...").catch(() => {});
+    await scanBusinessGifts(bot);
+    await ctx.reply("✅ Скан завершён").catch(() => {});
+  });
+
+  // Business connection: when you link the bot to your Telegram Business profile
+  bot.on("business_connection" as "message", async (ctx) => {
+    try {
+      const upd = ctx.update as unknown as {
+        business_connection?: {
+          id: string;
+          user: { id: number };
+          is_enabled?: boolean;
+          can_reply?: boolean;
+        };
+      };
+      const bc = upd.business_connection;
+      if (!bc?.id || !bc.user?.id) return;
+
+      if (bc.is_enabled === false) {
+        await notifyAdmin(bot, `🔌 Business connection отключён: <code>${bc.id}</code>`);
+        return;
+      }
+
+      const ownerId = String(bc.user.id);
+      await saveBusinessConnection(bc.id, ownerId);
+      await notifyAdmin(
+        bot,
+        `✅ <b>Профиль подключён к боту</b>\n\n` +
+          `👤 Owner: <code>${ownerId}</code>\n` +
+          `🔗 connection: <code>${bc.id}</code>\n\n` +
+          `Теперь NFT-подарки на этот профиль (если есть в каталоге бота) попадут в инвентарь.`,
+      );
+      // Initial scan
+      await scanBusinessGifts(bot);
+    } catch (err) {
+      console.error("[business_connection]", err);
+    }
+  });
+
+  // Gifts received in bot private chat (user sent gift to the bot)
+  bot.on("message", async (ctx) => {
+    try {
+      const msg = ctx.message as unknown as Record<string, unknown>;
+      if (!msg) return;
+      if (msg.unique_gift || (msg as { uniqueGift?: unknown }).uniqueGift) {
+        await handleIncomingGift(bot, msg, ctx.from?.id?.toString() ?? null, "bot_chat");
+      }
+    } catch (err) {
+      console.error("[message gift]", err);
+    }
+  });
+
+  // Business messages (activity on connected profile)
+  bot.on("business_message" as "message", async (ctx) => {
+    try {
+      const upd = ctx.update as unknown as { business_message?: Record<string, unknown> };
+      const msg = upd.business_message;
+      if (!msg) return;
+      if (msg.unique_gift || msg.uniqueGift) {
+        await handleIncomingGift(bot, msg, null, "business_profile");
+      }
+    } catch (err) {
+      console.error("[business_message gift]", err);
+    }
+  });
+
   bot.catch((err) => {
     console.error("Bot error:", err);
   });
 
-  bot.launch({ dropPendingUpdates: true }).catch((err) => {
+  bot.launch({ dropPendingUpdates: true, allowedUpdates: [
+    "message",
+    "business_connection",
+    "business_message",
+    "edited_business_message",
+  ] as unknown as undefined }).catch((err) => {
     console.error("Failed to start bot:", err.message);
   });
-  // Telegraf gotcha: bot.launch() resolves only on stop. Log immediately after polling begins.
-  setTimeout(() => console.log("🤖 Telegram bot polling started"), 1000);
+  setTimeout(() => console.log("🤖 Telegram bot polling started (gifts + business)"), 1000);
 
-  // Schedule daily 9:00 UTC stats report to admin
   scheduleDailyStats(bot);
+
+  // Periodic gift scan every 5 min
+  setInterval(() => {
+    scanBusinessGifts(bot).catch((e) => console.error("[gift-scan interval]", e));
+  }, 5 * 60 * 1000);
+  setTimeout(() => scanBusinessGifts(bot).catch(() => {}), 15_000);
 
   process.once("SIGINT", () => bot.stop("SIGINT"));
   process.once("SIGTERM", () => bot.stop("SIGTERM"));

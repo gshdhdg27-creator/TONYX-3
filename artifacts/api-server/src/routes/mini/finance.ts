@@ -98,7 +98,7 @@ router.post("/withdraw", async (req, res) => {
     id: withdrawal.id,
     status: withdrawal.status,
     amount: withdrawal.amount,
-    message: `Withdrawal of ${tonAmount.toFixed(4)} TON to ${body.address} submitted. Admin will process within 24h.`,
+    message: `Вывод ${tonAmount.toFixed(4)} TON принят. Обработка 1–5 минут — средства поступят на ваш кошелёк.`,
   });
   res.json(data);
 });

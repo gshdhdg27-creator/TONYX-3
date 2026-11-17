@@ -206,10 +206,11 @@ export default function SpinHistoryModal({ onClose, onReplay, telegramId }: Prop
             <div style={{ marginBottom: 12, fontSize: 13, opacity: 0.85 }}>
               {fmtTime(detail.finishedAt)} · банк {detail.totalPool} TON
             </div>
-            <div style={{ fontWeight: 800, color: "#4ade80", marginBottom: 10 }}>
-              Победитель: @{detail.winnerUsername || detail.winnerId}
+            <div style={{ fontWeight: 800, color: "#4ade80", marginBottom: 10, fontSize: 15 }}>
+              🏆 Победитель: @{detail.winnerUsername || detail.winnerId}
               {detail.winnerPayout ? ` · +${detail.winnerPayout} TON` : ""}
             </div>
+            <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 8 }}>Участники и ставки:</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 14 }}>
               {(detail.players || []).map((p) => (
                 <div
@@ -227,9 +228,11 @@ export default function SpinHistoryModal({ onClose, onReplay, telegramId }: Prop
                     fontSize: 13,
                   }}
                 >
-                  <span>@{p.username || p.telegramId}</span>
+                  <span>
+                    {p.telegramId === detail.winnerId ? "🏆 " : ""}@{p.username || p.telegramId}
+                  </span>
                   <span style={{ fontWeight: 700 }}>
-                    {p.stake} · {(p.chance ?? 0).toFixed(1)}%
+                    {p.stake} TON · {(p.chance ?? 0).toFixed(1)}%
                   </span>
                 </div>
               ))}
@@ -296,7 +299,10 @@ export default function SpinHistoryModal({ onClose, onReplay, telegramId }: Prop
               >
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
                   <div>
-                    <div style={{ fontWeight: 800, fontSize: 13 }}>Раунд #{h.id}</div>
+                    <div style={{ fontWeight: 800, fontSize: 13 }}>
+                      Раунд #{h.id}{" "}
+                      <span style={{ fontWeight: 600, opacity: 0.55, fontSize: 11 }}>· детали</span>
+                    </div>
                     <div style={{ fontSize: 12, opacity: 0.8, marginTop: 2 }}>
                       @{h.winnerUsername || h.winnerId || "—"} · банк {h.totalPool} TON
                     </div>

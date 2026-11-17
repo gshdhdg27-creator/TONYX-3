@@ -118,7 +118,7 @@ export function JackpotWheel({
             ? "0 0 50px rgba(167,139,250,0.55), 0 0 80px rgba(251,191,36,0.2)"
             : "0 0 40px rgba(167,139,250,0.25)",
           transition: spinning
-            ? "transform 4.8s cubic-bezier(0.08, 0.7, 0.1, 1)"
+            ? "transform 5.2s cubic-bezier(0.08, 0.65, 0.12, 1)"
             : "box-shadow 0.3s ease",
           transform: `rotate(${rotateDeg}deg)`,
           willChange: "transform",
@@ -227,6 +227,7 @@ export default function SpinGame({
   } | null>(null);
 
   const spinningRef = useRef(false);
+  const replayingRef = useRef(false);
   const rotateDegRef = useRef(0);
   const spunForId = useRef<number | null>(null);
   const spinTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -255,6 +256,7 @@ export default function SpinGame({
       if (!winner) {
         spinningRef.current = false;
         setSpinning(false);
+        replayingRef.current = false;
         return;
       }
 
@@ -296,7 +298,8 @@ export default function SpinGame({
             });
             hapticNotify(data.winnerId === telegramId ? "success" : "error");
             onBalanceChange();
-          }, 5000);
+            replayingRef.current = false;
+          }, 5600);
         });
       });
     },
@@ -305,6 +308,8 @@ export default function SpinGame({
 
   const fetchState = useCallback(async () => {
     try {
+      if (spinningRef.current || replayingRef.current) return;
+
       const res = await fetch("/api/mini/games/spin/state");
       if (!res.ok) return;
       const data = (await res.json()) as Round;
@@ -592,7 +597,10 @@ export default function SpinGame({
           onReplay={(item) => {
             setShowHistory(false);
             if (!item?.winnerId || !item.players?.length) return;
-            spunForId.current = null;
+            replayingRef.current = true;
+            spinningRef.current = false;
+            spunForId.current = item.id;
+            setWinnerBanner(null);
             startSpin({
               id: item.id,
               status: "finished",

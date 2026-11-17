@@ -167,11 +167,13 @@ router.post("/users/:telegramId/grant-gift", async (req, res) => {
     if (list) {
       meta.listed = true; meta.priceTon = priceTon; meta.listedAt = new Date().toISOString();
       if (!meta.valueTon || Number(meta.valueTon) <= 0) meta.valueTon = priceTon;
+    } else if (valueTon > 0) {
+      meta.priceTon = valueTon;
     }
     const inserted = await db.insert(miniUserInventoryTable).values({
       telegramId: targetId, itemType: "nft_full", itemId: short, quantity: 1, meta,
     }).returning();
-    console.log(`[Admin] ${adminId} grant-gift → ${targetId} ${short} / ${model} / ${backdrop} / ${symbol} list=${list}`);
+    console.log(`[Admin] ${adminId} grant-gift → ${targetId} ${short} / ${model} / ${backdrop} / ${symbol} list=${list} value=${meta.valueTon}`);
     res.json({
       ok: true,
       message: list ? `NFT выдан и выставлен на маркет за ${priceTon} TON` : `NFT выдан пользователю ${targetId}`,
@@ -220,16 +222,9 @@ router.get("/users/:telegramId/assets", async (req, res) => {
       const m = (it.meta ?? {}) as Record<string, unknown>;
       const giftName = (m.giftName as string) || it.itemId;
       return {
-        id: it.id,
-        itemType: it.itemType,
-        itemId: it.itemId,
-        quantity: it.quantity,
-        acquiredAt: it.acquiredAt,
-        name: giftName,
-        giftName,
-        model: m.model ?? null,
-        backdrop: m.backdrop ?? null,
-        symbol: m.symbol ?? null,
+        id: it.id, itemType: it.itemType, itemId: it.itemId, quantity: it.quantity, acquiredAt: it.acquiredAt,
+        name: giftName, giftName,
+        model: m.model ?? null, backdrop: m.backdrop ?? null, symbol: m.symbol ?? null,
         imageUrl: (m.modelImageUrl as string) || (m.imageUrl as string) || null,
         modelImageUrl: (m.modelImageUrl as string) || null,
         symbolImageUrl: (m.symbolImageUrl as string) || null,

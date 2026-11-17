@@ -107,10 +107,11 @@ export function JackpotWheel({
           zIndex: 6,
         }}
       />
+
       <div
         style={{
-          width: "100%",
-          height: "100%",
+          position: "absolute",
+          inset: 0,
           borderRadius: "50%",
           background: gradient,
           border: "3px solid rgba(167,139,250,0.45)",
@@ -122,58 +123,59 @@ export function JackpotWheel({
             : "box-shadow 0.3s ease",
           transform: `rotate(${rotateDeg}deg)`,
           willChange: "transform",
+          overflow: "hidden",
         }}
-      />
-      {sectors.map((s) => {
-        if (s.share < AVATAR_MIN_SHARE) return null;
-        const mid = (s.start + s.end) / 2;
-        const rad = ((mid * 360 - 90) * Math.PI) / 180;
-        const r = WHEEL_SIZE * 0.32;
-        const x = WHEEL_SIZE / 2 + Math.cos(rad) * r;
-        const y = WHEEL_SIZE / 2 + Math.sin(rad) * r;
-        return (
-          <div
-            key={s.telegramId}
-            style={{
-              position: "absolute",
-              left: x,
-              top: y,
-              width: 28,
-              height: 28,
-              marginLeft: -14,
-              marginTop: -14,
-              borderRadius: "50%",
-              overflow: "hidden",
-              border: "2px solid rgba(255,255,255,0.5)",
-              background: "#1e1b2e",
-              transform: `rotate(${-rotateDeg}deg)`,
-              transition: spinning
-                ? "none"
-                : "left 0.55s ease, top 0.55s ease, transform 0.55s ease",
-              zIndex: 4,
-            }}
-          >
-            {s.photoUrl ? (
-              <img src={s.photoUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-            ) : (
-              <div
-                style={{
-                  width: "100%",
-                  height: "100%",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontSize: 11,
-                  fontWeight: 800,
-                  color: "#e2e8f0",
-                }}
-              >
-                {(s.username || "?")[0].toUpperCase()}
-              </div>
-            )}
-          </div>
-        );
-      })}
+      >
+        {sectors.map((s) => {
+          if (s.share < AVATAR_MIN_SHARE) return null;
+          const mid = (s.start + s.end) / 2;
+          const rad = ((mid * 360 - 90) * Math.PI) / 180;
+          const r = WHEEL_SIZE * 0.32;
+          const x = WHEEL_SIZE / 2 + Math.cos(rad) * r;
+          const y = WHEEL_SIZE / 2 + Math.sin(rad) * r;
+          return (
+            <div
+              key={s.telegramId}
+              style={{
+                position: "absolute",
+                left: x,
+                top: y,
+                width: 28,
+                height: 28,
+                marginLeft: -14,
+                marginTop: -14,
+                borderRadius: "50%",
+                overflow: "hidden",
+                border: "2px solid rgba(255,255,255,0.55)",
+                background: "#1e1b2e",
+                transform: `rotate(${-rotateDeg}deg)`,
+                transition: spinning ? "none" : "left 0.55s ease, top 0.55s ease",
+                zIndex: 4,
+              }}
+            >
+              {s.photoUrl ? (
+                <img src={s.photoUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+              ) : (
+                <div
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: 11,
+                    fontWeight: 800,
+                    color: "#e2e8f0",
+                  }}
+                >
+                  {(s.username || "?")[0].toUpperCase()}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
       <div
         style={{
           position: "absolute",

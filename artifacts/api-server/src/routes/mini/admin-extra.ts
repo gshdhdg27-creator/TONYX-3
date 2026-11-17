@@ -1,1 +1,1 @@
-SEE_FILE
+LOAD_FROM_/tmp/admin_push.ts

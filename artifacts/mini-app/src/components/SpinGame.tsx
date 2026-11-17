@@ -23,7 +23,7 @@ type Round = {
   winnerUsername?: string | null;
   startAt: string | null;
   finishedAt: string | null;
-  stopFrac: number;
+  stopFrac: number | null;
   fair?: FairData | null;
 };
 
@@ -66,7 +66,8 @@ export function JackpotWheel({
 
   useEffect(() => {
     if (!spinning) return;
-    const target = 360 * 6 + (1 - stopFrac) * 360;
+    const frac = typeof stopFrac === "number" ? stopFrac : 0.5;
+    const target = 360 * 6 + (1 - frac) * 360;
     setRotation(target);
   }, [spinning, stopFrac, spinKey]);
 
@@ -172,62 +173,99 @@ export default function SpinGame({
   const [spinKey, setSpinKey] = useState(0);
   const [showHistory, setShowHistory] = useState(false);
   const [showFair, setShowFair] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [lastWinner, setLastWinner] = useState<{ username: string | null; telegramId: string; payout?: number } | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const spunForId = useRef<number | null>(null);
 
-  const loadRound = useCallback(async () => {
+  const applyRound = useCallback((r: Round) => {
+    setRound(r);
+    if (r.status === "finished" && r.winnerId && r.id !== spunForId.current) {
+      spunForId.current = r.id;
+      setSpinning(true);
+      setSpinKey((k) => k + 1);
+      haptic("medium");
+      setTimeout(() => {
+        setSpinning(false);
+        hapticNotify(r.winnerId === telegramId ? "success" : "error");
+        onBalanceChange();
+      }, 4800);
+    }
+  }, [telegramId, onBalanceChange]);
+
+  const fetchState = useCallback(async () => {
     try {
-      const res = await fetch("/api/mini/games/spin/current");
+      const res = await fetch("/api/mini/games/spin/state");
+      if (!res.ok) return;
       const data = await res.json();
-      const r = data.round || data.room || data;
-      if (r?.id) setRound(r);
-    } catch {}
-  }, []);
+      if (data?.id) applyRound(data as Round);
+    } catch {
+      /* offline */
+    }
+  }, [applyRound]);
 
   useEffect(() => {
-    loadRound();
-    pollRef.current = setInterval(loadRound, 2500);
+    fetchState();
+    fetch("/api/mini/games/spin/last-winner")
+      .then((r) => r.json())
+      .then((d) => {
+        if (d?.winner) setLastWinner(d.winner);
+      })
+      .catch(() => {});
+    pollRef.current = setInterval(fetchState, 1200);
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
     };
-  }, [loadRound]);
+  }, [fetchState]);
 
   const startSpin = useCallback((r: Round) => {
+    spunForId.current = r.id;
     setRound(r);
     setSpinning(true);
     setSpinKey((k) => k + 1);
     haptic("medium");
     setTimeout(() => {
       setSpinning(false);
-      hapticNotify("success");
+      hapticNotify(r.winnerId === telegramId ? "success" : "error");
       onBalanceChange();
-      loadRound();
+      fetchState();
     }, 4800);
-  }, [loadRound, onBalanceChange]);
+  }, [telegramId, onBalanceChange, fetchState]);
 
   const placeBet = async () => {
     const amount = parseFloat(bet);
+    if (!telegramId) {
+      setError("Открой игру из Telegram");
+      return;
+    }
     if (!amount || amount <= 0 || loading || spinning) return;
     setLoading(true);
+    setError(null);
     try {
-      const res = await fetch("/api/mini/games/spin/bet", {
+      const players = round?.players || [];
+      const me = players.find((p) => p.telegramId === telegramId);
+      const url = me ? "/api/mini/games/spin/increase" : "/api/mini/games/spin/join";
+      const body = me
+        ? { telegramId, additionalStake: amount }
+        : { telegramId, stake: amount };
+      const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ telegramId, amount }),
+        body: JSON.stringify(body),
       });
-      const data = await res.json();
-      if (data.ok || data.round || data.room) {
-        haptic("light");
-        const r = data.round || data.room;
-        if (r) setRound(r);
-        onBalanceChange();
-        if (r?.status === "spinning" || r?.status === "finished") {
-          startSpin(r);
-        }
-      } else {
-        alert(data.error || "Ошибка ставки");
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data.error || `Ошибка ${res.status}`);
+        return;
       }
-    } catch {
-      alert("Сеть недоступна");
+      haptic("light");
+      if (data?.id) {
+        applyRound(data as Round);
+      }
+      onBalanceChange();
+      fetchState();
+    } catch (e) {
+      setError("Сеть недоступна");
     } finally {
       setLoading(false);
     }
@@ -268,12 +306,27 @@ export default function SpinGame({
       />
 
       <div style={{ textAlign: "center", marginTop: 12, opacity: 0.85, fontSize: 13 }}>
-        Банк: <b>{totalPool.toFixed(2)}</b> TON · Игроков: {players.length}
+        Банк: <b>{Number(totalPool).toFixed(2)}</b> TON · Игроков: {players.length}
+        {round?.status === "starting" && round.startAt ? (
+          <span> · Старт…</span>
+        ) : null}
       </div>
 
-      {round?.winnerId && !spinning && (
+      {round?.winnerId && !spinning && round.status === "finished" && (
         <div style={{ textAlign: "center", marginTop: 8, color: "#fbbf24", fontWeight: 800 }}>
           Победитель: {round.winnerUsername || round.winnerId}
+        </div>
+      )}
+
+      {lastWinner && !round?.winnerId && (
+        <div style={{ textAlign: "center", marginTop: 6, fontSize: 12, opacity: 0.75 }}>
+          Последний: @{lastWinner.username || lastWinner.telegramId}
+        </div>
+      )}
+
+      {error && (
+        <div style={{ marginTop: 10, padding: "8px 12px", borderRadius: 12, background: "rgba(248,113,113,0.15)", border: "1px solid rgba(248,113,113,0.35)", color: "#fecaca", fontSize: 13 }}>
+          {error}
         </div>
       )}
 
@@ -310,7 +363,7 @@ export default function SpinGame({
             cursor: loading || spinning ? "default" : "pointer",
           }}
         >
-          {loading ? "…" : "Ставка"}
+          {loading ? "…" : players.some((p) => p.telegramId === telegramId) ? "Добить" : "Ставка"}
         </button>
       </div>
 
@@ -346,14 +399,14 @@ export default function SpinGame({
                 justifyContent: "space-between",
                 padding: "8px 12px",
                 borderRadius: 12,
-                background: "rgba(255,255,255,0.04)",
+                background: p.telegramId === telegramId ? "rgba(124,92,255,0.12)" : "rgba(255,255,255,0.04)",
                 border: "1px solid rgba(255,255,255,0.08)",
                 fontSize: 13,
               }}
             >
-              <span>{p.username || p.telegramId}</span>
+              <span>@{p.username || p.telegramId}</span>
               <span style={{ fontWeight: 800 }}>
-                {p.stake} TON · {((p.chance || p.stake / (totalPool || 1)) * 100).toFixed(1)}%
+                {p.stake} TON · {(p.chance ?? 0).toFixed(1)}%
               </span>
             </div>
           ))}

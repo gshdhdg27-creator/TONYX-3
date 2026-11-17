@@ -17,19 +17,13 @@ export type SpinHistoryItem = {
   }>;
   finishedAt: string | null;
   stopFrac?: number;
-  fair?: {
-    serverSeed: string | null;
-    serverSeedHash: string | null;
-    clientSeed: string | null;
-    nonce: number | null;
-    hash: string | null;
-  };
+  fair?: FairData | null;
 };
 
 type TabId = "all" | "lucky" | "big" | "mine";
 
 const TABS: { id: TabId; label: string; icon: string }[] = [
-  { id: "all", label: "Все", icon: "✕" },
+  { id: "all", label: "Все", icon: "☰" },
   { id: "lucky", label: "Везучие", icon: "🍀" },
   { id: "big", label: "Большие", icon: "💰" },
   { id: "mine", label: "Мои", icon: "👑" },
@@ -41,22 +35,46 @@ type Props = {
   telegramId?: string;
 };
 
+function fmtTime(iso: string | null) {
+  if (!iso) return "—";
+  try {
+    const d = new Date(iso);
+    return d.toLocaleString("ru-RU", {
+      day: "2-digit",
+      month: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return iso;
+  }
+}
+
 export default function SpinHistoryModal({ onClose, onReplay, telegramId }: Props) {
   const [tab, setTab] = useState<TabId>("all");
   const [items, setItems] = useState<SpinHistoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [detail, setDetail] = useState<SpinHistoryItem | null>(null);
+  const [fairItem, setFairItem] = useState<SpinHistoryItem | null>(null);
+  const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
         setLoading(true);
+        setErr(null);
         const res = await fetch("/api/mini/games/spin/history?limit=80");
+        if (!res.ok) {
+          if (!cancelled) setErr(`Ошибка ${res.status}`);
+          return;
+        }
         const data = await res.json();
-        if (!cancelled) setItems(data.rooms ?? data.history ?? []);
+        const list: SpinHistoryItem[] = data.rooms ?? data.history ?? [];
+        if (!cancelled) setItems(Array.isArray(list) ? list : []);
       } catch {
-        if (!cancelled) setItems([]);
+        if (!cancelled) setErr("Не удалось загрузить историю");
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -73,15 +91,21 @@ export default function SpinHistoryModal({ onClose, onReplay, telegramId }: Prop
       list = list.filter((r) => String(r.id).includes(q));
     }
     if (tab === "mine" && telegramId) {
-      list = list.filter((r) => r.winnerId === telegramId || r.players?.some((p) => p.telegramId === telegramId));
+      list = list.filter(
+        (r) =>
+          r.winnerId === telegramId ||
+          r.players?.some((p) => p.telegramId === telegramId)
+      );
     } else if (tab === "lucky") {
       list = list
-        .filter((r) => r.totalPool > 0 && r.winnerPayout / Math.max(r.totalPool, 0.001) >= 2)
-        .sort((a, b) => b.winnerPayout - a.winnerPayout);
+        .filter((r) => r.totalPool > 0 && r.winnerPayout / Math.max(r.totalPool, 0.001) >= 1.5)
+        .sort((a, b) => b.winnerPayout / Math.max(b.totalPool, 0.001) - a.winnerPayout / Math.max(a.totalPool, 0.001));
     } else if (tab === "big") {
       list = list
-        .filter((r) => r.totalPool >= 5 || r.winnerPayout >= 3)
+        .filter((r) => r.totalPool >= 3 || r.winnerPayout >= 2)
         .sort((a, b) => b.totalPool - a.totalPool);
+    } else {
+      list = list.sort((a, b) => b.id - a.id);
     }
     return list;
   }, [items, tab, search, telegramId]);
@@ -114,52 +138,146 @@ export default function SpinHistoryModal({ onClose, onReplay, telegramId }: Prop
         }}
       >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-          <div style={{ fontWeight: 900, fontSize: 16 }}>История раундов</div>
-          <button type="button" onClick={onClose} style={{ border: "none", background: "transparent", color: "#94a3b8", fontSize: 18, cursor: "pointer" }}>
-            ✕
+          <div style={{ fontWeight: 900, fontSize: 16 }}>
+            {detail ? `Раунд #${detail.id}` : "История раундов"}
+          </div>
+          <button
+            type="button"
+            onClick={() => (detail ? setDetail(null) : onClose())}
+            style={{ border: "none", background: "transparent", color: "#94a3b8", fontSize: 18, cursor: "pointer" }}
+          >
+            {detail ? "←" : "✕"}
           </button>
         </div>
 
-        <div style={{ display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap" }}>
-          {TABS.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              onClick={() => setTab(t.id)}
-              style={{
-                padding: "6px 10px",
-                borderRadius: 12,
-                border: tab === t.id ? "1px solid rgba(167,139,250,0.55)" : "1px solid rgba(255,255,255,0.1)",
-                background: tab === t.id ? "rgba(167,139,250,0.2)" : "rgba(255,255,255,0.04)",
-                color: "#f1f5f9",
-                fontWeight: 700,
-                fontSize: 12,
-                cursor: "pointer",
-              }}
-            >
-              {t.icon} {t.label}
-            </button>
-          ))}
-        </div>
+        {!detail && (
+          <>
+            <div style={{ display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap" }}>
+              {TABS.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setTab(t.id)}
+                  style={{
+                    padding: "6px 10px",
+                    borderRadius: 12,
+                    border:
+                      tab === t.id
+                        ? "1px solid rgba(167,139,250,0.55)"
+                        : "1px solid rgba(255,255,255,0.1)",
+                    background:
+                      tab === t.id ? "rgba(167,139,250,0.2)" : "rgba(255,255,255,0.04)",
+                    color: "#f1f5f9",
+                    fontWeight: 700,
+                    fontSize: 12,
+                    cursor: "pointer",
+                  }}
+                >
+                  {t.icon} {t.label}
+                </button>
+              ))}
+            </div>
 
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Поиск по номеру раунда"
-          style={{
-            width: "100%",
-            marginBottom: 10,
-            padding: "10px 12px",
-            borderRadius: 12,
-            border: "1px solid rgba(255,255,255,0.12)",
-            background: "rgba(0,0,0,0.25)",
-            color: "#f1f5f9",
-            outline: "none",
-          }}
-        />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Поиск по номеру раунда"
+              style={{
+                width: "100%",
+                marginBottom: 10,
+                padding: "10px 12px",
+                borderRadius: 12,
+                border: "1px solid rgba(255,255,255,0.12)",
+                background: "rgba(0,0,0,0.25)",
+                color: "#f1f5f9",
+                outline: "none",
+                boxSizing: "border-box",
+              }}
+            />
+          </>
+        )}
 
         {loading ? (
           <div style={{ opacity: 0.7, padding: 20, textAlign: "center" }}>Загрузка…</div>
+        ) : err ? (
+          <div style={{ color: "#fecaca", padding: 16, textAlign: "center" }}>{err}</div>
+        ) : detail ? (
+          <div>
+            <div style={{ marginBottom: 12, fontSize: 13, opacity: 0.85 }}>
+              {fmtTime(detail.finishedAt)} · банк {detail.totalPool} TON
+            </div>
+            <div style={{ fontWeight: 800, color: "#4ade80", marginBottom: 10 }}>
+              Победитель: @{detail.winnerUsername || detail.winnerId}
+              {detail.winnerPayout ? ` · +${detail.winnerPayout} TON` : ""}
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 14 }}>
+              {(detail.players || []).map((p) => (
+                <div
+                  key={p.telegramId}
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    padding: "8px 10px",
+                    borderRadius: 10,
+                    background:
+                      p.telegramId === detail.winnerId
+                        ? "rgba(34,197,94,0.15)"
+                        : "rgba(255,255,255,0.04)",
+                    border: "1px solid rgba(255,255,255,0.08)",
+                    fontSize: 13,
+                  }}
+                >
+                  <span>@{p.username || p.telegramId}</span>
+                  <span style={{ fontWeight: 700 }}>
+                    {p.stake} · {(p.chance ?? 0).toFixed(1)}%
+                  </span>
+                </div>
+              ))}
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                type="button"
+                onClick={() => {
+                  onReplay(detail);
+                }}
+                style={{
+                  flex: 1,
+                  padding: "12px",
+                  borderRadius: 12,
+                  border: "1px solid rgba(167,139,250,0.45)",
+                  background: "rgba(167,139,250,0.2)",
+                  color: "#e9d5ff",
+                  fontWeight: 800,
+                  cursor: "pointer",
+                }}
+              >
+                ▶ Повтор
+              </button>
+              <button
+                type="button"
+                onClick={() => setFairItem(detail)}
+                disabled={!detail.fair}
+                style={{
+                  flex: 1,
+                  padding: "12px",
+                  borderRadius: 12,
+                  border: "1px solid rgba(74,222,128,0.4)",
+                  background: "rgba(34,197,94,0.15)",
+                  color: "#86efac",
+                  fontWeight: 800,
+                  cursor: detail.fair ? "pointer" : "not-allowed",
+                  opacity: detail.fair ? 1 : 0.5,
+                }}
+              >
+                ✓ Честность
+              </button>
+            </div>
+            {detail.fair && (
+              <div style={{ marginTop: 12, fontSize: 11, opacity: 0.7, fontFamily: "monospace", wordBreak: "break-all" }}>
+                hash: {detail.fair.hash || detail.fair.serverSeedHash || "—"}
+              </div>
+            )}
+          </div>
         ) : filtered.length === 0 ? (
           <div style={{ opacity: 0.7, padding: 20, textAlign: "center" }}>Пока пусто</div>
         ) : (
@@ -167,43 +285,93 @@ export default function SpinHistoryModal({ onClose, onReplay, telegramId }: Prop
             {filtered.map((h) => (
               <div
                 key={h.id}
+                onClick={() => setDetail(h)}
                 style={{
                   padding: 12,
                   borderRadius: 14,
                   border: "1px solid rgba(255,255,255,0.1)",
                   background: "rgba(255,255,255,0.04)",
+                  cursor: "pointer",
                 }}
               >
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
                   <div>
                     <div style={{ fontWeight: 800, fontSize: 13 }}>Раунд #{h.id}</div>
                     <div style={{ fontSize: 12, opacity: 0.8, marginTop: 2 }}>
-                      {h.winnerUsername || h.winnerId || "—"} · банк {h.totalPool} TON
+                      @{h.winnerUsername || h.winnerId || "—"} · банк {h.totalPool} TON
+                    </div>
+                    <div style={{ fontSize: 11, opacity: 0.55, marginTop: 2 }}>
+                      {fmtTime(h.finishedAt)}
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => onReplay(h)}
-                    style={{
-                      padding: "6px 10px",
-                      borderRadius: 10,
-                      border: "1px solid rgba(167,139,250,0.4)",
-                      background: "rgba(167,139,250,0.15)",
-                      color: "#e9d5ff",
-                      fontWeight: 700,
-                      fontSize: 12,
-                      cursor: "pointer",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    ▶ Повтор
-                  </button>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6, alignItems: "flex-end" }}>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onReplay(h);
+                      }}
+                      style={{
+                        padding: "6px 10px",
+                        borderRadius: 10,
+                        border: "1px solid rgba(167,139,250,0.4)",
+                        background: "rgba(167,139,250,0.15)",
+                        color: "#e9d5ff",
+                        fontWeight: 700,
+                        fontSize: 12,
+                        cursor: "pointer",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      ▶ Повтор
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setFairItem(h);
+                      }}
+                      disabled={!h.fair}
+                      style={{
+                        padding: "6px 10px",
+                        borderRadius: 10,
+                        border: "1px solid rgba(74,222,128,0.35)",
+                        background: "rgba(34,197,94,0.12)",
+                        color: "#86efac",
+                        fontWeight: 700,
+                        fontSize: 12,
+                        cursor: h.fair ? "pointer" : "not-allowed",
+                        opacity: h.fair ? 1 : 0.45,
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      ✓ Честность
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}
           </div>
         )}
       </div>
+
+      {fairItem?.fair && (
+        <div onClick={(e) => e.stopPropagation()}>
+          <FairnessModal
+            fair={{
+              serverSeedHash: fairItem.fair.serverSeedHash ?? "",
+              serverSeed: fairItem.fair.serverSeed ?? null,
+              clientSeed: fairItem.fair.clientSeed ?? "default",
+              nonce: fairItem.fair.nonce ?? 1,
+              hash: fairItem.fair.hash ?? null,
+            }}
+            status="finished"
+            gameType="spin"
+            gameId={fairItem.id}
+            onClose={() => setFairItem(null)}
+          />
+        </div>
+      )}
     </div>
   );
 }

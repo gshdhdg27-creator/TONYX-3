@@ -1,1 +1,1 @@
-LOAD_FROM_/tmp/admin_push.ts
+RESTORE_THEN_PATCH

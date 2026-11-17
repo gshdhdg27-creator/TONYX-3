@@ -236,7 +236,7 @@ function giftShortName(name: string): string {
   return name.trim().toLowerCase().replace(/['']/g, "").replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
 }
 function normAttrName(s: string): string {
-  return (s || "").toLowerCase().replace(/[’'`]/g, "").replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
+  return (s || "").toLowerCase().replace(/[''`]/g, "").replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
 }
 function lookupPrice(map: Record<string, number> | undefined, name: string): number | null {
   if (!map || !name) return null;
@@ -296,8 +296,8 @@ function AssembledPanel({ built, onBack, onReset }: { built: BuiltGift; onBack: 
       const s = lookupPrice(data?.symbols, symbol.name) ?? rarityToTon(symbol.rarity, "symbol");
       const b = lookupPrice(data?.backdrops, backdrop.name) ?? rarityToTon(backdrop.rarity, "backdrop");
       setModelPrice(m); setSymbolPrice(s); setBackdropPrice(b);
-      const floor = Math.max(m, s, b);
-      setPrice(String(Number(floor.toFixed(2))));
+      const fl = Math.max(m, s, b);
+      setPrice(String(Number(fl.toFixed(2))));
     })();
     return () => { cancelled = true; };
   }, [gift.name, model.name, model.rarity, symbol.name, symbol.rarity, backdrop.name, backdrop.rarity]);
@@ -305,17 +305,21 @@ function AssembledPanel({ built, onBack, onReset }: { built: BuiltGift; onBack: 
   const floor = estimatedFloor.length ? Math.max(...estimatedFloor) : null;
   const postGrant = async (opts: { toId: string; list: boolean; priceTon?: number }) => {
     const num = giftNumber.trim() ? Number(giftNumber.replace(/[^0-9]/g, "")) : null;
+    const est = opts.priceTon ?? floor ?? 0;
     const body: Record<string, unknown> = {
       adminId, short: giftShortName(gift.name), giftName: gift.name,
+      tgBaseName: gift.name, collectionName: gift.name,
       model: model.name, backdrop: backdrop.name, symbol: symbol.name,
       imageUrl: model.img || COVER(gift.name),
       modelImageUrl: MODEL_PNG(gift.name, model.name),
       symbolImageUrl: SYMBOL_PNG(gift.name, symbol.name),
       patternImageUrl: PATTERN_PNG(gift.name, symbol.name),
       backdropCenter: backdrop.color || null, backdropEdge: backdrop.edgeColor || null, list: opts.list,
+      valueTon: est,
     };
     if (num != null && Number.isFinite(num) && num > 0) body.giftNumber = num;
     if (opts.list && opts.priceTon != null) body.priceTon = opts.priceTon;
+    else if (est > 0) body.priceTon = est;
     const r = await fetch(`/api/mini/admin/users/${encodeURIComponent(opts.toId)}/grant-gift`, {
       method: "POST", headers: adminHeaders(adminId), body: JSON.stringify(body),
     });
@@ -325,7 +329,7 @@ function AssembledPanel({ built, onBack, onReset }: { built: BuiltGift; onBack: 
   };
   const flash = async (fn: () => Promise<void>) => {
     setBusy(true); setMsg(null);
-    try { await fn(); setMsgErr(false); }
+    try { await fn(); setMsgErr(false); setMsg("OK"); }
     catch (e) { setMsgErr(true); setMsg(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(false); }
   };
@@ -343,54 +347,43 @@ function AssembledPanel({ built, onBack, onReset }: { built: BuiltGift; onBack: 
           <div style={{ display: "flex", gap: 8, fontSize: 12, marginBottom: 4 }}><span style={{ color: "#94a3b8", width: 70 }}>Model</span><span style={{ flex: 1 }}>{model.name}</span><b>{fmtTon(modelPrice)}</b></div>
           <div style={{ display: "flex", gap: 8, fontSize: 12, marginBottom: 4 }}><span style={{ color: "#94a3b8", width: 70 }}>Symbol</span><span style={{ flex: 1 }}>{symbol.name}</span><b>{fmtTon(symbolPrice)}</b></div>
           <div style={{ display: "flex", gap: 8, fontSize: 12, marginBottom: 4 }}><span style={{ color: "#94a3b8", width: 70 }}>Backdrop</span><span style={{ flex: 1 }}>{backdrop.name}</span><b>{fmtTon(backdropPrice)}</b></div>
-          <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, paddingTop: 8, borderTop: "1px solid rgba(255,255,255,0.08)" }}>
-            <span style={{ color: "#94a3b8", fontWeight: 600, fontSize: 12 }}>Цена сочетания</span>
-            <span style={{ fontWeight: 900 }}>{floor != null ? `${fmtTon(floor)} TON` : "—"}</span>
-          </div>
+          <div style={{ display: "flex", gap: 8, fontSize: 13, marginTop: 6, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 6 }}><span style={{ color: "#94a3b8", flex: 1 }}>Оценка</span><b style={{ color: "#7dd3fc" }}>{fmtTon(floor)} TON</b></div>
         </div>
       </div>
-      <div style={sectionBox}>
-        <div style={sectionTitle}>Номер подарка</div>
-        <input value={giftNumber} onChange={(e) => setGiftNumber(e.target.value)} placeholder="Номер" inputMode="numeric" style={inputStyle} />
-      </div>
-      <div style={sectionBox}>
-        <div style={sectionTitle}>Выдать</div>
-        <input value={targetId} onChange={(e) => setTargetId(e.target.value)} placeholder={adminId ? "ID (пусто = себе)" : "Telegram ID"} style={inputStyle} />
-        <button type="button" disabled={busy} style={btnGreen} onClick={() => void flash(async () => {
-          const id = targetId.trim() || adminId;
-          if (!id) throw new Error("Укажи Telegram ID");
-          await postGrant({ toId: id, list: false });
-          setMsg(`Выдано → ${id}`);
-        })}>{busy ? "…" : "Выдать"}</button>
-        <button type="button" disabled={busy || !adminId} style={{ ...btnGreen, marginTop: 8, background: "linear-gradient(135deg,#1d4ed8,#3b82f6)" }} onClick={() => void flash(async () => {
-          await postGrant({ toId: adminId, list: false });
-          setMsg(`Выдано себе (${adminId})`);
-        })}>{busy ? "…" : "Выдать себе"}</button>
-      </div>
-      <div style={sectionBox}>
-        <div style={sectionTitle}>На NFT Market</div>
+      <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 8 }}>
+        <input value={giftNumber} onChange={(e) => setGiftNumber(e.target.value)} placeholder="Номер гифта (опц.)" inputMode="numeric" style={inputStyle} />
+        <input value={targetId} onChange={(e) => setTargetId(e.target.value)} placeholder="Telegram ID получателя" inputMode="numeric" style={inputStyle} />
         <input value={price} onChange={(e) => setPrice(e.target.value)} placeholder="Цена TON" inputMode="decimal" style={inputStyle} />
-        <button type="button" disabled={busy} style={btnCyan} onClick={() => void flash(async () => {
-          if (!adminId) throw new Error("Открой админку из Telegram");
+        <button type="button" disabled={busy || !targetId.trim()} onClick={() => void flash(async () => { await postGrant({ toId: targetId.trim(), list: false }); })} style={actionBtn("#0ea5e9")}>{busy ? "…" : "Выдать пользователю"}</button>
+        <button type="button" disabled={busy || !adminId} onClick={() => void flash(async () => { await postGrant({ toId: adminId, list: false }); })} style={actionBtn("#22c55e")}>{busy ? "…" : "Выдать себе"}</button>
+        <button type="button" disabled={busy || !adminId} onClick={() => {
           const p = Number(String(price).replace(",", "."));
-          if (!Number.isFinite(p) || p <= 0) throw new Error("Цена TON > 0");
-          await postGrant({ toId: adminId, list: true, priceTon: p });
-          setMsg(`На маркете за ${p} TON`);
-        })}>{busy ? "…" : "Выставить со своего акка"}</button>
+          if (!Number.isFinite(p) || p <= 0) { setMsgErr(true); setMsg("Цена > 0"); return; }
+          void flash(async () => { await postGrant({ toId: adminId, list: true, priceTon: p }); });
+        }} style={actionBtn("#a855f7")}>{busy ? "…" : "Выдать себе и на маркет"}</button>
+        {msg && <div style={{ color: msgErr ? "#f87171" : "#4ade80", fontSize: 13, textAlign: "center" }}>{msg}</div>}
       </div>
-      {msg && (
-        <div style={{ marginTop: 10, padding: 10, borderRadius: 10, fontSize: 12, fontWeight: 700, background: msgErr ? "rgba(239,68,68,0.15)" : "rgba(34,197,94,0.15)", color: msgErr ? "#fca5a5" : "#86efac" }}>{msg}</div>
-      )}
     </div>
   );
 }
 
-const inputStyle: CSSProperties = { width: "100%", boxSizing: "border-box", padding: "10px 12px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(0,0,0,0.35)", color: "#e2e8f0", fontSize: 13, marginBottom: 10, fontFamily: "inherit" };
-const cardBtn: CSSProperties = { display: "flex", flexDirection: "column", alignItems: "center", padding: 8, borderRadius: 12, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.04)", cursor: "pointer", fontFamily: "inherit" };
-const imgSq: CSSProperties = { width: "100%", aspectRatio: "1", objectFit: "contain", borderRadius: 8 };
-const nameStyle: CSSProperties = { fontSize: 10, fontWeight: 700, color: "#cbd5e1", marginTop: 4, textAlign: "center", lineHeight: 1.2 };
-const backBtn: CSSProperties = { padding: "6px 12px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.05)", color: "#94a3b8", fontSize: 12, cursor: "pointer", fontFamily: "inherit" };
-const sectionBox: CSSProperties = { marginTop: 14, padding: 12, borderRadius: 14, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.03)" };
-const sectionTitle: CSSProperties = { fontSize: 12, fontWeight: 800, color: "#e2e8f0", marginBottom: 8 };
-const btnGreen: CSSProperties = { width: "100%", padding: "12px 0", borderRadius: 12, border: "none", background: "linear-gradient(135deg,#15803d,#22c55e)", color: "#fff", fontWeight: 800, fontSize: 13, cursor: "pointer", fontFamily: "inherit" };
-const btnCyan: CSSProperties = { width: "100%", padding: "12px 0", borderRadius: 12, border: "none", background: "linear-gradient(135deg,#0e7490,#06b6d4)", color: "#fff", fontWeight: 800, fontSize: 13, cursor: "pointer", fontFamily: "inherit" };
+const inputStyle: CSSProperties = {
+  width: "100%", boxSizing: "border-box", background: "rgba(15,23,42,0.9)", border: "1px solid rgba(255,255,255,0.12)",
+  borderRadius: 12, padding: "12px 14px", color: "#f1f5f9", fontFamily: "inherit", fontSize: 14,
+};
+const backBtn: CSSProperties = {
+  padding: "8px 12px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.05)",
+  color: "#94a3b8", fontWeight: 700, fontSize: 12, fontFamily: "inherit", cursor: "pointer",
+};
+const cardBtn: CSSProperties = {
+  border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, background: "rgba(15,23,42,0.7)", padding: 8,
+  cursor: "pointer", fontFamily: "inherit", color: "#e2e8f0",
+};
+const imgSq: CSSProperties = { width: "100%", aspectRatio: "1", objectFit: "contain", borderRadius: 8, display: "block" };
+const nameStyle: CSSProperties = { fontSize: 10, marginTop: 6, fontWeight: 700, lineHeight: 1.2, textAlign: "center" };
+function actionBtn(bg: string): CSSProperties {
+  return {
+    width: "100%", padding: "12px 14px", borderRadius: 12, border: "none", background: bg, color: "#fff",
+    fontWeight: 800, fontSize: 13, fontFamily: "inherit", cursor: "pointer",
+  };
+}

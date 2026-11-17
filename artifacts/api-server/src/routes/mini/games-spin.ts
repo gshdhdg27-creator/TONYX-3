@@ -1,7 +1,8 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
-import { usersTable, miniSpinRoomsTable } from "@workspace/db/schema";
-import { eq, desc, or, inArray } from "drizzle-orm";
+import { usersTable, miniSpinRoomsTable, miniUserInventoryTable } from "@workspace/db/schema";
+import { eq, desc, or, inArray, and } from "drizzle-orm";
+import { getNftCollection } from "../../lib/nft-catalog.js";
 import {
   generateServerSeed,
   hashServerSeed,
@@ -15,6 +16,7 @@ const router: IRouter = Router();
 const MIN_STAKE = 0.1;
 const TIMER_SECONDS = 20;
 const COMMISSION_RATE = 0.20;
+const SYSTEM_PVP = "SYSTEM_PVP_SPIN";
 
 function computeStopFrac(hash: string | null | undefined): number {
   if (!hash || hash.length < 16) return 0.5;
@@ -23,7 +25,20 @@ function computeStopFrac(hash: string | null | undefined): number {
   return n / 0xffffffff;
 }
 
-type SpinPlayer = { telegramId: string; username: string | null; stake: number; chance: number };
+type NftStake = {
+  inventoryId: number;
+  itemId: string;
+  valueTon: number;
+  meta?: Record<string, unknown>;
+};
+
+type SpinPlayer = {
+  telegramId: string;
+  username: string | null;
+  stake: number;
+  chance: number;
+  nftStakes?: NftStake[];
+};
 
 function recalcChances(players: SpinPlayer[]): SpinPlayer[] {
   const total = players.reduce((s, p) => s + p.stake, 0);
@@ -123,6 +138,60 @@ async function resolveRound(roundId: number) {
   const winnerStake = winner.stake;
   const othersPool = totalPool - winnerStake;
   const payout = Math.round((winnerStake + othersPool * (1 - COMMISSION_RATE)) * 1000) / 1000;
+  const commissionTon = Math.round(othersPool * COMMISSION_RATE * 1000) / 1000;
+
+  // NFT stakes: losers' gifts go to winner; if commission > winner stake → SYSTEM_PVP_SPIN
+  for (const p of players) {
+    const stakes = p.nftStakes ?? [];
+    if (!stakes.length) continue;
+    for (const ns of stakes) {
+      try {
+        const item = await db
+          .select()
+          .from(miniUserInventoryTable)
+          .where(eq(miniUserInventoryTable.id, ns.inventoryId))
+          .then((r) => r[0] ?? null);
+        if (!item) continue;
+        const m = { ...(item.meta ?? {}) } as Record<string, unknown>;
+        delete m.listed;
+        delete m.priceTon;
+        delete m.listedAt;
+        delete m.spinLocked;
+        delete m.spinRoundPending;
+        if (p.telegramId === winner.telegramId) {
+          await db
+            .update(miniUserInventoryTable)
+            .set({
+              telegramId: winner.telegramId,
+              meta: { ...m, source: "spin_win_own", spinRoundId: roundId },
+              acquiredAt: new Date(),
+            })
+            .where(eq(miniUserInventoryTable.id, item.id));
+          continue;
+        }
+        const toSystem = commissionTon > winnerStake + 1e-9;
+        const dest = toSystem ? SYSTEM_PVP : winner.telegramId;
+        await db
+          .update(miniUserInventoryTable)
+          .set({
+            telegramId: dest,
+            meta: {
+              ...m,
+              source: toSystem ? "spin_commission" : "spin_win",
+              fromPlayer: p.telegramId,
+              spinRoundId: roundId,
+              game: "spin",
+              commissionTon,
+              winnerStake,
+            },
+            acquiredAt: new Date(),
+          })
+          .where(eq(miniUserInventoryTable.id, item.id));
+      } catch (e) {
+        console.error("[spin/resolve nft]", e);
+      }
+    }
+  }
 
   await db
     .update(miniSpinRoomsTable)
@@ -350,13 +419,73 @@ router.post("/join", async (req, res) => {
     res.status(403).json({ error: GAME_DISABLED_MESSAGE });
     return;
   }
-  const { telegramId, stake } = req.body as { telegramId?: string; stake?: number };
-  if (!telegramId || typeof stake !== "number" || stake < MIN_STAKE) {
+  const body = req.body as {
+    telegramId?: string;
+    stake?: number;
+    giftInventoryId?: number;
+    inventoryId?: number;
+  };
+  const telegramId = body.telegramId;
+  const giftInventoryId = Number(body.giftInventoryId ?? body.inventoryId ?? 0) || 0;
+  const isGift = giftInventoryId > 0;
+  const stakeIn = typeof body.stake === "number" ? body.stake : 0;
+
+  if (!telegramId) {
+    res.status(400).json({ error: "telegramId обязателен" }); return;
+  }
+  if (!isGift && (typeof stakeIn !== "number" || stakeIn < MIN_STAKE)) {
     res.status(400).json({ error: `telegramId и stake >= ${MIN_STAKE} обязательны` }); return;
   }
+
   const user = await db.select().from(usersTable).where(eq(usersTable.telegramId, telegramId)).then((r) => r[0] ?? null);
   if (!user) { res.status(404).json({ error: "Пользователь не найден" }); return; }
-  if (Number(user.ton) < stake) { res.status(400).json({ error: "Недостаточно TON" }); return; }
+
+  let nftStake: NftStake | null = null;
+  let stakeR = 0;
+
+  if (isGift) {
+    const item = await db
+      .select()
+      .from(miniUserInventoryTable)
+      .where(and(eq(miniUserInventoryTable.id, giftInventoryId), eq(miniUserInventoryTable.telegramId, telegramId)))
+      .then((r) => r[0] ?? null);
+    if (!item) { res.status(404).json({ error: "Подарок не найден в инвентаре" }); return; }
+    const t = String(item.itemType || "").toLowerCase();
+    if (!(t.includes("nft") || t.includes("gift"))) {
+      res.status(400).json({ error: "Можно ставить только NFT подарок" }); return;
+    }
+    const m = (item.meta ?? {}) as Record<string, unknown>;
+    if (m.listed === true || m.spinLocked === true) {
+      res.status(400).json({ error: "Подарок недоступен для ставки" }); return;
+    }
+    const col = getNftCollection(item.itemId);
+    const valueTon = Math.max(
+      0.1,
+      Number(m.priceTon) || Number(m.valueTon) || col?.valueTon || 1
+    );
+    stakeR = Math.round(valueTon * 1000) / 1000;
+    nftStake = {
+      inventoryId: item.id,
+      itemId: item.itemId,
+      valueTon: stakeR,
+      meta: m,
+    };
+    await db
+      .update(miniUserInventoryTable)
+      .set({
+        meta: {
+          ...m,
+          spinLocked: true,
+          spinRoundPending: true,
+          lockedAt: new Date().toISOString(),
+        },
+      })
+      .where(eq(miniUserInventoryTable.id, item.id));
+  } else {
+    if (Number(user.ton) < stakeIn) { res.status(400).json({ error: "Недостаточно TON" }); return; }
+    stakeR = Math.round(stakeIn * 1000) / 1000;
+    await db.update(usersTable).set({ ton: String(Math.round((Number(user.ton) - stakeR) * 1000) / 1000), updatedAt: new Date() }).where(eq(usersTable.telegramId, telegramId));
+  }
 
   let round = await getActiveRound();
   round = await ensureSpinResolved(round);
@@ -373,12 +502,15 @@ router.post("/join", async (req, res) => {
     res.status(400).json({ error: "Ты уже в этом раунде" }); return;
   }
 
-  const stakeR = Math.round(stake * 1000) / 1000;
-  await db.update(usersTable).set({ ton: String(Math.round((Number(user.ton) - stakeR) * 1000) / 1000), updatedAt: new Date() }).where(eq(usersTable.telegramId, telegramId));
-
   const newPlayers: SpinPlayer[] = recalcChances([
     ...players,
-    { telegramId, username: user.username ?? null, stake: stakeR, chance: 0 },
+    {
+      telegramId,
+      username: user.username ?? null,
+      stake: stakeR,
+      chance: 0,
+      nftStakes: nftStake ? [nftStake] : [],
+    },
   ]);
 
   let newStatus = round.status;

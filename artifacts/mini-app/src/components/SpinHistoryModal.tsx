@@ -14,6 +14,13 @@ export type SpinHistoryItem = {
     stake: number;
     chance: number;
     photoUrl?: string | null;
+    nftStakes?: Array<{
+      inventoryId: number;
+      itemId: string;
+      valueTon: number;
+      nameRu?: string;
+      imageUrl?: string | null;
+    }>;
   }>;
   finishedAt: string | null;
   stopFrac?: number;
@@ -211,31 +218,77 @@ export default function SpinHistoryModal({ onClose, onReplay, telegramId }: Prop
               {detail.winnerPayout ? ` · +${detail.winnerPayout} TON` : ""}
             </div>
             <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 8 }}>Участники и ставки:</div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 14 }}>
-              {(detail.players || []).map((p) => (
-                <div
-                  key={p.telegramId}
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    padding: "8px 10px",
-                    borderRadius: 10,
-                    background:
-                      p.telegramId === detail.winnerId
-                        ? "rgba(34,197,94,0.15)"
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 14 }}>
+              {(detail.players || []).map((p) => {
+                const isW = p.telegramId === detail.winnerId;
+                const nfts = p.nftStakes ?? [];
+                const initials = (p.username || p.telegramId || "?").replace(/^@/, "").slice(0, 2).toUpperCase();
+                const avatar = (p.photoUrl && String(p.photoUrl).startsWith("http"))
+                  ? p.photoUrl
+                  : (p.username
+                    ? `https://t.me/i/userpic/320/${encodeURIComponent(String(p.username).replace(/^@/, ""))}.jpg`
+                    : null);
+                return (
+                  <div
+                    key={p.telegramId}
+                    style={{
+                      padding: "12px",
+                      borderRadius: 16,
+                      background: isW
+                        ? "linear-gradient(135deg, rgba(34,197,94,0.18), rgba(34,197,94,0.06))"
                         : "rgba(255,255,255,0.04)",
-                    border: "1px solid rgba(255,255,255,0.08)",
-                    fontSize: 13,
-                  }}
-                >
-                  <span>
-                    {p.telegramId === detail.winnerId ? "🏆 " : ""}@{p.username || p.telegramId}
-                  </span>
-                  <span style={{ fontWeight: 700 }}>
-                    {p.stake} TON · {(p.chance ?? 0).toFixed(1)}%
-                  </span>
-                </div>
-              ))}
+                      border: isW ? "1px solid rgba(34,197,94,0.45)" : "1px solid rgba(255,255,255,0.08)",
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <div style={{
+                        width: 40, height: 40, borderRadius: "50%", overflow: "hidden", flexShrink: 0,
+                        background: "rgba(255,255,255,0.08)", display: "flex", alignItems: "center", justifyContent: "center",
+                        fontWeight: 900, fontSize: 12, border: isW ? "2px solid #4ade80" : "2px solid transparent",
+                      }}>
+                        {avatar
+                          ? <img src={avatar} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                              onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
+                          : initials}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 800, fontSize: 14 }}>@{(p.username || p.telegramId || "").replace(/^@/, "")}</div>
+                        <div style={{ fontSize: 12, fontWeight: 700, marginTop: 2 }}>
+                          {isW
+                            ? <span style={{ color: "#4ade80" }}>Победитель <span style={{ opacity: 0.85 }}>{(p.chance ?? 0).toFixed(2)}%</span></span>
+                            : <span style={{ color: "#94a3b8" }}>{(p.chance ?? 0).toFixed(2)}%</span>}
+                        </div>
+                      </div>
+                      <div style={{ fontWeight: 900, fontSize: 15, color: isW ? "#4ade80" : "#e2e8f0" }}>
+                        {Number(p.stake).toFixed(2)} TON
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10 }}>
+                      {nfts.length > 0 ? nfts.map((n) => (
+                        <div key={n.inventoryId} style={{
+                          width: 48, height: 48, borderRadius: 12, overflow: "hidden", position: "relative",
+                          background: "rgba(59,130,246,0.2)", border: "1px solid rgba(59,130,246,0.35)",
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                        }}>
+                          {n.imageUrl
+                            ? <img src={n.imageUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                            : <span>🎁</span>}
+                          <span style={{ position: "absolute", left: 4, bottom: 3, fontSize: 10, fontWeight: 900, color: "#fff", textShadow: "0 1px 2px #000" }}>{n.valueTon}</span>
+                        </div>
+                      )) : (
+                        <div style={{
+                          width: 48, height: 48, borderRadius: 12,
+                          background: "linear-gradient(145deg,#3b82f6,#1d4ed8)",
+                          display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+                        }}>
+                          <span style={{ fontSize: 16 }}>💎</span>
+                          <span style={{ fontSize: 10, fontWeight: 900, color: "#fff" }}>{Number(p.stake).toFixed(0)}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
             <div style={{ display: "flex", gap: 8 }}>
               <button
@@ -299,10 +352,7 @@ export default function SpinHistoryModal({ onClose, onReplay, telegramId }: Prop
               >
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
                   <div>
-                    <div style={{ fontWeight: 800, fontSize: 13 }}>
-                      Раунд #{h.id}{" "}
-                      <span style={{ fontWeight: 600, opacity: 0.55, fontSize: 11 }}>· детали</span>
-                    </div>
+                    <div style={{ fontWeight: 800, fontSize: 13 }}>Раунд #{h.id} <span style={{ fontWeight: 600, opacity: 0.55, fontSize: 11 }}>· детали</span></div>
                     <div style={{ fontSize: 12, opacity: 0.8, marginTop: 2 }}>
                       @{h.winnerUsername || h.winnerId || "—"} · банк {h.totalPool} TON
                     </div>

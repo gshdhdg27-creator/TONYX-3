@@ -227,6 +227,21 @@ export default function SpinGame({
   const [round, setRound] = useState<Round | null>(null);
   const [bet, setBet] = useState("1");
   const [betMode, setBetMode] = useState<"ton" | "gift">("ton");
+  const DEFAULT_SPIN_CHIPS = [0.1, 0.15, 1, 10];
+  const [spinChips, setSpinChips] = useState<number[]>(() => {
+    try {
+      const raw = localStorage.getItem("tonyx_spin_chips");
+      if (raw) {
+        const arr = JSON.parse(raw);
+        if (Array.isArray(arr) && arr.length >= 4) return arr.slice(0, 4).map((x: any) => Number(x) || 0.1);
+      }
+    } catch { /* */ }
+    return DEFAULT_SPIN_CHIPS;
+  });
+  const [editOpen, setEditOpen] = useState(false);
+  const [editIdx, setEditIdx] = useState(0);
+  const [editVal, setEditVal] = useState("");
+  const [stakeDetail, setStakeDetail] = useState<Player | null>(null);
   const [gifts, setGifts] = useState<Array<{ id: number; itemId: string; nameRu: string; valueTon: number; imageUrl: string | null; locked?: boolean }>>([]);
   const [giftsLoading, setGiftsLoading] = useState(false);
   const [selectedGiftIds, setSelectedGiftIds] = useState<number[]>([]);
@@ -589,6 +604,106 @@ export default function SpinGame({
         </div>
       )}
 
+      {players.length > 0 && (
+        <div style={{ marginTop: 14, marginBottom: 8, display: "flex", flexDirection: "column", gap: 8 }}>
+          <div style={{ fontSize: 11, fontWeight: 800, color: "#94a3b8", letterSpacing: "0.06em" }}>
+            ИГРОКИ · {players.length}
+          </div>
+          {players.map((p) => {
+            const nfts = p.nftStakes ?? [];
+            const isWinner = !!(round?.status === "finished" || winnerBanner) && !!round?.winnerId && p.telegramId === round.winnerId;
+            const initials = (p.username || p.telegramId || "?").replace(/^@/, "").slice(0, 2).toUpperCase();
+            const avatar = (p.photoUrl && String(p.photoUrl).startsWith("http"))
+              ? p.photoUrl
+              : (p.username && String(p.username).replace(/^@/, "").trim()
+                ? `https://t.me/i/userpic/320/${encodeURIComponent(String(p.username).replace(/^@/, "").trim())}.jpg`
+                : null);
+            return (
+              <button
+                type="button"
+                key={p.telegramId}
+                onClick={() => setStakeDetail(p)}
+                style={{
+                  display: "block", width: "100%", textAlign: "left", cursor: "pointer",
+                  padding: "12px 12px 10px", borderRadius: 16, fontFamily: "inherit", color: "inherit",
+                  background: isWinner
+                    ? "linear-gradient(135deg, rgba(34,197,94,0.18), rgba(34,197,94,0.06))"
+                    : "rgba(255,255,255,0.04)",
+                  border: isWinner
+                    ? "1px solid rgba(34,197,94,0.45)"
+                    : "1px solid rgba(255,255,255,0.08)",
+                  boxShadow: isWinner ? "0 0 0 1px rgba(34,197,94,0.15)" : "none",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <div style={{
+                    width: 40, height: 40, borderRadius: "50%", overflow: "hidden", flexShrink: 0,
+                    background: "rgba(255,255,255,0.08)", display: "flex", alignItems: "center", justifyContent: "center",
+                    fontWeight: 900, fontSize: 12, color: "#e2e8f0",
+                    border: isWinner ? "2px solid #4ade80" : "2px solid transparent",
+                  }}>
+                    {avatar
+                      ? <img src={avatar} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                          onError={(e) => {
+                            const el = e.currentTarget;
+                            el.style.display = "none";
+                            if (el.parentElement) el.parentElement.textContent = initials;
+                          }} />
+                      : initials}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 800, fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      @{(p.username || p.telegramId || "").replace(/^@/, "")}
+                      {p.telegramId === telegramId ? " (вы)" : ""}
+                    </div>
+                    <div style={{ fontSize: 12, marginTop: 2, fontWeight: 700 }}>
+                      {isWinner
+                        ? <span style={{ color: "#4ade80" }}>Победитель <span style={{ opacity: 0.85 }}>{(p.chance ?? 0).toFixed(2)}%</span></span>
+                        : <span style={{ color: "#94a3b8" }}>{(p.chance ?? 0).toFixed(2)}%</span>}
+                    </div>
+                  </div>
+                  <div style={{
+                    fontWeight: 900, fontSize: 15, flexShrink: 0,
+                    color: isWinner ? "#4ade80" : "#e2e8f0",
+                  }}>
+                    {Number(p.stake).toFixed(2)} TON
+                  </div>
+                </div>
+                {/* stake items row */}
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10, paddingLeft: 2 }}>
+                  {nfts.length > 0 ? nfts.map((n) => (
+                    <div key={n.inventoryId} style={{
+                      width: 48, height: 48, borderRadius: 12, overflow: "hidden", position: "relative",
+                      background: "rgba(59,130,246,0.2)", border: "1px solid rgba(59,130,246,0.35)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                    }}>
+                      {n.imageUrl
+                        ? <img src={n.imageUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                        : <span style={{ fontSize: 18 }}>🎁</span>}
+                      <span style={{
+                        position: "absolute", left: 4, bottom: 3, fontSize: 10, fontWeight: 900, color: "#fff",
+                        textShadow: "0 1px 2px #000",
+                      }}>{n.valueTon}</span>
+                    </div>
+                  )) : (
+                    <div style={{
+                      width: 48, height: 48, borderRadius: 12,
+                      background: "linear-gradient(145deg,#3b82f6,#1d4ed8)",
+                      display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+                      border: "1px solid rgba(96,165,250,0.5)",
+                    }}>
+                      <span style={{ fontSize: 16 }}>💎</span>
+                      <span style={{ fontSize: 10, fontWeight: 900, color: "#fff" }}>{Number(p.stake).toFixed(0)}</span>
+                    </div>
+                  )}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+
       <div style={{ height: 110 }} />
       {/* Fixed bet bar bottom */}
       <div style={{
@@ -633,12 +748,23 @@ export default function SpinGame({
 
       {betMode === "ton" ? (
         <div style={{ display: "flex", gap: 6, alignItems: "center", width: "100%" }}>
-          {["0.1", "0.15", "1", "10"].map((v) => (
+          <button
+            type="button"
+            onClick={() => { setEditIdx(0); setEditVal(String(spinChips[0] ?? "")); setEditOpen(true); }}
+            style={{
+              flex: "0 0 auto", width: 38, height: 38, padding: 0, fontSize: 14,
+              borderRadius: 12, border: "1px solid rgba(255,255,255,0.14)",
+              background: "#0a0a0f", color: "#cbd5e1", cursor: "pointer", fontFamily: "inherit", fontWeight: 700,
+              display: "flex", alignItems: "center", justifyContent: "center",
+            }}
+            title="Изменить чипы"
+          >✎</button>
+          {spinChips.map((v, i) => (
             <button
-              key={v}
+              key={i}
               type="button"
               disabled={loading || !canBet}
-              onClick={() => { setBet(v); placeBet(parseFloat(v)); }}
+              onClick={() => { setBet(String(v)); placeBet(Number(v)); }}
               style={{
                 flex: "1 1 0", minWidth: 0, height: 38,
                 padding: "0 4px", borderRadius: 12,
@@ -814,88 +940,137 @@ export default function SpinGame({
       )}
 
 
-      {players.length > 0 && (
-        <div style={{ marginTop: 16, marginBottom: 120, display: "flex", flexDirection: "column", gap: 6 }}>
-          {players.map((p) => {
-            const nfts = p.nftStakes ?? [];
-            const isNft = nfts.length > 0;
-            const initials = (p.username || p.telegramId || "?").replace(/^@/, "").slice(0, 2).toUpperCase();
-            return (
-              <div
-                key={p.telegramId}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 10,
-                  padding: "10px 12px",
-                  borderRadius: 14,
-                  background:
-                    p.telegramId === telegramId
-                      ? "rgba(124,92,255,0.12)"
-                      : "rgba(255,255,255,0.04)",
-                  border: "1px solid rgba(255,255,255,0.08)",
-                  fontSize: 13,
-                }}
-              >
-                <div style={{
-                  width: 36, height: 36, borderRadius: "50%", overflow: "hidden", flexShrink: 0,
-                  background: "rgba(255,255,255,0.08)", display: "flex", alignItems: "center", justifyContent: "center",
-                  fontWeight: 900, fontSize: 12, color: "#e2e8f0",
-                }}>
-                  {(p.photoUrl && String(p.photoUrl).startsWith("http")) || (p.username && String(p.username).replace(/^@/, "").trim())
-                    ? <img
-                        src={
-                          (p.photoUrl && String(p.photoUrl).startsWith("http"))
-                            ? p.photoUrl
-                            : `https://t.me/i/userpic/320/${encodeURIComponent(String(p.username).replace(/^@/, "").trim())}.jpg`
-                        }
-                        alt=""
-                        style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                        onError={(e) => {
-                          const el = e.currentTarget;
-                          el.style.display = "none";
-                          if (el.parentElement) el.parentElement.textContent = initials;
-                        }}
-                      />
-                    : initials}
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 800, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    @{(p.username || p.telegramId || "").replace(/^@/, "")}
-                    {p.telegramId === telegramId ? " (вы)" : ""}
-                  </div>
-                  {isNft ? (
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 4, alignItems: "center" }}>
-                      {nfts.map((n) => (
-                        <div key={n.inventoryId} style={{
-                          display: "inline-flex", alignItems: "center", gap: 6,
-                          padding: "3px 8px", borderRadius: 999,
-                          background: "rgba(251,191,36,0.12)", border: "1px solid rgba(251,191,36,0.35)",
-                          fontSize: 11, fontWeight: 700, color: "#fde68a",
-                        }}>
-                          {n.imageUrl
-                            ? <img src={n.imageUrl} alt="" style={{ width: 18, height: 18, borderRadius: 5, objectFit: "cover" }} />
-                            : <span>🎁</span>}
-                          <span style={{ maxWidth: 90, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                            {n.nameRu || n.itemId}
-                          </span>
-                          <span style={{ opacity: 0.9 }}>{n.valueTon} TON</span>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div style={{ marginTop: 2, fontSize: 12, color: "#94a3b8", fontWeight: 600 }}>
-                      💎 {Number(p.stake).toFixed(2)} TON
-                    </div>
-                  )}
-                </div>
-                <div style={{ textAlign: "right", flexShrink: 0, fontWeight: 800 }}>
-                  <div style={{ fontSize: 13 }}>{Number(p.stake).toFixed(2)}</div>
-                  <div style={{ fontSize: 11, color: "#94a3b8", fontWeight: 700 }}>{(p.chance ?? 0).toFixed(1)}%</div>
-                </div>
+
+
+      {stakeDetail && (
+        <div
+          onClick={() => setStakeDetail(null)}
+          style={{
+            position: "fixed", inset: 0, zIndex: 600, background: "rgba(0,0,0,0.65)", backdropFilter: "blur(6px)",
+            display: "flex", alignItems: "center", justifyContent: "center", padding: 16,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: "100%", maxWidth: 340, borderRadius: 20,
+              background: "linear-gradient(180deg,#1c1c24,#121218)",
+              border: "1px solid rgba(255,255,255,0.1)", padding: 16, color: "#f1f5f9",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+              <div style={{
+                width: 36, height: 36, borderRadius: "50%", overflow: "hidden", flexShrink: 0,
+                background: "rgba(255,255,255,0.08)", display: "flex", alignItems: "center", justifyContent: "center",
+                fontWeight: 900, fontSize: 12,
+              }}>
+                {(() => {
+                  const p = stakeDetail;
+                  const initials = (p.username || p.telegramId || "?").replace(/^@/, "").slice(0, 2).toUpperCase();
+                  const avatar = (p.photoUrl && String(p.photoUrl).startsWith("http"))
+                    ? p.photoUrl
+                    : (p.username ? `https://t.me/i/userpic/320/${encodeURIComponent(String(p.username).replace(/^@/, ""))}.jpg` : null);
+                  return avatar
+                    ? <img src={avatar} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                        onError={(e) => { e.currentTarget.style.display = "none"; }} />
+                    : initials;
+                })()}
               </div>
-            );
-          })}
+              <div style={{ flex: 1, fontWeight: 800, fontSize: 15 }}>
+                Ставка @{(stakeDetail.username || stakeDetail.telegramId || "").replace(/^@/, "")}
+              </div>
+              <button type="button" onClick={() => setStakeDetail(null)}
+                style={{ border: "none", background: "transparent", color: "#94a3b8", fontSize: 18, cursor: "pointer" }}>×</button>
+            </div>
+            <div style={{ fontSize: 22, fontWeight: 900, marginBottom: 14 }}>
+              {Number(stakeDetail.stake).toFixed(2)} TON
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+              {(stakeDetail.nftStakes && stakeDetail.nftStakes.length > 0) ? stakeDetail.nftStakes.map((n) => (
+                <div key={n.inventoryId} style={{
+                  width: 72, height: 72, borderRadius: 14, overflow: "hidden", position: "relative",
+                  background: "rgba(59,130,246,0.15)", border: "1px solid rgba(59,130,246,0.3)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                }}>
+                  {n.imageUrl
+                    ? <img src={n.imageUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    : <span style={{ fontSize: 24 }}>🎁</span>}
+                  <span style={{
+                    position: "absolute", left: 6, bottom: 4, fontSize: 11, fontWeight: 900, color: "#fff",
+                    textShadow: "0 1px 3px #000",
+                  }}>{n.valueTon}💎</span>
+                </div>
+              )) : (
+                <div style={{
+                  width: 72, height: 72, borderRadius: 14,
+                  background: "linear-gradient(145deg,#3b82f6,#1d4ed8)",
+                  display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+                  border: "1px solid rgba(96,165,250,0.45)",
+                }}>
+                  <span style={{ fontSize: 26 }}>💎</span>
+                  <span style={{ fontSize: 12, fontWeight: 900, color: "#fff", marginTop: 2 }}>{Number(stakeDetail.stake).toFixed(0)}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {editOpen && (
+        <div
+          onClick={() => setEditOpen(false)}
+          style={{
+            position: "fixed", inset: 0, zIndex: 600, background: "rgba(0,0,0,0.65)", backdropFilter: "blur(6px)",
+            display: "flex", alignItems: "flex-end", justifyContent: "center",
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: "100%", maxWidth: 420, borderRadius: "20px 20px 0 0",
+              background: "linear-gradient(180deg,#1a1a24,#0e0e14)", padding: "18px 16px 28px",
+              border: "1px solid rgba(255,255,255,0.1)", color: "#f1f5f9",
+            }}
+          >
+            <div style={{ fontWeight: 900, fontSize: 16, marginBottom: 12 }}>Чипы ставки</div>
+            <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+              {spinChips.map((v, i) => (
+                <button key={i} type="button" onClick={() => { setEditIdx(i); setEditVal(String(v)); }}
+                  style={{
+                    flex: 1, padding: "10px 4px", borderRadius: 12, fontWeight: 900, fontSize: 13,
+                    border: editIdx === i ? "1px solid rgba(59,130,246,0.7)" : "1px solid rgba(255,255,255,0.12)",
+                    background: editIdx === i ? "rgba(59,130,246,0.2)" : "#0a0a0f", color: "#f1f5f9", cursor: "pointer",
+                  }}>{v}</button>
+              ))}
+            </div>
+            <input
+              value={editVal}
+              onChange={(e) => setEditVal(e.target.value.replace(",", "."))}
+              inputMode="decimal"
+              placeholder="Сумма"
+              style={{
+                width: "100%", boxSizing: "border-box", padding: "12px", borderRadius: 12,
+                border: "1px solid rgba(255,255,255,0.12)", background: "rgba(0,0,0,0.35)",
+                color: "#fff", fontWeight: 800, fontSize: 16, marginBottom: 12,
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => {
+                const n = parseFloat(editVal);
+                if (!n || n < 0.1) return;
+                const next = [...spinChips];
+                next[editIdx] = Math.round(n * 1000) / 1000;
+                setSpinChips(next);
+                try { localStorage.setItem("tonyx_spin_chips", JSON.stringify(next)); } catch { /* */ }
+                setEditOpen(false);
+              }}
+              style={{
+                width: "100%", padding: "14px", borderRadius: 14, border: "none",
+                background: "linear-gradient(135deg,#3b82f6,#60a5fa)", color: "#fff", fontWeight: 900, fontSize: 15, cursor: "pointer",
+              }}
+            >Сохранить</button>
+          </div>
         </div>
       )}
 

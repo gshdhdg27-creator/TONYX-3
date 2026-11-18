@@ -1,0 +1,80 @@
+name: patch-arena-ui
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/patch-arena-ui.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Arena UI - puck, zoom clip, hold 2s, chips +50%, smoother stop
+        run: |
+          set -euo pipefail
+          python3 << 'PY'
+          from pathlib import Path
+          import re
+          p = Path("artifacts/mini-app/src/components/ArenaGame.tsx")
+          t = p.read_text()
+
+          t = t.replace("const WINNER_HOLD_MS = 3200;", "const WINNER_HOLD_MS = 2000;")
+          t = t.replace("const WINNER_HOLD_MS = 2800;", "const WINNER_HOLD_MS = 2000;")
+          t = t.replace("Math.pow(1 - raw, 2.8)", "Math.pow(1 - raw, 3.8)")
+
+          old_bw = 'const boardWrap: CSSProperties = { display: "flex", justifyContent: "center", margin: "0 12px 4px", position: "relative", zIndex: 1 };'
+          new_bw = 'const boardWrap: CSSProperties = { display: "flex", justifyContent: "center", margin: "0 auto 4px", position: "relative", zIndex: 1, width: W, height: H, overflow: "hidden", borderRadius: 18 };'
+          if old_bw in t:
+              t = t.replace(old_bw, new_bw)
+              print("boardWrap ok")
+          else:
+              print("boardWrap miss or done")
+
+          t = t.replace(
+              'width: 38, height: 38, padding: 0, fontSize: 14,\n                borderRadius: 12, border: "1px solid rgba(255,255,255,0.14)",\n                background: "#0a0a0f", color: "#cbd5e1",\n                cursor: "pointer", fontFamily: "inherit", fontWeight: 700,\n                display: "flex", alignItems: "center", justifyContent: "center",\n              }} title="Изменить">✎</button>',
+              'width: 57, height: 57, padding: 0, fontSize: 18,\n                borderRadius: 14, border: "1px solid rgba(255,255,255,0.14)",\n                background: "#0a0a0f", color: "#cbd5e1",\n                cursor: "pointer", fontFamily: "inherit", fontWeight: 700,\n                display: "flex", alignItems: "center", justifyContent: "center",\n              }} title="Изменить">✎</button>',
+          )
+
+          t = t.replace(
+              'minWidth: 0, height: 38, opacity: busy || !canBet ? 0.45 : 1,\n                    cursor: busy || !canBet ? "not-allowed" : "pointer",\n                    display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 3,\n                    padding: "0 4px", borderRadius: 12, fontWeight: 900, fontSize: 13,',
+              'minWidth: 0, height: 57, opacity: busy || !canBet ? 0.45 : 1,\n                    cursor: busy || !canBet ? "not-allowed" : "pointer",\n                    display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 3,\n                    padding: "0 4px", borderRadius: 14, fontWeight: 900, fontSize: 16,',
+          )
+
+          t = t.replace(
+              'minWidth: 0, height: 38,\n                  opacity: busy || !canBet || balanceTon < MIN_STAKE ? 0.45 : 1,\n                  cursor: busy || !canBet ? "not-allowed" : "pointer",\n                  padding: "0 6px", borderRadius: 12, fontWeight: 900, fontSize: 12,',
+              'minWidth: 0, height: 57,\n                  opacity: busy || !canBet || balanceTon < MIN_STAKE ? 0.45 : 1,\n                  cursor: busy || !canBet ? "not-allowed" : "pointer",\n                  padding: "0 6px", borderRadius: 14, fontWeight: 900, fontSize: 14,',
+          )
+
+          puck_pat = re.compile(
+              r'<circle cx=\{puckPos\.x\} cy=\{puckPos\.y\} r=\{BALL_R \+ 5\} fill="rgba\(0,0,0,0\.18\)" />\s*'
+              r'<circle cx=\{puckPos\.x\} cy=\{puckPos\.y\} r=\{BALL_R\} fill="url\(#puckG\)"[^/]*/>\s*'
+              r'\{/\*[^*]*\*/\}\s*'
+              r'<circle cx=\{puckPos\.x\} cy=\{puckPos\.y\} r=\{2\.4\} fill="#111" />\s*'
+              r'<circle cx=\{puckPos\.x\} cy=\{puckPos\.y\} r=\{1\.1\} fill="#fff" />\s*'
+              r'<ellipse cx=\{puckPos\.x - 3\} cy=\{puckPos\.y - 4\} rx=\{4\} ry=\{2\.8\} fill="rgba\(255,255,255,0\.72\)" />',
+              re.M,
+          )
+          new_puck = '''{/* glass target puck — white ring + cross */}\n                <circle cx={puckPos.x} cy={puckPos.y} r={BALL_R + 3} fill="rgba(0,0,0,0.22)" />\n                <circle cx={puckPos.x} cy={puckPos.y} r={BALL_R + 0.5} fill="rgba(255,255,255,0.18)" stroke="rgba(255,255,255,0.95)" strokeWidth={3.4} />\n                <circle cx={puckPos.x} cy={puckPos.y} r={BALL_R - 3.4} fill="rgba(255,255,255,0.10)" stroke="rgba(255,255,255,0.45)" strokeWidth={1.1} />\n                <line x1={puckPos.x - (BALL_R - 2)} y1={puckPos.y} x2={puckPos.x + (BALL_R - 2)} y2={puckPos.y} stroke="rgba(255,255,255,0.92)" strokeWidth={2.2} strokeLinecap="round" />\n                <line x1={puckPos.x} y1={puckPos.y - (BALL_R - 2)} x2={puckPos.x} y2={puckPos.y + (BALL_R - 2)} stroke="rgba(255,255,255,0.92)" strokeWidth={2.2} strokeLinecap="round" />\n                <circle cx={puckPos.x} cy={puckPos.y} r={2.0} fill="rgba(255,255,255,0.95)" />'''
+          t2, n = puck_pat.subn(new_puck, t, count=1)
+          print("puck", n)
+          if n:
+              t = t2
+
+          t = t.replace("setBoardZoom(1.9);", "setBoardZoom(1.55);")
+          t = t.replace("setBoardZoom(1 + ease * 0.9);", "setBoardZoom(1 + ease * 0.55);")
+
+          p.write_text(t)
+          print("hold", "WINNER_HOLD_MS = 2000" in t)
+          print("chips57", t.count("height: 57"))
+          print("puckglass", "glass target puck" in t)
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add artifacts/mini-app/src/components/ArenaGame.tsx
+          git diff --cached --stat
+          git commit -m "fix(arena): glass puck, clip zoom, 2s next round, chips +50%, smoother stop" || exit 0
+          git push origin HEAD:main

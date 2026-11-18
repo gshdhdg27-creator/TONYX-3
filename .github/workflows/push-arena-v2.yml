@@ -1,0 +1,22 @@
+name: push-arena-v2
+on:
+  workflow_dispatch:
+jobs:
+  push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Assemble ArenaGame
+        run: |
+          cat .github/arena-v2/c0.b64 .github/arena-v2/c1.b64 .github/arena-v2/c2.b64 .github/arena-v2/c3.b64 .github/arena-v2/c4.b64 .github/arena-v2/c5.b64 .github/arena-v2/c6.b64 .github/arena-v2/c7.b64 | base64 -d > artifacts/mini-app/src/components/ArenaGame.tsx
+          wc -c artifacts/mini-app/src/components/ArenaGame.tsx
+          grep -n "diagonal wedges\|setBoardZoom(2)\|left: ax - av" artifacts/mini-app/src/components/ArenaGame.tsx | head -10
+      - name: Commit
+        run: |
+          git config user.name tonyx-bot
+          git config user.email bot@tonyx.local
+          git add artifacts/mini-app/src/components/ArenaGame.tsx
+          git commit -m "fix(arena): diagonal wedges, absolute avatars, zoom 2x" || exit 0
+          git push

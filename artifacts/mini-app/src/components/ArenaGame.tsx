@@ -13,7 +13,7 @@ import {
 const COMMISSION = 0.2;
 const MIN_STAKE = 0.1;
 const SPIN_MS = 7000;
-const DIR_MS = 900;
+const DIR_MS = 350;
 const WINNER_HOLD_MS = 3200;
 const DEFAULT_CHIPS = [1, 5, 10, 25];
 const CHIPS_KEY = "tonyx_arena_chips";
@@ -223,8 +223,9 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
       const elapsed = now - t0;
       // direction marker phase
       if (!dirHidden && elapsed > DIR_MS) { dirHidden = true; setDirVisible(false); }
-      const play = Math.max(0, elapsed - DIR_MS * 0.55);
+      const play = Math.max(0, elapsed - DIR_MS * 0.25);
       const raw = Math.min(1, play / SPIN_MS);
+      const eased = raw >= 1 ? 1 : 1 - Math.pow(1 - raw, 2.8);
 
       if (raw >= 1) {
         setPuckPos(target);
@@ -249,7 +250,7 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
         return;
       }
 
-      const pos = samplePath(path, raw);
+      const pos = samplePath(path, eased);
       const prev = lastPosRef.current;
       const near =
         pos.x <= MARGIN + BALL_R + 2 || pos.x >= W - MARGIN - BALL_R - 2 ||
@@ -264,8 +265,8 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
         const id = ++trailId.current;
         setTrail((p) => [...p.slice(-20), { x: pos.x, y: pos.y, id }]);
       }
-      if (raw > 0.72) {
-        const k = (raw - 0.72) / 0.28;
+      if (raw > 0.55) {
+        const k = (raw - 0.55) / 0.45;
         const ease = 1 - Math.pow(1 - k, 2);
         setZoomOrigin(`${(pos.x / W) * 100}% ${(pos.y / H) * 100}%`);
         setBoardZoom(1 + ease * 0.9);

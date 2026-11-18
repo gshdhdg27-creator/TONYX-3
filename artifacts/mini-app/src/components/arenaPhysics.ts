@@ -113,7 +113,7 @@ export function planBouncePath(
     if (cellX % 2 !== 0) lx = pw - lx;
     if (cellY % 2 !== 0) ly = ph - ly;
 
-    const t = 1 - Math.pow(1 - u, 2.2);
+    const t = u; // linear; ease-out applied in animation loop
     pts.push({ x: lo + lx, y: lo + ly, t });
   }
 

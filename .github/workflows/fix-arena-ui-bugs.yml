@@ -9,9 +9,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Patch
-        run: |
-          cat .github/scripts/patch_ui_0.b64 .github/scripts/patch_ui_1.b64 | base64 -d > /tmp/patch.py
-          python3 /tmp/patch.py
+        run: python3 .github/scripts/patch_arena_ui.py
       - name: Commit
         run: |
           git config user.name tonyx-bot

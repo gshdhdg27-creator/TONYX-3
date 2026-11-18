@@ -1,0 +1,25 @@
+name: restore-arena-from-git
+on:
+  workflow_dispatch:
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Restore ArenaGame from pre-placeholder commit
+        run: |
+          # Last known good full file before PLACEHOLDER
+          git show 76ef7781775d378fffb12a8204446663893d2b57:artifacts/mini-app/src/components/ArenaGame.tsx > artifacts/mini-app/src/components/ArenaGame.tsx
+          wc -c artifacts/mini-app/src/components/ArenaGame.tsx
+          head -c 120 artifacts/mini-app/src/components/ArenaGame.tsx; echo
+      - name: Commit
+        run: |
+          git config user.name "tonyx-bot"
+          git config user.email "bot@tonyx.local"
+          git add artifacts/mini-app/src/components/ArenaGame.tsx
+          git commit -m "fix: restore ArenaGame.tsx from last good commit" || exit 0
+          git push

@@ -136,9 +136,39 @@ function buildStrips(players: ArenaPlayer[]): Strip[] {
     const [a, b] = list;
     const sa = a.stake / total;
     const sb = b.stake / total;
-    // Area of left wedge ≈ (cutTop+cutBot)/2 — keep equal to share.
-    // Small diagonal tilt only; never inflate tiny stakes (was min 8%).
     const seed = hash01(a.telegramId + "|" + b.telegramId);
+
+    // Small share → corner triangle (not a thin full-height strip)
+    const CORNER_MAX = 0.22;
+    const smallIsA = sa <= sb;
+    const ss = Math.min(sa, sb);
+    const ls = Math.max(sa, sb);
+
+    if (ss < CORNER_MAX) {
+      // isosceles right triangle: area = (f*W)*(f*H)/2 ⇒ share = f²/2 ⇒ f = √(2·share)
+      const f = Math.min(0.95, Math.max(0.06, Math.sqrt(2 * ss)));
+      const corner = Math.floor(seed * 4); // 0=TL 1=TR 2=BR 3=BL
+      let polyS: Pt[];
+      let polyL: Pt[];
+      if (corner === 0) {
+        polyS = [{ x: 0, y: 0 }, { x: f * W, y: 0 }, { x: 0, y: f * H }];
+        polyL = [{ x: f * W, y: 0 }, { x: W, y: 0 }, { x: W, y: H }, { x: 0, y: H }, { x: 0, y: f * H }];
+      } else if (corner === 1) {
+        polyS = [{ x: W, y: 0 }, { x: W, y: f * H }, { x: (1 - f) * W, y: 0 }];
+        polyL = [{ x: 0, y: 0 }, { x: (1 - f) * W, y: 0 }, { x: W, y: f * H }, { x: W, y: H }, { x: 0, y: H }];
+      } else if (corner === 2) {
+        polyS = [{ x: W, y: H }, { x: (1 - f) * W, y: H }, { x: W, y: (1 - f) * H }];
+        polyL = [{ x: 0, y: 0 }, { x: W, y: 0 }, { x: W, y: (1 - f) * H }, { x: (1 - f) * W, y: H }, { x: 0, y: H }];
+      } else {
+        polyS = [{ x: 0, y: H }, { x: 0, y: (1 - f) * H }, { x: f * W, y: H }];
+        polyL = [{ x: 0, y: 0 }, { x: W, y: 0 }, { x: W, y: H }, { x: f * W, y: H }, { x: 0, y: (1 - f) * H }];
+      }
+      const stripS = mk(smallIsA ? a : b, smallIsA ? 0 : 1, ss, polyS, "corner");
+      const stripL = mk(smallIsA ? b : a, smallIsA ? 1 : 0, ls, polyL, "main");
+      return smallIsA ? [stripS, stripL] : [stripL, stripS];
+    }
+
+    // Balanced 2-way: diagonal wedge, area ≈ share
     const maxTilt = Math.min(sa, sb) * 0.35;
     const tilt = (seed - 0.5) * 2 * maxTilt;
     const minCut = Math.max(2 / W, 0.004);

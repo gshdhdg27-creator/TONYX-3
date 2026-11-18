@@ -1,0 +1,28 @@
+name: fix-arena-avatars-zoom
+on:
+  workflow_dispatch:
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Assemble
+        run: |
+          cat .github/arena-fix/chunk_0.b64 \
+              .github/arena-fix/chunk_1.b64 \
+              .github/arena-fix/chunk_2.b64 \
+              .github/arena-fix/chunk_3.b64 \
+              .github/arena-fix/chunk_4.b64 \
+              .github/arena-fix/chunk_5.b64 \
+              .github/arena-fix/chunk_6.b64 | base64 -d > artifacts/mini-app/src/components/ArenaGame.tsx
+          wc -c artifacts/mini-app/src/components/ArenaGame.tsx
+          grep -n "setTrail\(\[\]\)\|isCorner\|Площадной" artifacts/mini-app/src/components/ArenaGame.tsx | head -8
+      - name: Commit
+        run: |
+          git config user.name "tonyx-bot"
+          git config user.email "bot@tonyx.local"
+          git add artifacts/mini-app/src/components/ArenaGame.tsx
+          git commit -m "fix(arena): avatar in own zone, clear trail on stop, stronger zoom" || exit 0
+          git push

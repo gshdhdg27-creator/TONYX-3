@@ -632,12 +632,9 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
 
       {/* Fixed bets ABOVE bottom menu */}
       <div style={betBar}>
-        {/* Ряд 1: переключатель 🎁 / 💎 */}
-        <div style={{ display: "flex", justifyContent: "flex-start", marginBottom: 8 }}>
-          <div style={{
-            display: "inline-flex", alignItems: "center", gap: 2, padding: 3,
-            borderRadius: 999, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)",
-          }}>
+        {/* Ряд 1: переключатель 🎁 / 💎 — без фона-обводки */}
+        <div style={{ display: "flex", justifyContent: "flex-start", marginBottom: 6 }}>
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
             <button type="button" disabled={busy || !canBet}
               onClick={() => { setBetMode("gift"); loadGifts(true); }}
               style={{
@@ -661,12 +658,12 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
 
         {betMode === "ton" ? (
           <>
-            {/* Ряд 2: ✎ 1 5 10 25 Ва-банк — всё влезает без скролла */}
-            <div style={{
-              display: "flex", gap: 5, alignItems: "center", width: "100%",
-            }}>
+            {/* Ряд 2: ✎ 1 5 10 25 Ва-банк — без фонов, влезают */}
+            <div style={{ display: "flex", gap: 4, alignItems: "center", width: "100%" }}>
               <button type="button" onClick={openEdit} style={{
-                ...editBtn, flex: "0 0 auto", width: 36, height: 36, minWidth: 36, padding: 0, fontSize: 14,
+                flex: "0 0 auto", width: 34, height: 34, padding: 0, fontSize: 14,
+                border: "none", background: "transparent", color: "#94a3b8",
+                cursor: "pointer", fontFamily: "inherit", fontWeight: 700,
               }} title="Изменить">✎</button>
               {chips.map((v, i) => (
                 <button key={i} type="button" disabled={busy || !canBet} onClick={() => placeBet(v)}
@@ -674,8 +671,8 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
                     flex: "1 1 0", minWidth: 0, opacity: busy || !canBet ? 0.45 : 1,
                     cursor: busy || !canBet ? "not-allowed" : "pointer",
                     display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 2,
-                    padding: "10px 4px", borderRadius: 12, fontWeight: 900, fontSize: 13,
-                    background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", color: "#e2e8f0",
+                    padding: "10px 2px", borderRadius: 10, fontWeight: 900, fontSize: 13,
+                    background: "transparent", border: "none", color: "#e2e8f0",
                     fontFamily: "inherit",
                   }}>
                   {v}<span style={{ opacity: 0.85, fontSize: 10 }}>💎</span>
@@ -684,16 +681,16 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
               <button type="button" disabled={busy || !canBet || balanceTon < MIN_STAKE}
                 onClick={() => placeBet(Math.floor(balanceTon * 1000) / 1000)}
                 style={{
-                  flex: "1.15 1 0", minWidth: 0, opacity: busy || !canBet || balanceTon < MIN_STAKE ? 0.45 : 1,
+                  flex: "1.2 1 0", minWidth: 0, opacity: busy || !canBet || balanceTon < MIN_STAKE ? 0.45 : 1,
                   cursor: busy || !canBet ? "not-allowed" : "pointer",
-                  padding: "10px 6px", borderRadius: 12, fontWeight: 900, fontSize: 12,
-                  background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", color: "#e2e8f0",
+                  padding: "10px 4px", borderRadius: 10, fontWeight: 900, fontSize: 12,
+                  background: "transparent", border: "none", color: "#e2e8f0",
                   whiteSpace: "nowrap", fontFamily: "inherit",
                 }}>
                 Ва-банк
               </button>
             </div>
-            <div style={{ textAlign: "center", marginTop: 6, fontSize: 11, color: "#94a3b8", fontWeight: 600 }}>
+            <div style={{ textAlign: "center", marginTop: 4, fontSize: 11, color: "#94a3b8", fontWeight: 600 }}>
               Баланс: <span style={{ color: "#4ade80", fontWeight: 800 }}>{balanceTon.toFixed(2)} TON</span>
               {meIn ? " · докид" : ""}
             </div>
@@ -714,7 +711,7 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
                 onClick={placeGiftBet}
                 style={{
                   padding: "11px 14px", borderRadius: 999, border: "none", flexShrink: 0,
-                  background: selectedGiftIds.length && canBet && !busy ? "linear-gradient(135deg,#3b82f6,#60a5fa)" : "rgba(255,255,255,0.08)",
+                  background: selectedGiftIds.length && canBet && !busy ? "linear-gradient(135deg,#3b82f6,#60a5fa)" : "transparent",
                   color: "#fff", fontWeight: 900, fontSize: 13, minWidth: 80,
                   cursor: busy || !canBet || !selectedGiftIds.length ? "not-allowed" : "pointer",
                   opacity: selectedGiftIds.length ? 1 : 0.5,
@@ -966,10 +963,12 @@ const root: CSSProperties = {
   position: "relative", minHeight: "100%", paddingBottom: 200, color: "#fff",
   fontFamily: 'system-ui,-apple-system,"Segoe UI",Roboto,sans-serif', overflowX: "hidden",
 };
-const header: CSSProperties = { display: "flex", alignItems: "center", padding: "18px 12px 6px", position: "relative", zIndex: 2 };
+const header: CSSProperties = {
+  display: "flex", alignItems: "center", padding: "52px 12px 8px", position: "relative", zIndex: 2,
+};
 const iconBtn: CSSProperties = {
-  width: 40, height: 40, borderRadius: 12, border: "1px solid rgba(255,255,255,0.1)",
-  background: "rgba(255,255,255,0.06)", color: "#fff", fontSize: 16, fontWeight: 700,
+  width: 40, height: 40, borderRadius: 12, border: "none",
+  background: "transparent", color: "#fff", fontSize: 18, fontWeight: 700,
   cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
 };
 const statusPill: CSSProperties = {
@@ -989,18 +988,18 @@ const playerRow: CSSProperties = {
 };
 const betBar: CSSProperties = {
   position: "fixed", left: 0, right: 0, bottom: 62, zIndex: 40,
-  padding: "8px 12px 10px",
-  background: "linear-gradient(180deg, transparent, rgba(8,8,15,0.95) 28%, #08080f)",
-  borderTop: "1px solid rgba(255,255,255,0.06)",
+  padding: "6px 12px 10px",
+  background: "transparent",
+  borderTop: "none",
 };
 const chip: CSSProperties = {
-  padding: "12px 15px", borderRadius: 14, border: "1px solid rgba(34,197,94,0.3)",
-  background: "rgba(34,197,94,0.14)", color: "#4ade80", fontWeight: 900, fontSize: 14,
+  padding: "12px 15px", borderRadius: 14, border: "none",
+  background: "transparent", color: "#e2e8f0", fontWeight: 900, fontSize: 14,
   cursor: "pointer", fontFamily: "inherit", minWidth: 50,
 };
 const editBtn: CSSProperties = {
   ...chip, minWidth: 44, padding: "12px", color: "#94a3b8",
-  border: "1px solid rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.06)",
+  border: "none", background: "transparent",
 };
 const overlay: CSSProperties = {
   position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", backdropFilter: "blur(6px)",

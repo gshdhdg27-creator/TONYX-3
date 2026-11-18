@@ -1,1 +1,1 @@
-PLACEHOLDER_SPIN
+@/tmp/TONYX-3/artifacts/api-server/src/routes/mini/games-spin.ts

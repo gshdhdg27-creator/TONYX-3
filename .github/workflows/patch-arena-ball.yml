@@ -1,0 +1,78 @@
+name: patch-arena-ball
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/patch-arena-ball.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fix puck ease-out (fast start, slow stop, ~7s)
+        run: |
+          set -euo pipefail
+          python3 << 'PY'
+          from pathlib import Path
+          import re
+
+          p = Path("artifacts/mini-app/src/components/arenaPhysics.ts")
+          t = p.read_text()
+          if "Math.pow(1 - u, 2.2)" in t:
+              t = t.replace(
+                  "const t = 1 - Math.pow(1 - u, 2.2);",
+                  "const t = u; // linear; ease-out applied in animation loop",
+              )
+              print("physics: fixed inverted ease")
+          elif "const t = u" in t:
+              print("physics: already linear")
+          else:
+              print("physics: no match")
+          p.write_text(t)
+
+          p = Path("artifacts/mini-app/src/components/ArenaGame.tsx")
+          t = p.read_text()
+          t = re.sub(r"const DIR_MS = \d+;", "const DIR_MS = 350;", t, count=1)
+          t = re.sub(r"const SPIN_MS = \d+;", "const SPIN_MS = 7000;", t, count=1)
+
+          old = """      const play = Math.max(0, elapsed - DIR_MS * 0.55);\n      const raw = Math.min(1, play / SPIN_MS);\n\n      if (raw >= 1) {"""
+          new = """      const play = Math.max(0, elapsed - DIR_MS * 0.25);\n      const raw = Math.min(1, play / SPIN_MS);\n      const eased = raw >= 1 ? 1 : 1 - Math.pow(1 - raw, 2.8);\n\n      if (raw >= 1) {"""
+          if old in t:
+              t = t.replace(old, new, 1)
+              print("ArenaGame: ease timing ok")
+          elif "const eased =" in t:
+              print("ArenaGame: already has eased")
+          else:
+              print("ArenaGame: timing pattern miss")
+              idx = t.find("const play = Math.max")
+              print(repr(t[idx:idx+180]))
+
+          if "const pos = samplePath(path, raw);" in t:
+              t = t.replace("const pos = samplePath(path, raw);", "const pos = samplePath(path, eased);", 1)
+              print("ArenaGame: samplePath eased")
+          elif "samplePath(path, eased)" in t:
+              print("ArenaGame: samplePath already eased")
+          else:
+              print("ArenaGame: samplePath miss")
+
+          if "if (raw > 0.72)" in t:
+              t = t.replace(
+                  "if (raw > 0.72) {\n        const k = (raw - 0.72) / 0.28;",
+                  "if (raw > 0.55) {\n        const k = (raw - 0.55) / 0.45;",
+                  1,
+              )
+              print("ArenaGame: zoom window")
+
+          p.write_text(t)
+          print("done", "eased" in t, "DIR_MS = 350" in t)
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add artifacts/mini-app/src/components/arenaPhysics.ts artifacts/mini-app/src/components/ArenaGame.tsx
+          git diff --cached --stat
+          git commit -m "fix(arena): puck fast start + ease-out stop (~7s)" || exit 0
+          git push origin HEAD:main

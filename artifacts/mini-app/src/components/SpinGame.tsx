@@ -461,7 +461,7 @@ export default function SpinGame({
     try {
       const plist = round?.players || [];
       const me = plist.find((p) => p.telegramId === telegramId);
-      const url = me && betMode === "ton" ? "/api/mini/games/spin/increase" : "/api/mini/games/spin/join";
+      const url = me ? "/api/mini/games/spin/increase" : "/api/mini/games/spin/join";
       const body =
         betMode === "gift"
           ? {
@@ -589,6 +589,13 @@ export default function SpinGame({
         </div>
       )}
 
+      <div style={{ height: 110 }} />
+      {/* Fixed bet bar bottom */}
+      <div style={{
+        position: "fixed", left: 0, right: 0, bottom: 62, zIndex: 40,
+        padding: "8px 12px 10px",
+        background: "linear-gradient(180deg, transparent, rgba(8,8,15,0.92) 25%, #08080f)",
+      }}>
       {/* Mode toggle + chips — same as Arena */}
       <div style={{ display: "flex", justifyContent: "flex-start", marginTop: 12, marginBottom: 8 }}>
         <div style={{
@@ -669,64 +676,52 @@ export default function SpinGame({
           </button>
         </div>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          <div style={{ display: "flex", gap: 8, alignItems: "center", width: "100%" }}>
-            <button
-              type="button"
-              disabled={!canBet}
-              onClick={() => { setGiftPickerOpen(true); loadGifts(true); }}
-              style={{
-                flex: 1, padding: "11px 14px", borderRadius: 999, border: "none",
-                background: "#f8fafc", color: "#0f172a", fontWeight: 800, fontSize: 13,
-                cursor: canBet ? "pointer" : "not-allowed", opacity: canBet ? 1 : 0.5,
-              }}
-            >
-              Выбрать гифты{selectedGiftIds.length ? ` (${selectedGiftIds.length})` : ""}
-            </button>
-            <button
-              type="button"
-              disabled={loading || !canBet || selectedGiftIds.length === 0}
-              onClick={() => placeBet()}
-              style={{
-                padding: selectedGifts[0]?.imageUrl ? "6px 12px 6px 6px" : "11px 14px",
-                borderRadius: 999, border: "none", flexShrink: 0,
-                background: selectedGiftIds.length && canBet && !loading
-                  ? "linear-gradient(135deg,#3b82f6,#60a5fa)"
-                  : "#0a0a0f",
-                color: "#fff", fontWeight: 900, fontSize: 13, minWidth: 88,
-                cursor: loading || !canBet || !selectedGiftIds.length ? "not-allowed" : "pointer",
-                opacity: selectedGiftIds.length ? 1 : 0.5,
-                display: "inline-flex", alignItems: "center", gap: 6,
-              }}
-            >
-              {loading ? "…" : (
-                <>
-                  {selectedGifts.length === 1 && selectedGifts[0].imageUrl ? (
-                    <img src={selectedGifts[0].imageUrl} alt="" style={{ width: 28, height: 28, borderRadius: 8, objectFit: "cover", background: "#111" }} />
-                  ) : selectedGifts.length > 1 ? (
-                    <span style={{ fontSize: 16 }}>🎁×{selectedGifts.length}</span>
-                  ) : null}
-                  <span>{giftStakeTotal > 0 ? `${giftStakeTotal.toFixed(2)} 💎` : "Ставка"}</span>
-                </>
-              )}
-            </button>
-          </div>
-          {selectedGifts.length > 0 && (
-            <div style={{ fontSize: 12, color: "#94a3b8", textAlign: "center", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
-              {selectedGifts.length === 1 ? (
-                <>
-                  {selectedGifts[0].imageUrl && (
-                    <img src={selectedGifts[0].imageUrl} alt="" style={{ width: 18, height: 18, borderRadius: 5, objectFit: "cover" }} />
-                  )}
-                  <span>{selectedGifts[0].nameRu} · {selectedGifts[0].valueTon} TON</span>
-                </>
-              ) : (
-                <span>{selectedGifts.length} NFT · {giftStakeTotal.toFixed(2)} TON</span>
-              )}
-            </div>
-          )}
+        <div style={{ display: "flex", gap: 10, alignItems: "center", width: "100%" }}>
+          <button
+            type="button"
+            disabled={!canBet}
+            onClick={() => { setGiftPickerOpen(true); loadGifts(true); }}
+            style={{
+              flex: 1, padding: "12px 16px", borderRadius: 999, border: "none",
+              background: "#f1f5f9", color: "#0f172a", fontWeight: 800, fontSize: 14,
+              cursor: canBet ? "pointer" : "not-allowed", opacity: canBet ? 1 : 0.5,
+            }}
+          >
+            Выбрать гифты{selectedGiftIds.length > 1 ? ` (${selectedGiftIds.length})` : ""}
+          </button>
+          <button
+            type="button"
+            disabled={loading || !canBet || selectedGiftIds.length === 0}
+            onClick={() => placeBet()}
+            style={{
+              flex: 1, padding: "8px 12px", borderRadius: 999, border: "1px solid rgba(255,255,255,0.12)",
+              background: "#2a2a32", color: "#e2e8f0", fontWeight: 800, fontSize: 13,
+              cursor: loading || !canBet || !selectedGiftIds.length ? "not-allowed" : "pointer",
+              opacity: selectedGiftIds.length ? 1 : 0.55,
+              display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8,
+              minHeight: 44,
+            }}
+          >
+            {loading ? "…" : (
+              <>
+                <span style={{ fontWeight: 800 }}>{players.some((p) => p.telegramId === telegramId) ? "Добавить" : "Поставить"}</span>
+                {selectedGifts.length === 1 && selectedGifts[0].imageUrl ? (
+                  <img src={selectedGifts[0].imageUrl} alt="" style={{ width: 28, height: 28, borderRadius: 8, objectFit: "cover", background: "#111" }} />
+                ) : selectedGifts.length > 1 ? (
+                  <span style={{ fontSize: 15 }}>🎁×{selectedGifts.length}</span>
+                ) : selectedGifts.length === 1 ? (
+                  <span style={{ fontSize: 16 }}>🎁</span>
+                ) : null}
+                {giftStakeTotal > 0 && (
+                  <span style={{ fontWeight: 900, color: "#fff" }}>{giftStakeTotal.toFixed(2)}</span>
+                )}
+              </>
+            )}
+          </button>
         </div>
       )}
+
+      </div>
 
       {/* Gift multi-select sheet */}
       {giftPickerOpen && (
@@ -820,7 +815,7 @@ export default function SpinGame({
 
 
       {players.length > 0 && (
-        <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 6 }}>
+        <div style={{ marginTop: 16, marginBottom: 120, display: "flex", flexDirection: "column", gap: 6 }}>
           {players.map((p) => {
             const nfts = p.nftStakes ?? [];
             const isNft = nfts.length > 0;

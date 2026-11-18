@@ -381,11 +381,8 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
     setBusy(true); haptic("light");
     try {
       const me = arena?.players.find((p) => p.telegramId === telegramId);
-      if (me) {
-        flash("Докид NFT пока только при первой ставке", "err");
-        return;
-      }
-      const r = await fetch("/api/mini/games/arena/join", {
+      const url = me ? "/api/mini/games/arena/increase" : "/api/mini/games/arena/join";
+      const r = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -401,7 +398,7 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
       setGiftPickerOpen(false);
       refreshBalance();
       loadGifts();
-      flash(`Ставка ${giftStakeTotal.toFixed(2)} TON (NFT)`, "ok");
+      flash(me ? `Докид NFT +${giftStakeTotal.toFixed(2)} TON` : `Ставка ${giftStakeTotal.toFixed(2)} TON (NFT)`, "ok");
     } catch { flash("Сеть", "err"); }
     finally { setBusy(false); }
   }
@@ -727,54 +724,42 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
             </div>
           </>
         ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            <div style={{ display: "flex", gap: 8, alignItems: "center", width: "100%" }}>
-              <button type="button" disabled={!canBet || busy}
-                onClick={() => { setGiftPickerOpen(true); loadGifts(true); }}
-                style={{
-                  flex: 1, padding: "11px 14px", borderRadius: 999, border: "none",
-                  background: "#f8fafc", color: "#0f172a", fontWeight: 800, fontSize: 13,
-                  cursor: canBet && !busy ? "pointer" : "not-allowed", opacity: canBet && !busy ? 1 : 0.5,
-                }}>
-                Выбрать гифты{selectedGiftIds.length ? ` (${selectedGiftIds.length})` : ""}
-              </button>
-              <button type="button" disabled={busy || !canBet || selectedGiftIds.length === 0}
-                onClick={placeGiftBet}
-                style={{
-                  padding: selectedGifts[0]?.imageUrl ? "6px 12px 6px 6px" : "11px 14px",
-                  borderRadius: 999, border: "none", flexShrink: 0,
-                  background: selectedGiftIds.length && canBet && !busy ? "linear-gradient(135deg,#3b82f6,#60a5fa)" : "#0a0a0f",
-                  color: "#fff", fontWeight: 900, fontSize: 13, minWidth: 88,
-                  cursor: busy || !canBet || !selectedGiftIds.length ? "not-allowed" : "pointer",
-                  opacity: selectedGiftIds.length ? 1 : 0.5,
-                  display: "inline-flex", alignItems: "center", gap: 6,
-                }}>
-                {busy ? "…" : (
-                  <>
-                    {selectedGifts.length === 1 && selectedGifts[0].imageUrl ? (
-                      <img src={selectedGifts[0].imageUrl} alt="" style={{ width: 28, height: 28, borderRadius: 8, objectFit: "cover", background: "#111" }} />
-                    ) : selectedGifts.length > 1 ? (
-                      <span style={{ fontSize: 16 }}>🎁×{selectedGifts.length}</span>
-                    ) : null}
-                    <span>{giftStakeTotal > 0 ? `${giftStakeTotal.toFixed(2)} 💎` : "Ставка"}</span>
-                  </>
-                )}
-              </button>
-            </div>
-            {selectedGifts.length > 0 && (
-              <div style={{ fontSize: 12, color: "#94a3b8", textAlign: "center", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
-                {selectedGifts.length === 1 ? (
-                  <>
-                    {selectedGifts[0].imageUrl && (
-                      <img src={selectedGifts[0].imageUrl} alt="" style={{ width: 18, height: 18, borderRadius: 5, objectFit: "cover" }} />
-                    )}
-                    <span>{selectedGifts[0].nameRu} · {selectedGifts[0].valueTon} TON</span>
-                  </>
-                ) : (
-                  <span>{selectedGifts.length} NFT · {giftStakeTotal.toFixed(2)} TON</span>
-                )}
-              </div>
-            )}
+          <div style={{ display: "flex", gap: 10, alignItems: "center", width: "100%" }}>
+            <button type="button" disabled={!canBet || busy}
+              onClick={() => { setGiftPickerOpen(true); loadGifts(true); }}
+              style={{
+                flex: 1, padding: "12px 16px", borderRadius: 999, border: "none",
+                background: "#f1f5f9", color: "#0f172a", fontWeight: 800, fontSize: 14,
+                cursor: canBet && !busy ? "pointer" : "not-allowed", opacity: canBet && !busy ? 1 : 0.5,
+              }}>
+              Выбрать гифты{selectedGiftIds.length > 1 ? ` (${selectedGiftIds.length})` : ""}
+            </button>
+            <button type="button" disabled={busy || !canBet || selectedGiftIds.length === 0}
+              onClick={placeGiftBet}
+              style={{
+                flex: 1, padding: "8px 12px", borderRadius: 999, border: "1px solid rgba(255,255,255,0.12)",
+                background: "#2a2a32", color: "#e2e8f0", fontWeight: 800, fontSize: 13,
+                cursor: busy || !canBet || !selectedGiftIds.length ? "not-allowed" : "pointer",
+                opacity: selectedGiftIds.length ? 1 : 0.55,
+                display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8,
+                minHeight: 44,
+              }}>
+              {busy ? "…" : (
+                <>
+                  <span style={{ fontWeight: 800 }}>{meIn ? "Добавить" : "Поставить"}</span>
+                  {selectedGifts.length === 1 && selectedGifts[0].imageUrl ? (
+                    <img src={selectedGifts[0].imageUrl} alt="" style={{ width: 28, height: 28, borderRadius: 8, objectFit: "cover", background: "#111" }} />
+                  ) : selectedGifts.length > 1 ? (
+                    <span style={{ fontSize: 15 }}>🎁×{selectedGifts.length}</span>
+                  ) : selectedGifts.length === 1 ? (
+                    <span style={{ fontSize: 16 }}>🎁</span>
+                  ) : null}
+                  {giftStakeTotal > 0 && (
+                    <span style={{ fontWeight: 900, color: "#fff" }}>{giftStakeTotal.toFixed(2)}</span>
+                  )}
+                </>
+              )}
+            </button>
           </div>
         )}
       </div>

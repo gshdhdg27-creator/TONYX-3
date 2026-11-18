@@ -522,13 +522,32 @@ router.post("/join", async (req, res) => {
   res.json(await formatArena(updated));
 });
 
-/* ── POST /increase ── */
+/* ── POST /increase ── (TON или NFT-гифты к уже сделанной ставке) */
 router.post("/increase", async (req, res) => {
-  const { telegramId, additionalStake } = req.body as { telegramId?: string; additionalStake?: number };
-  if (!telegramId || typeof additionalStake !== "number" || additionalStake <= 0) {
+  const body = req.body as {
+    telegramId?: string;
+    additionalStake?: number;
+    giftInventoryId?: number;
+    inventoryId?: number;
+    giftInventoryIds?: number[];
+  };
+  const telegramId = body.telegramId;
+  const idsFromArray = Array.isArray(body.giftInventoryIds)
+    ? body.giftInventoryIds.map((x) => Number(x)).filter((n) => n > 0)
+    : [];
+  const singleId = Number(body.giftInventoryId ?? body.inventoryId ?? 0) || 0;
+  const giftIds = [...new Set(idsFromArray.length ? idsFromArray : singleId ? [singleId] : [])];
+  const isGift = giftIds.length > 0;
+  const additionalStake = typeof body.additionalStake === "number" ? body.additionalStake : 0;
+
+  if (!telegramId) {
+    res.status(400).json({ error: "telegramId обязателен" }); return;
+  }
+  if (!isGift && !(additionalStake > 0)) {
     res.status(400).json({ error: "telegramId и additionalStake > 0 обязательны" }); return;
   }
-    let arena = await getActiveArena();
+
+  let arena = await getActiveArena();
   arena = await maybeResolveExpired(arena);
   if (!["waiting", "starting"].includes(arena.status)) {
     res.status(400).json({ error: "Нельзя изменить ставку — игра уже завершена" }); return;
@@ -539,12 +558,63 @@ router.post("/increase", async (req, res) => {
 
   const user = await db.select().from(usersTable).where(eq(usersTable.telegramId, telegramId)).then((r) => r[0] ?? null);
   if (!user) { res.status(404).json({ error: "Пользователь не найден" }); return; }
-  const addR = Math.round(additionalStake * 1000) / 1000;
-  if (Number(user.ton) < addR) { res.status(400).json({ error: "Недостаточно TON" }); return; }
 
-  await db.update(usersTable).set({ ton: String(Math.round((Number(user.ton) - addR) * 1000) / 1000), updatedAt: new Date() }).where(eq(usersTable.telegramId, telegramId));
+  let addR = 0;
+  const extraNfts: NftStake[] = [];
 
-  const newPlayers = players.map((p, i) => i === idx ? { ...p, stake: Math.round((p.stake + addR) * 1000) / 1000 } : p);
+  if (isGift) {
+    for (const giftInventoryId of giftIds) {
+      const item = await db
+        .select()
+        .from(miniUserInventoryTable)
+        .where(and(eq(miniUserInventoryTable.id, giftInventoryId), eq(miniUserInventoryTable.telegramId, telegramId)))
+        .then((r) => r[0] ?? null);
+      if (!item) { res.status(404).json({ error: "Подарок не найден в инвентаре" }); return; }
+      const t = String(item.itemType || "").toLowerCase();
+      if (!(t.includes("nft") || t.includes("gift"))) {
+        res.status(400).json({ error: "Можно ставить только NFT подарок" }); return;
+      }
+      const m = (item.meta ?? {}) as Record<string, unknown>;
+      if (m.listed === true || m.spinLocked === true || m.arenaLocked === true) {
+        res.status(400).json({ error: "Подарок недоступен для ставки" }); return;
+      }
+      const col = getNftCollection(item.itemId);
+      const valueTon = Math.max(0.1, Number(m.priceTon) || Number(m.valueTon) || col?.valueTon || 1);
+      const v = Math.round(valueTon * 1000) / 1000;
+      addR = Math.round((addR + v) * 1000) / 1000;
+      const nameRu = String(m.giftName || m.nameRu || col?.nameRu || item.itemId);
+      const imageUrl = (m.imageUrl as string | null | undefined) ?? col?.imageUrl ?? null;
+      extraNfts.push({ inventoryId: item.id, itemId: item.itemId, valueTon: v, nameRu, imageUrl, meta: m });
+      await db
+        .update(miniUserInventoryTable)
+        .set({
+          meta: {
+            ...m,
+            arenaLocked: true,
+            arenaRoundPending: true,
+            lockedAt: new Date().toISOString(),
+          },
+        })
+        .where(eq(miniUserInventoryTable.id, item.id));
+    }
+  } else {
+    addR = Math.round(additionalStake * 1000) / 1000;
+    if (Number(user.ton) < addR) { res.status(400).json({ error: "Недостаточно TON" }); return; }
+    await db.update(usersTable).set({
+      ton: String(Math.round((Number(user.ton) - addR) * 1000) / 1000),
+      updatedAt: new Date(),
+    }).where(eq(usersTable.telegramId, telegramId));
+  }
+
+  const newPlayers = players.map((p, i) => {
+    if (i !== idx) return p;
+    const prevNfts = p.nftStakes ?? [];
+    return {
+      ...p,
+      stake: Math.round((p.stake + addR) * 1000) / 1000,
+      nftStakes: extraNfts.length ? [...prevNfts, ...extraNfts] : (prevNfts.length ? prevNfts : undefined),
+    };
+  });
   const newPool = Math.round((Number(arena.totalPool) + addR) * 1000) / 1000;
 
   const [updated] = await db

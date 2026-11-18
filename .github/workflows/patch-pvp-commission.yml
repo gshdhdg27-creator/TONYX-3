@@ -1,0 +1,72 @@
+name: patch-pvp-commission
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/patch-pvp-commission.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply pureTON commission + burn logic
+        run: |
+          set -euo pipefail
+          python3 << 'PY'
+          from pathlib import Path
+
+          # ===== ARENA =====
+          p = Path("artifacts/api-server/src/routes/mini/games-arena.ts")
+          t = p.read_text()
+          if "function pureTonOf" not in t:
+              insert = '''\n/** Pure TON part of a player's stake (stake value minus NFT values). */\nfunction pureTonOf(p: ArenaPlayer): number {\n  const nftSum = (p.nftStakes ?? []).reduce((s, n) => s + (Number(n.valueTon) || 0), 0);\n  return Math.max(0, Math.round((p.stake - nftSum) * 1000) / 1000);\n}\n\n'''
+              t = t.replace("async function resolveArena(arenaId: number)", insert + "async function resolveArena(arenaId: number)", 1)
+
+          old1 = """  const winnerStake = winner.stake;\n  const othersPool = totalPool - winnerStake;\n  const payout = Math.round((winnerStake + othersPool * (1 - COMMISSION_RATE)) * 1000) / 1000;\n  const commissionTon = Math.round(othersPool * COMMISSION_RATE * 1000) / 1000;"""
+
+          new1 = """  const winnerStake = winner.stake;\n  const othersPool = totalPool - winnerStake;\n  const commissionNeeded = Math.round(othersPool * COMMISSION_RATE * 1000) / 1000;\n  const totalPureTon = players.reduce((s, p) => s + pureTonOf(p), 0);\n  const winnerPure = pureTonOf(winner);\n  const canPayCommission = totalPureTon + 1e-9 >= commissionNeeded;\n  const payout = canPayCommission\n    ? Math.round((totalPureTon - commissionNeeded) * 1000) / 1000\n    : Math.round((winnerPure + othersPool * (1 - COMMISSION_RATE)) * 1000) / 1000;\n  const commissionTon = commissionNeeded;"""
+
+          if old1 in t:
+              t = t.replace(old1, new1, 1)
+              print("arena payout: ok")
+          else:
+              print("arena payout: pattern miss")
+
+          t = t.replace("const toSystem = commissionTon > winnerStake + 1e-9;", "const toSystem = !canPayCommission;")
+          t = t.replace('source: toSystem ? "arena_commission" : "arena_win"', 'source: toSystem ? "arena_burn_commission" : "arena_win"')
+          p.write_text(t)
+          print("arena size", len(t))
+
+          # ===== SPIN =====
+          p = Path("artifacts/api-server/src/routes/mini/games-spin.ts")
+          t = p.read_text()
+          if "function pureTonOf" not in t:
+              insert = '''\n/** Pure TON part of a player's stake (stake value minus NFT values). */\nfunction pureTonOf(p: SpinPlayer): number {\n  const nftSum = (p.nftStakes ?? []).reduce((s, n) => s + (Number(n.valueTon) || 0), 0);\n  return Math.max(0, Math.round((p.stake - nftSum) * 1000) / 1000);\n}\n\n'''
+              t = t.replace("async function resolveRound(roundId: number)", insert + "async function resolveRound(roundId: number)", 1)
+
+          old1 = """  const winnerStake = winner.stake;\n  const othersPool = totalPool - winnerStake;\n  const payout = Math.round((winnerStake + othersPool * (1 - COMMISSION_RATE)) * 1000) / 1000;\n  const commissionTon = Math.round(othersPool * COMMISSION_RATE * 1000) / 1000;"""
+
+          new1 = """  const winnerStake = winner.stake;\n  const othersPool = totalPool - winnerStake;\n  const commissionNeeded = Math.round(othersPool * COMMISSION_RATE * 1000) / 1000;\n  const totalPureTon = players.reduce((s, p) => s + pureTonOf(p), 0);\n  const winnerPure = pureTonOf(winner);\n  const canPayCommission = totalPureTon + 1e-9 >= commissionNeeded;\n  const payout = canPayCommission\n    ? Math.round((totalPureTon - commissionNeeded) * 1000) / 1000\n    : Math.round((winnerPure + othersPool * (1 - COMMISSION_RATE)) * 1000) / 1000;\n  const commissionTon = commissionNeeded;"""
+
+          if old1 in t:
+              t = t.replace(old1, new1, 1)
+              print("spin payout: ok")
+          else:
+              print("spin payout: pattern miss")
+
+          t = t.replace("const toSystem = commissionTon > winnerStake + 1e-9;", "const toSystem = !canPayCommission;")
+          t = t.replace('source: toSystem ? "spin_commission" : "spin_win"', 'source: toSystem ? "spin_burn_commission" : "spin_win"')
+          p.write_text(t)
+          print("spin size", len(t))
+          print("done")
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add artifacts/api-server/src/routes/mini/games-arena.ts artifacts/api-server/src/routes/mini/games-spin.ts
+          git diff --cached --stat
+          git commit -m "fix(pvp): commission from pure TON only; burn NFT when shortfall" || exit 0
+          git push origin HEAD:main

@@ -1,1 +1,1 @@
-@/tmp/TONYX-3/artifacts/api-server/src/routes/mini/admin-extra.ts
+LOAD_FROM_/tmp/push_admin.ts

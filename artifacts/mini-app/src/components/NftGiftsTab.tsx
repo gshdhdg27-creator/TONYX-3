@@ -1,1 +1,1 @@
-@/tmp/TONYX-3/artifacts/mini-app/src/components/NftGiftsTab.tsx
+LOAD_FROM_/tmp/push_nft.tsx

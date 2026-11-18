@@ -1,0 +1,19 @@
+name: patch-arena-v2
+on:
+  workflow_dispatch:
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch
+        run: python3 .github/scripts/patch_arena_v2.py
+      - name: Commit
+        run: |
+          git config user.name tonyx-bot
+          git config user.email bot@tonyx.local
+          git add artifacts/mini-app/src/components/ArenaGame.tsx
+          git commit -m "fix(arena): diagonal wedges, absolute avatars, zoom 2x" || exit 0
+          git push

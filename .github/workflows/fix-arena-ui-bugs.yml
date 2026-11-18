@@ -1,1 +1,21 @@
-PLACEHOLDER
+name: fix-arena-ui-bugs
+on:
+  workflow_dispatch:
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch
+        run: |
+          cat .github/scripts/patch_ui_0.b64 .github/scripts/patch_ui_1.b64 | base64 -d > /tmp/patch.py
+          python3 /tmp/patch.py
+      - name: Commit
+        run: |
+          git config user.name tonyx-bot
+          git config user.email bot@tonyx.local
+          git add artifacts/mini-app/src/components/ArenaGame.tsx
+          git commit -m "fix(arena): avatars in own zone, clear trail, stronger zoom" || exit 0
+          git push

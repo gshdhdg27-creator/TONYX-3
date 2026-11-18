@@ -1,0 +1,28 @@
+name: restore-arena-game
+on:
+  workflow_dispatch:
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Assemble ArenaGame.tsx
+        run: |
+          cat .github/arena-restore/chunk_0.b64 \
+              .github/arena-restore/chunk_1.b64 \
+              .github/arena-restore/chunk_2.b64 \
+              .github/arena-restore/chunk_3.b64 \
+              .github/arena-restore/chunk_4.b64 \
+              .github/arena-restore/chunk_5.b64 | base64 -d > artifacts/mini-app/src/components/ArenaGame.tsx
+          wc -c artifacts/mini-app/src/components/ArenaGame.tsx
+          head -c 100 artifacts/mini-app/src/components/ArenaGame.tsx; echo
+          grep -n "Portals-style territories" artifacts/mini-app/src/components/ArenaGame.tsx | head -3
+      - name: Commit and push
+        run: |
+          git config user.name "tonyx-bot"
+          git config user.email "bot@tonyx.local"
+          git add artifacts/mini-app/src/components/ArenaGame.tsx
+          git commit -m "feat(arena): Portals-style territories - diagonal 2p + corner triangles 3+" || exit 0
+          git push

@@ -139,6 +139,13 @@ async function getActiveArena() {
   return created;
 }
 
+
+/** Pure TON part of a player's stake (stake value minus NFT values). */
+function pureTonOf(p: ArenaPlayer): number {
+  const nftSum = (p.nftStakes ?? []).reduce((s, n) => s + (Number(n.valueTon) || 0), 0);
+  return Math.max(0, Math.round((p.stake - nftSum) * 1000) / 1000);
+}
+
 async function resolveArena(arenaId: number) {
   const arena = await db
     .select()
@@ -168,8 +175,14 @@ async function resolveArena(arenaId: number) {
 
   const winnerStake = winner.stake;
   const othersPool = totalPool - winnerStake;
-  const payout = Math.round((winnerStake + othersPool * (1 - COMMISSION_RATE)) * 1000) / 1000;
-  const commissionTon = Math.round(othersPool * COMMISSION_RATE * 1000) / 1000;
+  const commissionNeeded = Math.round(othersPool * COMMISSION_RATE * 1000) / 1000;
+  const totalPureTon = players.reduce((s, p) => s + pureTonOf(p), 0);
+  const winnerPure = pureTonOf(winner);
+  const canPayCommission = totalPureTon + 1e-9 >= commissionNeeded;
+  const payout = canPayCommission
+    ? Math.round((totalPureTon - commissionNeeded) * 1000) / 1000
+    : Math.round((winnerPure + othersPool * (1 - COMMISSION_RATE)) * 1000) / 1000;
+  const commissionTon = commissionNeeded;
 
   // NFT stakes: losers' gifts → winner (or SYSTEM if commission > winner stake)
   for (const p of players) {
@@ -201,7 +214,7 @@ async function resolveArena(arenaId: number) {
             .where(eq(miniUserInventoryTable.id, item.id));
           continue;
         }
-        const toSystem = commissionTon > winnerStake + 1e-9;
+        const toSystem = !canPayCommission;
         const dest = toSystem ? "SYSTEM_PVP_ARENA" : winner.telegramId;
         await db
           .update(miniUserInventoryTable)
@@ -209,7 +222,7 @@ async function resolveArena(arenaId: number) {
             telegramId: dest,
             meta: {
               ...m,
-              source: toSystem ? "arena_commission" : "arena_win",
+              source: toSystem ? "arena_burn_commission" : "arena_win",
               fromPlayer: p.telegramId,
               arenaRoundId: arenaId,
               game: "arena",

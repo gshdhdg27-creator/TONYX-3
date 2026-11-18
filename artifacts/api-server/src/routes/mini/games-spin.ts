@@ -115,6 +115,13 @@ async function getActiveRound() {
   return created;
 }
 
+
+/** Pure TON part of a player's stake (stake value minus NFT values). */
+function pureTonOf(p: SpinPlayer): number {
+  const nftSum = (p.nftStakes ?? []).reduce((s, n) => s + (Number(n.valueTon) || 0), 0);
+  return Math.max(0, Math.round((p.stake - nftSum) * 1000) / 1000);
+}
+
 async function resolveRound(roundId: number) {
   const round = await db
     .select()
@@ -139,8 +146,14 @@ async function resolveRound(roundId: number) {
 
   const winnerStake = winner.stake;
   const othersPool = totalPool - winnerStake;
-  const payout = Math.round((winnerStake + othersPool * (1 - COMMISSION_RATE)) * 1000) / 1000;
-  const commissionTon = Math.round(othersPool * COMMISSION_RATE * 1000) / 1000;
+  const commissionNeeded = Math.round(othersPool * COMMISSION_RATE * 1000) / 1000;
+  const totalPureTon = players.reduce((s, p) => s + pureTonOf(p), 0);
+  const winnerPure = pureTonOf(winner);
+  const canPayCommission = totalPureTon + 1e-9 >= commissionNeeded;
+  const payout = canPayCommission
+    ? Math.round((totalPureTon - commissionNeeded) * 1000) / 1000
+    : Math.round((winnerPure + othersPool * (1 - COMMISSION_RATE)) * 1000) / 1000;
+  const commissionTon = commissionNeeded;
 
   // NFT stakes: losers' gifts → winner, or SYSTEM_PVP if commission > winner stake
   for (const p of players) {
@@ -173,7 +186,7 @@ async function resolveRound(roundId: number) {
             .where(eq(miniUserInventoryTable.id, item.id));
           continue;
         }
-        const toSystem = commissionTon > winnerStake + 1e-9;
+        const toSystem = !canPayCommission;
         const dest = toSystem ? "SYSTEM_PVP_SPIN" : winner.telegramId;
         await db
           .update(miniUserInventoryTable)
@@ -181,7 +194,7 @@ async function resolveRound(roundId: number) {
             telegramId: dest,
             meta: {
               ...m,
-              source: toSystem ? "spin_commission" : "spin_win",
+              source: toSystem ? "spin_burn_commission" : "spin_win",
               fromPlayer: p.telegramId,
               spinRoundId: roundId,
               game: "spin",

@@ -1,0 +1,25 @@
+name: patch-arena-shapes
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/patch-arena-shapes.yml'
+      - 'scripts/apply-arena-shapes.py'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply geometric territories
+        run: |
+          python3 scripts/apply-arena-shapes.py
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add artifacts/mini-app/src/components/ArenaGame.tsx
+          git diff --cached --stat
+          git commit -m "fix(arena): geometric territories - triangle, rect, trapezoid, diamond" || exit 0
+          git push origin HEAD:main

@@ -407,14 +407,14 @@ export default function SpinGame({
           return t.includes("nft") || t.includes("gift");
         })
         .map((x: { id: number; itemId: string; nameRu?: string; valueTon?: number; imageUrl?: string | null; meta?: Record<string, unknown> }) => {
-          const m = x.meta || {};
+          const m = (x.meta || {}) as Record<string, unknown>;
           const locked = m.listed === true || m.spinLocked === true;
           return {
             id: x.id,
             itemId: x.itemId,
-            nameRu: x.nameRu || x.itemId,
+            nameRu: String(x.nameRu || m.giftName || m.nameRu || x.itemId),
             valueTon: Number(x.valueTon) || Number(m.valueTon) || Number(m.priceTon) || 0,
-            imageUrl: x.imageUrl ?? null,
+            imageUrl: (x.imageUrl || m.imageUrl || m.photoUrl || null) as string | null,
             locked: !!locked,
           };
         })
@@ -589,47 +589,43 @@ export default function SpinGame({
         </div>
       )}
 
-      {/* Mode toggle: gift | TON — matches design */}
-      <div style={{ display: "flex", justifyContent: "center", marginTop: 16, marginBottom: 10 }}>
+      {/* Mode toggle + chips — same as Arena */}
+      <div style={{ display: "flex", justifyContent: "flex-start", marginTop: 12, marginBottom: 8 }}>
         <div style={{
           display: "inline-flex", alignItems: "center", gap: 2, padding: 3,
-          borderRadius: 999, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)",
+          borderRadius: 999, background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.12)",
         }}>
           <button
             type="button"
             onClick={() => { setBetMode("gift"); loadGifts(true); }}
             disabled={!canBet}
             style={{
-              width: 40, height: 32, borderRadius: 999, border: "none", cursor: canBet ? "pointer" : "default",
+              width: 40, height: 30, borderRadius: 999, border: "none", cursor: canBet ? "pointer" : "default",
               display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16,
               background: betMode === "gift" ? "#3b82f6" : "transparent",
               color: betMode === "gift" ? "#fff" : "rgba(255,255,255,0.55)",
               opacity: canBet ? 1 : 0.5,
             }}
             title="NFT гифты"
-          >
-            🎁
-          </button>
+          >🎁</button>
           <button
             type="button"
             onClick={() => setBetMode("ton")}
             disabled={!canBet}
             style={{
-              width: 40, height: 32, borderRadius: 999, border: "none", cursor: canBet ? "pointer" : "default",
+              width: 40, height: 30, borderRadius: 999, border: "none", cursor: canBet ? "pointer" : "default",
               display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15,
               background: betMode === "ton" ? "#3b82f6" : "transparent",
               color: betMode === "ton" ? "#fff" : "rgba(255,255,255,0.55)",
               opacity: canBet ? 1 : 0.5,
             }}
             title="TON"
-          >
-            💎
-          </button>
+          >💎</button>
         </div>
       </div>
 
       {betMode === "ton" ? (
-        <div style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: "center", flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: 6, alignItems: "center", width: "100%" }}>
           {["0.1", "0.15", "1", "10"].map((v) => (
             <button
               key={v}
@@ -637,16 +633,18 @@ export default function SpinGame({
               disabled={loading || !canBet}
               onClick={() => { setBet(v); placeBet(parseFloat(v)); }}
               style={{
-                padding: "10px 14px", borderRadius: 999,
-                border: "1px solid rgba(255,255,255,0.12)",
-                background: "rgba(255,255,255,0.06)",
-                color: "#e2e8f0", fontWeight: 800, fontSize: 13,
+                flex: "1 1 0", minWidth: 0, height: 38,
+                padding: "0 4px", borderRadius: 12,
+                border: "1px solid rgba(255,255,255,0.14)",
+                background: "#0a0a0f",
+                color: "#f1f5f9", fontWeight: 900, fontSize: 13,
                 cursor: loading || !canBet ? "not-allowed" : "pointer",
                 opacity: loading || !canBet ? 0.45 : 1,
-                display: "inline-flex", alignItems: "center", gap: 4,
+                display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 3,
+                fontFamily: "inherit",
               }}
             >
-              {v} <span style={{ opacity: 0.85 }}>💎</span>
+              {v}<span style={{ opacity: 0.9, fontSize: 11 }}>💎</span>
             </button>
           ))}
           <button
@@ -657,56 +655,74 @@ export default function SpinGame({
               if (all >= 0.1) { setBet(String(all)); placeBet(all); }
             }}
             style={{
-              padding: "10px 14px", borderRadius: 999,
-              border: "1px solid rgba(255,255,255,0.12)",
-              background: "rgba(255,255,255,0.06)",
-              color: "#e2e8f0", fontWeight: 800, fontSize: 13,
+              flex: "1.25 1 0", minWidth: 0, height: 38,
+              padding: "0 6px", borderRadius: 12,
+              border: "1px solid rgba(255,255,255,0.14)",
+              background: "#0a0a0f",
+              color: "#f1f5f9", fontWeight: 900, fontSize: 12,
               cursor: loading || !canBet ? "not-allowed" : "pointer",
               opacity: loading || !canBet || tonBalance < 0.1 ? 0.45 : 1,
+              whiteSpace: "nowrap", fontFamily: "inherit",
             }}
           >
             Ва-банк
           </button>
         </div>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 10, alignItems: "center" }}>
-          <div style={{ display: "flex", gap: 8, width: "100%", maxWidth: 360 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", width: "100%" }}>
             <button
               type="button"
               disabled={!canBet}
               onClick={() => { setGiftPickerOpen(true); loadGifts(true); }}
               style={{
-                flex: 1, padding: "12px 16px", borderRadius: 999, border: "none",
-                background: "#f8fafc", color: "#0f172a", fontWeight: 800, fontSize: 14,
+                flex: 1, padding: "11px 14px", borderRadius: 999, border: "none",
+                background: "#f8fafc", color: "#0f172a", fontWeight: 800, fontSize: 13,
                 cursor: canBet ? "pointer" : "not-allowed", opacity: canBet ? 1 : 0.5,
               }}
             >
-              Выбрать гифты
-              {selectedGiftIds.length > 0 ? ` (${selectedGiftIds.length})` : ""}
+              Выбрать гифты{selectedGiftIds.length ? ` (${selectedGiftIds.length})` : ""}
             </button>
             <button
               type="button"
               disabled={loading || !canBet || selectedGiftIds.length === 0}
               onClick={() => placeBet()}
               style={{
-                padding: "12px 18px", borderRadius: 999, border: "none",
+                padding: selectedGifts[0]?.imageUrl ? "6px 12px 6px 6px" : "11px 14px",
+                borderRadius: 999, border: "none", flexShrink: 0,
                 background: selectedGiftIds.length && canBet && !loading
                   ? "linear-gradient(135deg,#3b82f6,#60a5fa)"
-                  : "rgba(255,255,255,0.08)",
-                color: "#fff", fontWeight: 900, fontSize: 13,
+                  : "#0a0a0f",
+                color: "#fff", fontWeight: 900, fontSize: 13, minWidth: 88,
                 cursor: loading || !canBet || !selectedGiftIds.length ? "not-allowed" : "pointer",
                 opacity: selectedGiftIds.length ? 1 : 0.5,
-                minWidth: 88,
+                display: "inline-flex", alignItems: "center", gap: 6,
               }}
             >
-              {loading ? "…" : giftStakeTotal > 0 ? `${giftStakeTotal.toFixed(2)} 💎` : "Ставка"}
+              {loading ? "…" : (
+                <>
+                  {selectedGifts.length === 1 && selectedGifts[0].imageUrl ? (
+                    <img src={selectedGifts[0].imageUrl} alt="" style={{ width: 28, height: 28, borderRadius: 8, objectFit: "cover", background: "#111" }} />
+                  ) : selectedGifts.length > 1 ? (
+                    <span style={{ fontSize: 16 }}>🎁×{selectedGifts.length}</span>
+                  ) : null}
+                  <span>{giftStakeTotal > 0 ? `${giftStakeTotal.toFixed(2)} 💎` : "Ставка"}</span>
+                </>
+              )}
             </button>
           </div>
           {selectedGifts.length > 0 && (
-            <div style={{ fontSize: 12, color: "#94a3b8", textAlign: "center" }}>
-              {selectedGifts.length === 1
-                ? `${selectedGifts[0].nameRu} · ${selectedGifts[0].valueTon} TON`
-                : `${selectedGifts.length} NFT · ${giftStakeTotal.toFixed(2)} TON`}
+            <div style={{ fontSize: 12, color: "#94a3b8", textAlign: "center", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+              {selectedGifts.length === 1 ? (
+                <>
+                  {selectedGifts[0].imageUrl && (
+                    <img src={selectedGifts[0].imageUrl} alt="" style={{ width: 18, height: 18, borderRadius: 5, objectFit: "cover" }} />
+                  )}
+                  <span>{selectedGifts[0].nameRu} · {selectedGifts[0].valueTon} TON</span>
+                </>
+              ) : (
+                <span>{selectedGifts.length} NFT · {giftStakeTotal.toFixed(2)} TON</span>
+              )}
             </div>
           )}
         </div>
@@ -831,8 +847,21 @@ export default function SpinGame({
                   background: "rgba(255,255,255,0.08)", display: "flex", alignItems: "center", justifyContent: "center",
                   fontWeight: 900, fontSize: 12, color: "#e2e8f0",
                 }}>
-                  {p.photoUrl
-                    ? <img src={p.photoUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                  {(p.photoUrl && String(p.photoUrl).startsWith("http")) || (p.username && String(p.username).replace(/^@/, "").trim())
+                    ? <img
+                        src={
+                          (p.photoUrl && String(p.photoUrl).startsWith("http"))
+                            ? p.photoUrl
+                            : `https://t.me/i/userpic/320/${encodeURIComponent(String(p.username).replace(/^@/, "").trim())}.jpg`
+                        }
+                        alt=""
+                        style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                        onError={(e) => {
+                          const el = e.currentTarget;
+                          el.style.display = "none";
+                          if (el.parentElement) el.parentElement.textContent = initials;
+                        }}
+                      />
                     : initials}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>

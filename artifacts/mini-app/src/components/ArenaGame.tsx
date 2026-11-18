@@ -53,6 +53,13 @@ function haptic(t: "light" | "medium" | "heavy" = "light") {
 function hapticNotify(t: "success" | "error" | "warning") {
   try { (window as any).Telegram?.WebApp?.HapticFeedback?.notificationOccurred?.(t); } catch { /* */ }
 }
+function avatarSrc(photoUrl?: string | null, username?: string | null): string | null {
+  if (photoUrl && String(photoUrl).startsWith("http")) return photoUrl;
+  const u = (username || "").replace(/^@/, "").trim();
+  if (u) return `https://t.me/i/userpic/320/${encodeURIComponent(u)}.jpg`;
+  return null;
+}
+
 function initials(name: string | null | undefined, id: string) {
   return (name || id || "?").replace(/^@/, "").slice(0, 2).toUpperCase();
 }
@@ -318,13 +325,13 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
           return t.includes("nft") || t.includes("gift");
         })
         .map((x: { id: number; itemId: string; nameRu?: string; valueTon?: number; imageUrl?: string | null; meta?: Record<string, unknown> }) => {
-          const m = x.meta || {};
+          const m = (x.meta || {}) as Record<string, unknown>;
           return {
             id: x.id,
             itemId: x.itemId,
-            nameRu: x.nameRu || x.itemId,
+            nameRu: String(x.nameRu || m.giftName || m.nameRu || x.itemId),
             valueTon: Number(x.valueTon) || Number(m.valueTon) || Number(m.priceTon) || 0,
-            imageUrl: x.imageUrl ?? null,
+            imageUrl: (x.imageUrl || m.imageUrl || m.photoUrl || null) as string | null,
             locked: m.listed === true || m.spinLocked === true || m.arenaLocked === true,
           };
         })
@@ -499,8 +506,17 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
                   fontWeight: 900, fontSize: av * 0.3, color: "#fff", flexShrink: 0, zIndex: 1,
                   boxShadow: "0 4px 12px rgba(0,0,0,0.35)",
                 }}>
-                  {s.photoUrl
-                    ? <img src={s.photoUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                  {avatarSrc(s.photoUrl, s.username)
+                    ? <img
+                        src={avatarSrc(s.photoUrl, s.username)!}
+                        alt=""
+                        style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                        onError={(e) => {
+                          const el = e.currentTarget;
+                          el.style.display = "none";
+                          if (el.parentElement) el.parentElement.textContent = initials(s.username, s.telegramId);
+                        }}
+                      />
                     : initials(s.username, s.telegramId)}
                 </div>
                 {width > 40 && (
@@ -584,8 +600,17 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
                     display: "flex", alignItems: "center", justifyContent: "center",
                     fontWeight: 900, fontSize: 10, color: "#fff",
                   }}>
-                    {s.photoUrl
-                      ? <img src={s.photoUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    {avatarSrc(s.photoUrl, s.username)
+                      ? <img
+                          src={avatarSrc(s.photoUrl, s.username)!}
+                          alt=""
+                          style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                          onError={(e) => {
+                            const el = e.currentTarget;
+                            el.style.display = "none";
+                            if (el.parentElement) el.parentElement.textContent = initials(s.username, s.telegramId);
+                          }}
+                        />
                       : initials(s.username, s.telegramId)}
                   </div>
                   <div style={{ minWidth: 0, flex: 1 }}>
@@ -665,8 +690,8 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
             <div style={{ display: "flex", gap: 6, alignItems: "center", width: "100%" }}>
               <button type="button" onClick={openEdit} style={{
                 flex: "0 0 auto", width: 38, height: 38, padding: 0, fontSize: 14,
-                borderRadius: 12, border: "1px solid rgba(255,255,255,0.12)",
-                background: "rgba(255,255,255,0.08)", color: "#cbd5e1",
+                borderRadius: 12, border: "1px solid rgba(255,255,255,0.14)",
+                background: "#0a0a0f", color: "#cbd5e1",
                 cursor: "pointer", fontFamily: "inherit", fontWeight: 700,
                 display: "flex", alignItems: "center", justifyContent: "center",
               }} title="Изменить">✎</button>
@@ -677,7 +702,7 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
                     cursor: busy || !canBet ? "not-allowed" : "pointer",
                     display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 3,
                     padding: "0 4px", borderRadius: 12, fontWeight: 900, fontSize: 13,
-                    background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.12)",
+                    background: "#0a0a0f", border: "1px solid rgba(255,255,255,0.14)",
                     color: "#f1f5f9", fontFamily: "inherit",
                   }}>
                   {v}<span style={{ opacity: 0.9, fontSize: 11 }}>💎</span>
@@ -690,7 +715,7 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
                   opacity: busy || !canBet || balanceTon < MIN_STAKE ? 0.45 : 1,
                   cursor: busy || !canBet ? "not-allowed" : "pointer",
                   padding: "0 6px", borderRadius: 12, fontWeight: 900, fontSize: 12,
-                  background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.12)",
+                  background: "#0a0a0f", border: "1px solid rgba(255,255,255,0.14)",
                   color: "#f1f5f9", whiteSpace: "nowrap", fontFamily: "inherit",
                 }}>
                 Ва-банк
@@ -716,20 +741,38 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
               <button type="button" disabled={busy || !canBet || selectedGiftIds.length === 0}
                 onClick={placeGiftBet}
                 style={{
-                  padding: "11px 14px", borderRadius: 999, border: "none", flexShrink: 0,
-                  background: selectedGiftIds.length && canBet && !busy ? "linear-gradient(135deg,#3b82f6,#60a5fa)" : "transparent",
-                  color: "#fff", fontWeight: 900, fontSize: 13, minWidth: 80,
+                  padding: selectedGifts[0]?.imageUrl ? "6px 12px 6px 6px" : "11px 14px",
+                  borderRadius: 999, border: "none", flexShrink: 0,
+                  background: selectedGiftIds.length && canBet && !busy ? "linear-gradient(135deg,#3b82f6,#60a5fa)" : "#0a0a0f",
+                  color: "#fff", fontWeight: 900, fontSize: 13, minWidth: 88,
                   cursor: busy || !canBet || !selectedGiftIds.length ? "not-allowed" : "pointer",
                   opacity: selectedGiftIds.length ? 1 : 0.5,
+                  display: "inline-flex", alignItems: "center", gap: 6,
                 }}>
-                {busy ? "…" : giftStakeTotal > 0 ? `${giftStakeTotal.toFixed(2)} 💎` : "Ставка"}
+                {busy ? "…" : (
+                  <>
+                    {selectedGifts.length === 1 && selectedGifts[0].imageUrl ? (
+                      <img src={selectedGifts[0].imageUrl} alt="" style={{ width: 28, height: 28, borderRadius: 8, objectFit: "cover", background: "#111" }} />
+                    ) : selectedGifts.length > 1 ? (
+                      <span style={{ fontSize: 16 }}>🎁×{selectedGifts.length}</span>
+                    ) : null}
+                    <span>{giftStakeTotal > 0 ? `${giftStakeTotal.toFixed(2)} 💎` : "Ставка"}</span>
+                  </>
+                )}
               </button>
             </div>
             {selectedGifts.length > 0 && (
-              <div style={{ fontSize: 12, color: "#94a3b8", textAlign: "center" }}>
-                {selectedGifts.length === 1
-                  ? `${selectedGifts[0].nameRu} · ${selectedGifts[0].valueTon} TON`
-                  : `${selectedGifts.length} NFT · ${giftStakeTotal.toFixed(2)} TON`}
+              <div style={{ fontSize: 12, color: "#94a3b8", textAlign: "center", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+                {selectedGifts.length === 1 ? (
+                  <>
+                    {selectedGifts[0].imageUrl && (
+                      <img src={selectedGifts[0].imageUrl} alt="" style={{ width: 18, height: 18, borderRadius: 5, objectFit: "cover" }} />
+                    )}
+                    <span>{selectedGifts[0].nameRu} · {selectedGifts[0].valueTon} TON</span>
+                  </>
+                ) : (
+                  <span>{selectedGifts.length} NFT · {giftStakeTotal.toFixed(2)} TON</span>
+                )}
               </div>
             )}
           </div>
@@ -999,8 +1042,8 @@ const betBar: CSSProperties = {
   borderTop: "none",
 };
 const chip: CSSProperties = {
-  padding: "10px 14px", borderRadius: 12, border: "1px solid rgba(255,255,255,0.12)",
-  background: "rgba(255,255,255,0.08)", color: "#f1f5f9", fontWeight: 900, fontSize: 14,
+  padding: "10px 14px", borderRadius: 12, border: "1px solid rgba(255,255,255,0.14)",
+  background: "#0a0a0f", color: "#f1f5f9", fontWeight: 900, fontSize: 14,
   cursor: "pointer", fontFamily: "inherit", minWidth: 50,
 };
 const editBtn: CSSProperties = {

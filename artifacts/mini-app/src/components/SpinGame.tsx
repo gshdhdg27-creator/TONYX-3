@@ -685,34 +685,45 @@ export default function SpinGame({
                     {Number(p.stake).toFixed(2)} TON
                   </div>
                 </div>
-                {/* stake items row */}
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10, paddingLeft: 2 }}>
-                  {nfts.length > 0 ? nfts.map((n) => (
-                    <div key={n.inventoryId} style={{
-                      width: 48, height: 48, borderRadius: 12, overflow: "hidden", position: "relative",
-                      background: "rgba(59,130,246,0.2)", border: "1px solid rgba(59,130,246,0.35)",
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                    }}>
-                      {n.imageUrl
-                        ? <img src={n.imageUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                        : <span style={{ fontSize: 18 }}>🎁</span>}
-                      <span style={{
-                        position: "absolute", left: 4, bottom: 3, fontSize: 10, fontWeight: 900, color: "#fff",
-                        textShadow: "0 1px 2px #000",
-                      }}>{n.valueTon}</span>
+                {/* stake chips: pure TON + NFTs */}
+                {(() => {
+                  const nftSum = nfts.reduce((s, n) => s + (Number(n.valueTon) || 0), 0);
+                  const pureTon = Math.max(0, Math.round((Number(p.stake) - nftSum) * 1000) / 1000);
+                  return (
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10, paddingLeft: 2 }}>
+                      {pureTon > 1e-9 && (
+                        <div style={{
+                          width: 48, height: 48, borderRadius: 12, position: "relative",
+                          background: "linear-gradient(145deg,#3b82f6,#1d4ed8)",
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                          border: "1px solid rgba(96,165,250,0.55)",
+                          boxShadow: "0 4px 12px rgba(37,99,235,0.25)",
+                        }}>
+                          <span style={{ fontSize: 20, lineHeight: 1 }}>💎</span>
+                          <span style={{
+                            position: "absolute", left: 4, bottom: 3, fontSize: 10, fontWeight: 900, color: "#fff",
+                            textShadow: "0 1px 2px #000",
+                          }}>{pureTon % 1 === 0 ? pureTon.toFixed(0) : pureTon.toFixed(2)}</span>
+                        </div>
+                      )}
+                      {nfts.map((n) => (
+                        <div key={n.inventoryId} style={{
+                          width: 48, height: 48, borderRadius: 12, overflow: "hidden", position: "relative",
+                          background: "rgba(59,130,246,0.2)", border: "1px solid rgba(59,130,246,0.35)",
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                        }}>
+                          {n.imageUrl
+                            ? <img src={n.imageUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                            : <span style={{ fontSize: 18 }}>🎁</span>}
+                          <span style={{
+                            position: "absolute", left: 4, bottom: 3, fontSize: 10, fontWeight: 900, color: "#fff",
+                            textShadow: "0 1px 2px #000",
+                          }}>{n.valueTon}</span>
+                        </div>
+                      ))}
                     </div>
-                  )) : (
-                    <div style={{
-                      width: 48, height: 48, borderRadius: 12,
-                      background: "linear-gradient(145deg,#3b82f6,#1d4ed8)",
-                      display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-                      border: "1px solid rgba(96,165,250,0.5)",
-                    }}>
-                      <span style={{ fontSize: 16 }}>💎</span>
-                      <span style={{ fontSize: 10, fontWeight: 900, color: "#fff" }}>{Number(p.stake).toFixed(0)}</span>
-                    </div>
-                  )}
-                </div>
+                  );
+                })()}
               </button>
             );
           })}
@@ -1002,31 +1013,44 @@ export default function SpinGame({
               {Number(stakeDetail.stake).toFixed(2)} TON
             </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
-              {(stakeDetail.nftStakes && stakeDetail.nftStakes.length > 0) ? stakeDetail.nftStakes.map((n) => (
-                <div key={n.inventoryId} style={{
-                  width: 72, height: 72, borderRadius: 14, overflow: "hidden", position: "relative",
-                  background: "rgba(59,130,246,0.15)", border: "1px solid rgba(59,130,246,0.3)",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                }}>
-                  {n.imageUrl
-                    ? <img src={n.imageUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                    : <span style={{ fontSize: 24 }}>🎁</span>}
-                  <span style={{
-                    position: "absolute", left: 6, bottom: 4, fontSize: 11, fontWeight: 900, color: "#fff",
-                    textShadow: "0 1px 3px #000",
-                  }}>{n.valueTon}💎</span>
-                </div>
-              )) : (
-                <div style={{
-                  width: 72, height: 72, borderRadius: 14,
-                  background: "linear-gradient(145deg,#3b82f6,#1d4ed8)",
-                  display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-                  border: "1px solid rgba(96,165,250,0.45)",
-                }}>
-                  <span style={{ fontSize: 26 }}>💎</span>
-                  <span style={{ fontSize: 12, fontWeight: 900, color: "#fff", marginTop: 2 }}>{Number(stakeDetail.stake).toFixed(0)}</span>
-                </div>
-              )}
+              {(() => {
+                const nfts = stakeDetail.nftStakes ?? [];
+                const nftSum = nfts.reduce((s, n) => s + (Number(n.valueTon) || 0), 0);
+                const pureTon = Math.max(0, Math.round((Number(stakeDetail.stake) - nftSum) * 1000) / 1000);
+                return (
+                  <>
+                    {pureTon > 1e-9 && (
+                      <div style={{
+                        width: 72, height: 72, borderRadius: 14, position: "relative",
+                        background: "linear-gradient(145deg,#3b82f6,#1d4ed8)",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        border: "1px solid rgba(96,165,250,0.45)",
+                      }}>
+                        <span style={{ fontSize: 28 }}>💎</span>
+                        <span style={{
+                          position: "absolute", left: 6, bottom: 4, fontSize: 12, fontWeight: 900, color: "#fff",
+                          textShadow: "0 1px 3px #000",
+                        }}>{pureTon % 1 === 0 ? pureTon.toFixed(0) : pureTon.toFixed(2)}</span>
+                      </div>
+                    )}
+                    {nfts.map((n) => (
+                      <div key={n.inventoryId} style={{
+                        width: 72, height: 72, borderRadius: 14, overflow: "hidden", position: "relative",
+                        background: "rgba(59,130,246,0.15)", border: "1px solid rgba(59,130,246,0.3)",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                      }}>
+                        {n.imageUrl
+                          ? <img src={n.imageUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                          : <span style={{ fontSize: 24 }}>🎁</span>}
+                        <span style={{
+                          position: "absolute", left: 6, bottom: 4, fontSize: 11, fontWeight: 900, color: "#fff",
+                          textShadow: "0 1px 3px #000",
+                        }}>{n.valueTon}</span>
+                      </div>
+                    ))}
+                  </>
+                );
+              })()}
             </div>
           </div>
         </div>

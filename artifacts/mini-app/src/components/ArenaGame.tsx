@@ -246,6 +246,7 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
   const [dirAngle, setDirAngle] = useState(0);
   const [dirVisible, setDirVisible] = useState(false);
   const [winnerTag, setWinnerTag] = useState<string | null>(null);
+  const [stakeDetail, setStakeDetail] = useState<(ArenaPlayer & { color?: string; share?: number }) | null>(null);
 
   const [chips, setChips] = useState<number[]>(DEFAULT_CHIPS);
   const [editOpen, setEditOpen] = useState(false);
@@ -733,7 +734,7 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
             const nfts = s.nftStakes ?? [];
             const isNft = nfts.length > 0;
             return (
-              <div key={s.telegramId} style={{ ...playerRow, alignItems: "flex-start", paddingTop: 6, paddingBottom: 6 }}>
+              <button type="button" key={s.telegramId} onClick={() => setStakeDetail(s)} style={{ ...playerRow, alignItems: "flex-start", paddingTop: 6, paddingBottom: 6, width: "100%", textAlign: "left", cursor: "pointer", fontFamily: "inherit", color: "inherit", background: "transparent" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, flex: 1 }}>
                   <div style={{
                     width: 28, height: 28, borderRadius: "50%", overflow: "hidden", flexShrink: 0,
@@ -763,34 +764,50 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
                       {(s.username || s.telegramId).replace(/^@/, "").slice(0, 14)}
                       {s.telegramId === telegramId ? " (вы)" : ""}
                     </div>
-                    {isNft ? (
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 3 }}>
-                        {nfts.map((n) => (
-                          <span key={n.inventoryId} style={{
-                            display: "inline-flex", alignItems: "center", gap: 4,
-                            padding: "2px 7px", borderRadius: 999, fontSize: 10, fontWeight: 700,
-                            background: "rgba(251,191,36,0.12)", border: "1px solid rgba(251,191,36,0.35)", color: "#fde68a",
-                          }}>
-                            {n.imageUrl
-                              ? <img src={n.imageUrl} alt="" style={{ width: 14, height: 14, borderRadius: 4, objectFit: "cover" }} />
-                              : "🎁"}
-                            <span style={{ maxWidth: 70, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                              {n.nameRu || n.itemId}
-                            </span>
-                            <span>{n.valueTon}</span>
-                          </span>
-                        ))}
-                      </div>
-                    ) : (
-                      <div style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600, marginTop: 1 }}>💎 TON</div>
-                    )}
+                    {(() => {
+                      const nftSum = nfts.reduce((a, n) => a + (Number(n.valueTon) || 0), 0);
+                      const pureTon = Math.max(0, Math.round((Number(s.stake) - nftSum) * 1000) / 1000);
+                      return (
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 }}>
+                          {pureTon > 1e-9 && (
+                            <div style={{
+                              width: 40, height: 40, borderRadius: 10, position: "relative",
+                              background: "linear-gradient(145deg,#3b82f6,#1d4ed8)",
+                              display: "flex", alignItems: "center", justifyContent: "center",
+                              border: "1px solid rgba(96,165,250,0.55)",
+                            }}>
+                              <span style={{ fontSize: 16 }}>💎</span>
+                              <span style={{
+                                position: "absolute", left: 3, bottom: 2, fontSize: 9, fontWeight: 900, color: "#fff",
+                                textShadow: "0 1px 2px #000",
+                              }}>{pureTon % 1 === 0 ? pureTon.toFixed(0) : pureTon.toFixed(2)}</span>
+                            </div>
+                          )}
+                          {nfts.map((n) => (
+                            <div key={n.inventoryId} style={{
+                              width: 40, height: 40, borderRadius: 10, overflow: "hidden", position: "relative",
+                              background: "rgba(59,130,246,0.2)", border: "1px solid rgba(59,130,246,0.35)",
+                              display: "flex", alignItems: "center", justifyContent: "center",
+                            }}>
+                              {n.imageUrl
+                                ? <img src={n.imageUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                                : <span style={{ fontSize: 14 }}>🎁</span>}
+                              <span style={{
+                                position: "absolute", left: 3, bottom: 2, fontSize: 9, fontWeight: 900, color: "#fff",
+                                textShadow: "0 1px 2px #000",
+                              }}>{n.valueTon}</span>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
                 <div style={{ textAlign: "right", flexShrink: 0, paddingTop: 2 }}>
                   <div style={{ fontWeight: 800, fontSize: 12 }}>{s.stake.toFixed(2)}</div>
                   <div style={{ fontSize: 10, color: "#94a3b8" }}>{(s.chance || s.share * 100).toFixed(1)}%</div>
                 </div>
-              </div>
+              </button>
             );
           })}
         </div>
@@ -1125,7 +1142,73 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
         </div>
       )}
 
-      {toast && (
+
+      {stakeDetail && (
+        <div onClick={() => setStakeDetail(null)} style={{
+          position: "fixed", inset: 0, zIndex: 70, background: "rgba(0,0,0,0.65)", backdropFilter: "blur(6px)",
+          display: "flex", alignItems: "center", justifyContent: "center", padding: 16,
+        }}>
+          <div onClick={(e) => e.stopPropagation()} style={{
+            width: "100%", maxWidth: 320, borderRadius: 22,
+            background: "linear-gradient(180deg,#1a1a24,#0f0f18)",
+            border: "1px solid rgba(255,255,255,0.1)", padding: "16px 16px 18px",
+            boxShadow: "0 20px 50px rgba(0,0,0,0.5)",
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <div style={{ fontWeight: 800, fontSize: 15 }}>
+                Ставка @{(stakeDetail.username || stakeDetail.telegramId || "").replace(/^@/, "")}
+              </div>
+              <button type="button" onClick={() => setStakeDetail(null)}
+                style={{ border: "none", background: "transparent", color: "#94a3b8", fontSize: 18, cursor: "pointer" }}>×</button>
+            </div>
+            <div style={{ fontSize: 22, fontWeight: 900, marginBottom: 14 }}>
+              {Number(stakeDetail.stake).toFixed(2)} TON
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+              {(() => {
+                const nfts = stakeDetail.nftStakes ?? [];
+                const nftSum = nfts.reduce((s, n) => s + (Number(n.valueTon) || 0), 0);
+                const pureTon = Math.max(0, Math.round((Number(stakeDetail.stake) - nftSum) * 1000) / 1000);
+                return (
+                  <>
+                    {pureTon > 1e-9 && (
+                      <div style={{
+                        width: 72, height: 72, borderRadius: 14, position: "relative",
+                        background: "linear-gradient(145deg,#3b82f6,#1d4ed8)",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        border: "1px solid rgba(96,165,250,0.45)",
+                      }}>
+                        <span style={{ fontSize: 28 }}>💎</span>
+                        <span style={{
+                          position: "absolute", left: 6, bottom: 4, fontSize: 12, fontWeight: 900, color: "#fff",
+                          textShadow: "0 1px 3px #000",
+                        }}>{pureTon % 1 === 0 ? pureTon.toFixed(0) : pureTon.toFixed(2)}</span>
+                      </div>
+                    )}
+                    {nfts.map((n) => (
+                      <div key={n.inventoryId} style={{
+                        width: 72, height: 72, borderRadius: 14, overflow: "hidden", position: "relative",
+                        background: "rgba(59,130,246,0.15)", border: "1px solid rgba(59,130,246,0.3)",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                      }}>
+                        {n.imageUrl
+                          ? <img src={n.imageUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                          : <span style={{ fontSize: 24 }}>🎁</span>}
+                        <span style={{
+                          position: "absolute", left: 6, bottom: 4, fontSize: 11, fontWeight: 900, color: "#fff",
+                          textShadow: "0 1px 3px #000",
+                        }}>{n.valueTon}</span>
+                      </div>
+                    ))}
+                  </>
+                );
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
+
+            {toast && (
         <div style={{ ...toastStyle, background: toast.type === "ok" ? "rgba(22,101,52,0.95)" : "rgba(127,29,29,0.95)" }}>{toast.msg}</div>
       )}
     </div>

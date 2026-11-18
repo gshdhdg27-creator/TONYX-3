@@ -150,7 +150,41 @@ function buildStrips(players: ArenaPlayer[]): Strip[] {
     return [mk(a, 0, sa, polyA, "wedge"), mk(b, 1, sb, polyB, "wedge")];
   }
 
-\n  // 3+ : sequential diagonal wedges by cumulative share\n  const cuts: number[] = [0];\n  let acc = 0;\n  for (let i = 0; i < n; i++) {\n    acc += list[i].stake / total;\n    cuts.push(i === n - 1 ? 1 : Math.min(0.999, acc));\n  }\n  const topX: number[] = [];\n  const botX: number[] = [];\n  for (let i = 0; i <= n; i++) {\n    if (i === 0) { topX.push(0); botX.push(0); continue; }\n    if (i === n) { topX.push(W); botX.push(W); continue; }\n    const base = cuts[i];\n    const seed = hash01(list[i - 1].telegramId + "|" + list[i].telegramId + "|" + i);\n    const tilt = (seed - 0.5) * 0.12;\n    const shareL = cuts[i] - cuts[i - 1];\n    const shareR = cuts[i + 1] - cuts[i];\n    const maxT = Math.min(shareL, shareR) * 0.45;\n    const tt = Math.max(-maxT, Math.min(maxT, tilt));\n    topX.push(Math.max(0, Math.min(W, (base + tt) * W)));\n    botX.push(Math.max(0, Math.min(W, (base - tt) * W)));\n  }\n  return list.map((p, i) => {\n    const share = p.stake / total;\n    const poly: Pt[] = [\n      { x: topX[i], y: 0 },\n      { x: topX[i + 1], y: 0 },\n      { x: botX[i + 1], y: H },\n      { x: botX[i], y: H },\n    ];\n    return mk(p, i, share, poly, "wedge");\n  });\n}\n
+
+  // 3+ : sequential diagonal wedges by cumulative share
+  const cuts: number[] = [0];
+  let acc = 0;
+  for (let i = 0; i < n; i++) {
+    acc += list[i].stake / total;
+    cuts.push(i === n - 1 ? 1 : Math.min(0.999, acc));
+  }
+  const topX: number[] = [];
+  const botX: number[] = [];
+  for (let i = 0; i <= n; i++) {
+    if (i === 0) { topX.push(0); botX.push(0); continue; }
+    if (i === n) { topX.push(W); botX.push(W); continue; }
+    const base = cuts[i];
+    const seed = hash01(list[i - 1].telegramId + "|" + list[i].telegramId + "|" + i);
+    const tilt = (seed - 0.5) * 0.12;
+    const shareL = cuts[i] - cuts[i - 1];
+    const shareR = cuts[i + 1] - cuts[i];
+    const maxT = Math.min(shareL, shareR) * 0.45;
+    const tt = Math.max(-maxT, Math.min(maxT, tilt));
+    topX.push(Math.max(0, Math.min(W, (base + tt) * W)));
+    botX.push(Math.max(0, Math.min(W, (base - tt) * W)));
+  }
+  return list.map((p, i) => {
+    const share = p.stake / total;
+    const poly: Pt[] = [
+      { x: topX[i], y: 0 },
+      { x: topX[i + 1], y: 0 },
+      { x: botX[i + 1], y: H },
+      { x: botX[i], y: H },
+    ];
+    return mk(p, i, share, poly, "wedge");
+  });
+}
+
 
 function loadChips(): number[] {
   try {

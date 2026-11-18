@@ -50,6 +50,7 @@ type Strip = ArenaPlayer & {
   color: string; index: number; share: number; x0: number; x1: number; midX: number;
   poly: Pt[];
   cx: number; cy: number;
+  shape: string;
 };
 
 function haptic(t: "light" | "medium" | "heavy" = "light") {
@@ -77,58 +78,110 @@ function hash01(s: string): number {
   for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
   return (h >>> 0) / 4294967296;
 }
-function boundaryXs(baseX: number, seed: number, amp: number, steps = 18): Pt[] {
-  const pts: Pt[] = [];
-  for (let i = 0; i <= steps; i++) {
-    const y = (i / steps) * H;
-    const ny = i / steps;
-    const w =
-      Math.sin((ny * 2.15 + seed * 6.28) * Math.PI * 2) * amp +
-      Math.sin((ny * 5.4 + seed * 11.0) * Math.PI * 2) * amp * 0.42 +
-      Math.sin((ny * 9.2 + seed * 3.1) * Math.PI * 2) * amp * 0.18;
-    pts.push({ x: Math.min(W - 0.5, Math.max(0.5, baseX + w)), y });
-  }
-  return pts;
-}
+/**
+ * Portals-style territories:
+ * - 1 player -> full board
+ * - 2 players -> diagonal split, area ~ stake %
+ * - 3+ -> corner triangles + main zone for leader
+ */
 function buildStrips(players: ArenaPlayer[]): Strip[] {
   const list = [...players].filter((p) => p && p.stake > 0);
   const total = list.reduce((s, p) => s + p.stake, 0) || 1;
   const n = list.length;
-  const cuts: number[] = [0];
-  let acc = 0;
-  for (let i = 0; i < n; i++) {
-    acc += list[i].stake / total;
-    cuts.push(i === n - 1 ? 1 : acc);
-  }
-  const bounds: Pt[][] = [];
-  for (let i = 0; i <= n; i++) {
-    const baseX = cuts[i] * W;
-    if (i === 0) {
-      bounds.push(Array.from({ length: 19 }, (_, k) => ({ x: 0, y: (k / 18) * H })));
-    } else if (i === n) {
-      bounds.push(Array.from({ length: 19 }, (_, k) => ({ x: W, y: (k / 18) * H })));
-    } else {
-      const seed = hash01(list[i - 1].telegramId + ":" + list[i].telegramId + ":" + i);
-      const shareL = cuts[i] - cuts[i - 1];
-      const shareR = cuts[i + 1] - cuts[i];
-      const amp = Math.min(28, Math.max(8, Math.min(shareL, shareR) * W * 0.35));
-      bounds.push(boundaryXs(baseX, seed, amp));
-    }
-  }
-  return list.map((p, i) => {
-    const share = p.stake / total;
-    const left = bounds[i];
-    const right = bounds[i + 1];
-    const poly: Pt[] = [...left, ...[...right].reverse()];
+  if (n === 0) return [];
+
+  const mk = (
+    p: ArenaPlayer,
+    i: number,
+    share: number,
+    poly: Pt[],
+    shape: string,
+  ): Strip => {
     let sx = 0, sy = 0;
     for (const q of poly) { sx += q.x; sy += q.y; }
-    const cx = sx / poly.length;
-    const cy = sy / poly.length;
+    const cx = sx / Math.max(1, poly.length);
+    const cy = sy / Math.max(1, poly.length);
     const xs = poly.map((q) => q.x);
     const x0 = Math.min(...xs);
     const x1 = Math.max(...xs);
-    return { ...p, color: colorFor(i), index: i, share, x0, x1, midX: (x0 + x1) / 2, poly, cx, cy };
+    return {
+      ...p, color: colorFor(i), index: i, share,
+      x0, x1, midX: (x0 + x1) / 2, poly, cx, cy, shape,
+    };
+  };
+
+  if (n === 1) {
+    const p = list[0];
+    return [mk(p, 0, 1, [
+      { x: 0, y: 0 }, { x: W, y: 0 }, { x: W, y: H }, { x: 0, y: H },
+    ], "rect")];
+  }
+
+  if (n === 2) {
+    const [a, b] = list;
+    const sa = a.stake / total;
+    const sb = b.stake / total;
+    const seed = hash01(a.telegramId + "|" + b.telegramId);
+    const tilt = 0.15 + seed * 0.25;
+    let cutTop = Math.min(0.92, Math.max(0.08, sa + tilt * (sa > 0.5 ? -1 : 1)));
+    let cutBot = Math.min(0.92, Math.max(0.08, 2 * sa - cutTop));
+    if (cutBot < 0.05) { cutBot = 0.05; cutTop = Math.min(0.95, 2 * sa - cutBot); }
+    if (cutBot > 0.95) { cutBot = 0.95; cutTop = Math.max(0.05, 2 * sa - cutBot); }
+    const polyA: Pt[] = [
+      { x: 0, y: 0 }, { x: cutTop * W, y: 0 }, { x: cutBot * W, y: H }, { x: 0, y: H },
+    ];
+    const polyB: Pt[] = [
+      { x: cutTop * W, y: 0 }, { x: W, y: 0 }, { x: W, y: H }, { x: cutBot * W, y: H },
+    ];
+    return [mk(a, 0, sa, polyA, "wedge"), mk(b, 1, sb, polyB, "wedge")];
+  }
+
+  const ordered = [...list].sort((x, y) => y.stake - x.stake);
+  const main = ordered[0];
+  const others = ordered.slice(1);
+  const mainShare = main.stake / total;
+  type Corner = "tl" | "tr" | "br" | "bl";
+  const CORNERS: Corner[] = ["tl", "tr", "br", "bl"];
+  const rot = Math.floor(hash01(main.telegramId) * 4);
+  const corners = [...CORNERS.slice(rot), ...CORNERS.slice(0, rot)];
+  const result: Strip[] = [];
+  const cut: Record<Corner, number> = { tl: 0, tr: 0, br: 0, bl: 0 };
+
+  others.forEach((p, idx) => {
+    const share = p.stake / total;
+    const f = Math.min(0.72, Math.max(0.08, Math.sqrt(2 * share)));
+    const corner = corners[idx % 4];
+    cut[corner] = Math.max(cut[corner], f);
+    let poly: Pt[];
+    if (corner === "tl") poly = [{ x: 0, y: 0 }, { x: f * W, y: 0 }, { x: 0, y: f * H }];
+    else if (corner === "tr") poly = [{ x: W, y: 0 }, { x: W, y: f * H }, { x: W - f * W, y: 0 }];
+    else if (corner === "br") poly = [{ x: W, y: H }, { x: W - f * W, y: H }, { x: W, y: H - f * H }];
+    else poly = [{ x: 0, y: H }, { x: 0, y: H - f * H }, { x: f * W, y: H }];
+    const origIdx = list.findIndex((x) => x.telegramId === p.telegramId);
+    result.push(mk(p, origIdx >= 0 ? origIdx : idx + 1, share, poly, "corner"));
   });
+
+  const mainPoly: Pt[] = [];
+  if (cut.tl > 0) mainPoly.push({ x: cut.tl * W, y: 0 });
+  else mainPoly.push({ x: 0, y: 0 });
+  if (cut.tr > 0) {
+    mainPoly.push({ x: W - cut.tr * W, y: 0 });
+    mainPoly.push({ x: W, y: cut.tr * H });
+  } else mainPoly.push({ x: W, y: 0 });
+  if (cut.br > 0) {
+    mainPoly.push({ x: W, y: H - cut.br * H });
+    mainPoly.push({ x: W - cut.br * W, y: H });
+  } else mainPoly.push({ x: W, y: H });
+  if (cut.bl > 0) {
+    mainPoly.push({ x: cut.bl * W, y: H });
+    mainPoly.push({ x: 0, y: H - cut.bl * H });
+  } else mainPoly.push({ x: 0, y: H });
+  if (cut.tl > 0) mainPoly.push({ x: 0, y: cut.tl * H });
+
+  const mainOrig = list.findIndex((x) => x.telegramId === main.telegramId);
+  result.unshift(mk(main, mainOrig >= 0 ? mainOrig : 0, mainShare, mainPoly, "main"));
+  const byId = new Map(result.map((s) => [s.telegramId, s]));
+  return list.map((p) => byId.get(p.telegramId)!).filter(Boolean);
 }
 function loadChips(): number[] {
   try {
@@ -539,7 +592,7 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
             </div>
           ) : strips.map((s) => {
             const width = Math.max(2, s.x1 - s.x0);
-            const av = Math.min(48, Math.max(22, width - 8));
+            const av = Math.round(Math.min(96, Math.max(28, 22 + s.share * 110)));
             const clip = (s.poly && s.poly.length)
               ? `polygon(${s.poly.map((q) => `${(q.x / W) * 100}% ${(q.y / H) * 100}%`).join(", ")})`
               : undefined;

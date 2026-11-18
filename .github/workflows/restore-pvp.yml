@@ -1,0 +1,47 @@
+name: restore-pvp-files
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/restore-pvp.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Restore full files from last good commit
+        run: |
+          set -euo pipefail
+          GOOD=6c8fb01e2d8e9643935e89652796a8cd4ab3776d
+          git checkout "$GOOD" -- \
+            artifacts/api-server/src/routes/mini/games-arena.ts \
+            artifacts/api-server/src/routes/mini/games-spin.ts \
+            artifacts/api-server/src/routes/mini/admin-extra.ts \
+            artifacts/mini-app/src/components/NftGiftsTab.tsx
+          wc -c artifacts/api-server/src/routes/mini/games-arena.ts \
+               artifacts/api-server/src/routes/mini/games-spin.ts \
+               artifacts/api-server/src/routes/mini/admin-extra.ts \
+               artifacts/mini-app/src/components/NftGiftsTab.tsx
+          for f in artifacts/api-server/src/routes/mini/games-arena.ts \
+                   artifacts/api-server/src/routes/mini/games-spin.ts \
+                   artifacts/api-server/src/routes/mini/admin-extra.ts \
+                   artifacts/mini-app/src/components/NftGiftsTab.tsx; do
+            sz=$(wc -c < "$f")
+            test "$sz" -gt 5000 || { echo "FAIL $f size $sz"; exit 1; }
+            ! grep -q 'LOAD_FROM_\|PLACEHOLDER' "$f" || { echo "FAIL placeholder $f"; exit 1; }
+          done
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add artifacts/api-server/src/routes/mini/games-arena.ts \
+                  artifacts/api-server/src/routes/mini/games-spin.ts \
+                  artifacts/api-server/src/routes/mini/admin-extra.ts \
+                  artifacts/mini-app/src/components/NftGiftsTab.tsx
+          git commit -m "fix: restore full PvP files (arena/spin/admin/NftGiftsTab) from good commit" || exit 0
+          git push origin HEAD:main

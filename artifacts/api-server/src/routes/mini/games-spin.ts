@@ -147,13 +147,11 @@ async function resolveRound(roundId: number) {
   const winnerStake = winner.stake;
   const othersPool = totalPool - winnerStake;
   const commissionNeeded = Math.round(othersPool * COMMISSION_RATE * 1000) / 1000;
+  // Commission only from pure TON in the pot (never from NFT face value).
+  // NFTs always transfer to the winner — they must not vanish into SYSTEM on normal bets.
   const totalPureTon = players.reduce((s, p) => s + pureTonOf(p), 0);
-  const winnerPure = pureTonOf(winner);
-  const canPayCommission = totalPureTon + 1e-9 >= commissionNeeded;
-  const payout = canPayCommission
-    ? Math.round((totalPureTon - commissionNeeded) * 1000) / 1000
-    : Math.round((winnerPure + othersPool * (1 - COMMISSION_RATE)) * 1000) / 1000;
-  const commissionTon = commissionNeeded;
+  const commissionTon = Math.round(Math.min(commissionNeeded, totalPureTon) * 1000) / 1000;
+  const payout = Math.round((totalPureTon - commissionTon) * 1000) / 1000;
 
   // NFT stakes: losers' gifts → winner, or SYSTEM_PVP if commission > winner stake
   for (const p of players) {
@@ -173,7 +171,12 @@ async function resolveRound(roundId: number) {
         delete m.priceTon;
         delete m.listedAt;
         delete m.spinLocked;
+        delete m.spinRoundPending;
         delete m.spinRoundId;
+        delete m.arenaLocked;
+        delete m.arenaRoundPending;
+        delete m.arenaRoundId;
+        delete m.lockedAt;
         if (p.telegramId === winner.telegramId) {
           // winner keeps own NFT
           await db
@@ -186,7 +189,7 @@ async function resolveRound(roundId: number) {
             .where(eq(miniUserInventoryTable.id, item.id));
           continue;
         }
-        const toSystem = !canPayCommission;
+        const toSystem = commissionTon > winnerStake + 1e-9; // extreme only; normal bets → NFT to winner
         const dest = toSystem ? "SYSTEM_PVP_SPIN" : winner.telegramId;
         await db
           .update(miniUserInventoryTable)

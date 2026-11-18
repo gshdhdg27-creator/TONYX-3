@@ -1,0 +1,19 @@
+name: multi-corner
+on:
+  workflow_dispatch:
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply
+        run: python3 .github/scripts/multi_corner_patch.py
+      - name: Commit
+        run: |
+          git config user.name tonyx-bot
+          git config user.email bot@tonyx.local
+          git add artifacts/mini-app/src/components/ArenaGame.tsx
+          git commit -m "fix(arena): multiple small players go to different corners" || exit 0
+          git push

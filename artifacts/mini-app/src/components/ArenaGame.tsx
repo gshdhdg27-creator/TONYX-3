@@ -136,12 +136,21 @@ function buildStrips(players: ArenaPlayer[]): Strip[] {
     const [a, b] = list;
     const sa = a.stake / total;
     const sb = b.stake / total;
+    // Area of left wedge ≈ (cutTop+cutBot)/2 — keep equal to share.
+    // Small diagonal tilt only; never inflate tiny stakes (was min 8%).
     const seed = hash01(a.telegramId + "|" + b.telegramId);
-    const tilt = 0.15 + seed * 0.25;
-    let cutTop = Math.min(0.92, Math.max(0.08, sa + tilt * (sa > 0.5 ? -1 : 1)));
-    let cutBot = Math.min(0.92, Math.max(0.08, 2 * sa - cutTop));
-    if (cutBot < 0.05) { cutBot = 0.05; cutTop = Math.min(0.95, 2 * sa - cutBot); }
-    if (cutBot > 0.95) { cutBot = 0.95; cutTop = Math.max(0.05, 2 * sa - cutBot); }
+    const maxTilt = Math.min(sa, sb) * 0.35;
+    const tilt = (seed - 0.5) * 2 * maxTilt;
+    const minCut = Math.max(2 / W, 0.004);
+    const maxCut = 1 - minCut;
+    let cutTop = Math.max(minCut, Math.min(maxCut, sa + tilt));
+    let cutBot = Math.max(minCut, Math.min(maxCut, sa - tilt));
+    const mean = (cutTop + cutBot) / 2;
+    if (Math.abs(mean - sa) > 1e-6) {
+      const d = sa - mean;
+      cutTop = Math.max(minCut, Math.min(maxCut, cutTop + d));
+      cutBot = Math.max(minCut, Math.min(maxCut, cutBot + d));
+    }
     const polyA: Pt[] = [
       { x: 0, y: 0 }, { x: cutTop * W, y: 0 }, { x: cutBot * W, y: H }, { x: 0, y: H },
     ];

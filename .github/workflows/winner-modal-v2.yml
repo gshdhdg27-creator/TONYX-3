@@ -10,8 +10,9 @@ jobs:
       - uses: actions/checkout@v4
       - name: Apply
         run: |
-          cp .github/scripts/WinnerModal.tsx artifacts/mini-app/src/components/WinnerModal.tsx
-          python3 .github/scripts/wm_patch.py
+          cat .github/scripts/wm_w0.b64 .github/scripts/wm_w1.b64 | base64 -d > artifacts/mini-app/src/components/WinnerModal.tsx
+          cat .github/scripts/wm_p0.b64 .github/scripts/wm_p1.b64 | base64 -d > /tmp/wm_patch.py
+          python3 /tmp/wm_patch.py
       - name: Commit
         run: |
           git config user.name tonyx-bot

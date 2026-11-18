@@ -14,7 +14,7 @@ const COMMISSION = 0.2;
 const MIN_STAKE = 0.1;
 const SPIN_MS = 7000;
 const DIR_MS = 350;
-const WINNER_HOLD_MS = 3200;
+const WINNER_HOLD_MS = 2000;
 const DEFAULT_CHIPS = [1, 5, 10, 25];
 const CHIPS_KEY = "tonyx_arena_chips";
 const COLORS = [
@@ -225,12 +225,12 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
       if (!dirHidden && elapsed > DIR_MS) { dirHidden = true; setDirVisible(false); }
       const play = Math.max(0, elapsed - DIR_MS * 0.25);
       const raw = Math.min(1, play / SPIN_MS);
-      const eased = raw >= 1 ? 1 : 1 - Math.pow(1 - raw, 2.8);
+      const eased = raw >= 1 ? 1 : 1 - Math.pow(1 - raw, 3.8);
 
       if (raw >= 1) {
         setPuckPos(target);
         setZoomOrigin(`${(target.x / W) * 100}% ${(target.y / H) * 100}%`);
-        setBoardZoom(1.9);
+        setBoardZoom(1.55);
         setPhase("winner"); setDirVisible(false); setWinnerTag(winName);
         hapticNotify("success");
         const payout = payoutOf(winner.stake, data.totalPool);
@@ -269,7 +269,7 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
         const k = (raw - 0.55) / 0.45;
         const ease = 1 - Math.pow(1 - k, 2);
         setZoomOrigin(`${(pos.x / W) * 100}% ${(pos.y / H) * 100}%`);
-        setBoardZoom(1 + ease * 0.9);
+        setBoardZoom(1 + ease * 0.55);
       }
       rafRef.current = requestAnimationFrame(step);
     };
@@ -556,12 +556,13 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
                     />
                   </g>
                 )}
-                <circle cx={puckPos.x} cy={puckPos.y} r={BALL_R + 5} fill="rgba(0,0,0,0.18)" />
-                <circle cx={puckPos.x} cy={puckPos.y} r={BALL_R} fill="url(#puckG)" stroke="rgba(0,0,0,0.22)" strokeWidth={1} />
-                {/* center decisive pixel */}
-                <circle cx={puckPos.x} cy={puckPos.y} r={2.4} fill="#111" />
-                <circle cx={puckPos.x} cy={puckPos.y} r={1.1} fill="#fff" />
-                <ellipse cx={puckPos.x - 3} cy={puckPos.y - 4} rx={4} ry={2.8} fill="rgba(255,255,255,0.72)" />
+                {/* glass target puck — white ring + cross */}
+                <circle cx={puckPos.x} cy={puckPos.y} r={BALL_R + 3} fill="rgba(0,0,0,0.22)" />
+                <circle cx={puckPos.x} cy={puckPos.y} r={BALL_R + 0.5} fill="rgba(255,255,255,0.18)" stroke="rgba(255,255,255,0.95)" strokeWidth={3.4} />
+                <circle cx={puckPos.x} cy={puckPos.y} r={BALL_R - 3.4} fill="rgba(255,255,255,0.10)" stroke="rgba(255,255,255,0.45)" strokeWidth={1.1} />
+                <line x1={puckPos.x - (BALL_R - 2)} y1={puckPos.y} x2={puckPos.x + (BALL_R - 2)} y2={puckPos.y} stroke="rgba(255,255,255,0.92)" strokeWidth={2.2} strokeLinecap="round" />
+                <line x1={puckPos.x} y1={puckPos.y - (BALL_R - 2)} x2={puckPos.x} y2={puckPos.y + (BALL_R - 2)} stroke="rgba(255,255,255,0.92)" strokeWidth={2.2} strokeLinecap="round" />
+                <circle cx={puckPos.x} cy={puckPos.y} r={2.0} fill="rgba(255,255,255,0.95)" />
               </svg>
               {winnerTag && (
                 <div style={{
@@ -687,8 +688,8 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
             {/* Ряд 2: ✎ 1 5 10 25 Ва-банк — аккуратные чипы с фоном */}
             <div style={{ display: "flex", gap: 6, alignItems: "center", width: "100%" }}>
               <button type="button" onClick={openEdit} style={{
-                flex: "0 0 auto", width: 38, height: 38, padding: 0, fontSize: 14,
-                borderRadius: 12, border: "1px solid rgba(255,255,255,0.14)",
+                flex: "0 0 auto", width: 57, height: 57, padding: 0, fontSize: 18,
+                borderRadius: 14, border: "1px solid rgba(255,255,255,0.14)",
                 background: "#0a0a0f", color: "#cbd5e1",
                 cursor: "pointer", fontFamily: "inherit", fontWeight: 700,
                 display: "flex", alignItems: "center", justifyContent: "center",
@@ -696,10 +697,10 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
               {chips.map((v, i) => (
                 <button key={i} type="button" disabled={busy || !canBet} onClick={() => placeBet(v)}
                   style={{
-                    flex: "1 1 0", minWidth: 0, height: 38, opacity: busy || !canBet ? 0.45 : 1,
+                    flex: "1 1 0", minWidth: 0, height: 57, opacity: busy || !canBet ? 0.45 : 1,
                     cursor: busy || !canBet ? "not-allowed" : "pointer",
                     display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 3,
-                    padding: "0 4px", borderRadius: 12, fontWeight: 900, fontSize: 13,
+                    padding: "0 4px", borderRadius: 14, fontWeight: 900, fontSize: 16,
                     background: "#0a0a0f", border: "1px solid rgba(255,255,255,0.14)",
                     color: "#f1f5f9", fontFamily: "inherit",
                   }}>
@@ -709,10 +710,10 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
               <button type="button" disabled={busy || !canBet || balanceTon < MIN_STAKE}
                 onClick={() => placeBet(Math.floor(balanceTon * 1000) / 1000)}
                 style={{
-                  flex: "1.25 1 0", minWidth: 0, height: 38,
+                  flex: "1.25 1 0", minWidth: 0, height: 57,
                   opacity: busy || !canBet || balanceTon < MIN_STAKE ? 0.45 : 1,
                   cursor: busy || !canBet ? "not-allowed" : "pointer",
-                  padding: "0 6px", borderRadius: 12, fontWeight: 900, fontSize: 12,
+                  padding: "0 6px", borderRadius: 14, fontWeight: 900, fontSize: 14,
                   background: "#0a0a0f", border: "1px solid rgba(255,255,255,0.14)",
                   color: "#f1f5f9", whiteSpace: "nowrap", fontFamily: "inherit",
                 }}>
@@ -1011,7 +1012,7 @@ const statusPill: CSSProperties = {
   background: "rgba(34,197,94,0.12)", border: "1px solid rgba(34,197,94,0.28)",
   color: "#86efac", fontWeight: 800, fontSize: 12,
 };
-const boardWrap: CSSProperties = { display: "flex", justifyContent: "center", margin: "0 12px 4px", position: "relative", zIndex: 1 };
+const boardWrap: CSSProperties = { display: "flex", justifyContent: "center", margin: "0 auto 4px", position: "relative", zIndex: 1, width: W, height: H, overflow: "hidden", borderRadius: 18 };
 const playersCard: CSSProperties = {
   margin: "10px 14px 12px", background: "linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.03))",
   borderRadius: 16, padding: "10px 12px", border: "1px solid rgba(255,255,255,0.08)", position: "relative", zIndex: 1,

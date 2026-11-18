@@ -191,26 +191,25 @@ function buildStrips(players: ArenaPlayer[]): Strip[] {
   }
 
 
-  // 3+ : small players → different corners; one big leader keeps the center
+  // 3+ : any small share → corner triangle; remaining area split among larges
   {
-    const CORNER_MAX3 = 0.22;
+    const CORNER_MAX3 = 0.25;
     const withShare = list.map((p, i) => ({ p, i, share: p.stake / total }));
     const smalls = withShare.filter((x) => x.share < CORNER_MAX3).sort((a, b) => a.share - b.share);
     const larges = withShare.filter((x) => x.share >= CORNER_MAX3).sort((a, b) => b.share - a.share);
 
-    // One dominant + 1..4 small → put each small in its own corner
-    if (larges.length === 1 && smalls.length >= 1 && smalls.length <= 4) {
+    // 1..4 smalls + ≥1 large → smalls in corners (not thin wall strips)
+    if (smalls.length >= 1 && smalls.length <= 4 && larges.length >= 1) {
       const seed0 = hash01(list.map((p) => p.telegramId).join("|"));
       const startCorner = Math.floor(seed0 * 4);
-      // prefer opposite corners first so smalls are spread: 0,2,1,3
       const order = [0, 2, 1, 3];
       const used: Record<number, number> = {};
       const strips: Strip[] = new Array(n);
 
       smalls.forEach((s, k) => {
-        const corner = (startCorner + order[k]) % 4;
-        const f = Math.min(0.48, Math.max(0.06, Math.sqrt(2 * s.share)));
-        used[corner] = f;
+        const corner = (startCorner + order[k % 4]) % 4;
+        const f = Math.min(0.55, Math.max(0.08, Math.sqrt(2 * s.share)));
+        used[corner] = Math.max(used[corner] ?? 0, f);
         let polyS: Pt[];
         if (corner === 0) {
           polyS = [{ x: 0, y: 0 }, { x: f * W, y: 0 }, { x: 0, y: f * H }];
@@ -224,35 +223,39 @@ function buildStrips(players: ArenaPlayer[]): Strip[] {
         strips[s.i] = mk(s.p, s.i, s.share, polyS, "corner");
       });
 
-      const mainPts: Pt[] = [];
-      if (used[0] != null) {
-        mainPts.push({ x: 0, y: used[0] * H });
-        mainPts.push({ x: used[0] * W, y: 0 });
-      } else {
-        mainPts.push({ x: 0, y: 0 });
-      }
-      if (used[1] != null) {
-        mainPts.push({ x: (1 - used[1]) * W, y: 0 });
-        mainPts.push({ x: W, y: used[1] * H });
-      } else {
-        mainPts.push({ x: W, y: 0 });
-      }
-      if (used[2] != null) {
-        mainPts.push({ x: W, y: (1 - used[2]) * H });
-        mainPts.push({ x: (1 - used[2]) * W, y: H });
-      } else {
-        mainPts.push({ x: W, y: H });
-      }
-      if (used[3] != null) {
-        mainPts.push({ x: used[3] * W, y: H });
-        mainPts.push({ x: 0, y: (1 - used[3]) * H });
-      } else {
-        mainPts.push({ x: 0, y: H });
+      if (larges.length === 1) {
+        const u0 = used[0] ?? 0, u1 = used[1] ?? 0, u2 = used[2] ?? 0, u3 = used[3] ?? 0;
+        const mainPts: Pt[] = [];
+        if (u0 > 0) { mainPts.push({ x: 0, y: u0 * H }, { x: u0 * W, y: 0 }); }
+        else mainPts.push({ x: 0, y: 0 });
+        if (u1 > 0) { mainPts.push({ x: (1 - u1) * W, y: 0 }, { x: W, y: u1 * H }); }
+        else mainPts.push({ x: W, y: 0 });
+        if (u2 > 0) { mainPts.push({ x: W, y: (1 - u2) * H }, { x: (1 - u2) * W, y: H }); }
+        else mainPts.push({ x: W, y: H });
+        if (u3 > 0) { mainPts.push({ x: u3 * W, y: H }, { x: 0, y: (1 - u3) * H }); }
+        else mainPts.push({ x: 0, y: H });
+        strips[larges[0].i] = mk(larges[0].p, larges[0].i, larges[0].share, mainPts, "main");
+        return strips.filter(Boolean) as Strip[];
       }
 
-      const L = larges[0];
-      strips[L.i] = mk(L.p, L.i, L.share, mainPts, "main");
-      return strips;
+      // 2+ larges: vertical split of remaining board by relative share
+      const largeTotal = larges.reduce((s, x) => s + x.share, 0) || 1;
+      let acc = 0;
+      const cuts: number[] = [0];
+      larges.forEach((L, idx) => {
+        acc += L.share / largeTotal;
+        cuts.push(idx === larges.length - 1 ? 1 : acc);
+      });
+      larges.forEach((L, idx) => {
+        const left = cuts[idx] * W;
+        const right = cuts[idx + 1] * W;
+        const poly: Pt[] = [
+          { x: left, y: 0 }, { x: right, y: 0 },
+          { x: right, y: H }, { x: left, y: H },
+        ];
+        strips[L.i] = mk(L.p, L.i, L.share, poly, "main");
+      });
+      return strips.filter(Boolean) as Strip[];
     }
   }
 

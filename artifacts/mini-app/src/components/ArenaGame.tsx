@@ -150,53 +150,8 @@ function buildStrips(players: ArenaPlayer[]): Strip[] {
     return [mk(a, 0, sa, polyA, "wedge"), mk(b, 1, sb, polyB, "wedge")];
   }
 
-  const ordered = [...list].sort((x, y) => y.stake - x.stake);
-  const main = ordered[0];
-  const others = ordered.slice(1);
-  const mainShare = main.stake / total;
-  type Corner = "tl" | "tr" | "br" | "bl";
-  const CORNERS: Corner[] = ["tl", "tr", "br", "bl"];
-  const rot = Math.floor(hash01(main.telegramId) * 4);
-  const corners = [...CORNERS.slice(rot), ...CORNERS.slice(0, rot)];
-  const result: Strip[] = [];
-  const cut: Record<Corner, number> = { tl: 0, tr: 0, br: 0, bl: 0 };
+\n  // 3+ : sequential diagonal wedges by cumulative share\n  const cuts: number[] = [0];\n  let acc = 0;\n  for (let i = 0; i < n; i++) {\n    acc += list[i].stake / total;\n    cuts.push(i === n - 1 ? 1 : Math.min(0.999, acc));\n  }\n  const topX: number[] = [];\n  const botX: number[] = [];\n  for (let i = 0; i <= n; i++) {\n    if (i === 0) { topX.push(0); botX.push(0); continue; }\n    if (i === n) { topX.push(W); botX.push(W); continue; }\n    const base = cuts[i];\n    const seed = hash01(list[i - 1].telegramId + "|" + list[i].telegramId + "|" + i);\n    const tilt = (seed - 0.5) * 0.12;\n    const shareL = cuts[i] - cuts[i - 1];\n    const shareR = cuts[i + 1] - cuts[i];\n    const maxT = Math.min(shareL, shareR) * 0.45;\n    const tt = Math.max(-maxT, Math.min(maxT, tilt));\n    topX.push(Math.max(0, Math.min(W, (base + tt) * W)));\n    botX.push(Math.max(0, Math.min(W, (base - tt) * W)));\n  }\n  return list.map((p, i) => {\n    const share = p.stake / total;\n    const poly: Pt[] = [\n      { x: topX[i], y: 0 },\n      { x: topX[i + 1], y: 0 },\n      { x: botX[i + 1], y: H },\n      { x: botX[i], y: H },\n    ];\n    return mk(p, i, share, poly, "wedge");\n  });\n}\n
 
-  others.forEach((p, idx) => {
-    const share = p.stake / total;
-    const f = Math.min(0.72, Math.max(0.08, Math.sqrt(2 * share)));
-    const corner = corners[idx % 4];
-    cut[corner] = Math.max(cut[corner], f);
-    let poly: Pt[];
-    if (corner === "tl") poly = [{ x: 0, y: 0 }, { x: f * W, y: 0 }, { x: 0, y: f * H }];
-    else if (corner === "tr") poly = [{ x: W, y: 0 }, { x: W, y: f * H }, { x: W - f * W, y: 0 }];
-    else if (corner === "br") poly = [{ x: W, y: H }, { x: W - f * W, y: H }, { x: W, y: H - f * H }];
-    else poly = [{ x: 0, y: H }, { x: 0, y: H - f * H }, { x: f * W, y: H }];
-    const origIdx = list.findIndex((x) => x.telegramId === p.telegramId);
-    result.push(mk(p, origIdx >= 0 ? origIdx : idx + 1, share, poly, "corner"));
-  });
-
-  const mainPoly: Pt[] = [];
-  if (cut.tl > 0) mainPoly.push({ x: cut.tl * W, y: 0 });
-  else mainPoly.push({ x: 0, y: 0 });
-  if (cut.tr > 0) {
-    mainPoly.push({ x: W - cut.tr * W, y: 0 });
-    mainPoly.push({ x: W, y: cut.tr * H });
-  } else mainPoly.push({ x: W, y: 0 });
-  if (cut.br > 0) {
-    mainPoly.push({ x: W, y: H - cut.br * H });
-    mainPoly.push({ x: W - cut.br * W, y: H });
-  } else mainPoly.push({ x: W, y: H });
-  if (cut.bl > 0) {
-    mainPoly.push({ x: cut.bl * W, y: H });
-    mainPoly.push({ x: 0, y: H - cut.bl * H });
-  } else mainPoly.push({ x: 0, y: H });
-  if (cut.tl > 0) mainPoly.push({ x: 0, y: cut.tl * H });
-
-  const mainOrig = list.findIndex((x) => x.telegramId === main.telegramId);
-  result.unshift(mk(main, mainOrig >= 0 ? mainOrig : 0, mainShare, mainPoly, "main"));
-  const byId = new Map(result.map((s) => [s.telegramId, s]));
-  return list.map((p) => byId.get(p.telegramId)!).filter(Boolean);
-}
 function loadChips(): number[] {
   try {
     const raw = localStorage.getItem(CHIPS_KEY);
@@ -349,7 +304,7 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
         setPuckPos(target);
         setTrail([]);
         setZoomOrigin(`${(target.x / W) * 100}% ${(target.y / H) * 100}%`);
-        setBoardZoom(1.7);
+        setBoardZoom(2);
         setPhase("winner"); setDirVisible(false); setWinnerTag(winName);
         hapticNotify("success");
         const payout = payoutOf(winner.stake, data.totalPool);
@@ -388,7 +343,7 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
         const k = (raw - 0.35) / 0.65;
         const ease = 1 - Math.pow(1 - k, 2);
         setZoomOrigin(`${(pos.x / W) * 100}% ${(pos.y / H) * 100}%`);
-        setBoardZoom(1 + ease * 0.7);
+        setBoardZoom(1 + ease * 1.0);
       }
       rafRef.current = requestAnimationFrame(step);
     };
@@ -614,23 +569,28 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
             const clip = (s.poly && s.poly.length)
               ? `polygon(${s.poly.map((q) => `${(q.x / W) * 100}% ${(q.y / H) * 100}%`).join(", ")})`
               : undefined;
+            const ax = Math.max(av / 2 + 4, Math.min(W - av / 2 - 4, s.cx || W / 2));
+            const ay = Math.max(av / 2 + 4, Math.min(H - av / 2 - 4, s.cy || H / 2));
             return (
               <div key={s.telegramId} style={{
                 position: "absolute", left: 0, top: 0, width: W, height: H,
                 background: s.color,
                 clipPath: clip,
                 WebkitClipPath: clip,
-                display: "flex", flexDirection: "column", alignItems: "center",
-                paddingTop: Math.max(12, Math.min(H - 80, (s.cy || H * 0.28) - av / 2)),
-                boxSizing: "border-box", overflow: "hidden", zIndex: 1,
+                overflow: "hidden", zIndex: 1,
                 transition: phase === "lobby" ? "clip-path .45s ease" : "none",
               }}>
                 <div className="ar-strip-gloss" />
                 <div style={{
-                  width: av, height: av, borderRadius: "50%", border: "2.5px solid #fff", overflow: "hidden",
-                  background: "#0a0a12", display: "flex", alignItems: "center", justifyContent: "center",
-                  fontWeight: 900, fontSize: av * 0.3, color: "#fff", flexShrink: 0, zIndex: 1,
-                  boxShadow: "0 4px 12px rgba(0,0,0,0.35)",
+                  position: "absolute",
+                  left: ax - av / 2,
+                  top: ay - av / 2,
+                  width: av, height: av, borderRadius: "50%",
+                  border: "3px solid rgba(255,255,255,0.95)", overflow: "hidden",
+                  background: "rgba(10,10,18,0.55)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontWeight: 900, fontSize: av * 0.32, color: "#fff", zIndex: 2,
+                  boxShadow: "0 6px 16px rgba(0,0,0,0.4)",
                 }}>
                   {avatarSrc(s.photoUrl, s.username)
                     ? <img
@@ -645,14 +605,19 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
                       />
                     : initials(s.username, s.telegramId)}
                 </div>
-                {width > 40 && (
-                  <>
-                    <div style={{ marginTop: 6, fontSize: 11, fontWeight: 900, color: "#fff", textShadow: "0 1px 4px rgba(0,0,0,.5)", maxWidth: width - 6, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", zIndex: 1 }}>
-                      {(s.username || s.telegramId).replace(/^@/, "").slice(0, 9)}
+                {s.share >= 0.12 && (
+                  <div style={{
+                    position: "absolute", left: ax, top: ay + av / 2 + 6,
+                    transform: "translateX(-50%)", textAlign: "center", zIndex: 2,
+                    textShadow: "0 1px 4px rgba(0,0,0,.55)", pointerEvents: "none",
+                  }}>
+                    <div style={{ fontSize: 11, fontWeight: 900, color: "#fff", maxWidth: 88, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {(s.username || s.telegramId).replace(/^@/, "").slice(0, 10)}
                     </div>
-                    <div style={{ fontSize: 11, fontWeight: 800, color: "rgba(255,255,255,.95)", zIndex: 1 }}>{(s.chance || s.share * 100).toFixed(1)}%</div>
-                    <div style={{ fontSize: 10, fontWeight: 700, color: "rgba(255,255,255,.75)", zIndex: 1 }}>{s.stake.toFixed(2)}</div>
-                  </>
+                    <div style={{ fontSize: 12, fontWeight: 800, color: "rgba(255,255,255,.95)" }}>
+                      {(s.chance || s.share * 100).toFixed(1)}%
+                    </div>
+                  </div>
                 )}
               </div>
             );

@@ -1,0 +1,23 @@
+name: fix-arena-newlines
+on:
+  workflow_dispatch:
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fix
+        run: |
+          echo "CmZyb20gcGF0aGxpYiBpbXBvcnQgUGF0aApwID0gUGF0aCgiYXJ0aWZhY3RzL21pbmktYXBwL3NyYy9jb21wb25lbnRzL0FyZW5hR2FtZS50c3giKQp0ID0gcC5yZWFkX3RleHQoKQptYXJrZXIgPSAiXFxuICAvLyAzKyA6IHNlcXVlbnRpYWwgZGlhZ29uYWwgd2VkZ2VzIgppZiBtYXJrZXIgbm90IGluIHQ6CiAgICAjIG1heWJlIGFscmVhZHkgZml4ZWQKICAgIGlmICJjb25zdCB0b3BYOiBudW1iZXJbXSIgaW4gdCBhbmQgIlxcbiAgY29uc3QgdG9wWCIgbm90IGluIHQ6CiAgICAgICAgcHJpbnQoImFscmVhZHkgZml4ZWQiKQogICAgICAgIHJhaXNlIFN5c3RlbUV4aXQoMCkKICAgIHJhaXNlIFN5c3RlbUV4aXQoImJyb2tlbiBtYXJrZXIgbm90IGZvdW5kIikKCmlkeCA9IHQuZmluZChtYX" > /tmp/p.b64
+          echo "JrZXIpCmVuZCA9IHQuZmluZCgiXG5mdW5jdGlvbiBsb2FkQ2hpcHMiLCBpZHgpCmlmIGVuZCA8IDA6CiAgICByYWlzZSBTeXN0ZW1FeGl0KCJsb2FkQ2hpcHMgbm90IGZvdW5kIikKYnJva2VuID0gdFtpZHg6ZW5kXQpmaXhlZCA9IGJyb2tlbi5yZXBsYWNlKCJcXG4iLCAiXG4iKQp0ID0gdFs6aWR4XSArIGZpeGVkICsgdFtlbmQ6XQppZiAiXFxuICAvLyAzKyIgaW4gdCBvciAiXFxuICBjb25zdCBjdXRzIiBpbiB0OgogICAgcmFpc2UgU3lzdGVtRXhpdCgic3RpbGwgYnJva2VuIikKcC53cml0ZV90ZXh0KHQpCnByaW50KCJPSyBmaXhlZCIsIHAuc3RhdCgpLnN0X3NpemUpCnByaW50KCJ0b3BYIHJlYWw6IiwgIiAgY29uc3QgdG9wWDogbnVtYmVyW10iIGluIHAucmVhZF90ZXh0KCkpCg==" >> /tmp/p.b64
+          base64 -d /tmp/p.b64 > /tmp/fix.py
+          python3 /tmp/fix.py
+      - name: Commit
+        run: |
+          git config user.name tonyx-bot
+          git config user.email bot@tonyx.local
+          git add artifacts/mini-app/src/components/ArenaGame.tsx
+          git commit -m "fix(arena): repair broken newlines in buildStrips 3+ block" || exit 0
+          git push

@@ -50,71 +50,107 @@ type Strip = ArenaPlayer & {
   color: string; index: number; share: number; x0: number; x1: number; midX: number;
   poly: Pt[];
   cx: number; cy: number;
+  shape: string;
 };
 
-function haptic(t: "light" | "medium" | "heavy" = "light") {
-  try { (window as any).Telegram?.WebApp?.HapticFeedback?.impactOccurred?.(t); } catch { /* */ }
-}
-function hapticNotify(t: "success" | "error" | "warning") {
-  try { (window as any).Telegram?.WebApp?.HapticFeedback?.notificationOccurred?.(t); } catch { /* */ }
-}
-function avatarSrc(photoUrl?: string | null, username?: string | null): string | null {
-  if (photoUrl && String(photoUrl).startsWith("http")) return photoUrl;
-  const u = (username || "").replace(/^@/, "").trim();
-  if (u) return `https://t.me/i/userpic/320/${encodeURIComponent(u)}.jpg`;
-  return null;
-}
-
-function initials(name: string | null | undefined, id: string) {
-  return (name || id || "?").replace(/^@/, "").slice(0, 2).toUpperCase();
-}
-function colorFor(i: number) { return COLORS[i % COLORS.length]; }
-function payoutOf(stake: number, pool: number) {
-  return Math.round((stake + (pool - stake) * (1 - COMMISSION)) * 1000) / 1000;
-}
 function hash01(s: string): number {
   let h = 2166136261 >>> 0;
   for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
   return (h >>> 0) / 4294967296;
 }
-function boundaryXs(baseX: number, seed: number, amp: number, steps = 18): Pt[] {
-  const pts: Pt[] = [];
-  for (let i = 0; i <= steps; i++) {
-    const y = (i / steps) * H;
-    const ny = i / steps;
-    const w =
-      Math.sin((ny * 2.15 + seed * 6.28) * Math.PI * 2) * amp +
-      Math.sin((ny * 5.4 + seed * 11.0) * Math.PI * 2) * amp * 0.42 +
-      Math.sin((ny * 9.2 + seed * 3.1) * Math.PI * 2) * amp * 0.18;
-    pts.push({ x: Math.min(W - 0.5, Math.max(0.5, baseX + w)), y });
-  }
-  return pts;
-}
+
+/**
+ * Geometric territories: triangle / rect / trapezoid / diamond / pentagon / chevron.
+ * Area ≈ stake share. Straight edges. Stake up → shape grows.
+ */
 function buildStrips(players: ArenaPlayer[]): Strip[] {
   const list = [...players].filter((p) => p && p.stake > 0);
   const total = list.reduce((s, p) => s + p.stake, 0) || 1;
   const n = list.length;
+  if (n === 0) return [];
+
   const cuts: number[] = [0];
   let acc = 0;
   for (let i = 0; i < n; i++) {
     acc += list[i].stake / total;
-    cuts.push(i === n - 1 ? 1 : acc);
+    cuts.push(i === n - 1 ? 1 : Math.min(0.999, acc));
   }
-  const bounds: Pt[][] = [];
+
+  const KINDS = ["rect", "triangle", "trapezoid", "diamond", "pentagon", "chevron"] as const;
+
+  type Bnd = Pt[];
+  const bounds: Bnd[] = [];
   for (let i = 0; i <= n; i++) {
-    const baseX = cuts[i] * W;
+    const bx = cuts[i] * W;
     if (i === 0) {
-      bounds.push(Array.from({ length: 19 }, (_, k) => ({ x: 0, y: (k / 18) * H })));
-    } else if (i === n) {
-      bounds.push(Array.from({ length: 19 }, (_, k) => ({ x: W, y: (k / 18) * H })));
+      bounds.push([{ x: 0, y: 0 }, { x: 0, y: H }]);
+      continue;
+    }
+    if (i === n) {
+      bounds.push([{ x: W, y: 0 }, { x: W, y: H }]);
+      continue;
+    }
+    const seed = hash01(list[i - 1].telegramId + "|" + list[i].telegramId + "|" + i);
+    const kind = Math.floor(seed * 5);
+    const maxJ = Math.min(cuts[i] - cuts[i - 1], cuts[i + 1] - cuts[i]) * W * 0.45;
+    const j = Math.max(6, maxJ);
+
+    let pts: Pt[];
+    if (kind === 0) {
+      pts = [{ x: bx, y: 0 }, { x: bx, y: H }];
+    } else if (kind === 1) {
+      pts = [{ x: Math.min(W, Math.max(0, bx - j)), y: 0 }, { x: Math.min(W, Math.max(0, bx + j)), y: H }];
+    } else if (kind === 2) {
+      pts = [{ x: Math.min(W, Math.max(0, bx + j)), y: 0 }, { x: Math.min(W, Math.max(0, bx - j)), y: H }];
+    } else if (kind === 3) {
+      const mid = H * (0.35 + seed * 0.3);
+      pts = [
+        { x: bx, y: 0 },
+        { x: Math.min(W, Math.max(0, bx + j)), y: mid },
+        { x: bx, y: H },
+      ];
     } else {
-      const seed = hash01(list[i - 1].telegramId + ":" + list[i].telegramId + ":" + i);
-      const shareL = cuts[i] - cuts[i - 1];
-      const shareR = cuts[i + 1] - cuts[i];
-      const amp = Math.min(28, Math.max(8, Math.min(shareL, shareR) * W * 0.35));
-      bounds.push(boundaryXs(baseX, seed, amp));
+      const mid = H * 0.5;
+      pts = [
+        { x: bx, y: 0 },
+        { x: bx, y: mid },
+        { x: Math.min(W, Math.max(0, bx + (seed > 0.5 ? j : -j))), y: mid },
+        { x: Math.min(W, Math.max(0, bx + (seed > 0.5 ? j : -j))), y: H },
+      ];
+    }
+    bounds.push(pts);
+  }
+
+  if (n === 2) {
+    const a = cuts[1] * W;
+    const seed = hash01(list[0].telegramId + list[1].telegramId);
+    if (seed < 0.34) {
+      bounds[1] = [{ x: a, y: 0 }, { x: Math.min(W, Math.max(0, W - a)), y: H }];
+    } else if (seed < 0.67) {
+      bounds[1] = [
+        { x: a * 0.7, y: 0 },
+        { x: a, y: H * 0.5 },
+        { x: a * 0.7, y: H },
+      ];
+    } else {
+      bounds[1] = [
+        { x: a, y: 0 },
+        { x: a, y: H * 0.4 },
+        { x: Math.min(W, a + (W - a) * 0.25), y: H * 0.4 },
+        { x: Math.min(W, a + (W - a) * 0.25), y: H },
+      ];
     }
   }
+
+  if (n === 1) {
+    return [{
+      ...list[0], color: colorFor(0), index: 0, share: 1,
+      x0: 0, x1: W, midX: W / 2,
+      poly: [{ x: 0, y: 0 }, { x: W, y: 0 }, { x: W, y: H }, { x: 0, y: H }],
+      cx: W / 2, cy: H / 2, shape: "rect",
+    }];
+  }
+
   return list.map((p, i) => {
     const share = p.stake / total;
     const left = bounds[i];
@@ -122,14 +158,19 @@ function buildStrips(players: ArenaPlayer[]): Strip[] {
     const poly: Pt[] = [...left, ...[...right].reverse()];
     let sx = 0, sy = 0;
     for (const q of poly) { sx += q.x; sy += q.y; }
-    const cx = sx / poly.length;
-    const cy = sy / poly.length;
+    const cx = sx / Math.max(1, poly.length);
+    const cy = sy / Math.max(1, poly.length);
     const xs = poly.map((q) => q.x);
     const x0 = Math.min(...xs);
     const x1 = Math.max(...xs);
-    return { ...p, color: colorFor(i), index: i, share, x0, x1, midX: (x0 + x1) / 2, poly, cx, cy };
+    const shape = KINDS[i % KINDS.length];
+    return {
+      ...p, color: colorFor(i), index: i, share,
+      x0, x1, midX: (x0 + x1) / 2, poly, cx, cy, shape,
+    };
   });
 }
+
 function loadChips(): number[] {
   try {
     const raw = localStorage.getItem(CHIPS_KEY);

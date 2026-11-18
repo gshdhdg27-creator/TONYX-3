@@ -1,0 +1,21 @@
+name: winner-modal-v2
+on:
+  workflow_dispatch:
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply
+        run: |
+          cp .github/scripts/WinnerModal.tsx artifacts/mini-app/src/components/WinnerModal.tsx
+          python3 .github/scripts/wm_patch.py
+      - name: Commit
+        run: |
+          git config user.name tonyx-bot
+          git config user.email bot@tonyx.local
+          git add artifacts/mini-app/src/components/WinnerModal.tsx artifacts/mini-app/src/components/ArenaGame.tsx artifacts/mini-app/src/components/SpinGame.tsx
+          git commit -m "feat(pvp): WinnerModal for arena and spin" || exit 0
+          git push

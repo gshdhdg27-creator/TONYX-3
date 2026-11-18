@@ -54,8 +54,9 @@ export function planBouncePath(
   type Cand = { nx: number; ny: number; dist: number; bounces: number };
   const cands: Cand[] = [];
 
-  for (let nx = -6; nx <= 6; nx++) {
-    for (let ny = -6; ny <= 6; ny++) {
+  // Prefer many wall bounces (8–14) and a longer path so the puck races around
+  for (let nx = -12; nx <= 12; nx++) {
+    for (let ny = -12; ny <= 12; ny++) {
       if (nx === 0 && ny === 0) continue;
       const rx = nx % 2 === 0 ? tx0 : pw - tx0;
       const ry = ny % 2 === 0 ? ty0 : ph - ty0;
@@ -63,40 +64,43 @@ export function planBouncePath(
       const gy = ny * ph + ry;
       const dist = Math.hypot(gx - sx, gy - sy);
       const bounces = Math.abs(nx) + Math.abs(ny);
-      if (bounces < 2 || bounces > 9) continue;
-      if (dist < 200 || dist > 1600) continue;
+      if (bounces < 6 || bounces > 16) continue;
+      if (dist < 500 || dist > 3200) continue;
       cands.push({ nx, ny, dist, bounces });
     }
   }
 
   if (cands.length === 0) {
-    for (let nx = -4; nx <= 4; nx++) {
-      for (let ny = -4; ny <= 4; ny++) {
+    for (let nx = -8; nx <= 8; nx++) {
+      for (let ny = -8; ny <= 8; ny++) {
         if (nx === 0 && ny === 0) continue;
         const rx = nx % 2 === 0 ? tx0 : pw - tx0;
         const ry = ny % 2 === 0 ? ty0 : ph - ty0;
         const gx = nx * pw + rx;
         const gy = ny * ph + ry;
         const dist = Math.hypot(gx - sx, gy - sy);
-        cands.push({ nx, ny, dist, bounces: Math.abs(nx) + Math.abs(ny) });
+        const bounces = Math.abs(nx) + Math.abs(ny);
+        if (bounces < 4) continue;
+        cands.push({ nx, ny, dist, bounces });
       }
     }
   }
 
   cands.sort((a, b) => {
-    const score = (c: Cand) => Math.abs(c.bounces - 5) * 80 + Math.abs(c.dist - 600);
+    // Prefer ~10 bounces and long travel (~1200–1800)
+    const score = (c: Cand) => Math.abs(c.bounces - 10) * 40 + Math.abs(c.dist - 1400) * 0.15;
     return score(a) - score(b);
   });
 
-  const top = cands.slice(0, Math.min(10, cands.length));
-  const pick = top[Math.floor(rng() * top.length)] ?? { nx: 1, ny: 1, dist: 400, bounces: 2 };
+  const top = cands.slice(0, Math.min(14, cands.length));
+  const pick = top[Math.floor(rng() * top.length)] ?? { nx: 3, ny: 4, dist: 1200, bounces: 7 };
 
   const rx = pick.nx % 2 === 0 ? tx0 : pw - tx0;
   const ry = pick.ny % 2 === 0 ? ty0 : ph - ty0;
   const gx = pick.nx * pw + rx;
   const gy = pick.ny * ph + ry;
 
-  const samples = Math.max(80, Math.floor(pick.dist / 4));
+  const samples = Math.max(120, Math.floor(pick.dist / 3));
   const pts: PathPoint[] = [];
 
   for (let i = 0; i <= samples; i++) {

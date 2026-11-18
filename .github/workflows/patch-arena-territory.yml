@@ -1,0 +1,57 @@
+name: patch-arena-territory
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/patch-arena-territory.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Portals-style organic territories
+        run: |
+          python3 << 'ENDSCRIPT'
+          from pathlib import Path
+
+          p = Path("artifacts/mini-app/src/components/ArenaGame.tsx")
+          t = p.read_text()
+          if "function boundaryXs" in t and "clipPath" in t:
+              print("already done")
+              raise SystemExit(0)
+
+          old_type = "type Strip = ArenaPlayer & { color: string; index: number; share: number; x0: number; x1: number; midX: number };"
+          new_type = """type Pt = { x: number; y: number };\ntype Strip = ArenaPlayer & {\n  color: string; index: number; share: number; x0: number; x1: number; midX: number;\n  poly: Pt[];\n  cx: number; cy: number;\n};"""
+          if old_type not in t:
+              raise SystemExit("type miss")
+          t = t.replace(old_type, new_type)
+
+          old_build = """function buildStrips(players: ArenaPlayer[]): Strip[] {\n  const list = [...players].filter((p) => p && p.stake > 0);\n  const total = list.reduce((s, p) => s + p.stake, 0) || 1;\n  let acc = 0;\n  return list.map((p, i) => {\n    const share = p.stake / total;\n    const x0 = Math.round(acc * W * 1000) / 1000;\n    acc += share;\n    const x1 = i === list.length - 1 ? W : Math.round(acc * W * 1000) / 1000;\n    return { ...p, color: colorFor(i), index: i, share, x0, x1, midX: (x0 + x1) / 2 };\n  });\n}"""
+
+          new_build = """function hash01(s: string): number {\n  let h = 2166136261 >>> 0;\n  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }\n  return (h >>> 0) / 4294967296;\n}\nfunction boundaryXs(baseX: number, seed: number, amp: number, steps = 18): Pt[] {\n  const pts: Pt[] = [];\n  for (let i = 0; i <= steps; i++) {\n    const y = (i / steps) * H;\n    const ny = i / steps;\n    const w =\n      Math.sin((ny * 2.15 + seed * 6.28) * Math.PI * 2) * amp +\n      Math.sin((ny * 5.4 + seed * 11.0) * Math.PI * 2) * amp * 0.42 +\n      Math.sin((ny * 9.2 + seed * 3.1) * Math.PI * 2) * amp * 0.18;\n    pts.push({ x: Math.min(W - 0.5, Math.max(0.5, baseX + w)), y });\n  }\n  return pts;\n}\nfunction buildStrips(players: ArenaPlayer[]): Strip[] {\n  const list = [...players].filter((p) => p && p.stake > 0);\n  const total = list.reduce((s, p) => s + p.stake, 0) || 1;\n  const n = list.length;\n  const cuts: number[] = [0];\n  let acc = 0;\n  for (let i = 0; i < n; i++) {\n    acc += list[i].stake / total;\n    cuts.push(i === n - 1 ? 1 : acc);\n  }\n  const bounds: Pt[][] = [];\n  for (let i = 0; i <= n; i++) {\n    const baseX = cuts[i] * W;\n    if (i === 0) {\n      bounds.push(Array.from({ length: 19 }, (_, k) => ({ x: 0, y: (k / 18) * H })));\n    } else if (i === n) {\n      bounds.push(Array.from({ length: 19 }, (_, k) => ({ x: W, y: (k / 18) * H })));\n    } else {\n      const seed = hash01(list[i - 1].telegramId + \":\" + list[i].telegramId + \":\" + i);\n      const shareL = cuts[i] - cuts[i - 1];\n      const shareR = cuts[i + 1] - cuts[i];\n      const amp = Math.min(28, Math.max(8, Math.min(shareL, shareR) * W * 0.35));\n      bounds.push(boundaryXs(baseX, seed, amp));\n    }\n  }\n  return list.map((p, i) => {\n    const share = p.stake / total;\n    const left = bounds[i];\n    const right = bounds[i + 1];\n    const poly: Pt[] = [...left, ...[...right].reverse()];\n    let sx = 0, sy = 0;\n    for (const q of poly) { sx += q.x; sy += q.y; }\n    const cx = sx / poly.length;\n    const cy = sy / poly.length;\n    const xs = poly.map((q) => q.x);\n    const x0 = Math.min(...xs);\n    const x1 = Math.max(...xs);\n    return { ...p, color: colorFor(i), index: i, share, x0, x1, midX: (x0 + x1) / 2, poly, cx, cy };\n  });\n}"""
+
+          if old_build not in t:
+              raise SystemExit("build miss")
+          t = t.replace(old_build, new_build)
+
+          old_map = """          ) : strips.map((s) => {\n            const width = Math.max(2, s.x1 - s.x0);\n            const av = Math.min(48, Math.max(22, width - 8));\n            return (\n              <div key={s.telegramId} style={{{\n                position: \"absolute\", left: s.x0, top: 0, width, height: \"100%\",\n                background: s.color, borderRight: \"1px solid rgba(0,0,0,0.25)\",\n                display: \"flex\", flexDirection: \"column\", alignItems: \"center\", paddingTop: 12,\n                boxSizing: \"border-box\", overflow: \"hidden\", zIndex: 1,\n                transition: phase === \"lobby\" ? \"left .3s ease, width .3s ease\" : \"none\",\n              }}>"""
+
+          new_map = """          ) : strips.map((s) => {\n            const width = Math.max(2, s.x1 - s.x0);\n            const av = Math.min(48, Math.max(22, width - 8));\n            const clip = (s.poly && s.poly.length)\n              ? `polygon(${s.poly.map((q) => `${(q.x / W) * 100}% ${(q.y / H) * 100}%`).join(\", \")})`\n              : undefined;\n            return (\n              <div key={s.telegramId} style={{{\n                position: \"absolute\", left: 0, top: 0, width: W, height: H,\n                background: s.color,\n                clipPath: clip,\n                WebkitClipPath: clip,\n                display: \"flex\", flexDirection: \"column\", alignItems: \"center\",\n                paddingTop: Math.max(12, Math.min(H - 80, (s.cy || H * 0.28) - av / 2)),\n                boxSizing: \"border-box\", overflow: \"hidden\", zIndex: 1,\n                transition: phase === \"lobby\" ? \"clip-path .45s ease\" : \"none\",\n              }}>"""
+
+          if old_map not in t:
+              raise SystemExit("map miss")
+          t = t.replace(old_map, new_map)
+
+          p.write_text(t)
+          print("ok", "boundaryXs" in t, "clipPath" in t)
+          ENDSCRIPT
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add artifacts/mini-app/src/components/ArenaGame.tsx
+          git diff --cached --stat
+          git commit -m "feat(arena): Portals-style organic territories by stake %" || exit 0
+          git push origin HEAD:main

@@ -632,53 +632,58 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
 
       {/* Fixed bets ABOVE bottom menu */}
       <div style={betBar}>
-        <div style={{ display: "flex", justifyContent: "center", marginBottom: 8 }}>
-          <div style={{
-            display: "inline-flex", alignItems: "center", gap: 2, padding: 3,
-            borderRadius: 999, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)",
-          }}>
-            <button type="button" disabled={busy || !canBet}
-              onClick={() => { setBetMode("gift"); loadGifts(true); }}
-              style={{
-                width: 40, height: 32, borderRadius: 999, border: "none", cursor: canBet && !busy ? "pointer" : "default",
-                display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16,
-                background: betMode === "gift" ? "#3b82f6" : "transparent",
-                color: betMode === "gift" ? "#fff" : "rgba(255,255,255,0.55)",
-                opacity: canBet && !busy ? 1 : 0.5,
-              }}>🎁</button>
-            <button type="button" disabled={busy || !canBet}
-              onClick={() => setBetMode("ton")}
-              style={{
-                width: 40, height: 32, borderRadius: 999, border: "none", cursor: canBet && !busy ? "pointer" : "default",
-                display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15,
-                background: betMode === "ton" ? "#3b82f6" : "transparent",
-                color: betMode === "ton" ? "#fff" : "rgba(255,255,255,0.55)",
-                opacity: canBet && !busy ? 1 : 0.5,
-              }}>💎</button>
-          </div>
-        </div>
-
         {betMode === "ton" ? (
           <>
-            <div style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: "center", flexWrap: "wrap" }}>
-              <button type="button" onClick={openEdit} style={editBtn} title="Изменить">✎</button>
+            <div style={{
+              display: "flex", gap: 6, alignItems: "center", justifyContent: "flex-start",
+              flexWrap: "nowrap", overflowX: "auto", width: "100%", paddingBottom: 2,
+            }}>
+              {/* 🎁 / 💎 слева */}
+              <div style={{
+                display: "inline-flex", alignItems: "center", gap: 2, padding: 3, flexShrink: 0,
+                borderRadius: 999, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)",
+              }}>
+                <button type="button" disabled={busy || !canBet}
+                  onClick={() => { setBetMode("gift"); loadGifts(true); }}
+                  style={{
+                    width: 36, height: 30, borderRadius: 999, border: "none", cursor: canBet && !busy ? "pointer" : "default",
+                    display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15,
+                    background: betMode === "gift" ? "#3b82f6" : "transparent",
+                    color: betMode === "gift" ? "#fff" : "rgba(255,255,255,0.55)",
+                    opacity: canBet && !busy ? 1 : 0.5,
+                  }}>🎁</button>
+                <button type="button" disabled={busy || !canBet}
+                  onClick={() => setBetMode("ton")}
+                  style={{
+                    width: 36, height: 30, borderRadius: 999, border: "none", cursor: canBet && !busy ? "pointer" : "default",
+                    display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14,
+                    background: betMode === "ton" ? "#3b82f6" : "transparent",
+                    color: betMode === "ton" ? "#fff" : "rgba(255,255,255,0.55)",
+                    opacity: canBet && !busy ? 1 : 0.5,
+                  }}>💎</button>
+              </div>
+
+              <button type="button" onClick={openEdit} style={{ ...editBtn, flexShrink: 0 }} title="Изменить">✎</button>
               {chips.map((v, i) => (
                 <button key={i} type="button" disabled={busy || !canBet} onClick={() => placeBet(v)}
                   style={{
-                    ...chip, opacity: busy || !canBet ? 0.45 : 1,
+                    ...chip, opacity: busy || !canBet ? 0.45 : 1, flexShrink: 0,
                     cursor: busy || !canBet ? "not-allowed" : "pointer",
-                    display: "inline-flex", alignItems: "center", gap: 4,
+                    display: "inline-flex", alignItems: "center", gap: 3,
+                    padding: "8px 12px",
                     background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", color: "#e2e8f0",
                   }}>
-                  {v} <span style={{ opacity: 0.85, fontSize: 12 }}>💎</span>
+                  {v} <span style={{ opacity: 0.85, fontSize: 11 }}>💎</span>
                 </button>
               ))}
               <button type="button" disabled={busy || !canBet || balanceTon < MIN_STAKE}
                 onClick={() => placeBet(Math.floor(balanceTon * 1000) / 1000)}
                 style={{
-                  ...chip, opacity: busy || !canBet || balanceTon < MIN_STAKE ? 0.45 : 1,
+                  ...chip, opacity: busy || !canBet || balanceTon < MIN_STAKE ? 0.45 : 1, flexShrink: 0,
                   cursor: busy || !canBet ? "not-allowed" : "pointer",
+                  padding: "8px 14px",
                   background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", color: "#e2e8f0",
+                  whiteSpace: "nowrap",
                 }}>
                 Ва-банк
               </button>
@@ -689,13 +694,37 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
             </div>
           </>
         ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "center" }}>
-            <div style={{ display: "flex", gap: 8, width: "100%", maxWidth: 360 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <div style={{ display: "flex", gap: 8, alignItems: "center", width: "100%" }}>
+              {/* 🎁 / 💎 слева и в gift-режиме */}
+              <div style={{
+                display: "inline-flex", alignItems: "center", gap: 2, padding: 3, flexShrink: 0,
+                borderRadius: 999, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)",
+              }}>
+                <button type="button" disabled={busy || !canBet}
+                  onClick={() => { setBetMode("gift"); loadGifts(true); }}
+                  style={{
+                    width: 36, height: 30, borderRadius: 999, border: "none", cursor: canBet && !busy ? "pointer" : "default",
+                    display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15,
+                    background: betMode === "gift" ? "#3b82f6" : "transparent",
+                    color: betMode === "gift" ? "#fff" : "rgba(255,255,255,0.55)",
+                    opacity: canBet && !busy ? 1 : 0.5,
+                  }}>🎁</button>
+                <button type="button" disabled={busy || !canBet}
+                  onClick={() => setBetMode("ton")}
+                  style={{
+                    width: 36, height: 30, borderRadius: 999, border: "none", cursor: canBet && !busy ? "pointer" : "default",
+                    display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14,
+                    background: betMode === "ton" ? "#3b82f6" : "transparent",
+                    color: betMode === "ton" ? "#fff" : "rgba(255,255,255,0.55)",
+                    opacity: canBet && !busy ? 1 : 0.5,
+                  }}>💎</button>
+              </div>
               <button type="button" disabled={!canBet || busy}
                 onClick={() => { setGiftPickerOpen(true); loadGifts(true); }}
                 style={{
-                  flex: 1, padding: "12px 16px", borderRadius: 999, border: "none",
-                  background: "#f8fafc", color: "#0f172a", fontWeight: 800, fontSize: 14,
+                  flex: 1, padding: "10px 14px", borderRadius: 999, border: "none",
+                  background: "#f8fafc", color: "#0f172a", fontWeight: 800, fontSize: 13,
                   cursor: canBet && !busy ? "pointer" : "not-allowed", opacity: canBet && !busy ? 1 : 0.5,
                 }}>
                 Выбрать гифты{selectedGiftIds.length ? ` (${selectedGiftIds.length})` : ""}
@@ -703,9 +732,9 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
               <button type="button" disabled={busy || !canBet || selectedGiftIds.length === 0}
                 onClick={placeGiftBet}
                 style={{
-                  padding: "12px 16px", borderRadius: 999, border: "none",
+                  padding: "10px 14px", borderRadius: 999, border: "none", flexShrink: 0,
                   background: selectedGiftIds.length && canBet && !busy ? "linear-gradient(135deg,#3b82f6,#60a5fa)" : "rgba(255,255,255,0.08)",
-                  color: "#fff", fontWeight: 900, fontSize: 13, minWidth: 88,
+                  color: "#fff", fontWeight: 900, fontSize: 13, minWidth: 80,
                   cursor: busy || !canBet || !selectedGiftIds.length ? "not-allowed" : "pointer",
                   opacity: selectedGiftIds.length ? 1 : 0.5,
                 }}>
@@ -713,7 +742,7 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
               </button>
             </div>
             {selectedGifts.length > 0 && (
-              <div style={{ fontSize: 12, color: "#94a3b8" }}>
+              <div style={{ fontSize: 12, color: "#94a3b8", textAlign: "center" }}>
                 {selectedGifts.length === 1
                   ? `${selectedGifts[0].nameRu} · ${selectedGifts[0].valueTon} TON`
                   : `${selectedGifts.length} NFT · ${giftStakeTotal.toFixed(2)} TON`}

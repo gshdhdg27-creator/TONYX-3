@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
-import { usersTable, miniArenaRoomsTable } from "@workspace/db/schema";
+import { usersTable, miniArenaRoomsTable, miniUserInventoryTable } from "@workspace/db/schema";
 import { eq, desc, or, and, gte, inArray } from "drizzle-orm";
 import {
   generateServerSeed,
@@ -9,6 +9,7 @@ import {
   pickWinnerByHash,
 } from "../../lib/fairness.js";
 import { isGameEnabled, GAME_DISABLED_MESSAGE } from "../../lib/game-config.js";
+import { getNftCollection } from "../../lib/nft-catalog.js";
 
 const router: IRouter = Router();
 
@@ -17,7 +18,21 @@ const COMMISSION_RATE = 0.20;
 const MIN_STAKE = 0.1;
 const MIN_PLAYERS = 2;
 
-type ArenaPlayer = { telegramId: string; username: string | null; stake: number };
+type NftStake = {
+  inventoryId: number;
+  itemId: string;
+  valueTon: number;
+  nameRu?: string;
+  imageUrl?: string | null;
+  meta?: Record<string, unknown>;
+};
+
+type ArenaPlayer = {
+  telegramId: string;
+  username: string | null;
+  stake: number;
+  nftStakes?: NftStake[];
+};
 
 async function formatArena(room: typeof miniArenaRoomsTable.$inferSelect) {
   const players = (room.players as ArenaPlayer[]) ?? [];
@@ -57,6 +72,7 @@ async function formatArena(room: typeof miniArenaRoomsTable.$inferSelect) {
       stake: p.stake,
       chance: totalPool > 0 ? Math.round((p.stake / totalPool) * 10000) / 100 : 0,
       photoUrl: photoById.get(p.telegramId) ?? null,
+      nftStakes: p.nftStakes ?? [],
     })),
     winnerId: room.winnerId ?? null,
     winnerUsername: room.winnerUsername ?? null,
@@ -153,6 +169,61 @@ async function resolveArena(arenaId: number) {
   const winnerStake = winner.stake;
   const othersPool = totalPool - winnerStake;
   const payout = Math.round((winnerStake + othersPool * (1 - COMMISSION_RATE)) * 1000) / 1000;
+  const commissionTon = Math.round(othersPool * COMMISSION_RATE * 1000) / 1000;
+
+  // NFT stakes: losers' gifts → winner (or SYSTEM if commission > winner stake)
+  for (const p of players) {
+    const stakes = p.nftStakes ?? [];
+    if (!stakes.length) continue;
+    for (const ns of stakes) {
+      try {
+        const item = await db
+          .select()
+          .from(miniUserInventoryTable)
+          .where(eq(miniUserInventoryTable.id, ns.inventoryId))
+          .then((r) => r[0] ?? null);
+        if (!item) continue;
+        const m = { ...(item.meta ?? {}) } as Record<string, unknown>;
+        delete m.listed;
+        delete m.priceTon;
+        delete m.listedAt;
+        delete m.spinLocked;
+        delete m.arenaLocked;
+        delete m.arenaRoundId;
+        if (p.telegramId === winner.telegramId) {
+          await db
+            .update(miniUserInventoryTable)
+            .set({
+              telegramId: winner.telegramId,
+              meta: { ...m, source: "arena_win_own", arenaRoundId: arenaId },
+              acquiredAt: new Date(),
+            })
+            .where(eq(miniUserInventoryTable.id, item.id));
+          continue;
+        }
+        const toSystem = commissionTon > winnerStake + 1e-9;
+        const dest = toSystem ? "SYSTEM_PVP_ARENA" : winner.telegramId;
+        await db
+          .update(miniUserInventoryTable)
+          .set({
+            telegramId: dest,
+            meta: {
+              ...m,
+              source: toSystem ? "arena_commission" : "arena_win",
+              fromPlayer: p.telegramId,
+              arenaRoundId: arenaId,
+              game: "arena",
+              commissionTon,
+              winnerStake,
+            },
+            acquiredAt: new Date(),
+          })
+          .where(eq(miniUserInventoryTable.id, item.id));
+      } catch (e) {
+        console.error("[arena/resolve nft]", e);
+      }
+    }
+  }
 
   await db
     .update(miniArenaRoomsTable)
@@ -325,14 +396,80 @@ router.post("/join", async (req, res) => {
     res.status(403).json({ error: GAME_DISABLED_MESSAGE });
     return;
   }
-  const { telegramId, stake } = req.body as { telegramId?: string; stake?: number };
-  if (!telegramId || typeof stake !== "number" || stake < MIN_STAKE) {
+  const body = req.body as {
+    telegramId?: string;
+    stake?: number;
+    giftInventoryId?: number;
+    inventoryId?: number;
+    giftInventoryIds?: number[];
+  };
+  const telegramId = body.telegramId;
+  const idsFromArray = Array.isArray(body.giftInventoryIds)
+    ? body.giftInventoryIds.map((x) => Number(x)).filter((n) => n > 0)
+    : [];
+  const singleId = Number(body.giftInventoryId ?? body.inventoryId ?? 0) || 0;
+  const giftIds = [...new Set(idsFromArray.length ? idsFromArray : singleId ? [singleId] : [])];
+  const isGift = giftIds.length > 0;
+  const stakeIn = typeof body.stake === "number" ? body.stake : 0;
+
+  if (!telegramId) {
+    res.status(400).json({ error: "telegramId обязателен" });
+    return;
+  }
+  if (!isGift && (typeof stakeIn !== "number" || stakeIn < MIN_STAKE)) {
     res.status(400).json({ error: `telegramId и stake >= ${MIN_STAKE} обязательны` });
     return;
   }
+
   const user = await db.select().from(usersTable).where(eq(usersTable.telegramId, telegramId)).then((r) => r[0] ?? null);
   if (!user) { res.status(404).json({ error: "Пользователь не найден" }); return; }
-  if (Number(user.ton) < stake) { res.status(400).json({ error: "Недостаточно TON" }); return; }
+
+  const nftStakes: NftStake[] = [];
+  let stakeR = 0;
+
+  if (isGift) {
+    for (const giftInventoryId of giftIds) {
+      const item = await db
+        .select()
+        .from(miniUserInventoryTable)
+        .where(and(eq(miniUserInventoryTable.id, giftInventoryId), eq(miniUserInventoryTable.telegramId, telegramId)))
+        .then((r) => r[0] ?? null);
+      if (!item) { res.status(404).json({ error: "Подарок не найден в инвентаре" }); return; }
+      const t = String(item.itemType || "").toLowerCase();
+      if (!(t.includes("nft") || t.includes("gift"))) {
+        res.status(400).json({ error: "Можно ставить только NFT подарок" }); return;
+      }
+      const m = (item.meta ?? {}) as Record<string, unknown>;
+      if (m.listed === true || m.spinLocked === true || m.arenaLocked === true) {
+        res.status(400).json({ error: "Подарок недоступен для ставки" }); return;
+      }
+      const col = getNftCollection(item.itemId);
+      const valueTon = Math.max(
+        0.1,
+        Number(m.priceTon) || Number(m.valueTon) || col?.valueTon || 1
+      );
+      const v = Math.round(valueTon * 1000) / 1000;
+      stakeR = Math.round((stakeR + v) * 1000) / 1000;
+      const nameRu = String(m.giftName || m.nameRu || col?.nameRu || item.itemId);
+      const imageUrl = (m.imageUrl as string | null | undefined) ?? col?.imageUrl ?? null;
+      nftStakes.push({ inventoryId: item.id, itemId: item.itemId, valueTon: v, nameRu, imageUrl, meta: m });
+      await db
+        .update(miniUserInventoryTable)
+        .set({
+          meta: {
+            ...m,
+            arenaLocked: true,
+            arenaRoundPending: true,
+            lockedAt: new Date().toISOString(),
+          },
+        })
+        .where(eq(miniUserInventoryTable.id, item.id));
+    }
+  } else {
+    if (Number(user.ton) < stakeIn) { res.status(400).json({ error: "Недостаточно TON" }); return; }
+    stakeR = Math.round(stakeIn * 1000) / 1000;
+    await db.update(usersTable).set({ ton: String(Math.round((Number(user.ton) - stakeR) * 1000) / 1000), updatedAt: new Date() }).where(eq(usersTable.telegramId, telegramId));
+  }
 
   let arena = await getActiveArena();
   arena = await maybeResolveExpired(arena);
@@ -362,10 +499,10 @@ router.post("/join", async (req, res) => {
     res.status(400).json({ error: "Вы уже участвуете в арене" }); return;
   }
 
-  const stakeR = Math.round(stake * 1000) / 1000;
-  await db.update(usersTable).set({ ton: String(Math.round((Number(user.ton) - stakeR) * 1000) / 1000), updatedAt: new Date() }).where(eq(usersTable.telegramId, telegramId));
-
-  const newPlayers: ArenaPlayer[] = [...players, { telegramId, username: user.username ?? null, stake: stakeR }];
+  const newPlayers: ArenaPlayer[] = [
+    ...players,
+    { telegramId, username: user.username ?? null, stake: stakeR, nftStakes: nftStakes.length ? nftStakes : undefined },
+  ];
   const newPool = Math.round((Number(arena.totalPool) + stakeR) * 1000) / 1000;
 
   let newStatus = arena.status;

@@ -10,12 +10,21 @@ const COLORS = [
   "#f87171", "#22d3ee", "#c084fc", "#fb923c", "#4ade80",
 ];
 
+type NftStakeInfo = {
+  inventoryId: number;
+  itemId: string;
+  valueTon: number;
+  nameRu?: string;
+  imageUrl?: string | null;
+};
+
 type Player = {
   telegramId: string;
   username: string | null;
   stake: number;
   chance: number;
   photoUrl?: string | null;
+  nftStakes?: NftStakeInfo[];
 };
 
 type Round = {
@@ -29,14 +38,6 @@ type Round = {
   finishedAt: string | null;
   stopFrac: number | null;
   fair?: FairData | null;
-};
-
-type GiftItem = {
-  id: number;
-  itemId: string;
-  nameRu: string;
-  valueTon: number;
-  imageUrl: string | null;
 };
 
 function useCountdown(startAt: string | null): number | null {
@@ -86,23 +87,25 @@ export function JackpotWheel({
   players: Player[];
   rotateDeg: number;
   spinning: boolean;
-  centerLabel: string;
-  centerGreen: boolean;
+  winnerId?: string | null;
+  stopFrac?: number;
+  spinKey?: number;
+  centerLabel?: string;
+  centerGreen?: boolean;
 }) {
   const sectors = useMemo(() => buildSectors(players), [players]);
-  const gradient =
-    sectors.length === 0
-      ? "conic-gradient(#334155 0deg 360deg)"
-      : `conic-gradient(${sectors
-          .map((s) => `${s.color} ${s.startDeg}deg ${s.endDeg}deg`)
-          .join(", ")})`;
+  const gradient = sectors.length
+    ? `conic-gradient(${sectors
+        .map((s) => `${s.color} ${s.startDeg}deg ${s.endDeg}deg`)
+        .join(", ")})`
+    : "radial-gradient(circle at 40% 35%, #2a1845, #12081f)";
 
   return (
     <div style={{ position: "relative", width: WHEEL_SIZE, height: WHEEL_SIZE, margin: "0 auto" }}>
       <div
         style={{
           position: "absolute",
-          top: -6,
+          top: -8,
           left: "50%",
           transform: "translateX(-50%)",
           width: 0,
@@ -110,27 +113,33 @@ export function JackpotWheel({
           borderLeft: "10px solid transparent",
           borderRight: "10px solid transparent",
           borderTop: "16px solid #fbbf24",
-          zIndex: 5,
-          filter: "drop-shadow(0 2px 4px rgba(0,0,0,0.5))",
+          zIndex: 6,
         }}
       />
+
       <div
         style={{
-          width: WHEEL_SIZE,
-          height: WHEEL_SIZE,
+          position: "absolute",
+          inset: 0,
           borderRadius: "50%",
           background: gradient,
+          border: "3px solid rgba(167,139,250,0.45)",
+          boxShadow: spinning
+            ? "0 0 50px rgba(167,139,250,0.55), 0 0 80px rgba(251,191,36,0.2)"
+            : "0 0 40px rgba(167,139,250,0.25)",
+          transition: spinning
+            ? "transform 5.2s cubic-bezier(0.08, 0.65, 0.12, 1)"
+            : "box-shadow 0.3s ease",
           transform: `rotate(${rotateDeg}deg)`,
-          transition: spinning ? "transform 5.2s cubic-bezier(0.12, 0.75, 0.12, 1)" : "none",
-          boxShadow: "0 0 0 4px rgba(255,255,255,0.08), 0 12px 40px rgba(0,0,0,0.45)",
-          position: "relative",
+          willChange: "transform",
+          overflow: "hidden",
         }}
       >
         {sectors.map((s) => {
           if (s.share < AVATAR_MIN_SHARE) return null;
-          const mid = (s.startDeg + s.endDeg) / 2;
+          const mid = (s.start + s.end) / 2;
+          const rad = ((mid * 360 - 90) * Math.PI) / 180;
           const r = WHEEL_SIZE * 0.32;
-          const rad = ((mid - 90) * Math.PI) / 180;
           const x = WHEEL_SIZE / 2 + Math.cos(rad) * r;
           const y = WHEEL_SIZE / 2 + Math.sin(rad) * r;
           return (
@@ -140,47 +149,67 @@ export function JackpotWheel({
                 position: "absolute",
                 left: x,
                 top: y,
-                width: 36,
-                height: 36,
-                marginLeft: -18,
-                marginTop: -18,
+                width: 28,
+                height: 28,
+                marginLeft: -14,
+                marginTop: -14,
                 borderRadius: "50%",
                 overflow: "hidden",
-                border: "2px solid rgba(255,255,255,0.85)",
-                background: "#1e293b",
+                border: "2px solid rgba(255,255,255,0.55)",
+                background: "#1e1b2e",
                 transform: `rotate(${-rotateDeg}deg)`,
                 transition: spinning ? "none" : "left 0.55s ease, top 0.55s ease",
+                zIndex: 4,
               }}
             >
               {s.photoUrl ? (
                 <img src={s.photoUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
               ) : (
-                <div style={{ width: "100%", height: "100%", display: "grid", placeItems: "center", fontSize: 12, fontWeight: 800 }}>
-                  {(s.username || "?")[0]?.toUpperCase()}
+                <div
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: 11,
+                    fontWeight: 800,
+                    color: "#e2e8f0",
+                  }}
+                >
+                  {(s.username || "?")[0].toUpperCase()}
                 </div>
               )}
             </div>
           );
         })}
-        <div
-          style={{
-            position: "absolute",
-            inset: "32%",
-            borderRadius: "50%",
-            background: centerGreen
-              ? "radial-gradient(circle, #166534 0%, #14532d 100%)"
-              : "radial-gradient(circle, #1e293b 0%, #0f172a 100%)",
-            border: "3px solid rgba(255,255,255,0.12)",
-            display: "grid",
-            placeItems: "center",
-            fontWeight: 900,
-            fontSize: centerLabel.length > 3 ? 18 : 28,
-            color: "#f8fafc",
-            boxShadow: "inset 0 0 20px rgba(0,0,0,0.35)",
-          }}
-        >
-          {centerLabel}
-        </div>
+      </div>
+
+      <div
+        style={{
+          position: "absolute",
+          inset: "30%",
+          borderRadius: "50%",
+          background: centerGreen
+            ? "radial-gradient(circle at 40% 35%, #166534, #0f172a)"
+            : "radial-gradient(circle at 40% 35%, #2a1845, #0f0818)",
+          border: centerGreen
+            ? "2px solid rgba(74,222,128,0.55)"
+            : "2px solid rgba(255,255,255,0.12)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          color: centerGreen ? "#4ade80" : "#f1f5f9",
+          fontWeight: 900,
+          fontSize: centerLabel && centerLabel.length <= 2 ? 28 : 15,
+          zIndex: 5,
+          transition: "background 0.3s ease, color 0.3s ease, border 0.3s ease",
+          textAlign: "center",
+          lineHeight: 1.1,
+          padding: 4,
+        }}
+      >
+        {centerLabel || "PvP"}
       </div>
     </div>
   );
@@ -188,87 +217,149 @@ export function JackpotWheel({
 
 export default function SpinGame({
   telegramId,
+  tonBalance,
   onBalanceChange,
 }: {
-  telegramId: string | null;
+  telegramId: string;
+  tonBalance: number;
   onBalanceChange: () => void;
 }) {
   const [round, setRound] = useState<Round | null>(null);
-  const [lockedPlayers, setLockedPlayers] = useState<Player[]>([]);
   const [bet, setBet] = useState("1");
   const [betMode, setBetMode] = useState<"ton" | "gift">("ton");
-  const [gifts, setGifts] = useState<GiftItem[]>([]);
+  const [gifts, setGifts] = useState<Array<{ id: number; itemId: string; nameRu: string; valueTon: number; imageUrl: string | null; locked?: boolean }>>([]);
   const [giftsLoading, setGiftsLoading] = useState(false);
-  const [selectedGiftId, setSelectedGiftId] = useState<number | null>(null);
+  const [selectedGiftIds, setSelectedGiftIds] = useState<number[]>([]);
+  const [giftPickerOpen, setGiftPickerOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [rotateDeg, setRotateDeg] = useState(0);
   const [spinning, setSpinning] = useState(false);
-  const [winnerBanner, setWinnerBanner] = useState<string | null>(null);
+  const [rotateDeg, setRotateDeg] = useState(0);
+  const [error, setError] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
+  const [winnerBanner, setWinnerBanner] = useState<{
+    name: string;
+    payout: number;
+    chance: number;
+  } | null>(null);
+  // Keep last non-empty players so wheel sectors never flash empty
+  const [lockedPlayers, setLockedPlayers] = useState<Player[]>([]);
+
   const spinningRef = useRef(false);
   const replayingRef = useRef(false);
+  const rotateDegRef = useRef(0);
   const spunForId = useRef<number | null>(null);
   const spinTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const rotateRef = useRef(0);
 
-  const countdown = useCountdown(round?.startAt ?? null);
+  const countdown = useCountdown(
+    round?.status === "starting" ? round.startAt : null
+  );
 
-  const startSpin = useCallback((data: Round) => {
-    if (!data.winnerId || !data.players?.length) return;
-    if (spinningRef.current && spunForId.current === data.id && !replayingRef.current) return;
+  const startSpin = useCallback(
+    (data: Round) => {
+      if (spinningRef.current) return;
+      if (!data.winnerId || !data.players?.length) return;
+      spinningRef.current = true;
+      if (spinTimerRef.current) {
+        clearTimeout(spinTimerRef.current);
+        spinTimerRef.current = null;
+      }
 
-    const sectors = buildSectors(data.players);
-    const winner = sectors.find((s) => s.telegramId === data.winnerId);
-    if (!winner) return;
+      setRound(data);
+      setWinnerBanner(null);
+      if (data.players?.length) setLockedPlayers(data.players);
+      setSpinning(true);
 
-    spinningRef.current = true;
-    setSpinning(true);
-    setWinnerBanner(null);
-    setLockedPlayers(data.players);
-    setRound(data);
-    spunForId.current = data.id;
+      const sectors = buildSectors(data.players);
+      const winner =
+        sectors.find((s) => s.telegramId === data.winnerId) ?? sectors[0];
+      if (!winner) {
+        spinningRef.current = false;
+        setSpinning(false);
+        replayingRef.current = false;
+        return;
+      }
 
-    const frac = typeof data.stopFrac === "number" ? data.stopFrac : 0.5;
-    const targetMid = (winner.startDeg + winner.endDeg) / 2;
-    const stopAt = winner.startDeg + (winner.endDeg - winner.startDeg) * frac;
-    const pointer = 0;
-    const current = ((rotateRef.current % 360) + 360) % 360;
-    const need = (360 - ((stopAt - pointer) % 360) + 360) % 360;
-    const extra = 360 * 6 + need - current;
-    const next = rotateRef.current + extra;
-    rotateRef.current = next;
-    setRotateDeg(next);
+      const turns = 6 + Math.floor(Math.random() * 2);
+      const from = rotateDegRef.current;
+      const span = Math.max(0.01, winner.endDeg - winner.startDeg);
+      const pad = Math.min(span * 0.1, 3);
+      const frac =
+        typeof data.stopFrac === "number"
+          ? Math.min(1, Math.max(0, data.stopFrac))
+          : 0.5;
+      const stopDeg = winner.startDeg + pad + frac * Math.max(0.01, span - pad * 2);
+      const adj = (((-stopDeg - from) % 360) + 360) % 360;
+      const endAngle = from + turns * 360 + adj;
 
-    if (spinTimerRef.current) clearTimeout(spinTimerRef.current);
-    spinTimerRef.current = setTimeout(() => {
-      spinningRef.current = false;
-      replayingRef.current = false;
       setSpinning(false);
-      const name = data.winnerUsername || data.winnerId;
-      setWinnerBanner(`Победитель @${name}`);
-      hapticNotify("success");
-      onBalanceChange();
-    }, 5200);
-  }, [onBalanceChange]);
+      setRotateDeg(from);
+      rotateDegRef.current = from;
+
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          setSpinning(true);
+          setRotateDeg(endAngle);
+          rotateDegRef.current = endAngle;
+
+          spinTimerRef.current = setTimeout(() => {
+            spinningRef.current = false;
+            setSpinning(false);
+            const wp = data.players.find((p) => p.telegramId === data.winnerId);
+            const total = data.totalPool || 1;
+            const stake = wp?.stake ?? 0;
+            const chance = total > 0 ? (stake / total) * 100 : 0;
+            const others = total - stake;
+            const payout = Math.round((stake + others * 0.8) * 1000) / 1000;
+            setWinnerBanner({
+              name: data.winnerUsername || data.winnerId || "?",
+              payout,
+              chance,
+            });
+            hapticNotify(data.winnerId === telegramId ? "success" : "error");
+            onBalanceChange();
+            replayingRef.current = false;
+          }, 5600);
+        });
+      });
+    },
+    [telegramId, onBalanceChange]
+  );
 
   const fetchState = useCallback(async () => {
-    if (spinningRef.current || replayingRef.current) return;
     try {
+      if (spinningRef.current || replayingRef.current) return;
+
       const res = await fetch("/api/mini/games/spin/state");
+      if (!res.ok) return;
       const data = (await res.json()) as Round;
       if (!data?.id) return;
 
-      if (data.status === "finished" && data.winnerId && data.players?.length) {
-        if (spunForId.current !== data.id) {
-          startSpin(data);
-        } else if (!spinningRef.current) {
+      if (data.status === "waiting" || data.status === "starting") {
+        const incoming = data.players || [];
+        // Never flash empty wheel right after spin/replay
+        if (incoming.length > 0) {
           setRound(data);
-          if (data.players?.length) setLockedPlayers(data.players);
+          setLockedPlayers(incoming);
+          if (data.status === "waiting") setWinnerBanner(null);
+        } else if (!spinningRef.current && !replayingRef.current) {
+          // empty waiting: keep locked players for display, update meta
+          setRound((prev) => {
+            if (prev && (prev.status === "finished" || (prev.players?.length ?? 0) > 0)) {
+              return { ...data, players: prev.players, totalPool: prev.totalPool };
+            }
+            return data;
+          });
         }
+      } else if (
+        data.status === "finished" &&
+        data.winnerId &&
+        data.id !== spunForId.current &&
+        !spinningRef.current
+      ) {
+        spunForId.current = data.id;
+        startSpin(data);
       } else if (!spinningRef.current) {
         setRound(data);
-        if (data.players?.length) setLockedPlayers(data.players);
       }
     } catch {
       /* offline */
@@ -303,7 +394,8 @@ export default function SpinGame({
     }
   }, [countdown, round?.status, fetchState]);
 
-  const loadGifts = async () => {
+
+  const loadGifts = async (autoSelectCheapest = false) => {
     setGiftsLoading(true);
     try {
       const res = await fetch("/api/mini/inventory");
@@ -314,15 +406,24 @@ export default function SpinGame({
           const t = String(x.itemType || "").toLowerCase();
           return t.includes("nft") || t.includes("gift");
         })
-        .map((x: { id: number; itemId: string; nameRu?: string; valueTon?: number; imageUrl?: string | null }) => ({
-          id: x.id,
-          itemId: x.itemId,
-          nameRu: x.nameRu || x.itemId,
-          valueTon: Number(x.valueTon) || 0,
-          imageUrl: x.imageUrl ?? null,
-        }));
+        .map((x: { id: number; itemId: string; nameRu?: string; valueTon?: number; imageUrl?: string | null; meta?: Record<string, unknown> }) => {
+          const m = x.meta || {};
+          const locked = m.listed === true || m.spinLocked === true;
+          return {
+            id: x.id,
+            itemId: x.itemId,
+            nameRu: x.nameRu || x.itemId,
+            valueTon: Number(x.valueTon) || Number(m.valueTon) || Number(m.priceTon) || 0,
+            imageUrl: x.imageUrl ?? null,
+            locked: !!locked,
+          };
+        })
+        .filter((g: { locked: boolean }) => !g.locked)
+        .sort((a: { valueTon: number }, b: { valueTon: number }) => a.valueTon - b.valueTon);
       setGifts(list);
-      if (list.length && !selectedGiftId) setSelectedGiftId(list[0].id);
+      if (autoSelectCheapest && list.length > 0 && selectedGiftIds.length === 0) {
+        setSelectedGiftIds([list[0].id]);
+      }
     } catch {
       setGifts([]);
     } finally {
@@ -330,7 +431,16 @@ export default function SpinGame({
     }
   };
 
-  const placeBet = async () => {
+  const toggleGift = (id: number) => {
+    setSelectedGiftIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  };
+
+  const selectedGifts = gifts.filter((g) => selectedGiftIds.includes(g.id));
+  const giftStakeTotal = selectedGifts.reduce((s, g) => s + (g.valueTon || 0), 0);
+
+  const placeBet = async (overrideAmount?: number) => {
     if (!telegramId) {
       setError("Открой игру из Telegram");
       return;
@@ -340,9 +450,9 @@ export default function SpinGame({
       setError("Раунд завершён, подожди новый");
       return;
     }
-    const amount = betMode === "ton" ? parseFloat(bet) : 0;
+    const amount = betMode === "ton" ? (overrideAmount ?? parseFloat(bet)) : 0;
     if (betMode === "ton" && (!amount || amount <= 0)) return;
-    if (betMode === "gift" && !selectedGiftId) {
+    if (betMode === "gift" && selectedGiftIds.length === 0) {
       setError("Выбери NFT подарок");
       return;
     }
@@ -354,7 +464,11 @@ export default function SpinGame({
       const url = me && betMode === "ton" ? "/api/mini/games/spin/increase" : "/api/mini/games/spin/join";
       const body =
         betMode === "gift"
-          ? { telegramId, giftInventoryId: selectedGiftId }
+          ? {
+              telegramId,
+              giftInventoryIds: selectedGiftIds,
+              giftInventoryId: selectedGiftIds[0],
+            }
           : me
             ? { telegramId, additionalStake: amount }
             : { telegramId, stake: amount };
@@ -375,7 +489,11 @@ export default function SpinGame({
       }
       setWinnerBanner(null);
       onBalanceChange();
-      if (betMode === "gift") loadGifts();
+      if (betMode === "gift") {
+        setSelectedGiftIds([]);
+        setGiftPickerOpen(false);
+        loadGifts();
+      }
       fetchState();
     } catch {
       setError("Сеть недоступна");
@@ -442,235 +560,318 @@ export default function SpinGame({
             marginTop: 12,
             padding: 14,
             borderRadius: 16,
-            background: "rgba(34,197,94,0.15)",
-            border: "1px solid rgba(34,197,94,0.35)",
+            background: "linear-gradient(135deg, rgba(34,197,94,0.22), rgba(124,92,255,0.18))",
+            border: "1px solid rgba(34,197,94,0.45)",
             textAlign: "center",
-            fontWeight: 900,
           }}
         >
-          {winnerBanner}
+          <div style={{ fontSize: 12, color: "#94a3b8" }}>Победитель</div>
+          <div style={{ fontSize: 18, fontWeight: 900, color: "#4ade80" }}>@{winnerBanner.name}</div>
+          <div style={{ fontSize: 13, color: "#e2e8f0", marginTop: 4 }}>
+            +{winnerBanner.payout} TON · {winnerBanner.chance.toFixed(1)}%
+          </div>
         </div>
       )}
 
       {error && (
-        <div style={{ marginTop: 10, color: "#f87171", fontSize: 13, fontWeight: 700 }}>{error}</div>
+        <div
+          style={{
+            marginTop: 10,
+            padding: "8px 12px",
+            borderRadius: 12,
+            background: "rgba(248,113,113,0.15)",
+            border: "1px solid rgba(248,113,113,0.35)",
+            color: "#fecaca",
+            fontSize: 13,
+          }}
+        >
+          {error}
+        </div>
       )}
 
-      <div style={{ marginTop: 16, opacity: canBet ? 1 : 0.5, pointerEvents: canBet ? "auto" : "none" }}>
-        <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-          <input
-            value={bet}
-            onChange={(e) => setBet(e.target.value)}
-            disabled={betMode !== "ton"}
-            inputMode="decimal"
-            style={{
-              flex: 1,
-              padding: "12px 14px",
-              borderRadius: 14,
-              border: "1px solid rgba(255,255,255,0.12)",
-              background: "rgba(0,0,0,0.25)",
-              color: "#f1f5f9",
-              fontWeight: 800,
-              fontSize: 16,
-            }}
-            placeholder="Ставка TON"
-          />
+      {/* Mode toggle: gift | TON — matches design */}
+      <div style={{ display: "flex", justifyContent: "center", marginTop: 16, marginBottom: 10 }}>
+        <div style={{
+          display: "inline-flex", alignItems: "center", gap: 2, padding: 3,
+          borderRadius: 999, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)",
+        }}>
           <button
             type="button"
-            onClick={placeBet}
-            disabled={loading}
+            onClick={() => { setBetMode("gift"); loadGifts(true); }}
+            disabled={!canBet}
             style={{
-              padding: "12px 18px",
-              borderRadius: 14,
-              border: "none",
-              background: "linear-gradient(135deg,#7c5cff,#a78bfa)",
-              color: "#fff",
-              fontWeight: 900,
-              cursor: "pointer",
-              minWidth: 110,
+              width: 40, height: 32, borderRadius: 999, border: "none", cursor: canBet ? "pointer" : "default",
+              display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16,
+              background: betMode === "gift" ? "#3b82f6" : "transparent",
+              color: betMode === "gift" ? "#fff" : "rgba(255,255,255,0.55)",
+              opacity: canBet ? 1 : 0.5,
             }}
+            title="NFT гифты"
           >
-            {loading ? "…" : "Ставка"}
+            🎁
           </button>
-        </div>
-
-        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
-          {[0.5, 1, 2, 5, 10].map((v) => (
-            <button
-              key={v}
-              type="button"
-              onClick={() => setBet(String(v))}
-              disabled={betMode !== "ton"}
-              style={{
-                padding: "6px 12px",
-                borderRadius: 10,
-                border: "1px solid rgba(255,255,255,0.1)",
-                background: bet === String(v) ? "rgba(167,139,250,0.25)" : "rgba(255,255,255,0.04)",
-                color: "#f1f5f9",
-                fontWeight: 800,
-                cursor: "pointer",
-              }}
-            >
-              {v}
-            </button>
-          ))}
-        </div>
-
-        {/* Bet mode: TON or NFT gift */}
-        <div style={{ marginTop: 4, display: "flex", gap: 8 }}>
           <button
             type="button"
             onClick={() => setBetMode("ton")}
+            disabled={!canBet}
             style={{
-              flex: 1,
-              padding: "8px 10px",
-              borderRadius: 12,
-              fontWeight: 800,
-              cursor: "pointer",
-              border: betMode === "ton" ? "1px solid rgba(167,139,250,0.6)" : "1px solid rgba(255,255,255,0.1)",
-              background: betMode === "ton" ? "rgba(167,139,250,0.2)" : "rgba(255,255,255,0.04)",
-              color: "#f1f5f9",
+              width: 40, height: 32, borderRadius: 999, border: "none", cursor: canBet ? "pointer" : "default",
+              display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15,
+              background: betMode === "ton" ? "#3b82f6" : "transparent",
+              color: betMode === "ton" ? "#fff" : "rgba(255,255,255,0.55)",
+              opacity: canBet ? 1 : 0.5,
             }}
+            title="TON"
           >
-            💎 TON
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setBetMode("gift");
-              loadGifts();
-            }}
-            style={{
-              flex: 1,
-              padding: "8px 10px",
-              borderRadius: 12,
-              fontWeight: 800,
-              cursor: "pointer",
-              border: betMode === "gift" ? "1px solid rgba(251,191,36,0.55)" : "1px solid rgba(255,255,255,0.1)",
-              background: betMode === "gift" ? "rgba(251,191,36,0.15)" : "rgba(255,255,255,0.04)",
-              color: "#f1f5f9",
-            }}
-          >
-            🎁 NFT подарок
+            💎
           </button>
         </div>
+      </div>
 
-        {betMode === "gift" && (
-          <div
+      {betMode === "ton" ? (
+        <div style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: "center", flexWrap: "wrap" }}>
+          {["0.1", "0.15", "1", "10"].map((v) => (
+            <button
+              key={v}
+              type="button"
+              disabled={loading || !canBet}
+              onClick={() => { setBet(v); placeBet(parseFloat(v)); }}
+              style={{
+                padding: "10px 14px", borderRadius: 999,
+                border: "1px solid rgba(255,255,255,0.12)",
+                background: "rgba(255,255,255,0.06)",
+                color: "#e2e8f0", fontWeight: 800, fontSize: 13,
+                cursor: loading || !canBet ? "not-allowed" : "pointer",
+                opacity: loading || !canBet ? 0.45 : 1,
+                display: "inline-flex", alignItems: "center", gap: 4,
+              }}
+            >
+              {v} <span style={{ opacity: 0.85 }}>💎</span>
+            </button>
+          ))}
+          <button
+            type="button"
+            disabled={loading || !canBet || tonBalance < 0.1}
+            onClick={() => {
+              const all = Math.floor(tonBalance * 1000) / 1000;
+              if (all >= 0.1) { setBet(String(all)); placeBet(all); }
+            }}
             style={{
-              marginTop: 10,
-              padding: 12,
-              borderRadius: 14,
-              border: "1px solid rgba(255,255,255,0.1)",
-              background: "rgba(0,0,0,0.2)",
+              padding: "10px 14px", borderRadius: 999,
+              border: "1px solid rgba(255,255,255,0.12)",
+              background: "rgba(255,255,255,0.06)",
+              color: "#e2e8f0", fontWeight: 800, fontSize: 13,
+              cursor: loading || !canBet ? "not-allowed" : "pointer",
+              opacity: loading || !canBet || tonBalance < 0.1 ? 0.45 : 1,
             }}
           >
+            Ва-банк
+          </button>
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, alignItems: "center" }}>
+          <div style={{ display: "flex", gap: 8, width: "100%", maxWidth: 360 }}>
+            <button
+              type="button"
+              disabled={!canBet}
+              onClick={() => { setGiftPickerOpen(true); loadGifts(true); }}
+              style={{
+                flex: 1, padding: "12px 16px", borderRadius: 999, border: "none",
+                background: "#f8fafc", color: "#0f172a", fontWeight: 800, fontSize: 14,
+                cursor: canBet ? "pointer" : "not-allowed", opacity: canBet ? 1 : 0.5,
+              }}
+            >
+              Выбрать гифты
+              {selectedGiftIds.length > 0 ? ` (${selectedGiftIds.length})` : ""}
+            </button>
+            <button
+              type="button"
+              disabled={loading || !canBet || selectedGiftIds.length === 0}
+              onClick={() => placeBet()}
+              style={{
+                padding: "12px 18px", borderRadius: 999, border: "none",
+                background: selectedGiftIds.length && canBet && !loading
+                  ? "linear-gradient(135deg,#3b82f6,#60a5fa)"
+                  : "rgba(255,255,255,0.08)",
+                color: "#fff", fontWeight: 900, fontSize: 13,
+                cursor: loading || !canBet || !selectedGiftIds.length ? "not-allowed" : "pointer",
+                opacity: selectedGiftIds.length ? 1 : 0.5,
+                minWidth: 88,
+              }}
+            >
+              {loading ? "…" : giftStakeTotal > 0 ? `${giftStakeTotal.toFixed(2)} 💎` : "Ставка"}
+            </button>
+          </div>
+          {selectedGifts.length > 0 && (
+            <div style={{ fontSize: 12, color: "#94a3b8", textAlign: "center" }}>
+              {selectedGifts.length === 1
+                ? `${selectedGifts[0].nameRu} · ${selectedGifts[0].valueTon} TON`
+                : `${selectedGifts.length} NFT · ${giftStakeTotal.toFixed(2)} TON`}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Gift multi-select sheet */}
+      {giftPickerOpen && (
+        <div
+          style={{
+            position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", backdropFilter: "blur(6px)",
+            display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 500,
+          }}
+          onClick={() => setGiftPickerOpen(false)}
+        >
+          <div
+            style={{
+              width: "100%", maxWidth: 420, background: "linear-gradient(180deg,#12141c,#0a0c12)",
+              borderRadius: "22px 22px 0 0", padding: "18px 16px 28px", maxHeight: "75vh", overflow: "auto",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <div style={{ fontWeight: 900, fontSize: 16 }}>Выбрать гифты</div>
+              <button type="button" onClick={() => setGiftPickerOpen(false)}
+                style={{ width: 36, height: 36, borderRadius: 12, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.06)", color: "#fff", fontWeight: 700, cursor: "pointer" }}>
+                ✕
+              </button>
+            </div>
+            <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 10 }}>
+              Можно выбрать несколько. По умолчанию — самый дешёвый.
+            </div>
             {giftsLoading ? (
-              <div style={{ opacity: 0.7, fontSize: 13 }}>Загрузка подарков…</div>
+              <div style={{ opacity: 0.7, fontSize: 13, padding: 12 }}>Загрузка…</div>
             ) : gifts.length === 0 ? (
-              <div style={{ fontSize: 13, lineHeight: 1.5 }}>
-                Нет подарков.{" "}
-                <button
-                  type="button"
-                  onClick={() => {
-                    try {
-                      window.dispatchEvent(new CustomEvent("tonyx-navigate", { detail: { tab: "inventory" } }));
-                    } catch {
-                      /* */
-                    }
-                    window.location.hash = "#inventory";
-                  }}
-                  style={{
-                    color: "#60a5fa",
-                    fontWeight: 800,
-                    textDecoration: "underline",
-                    background: "none",
-                    border: "none",
-                    cursor: "pointer",
-                    padding: 0,
-                    fontSize: 13,
-                  }}
-                >
-                  Инвентарь
-                </button>
+              <div style={{ fontSize: 13, lineHeight: 1.5, padding: 8 }}>
+                Нет доступных NFT.{" "}
+                <a href="/inventory" onClick={(e) => { e.preventDefault(); window.location.assign("/inventory"); }}
+                  style={{ color: "#60a5fa", fontWeight: 800 }}>Инвентарь</a>
               </div>
             ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 160, overflow: "auto" }}>
-                {gifts.map((g) => (
-                  <button
-                    key={g.id}
-                    type="button"
-                    onClick={() => setSelectedGiftId(g.id)}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 10,
-                      padding: "8px 10px",
-                      borderRadius: 12,
-                      cursor: "pointer",
-                      textAlign: "left",
-                      border:
-                        selectedGiftId === g.id
-                          ? "1px solid rgba(251,191,36,0.6)"
-                          : "1px solid rgba(255,255,255,0.08)",
-                      background:
-                        selectedGiftId === g.id ? "rgba(251,191,36,0.12)" : "rgba(255,255,255,0.03)",
-                      color: "#f1f5f9",
-                    }}
-                  >
-                    {g.imageUrl ? (
-                      <img
-                        src={g.imageUrl}
-                        alt=""
-                        style={{ width: 32, height: 32, borderRadius: 8, objectFit: "cover" }}
-                      />
-                    ) : (
-                      <span style={{ fontSize: 20 }}>🎁</span>
-                    )}
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div
-                        style={{
-                          fontWeight: 800,
-                          fontSize: 13,
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap",
-                        }}
-                      >
-                        {g.nameRu}
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {gifts.map((g) => {
+                  const on = selectedGiftIds.includes(g.id);
+                  return (
+                    <button
+                      key={g.id}
+                      type="button"
+                      onClick={() => toggleGift(g.id)}
+                      style={{
+                        display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 14,
+                        cursor: "pointer", textAlign: "left",
+                        border: on ? "1px solid rgba(59,130,246,0.7)" : "1px solid rgba(255,255,255,0.08)",
+                        background: on ? "rgba(59,130,246,0.15)" : "rgba(255,255,255,0.03)",
+                        color: "#f1f5f9",
+                      }}
+                    >
+                      {g.imageUrl
+                        ? <img src={g.imageUrl} alt="" style={{ width: 40, height: 40, borderRadius: 10, objectFit: "cover" }} />
+                        : <span style={{ fontSize: 24 }}>🎁</span>}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 800, fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.nameRu}</div>
+                        <div style={{ fontSize: 12, opacity: 0.75 }}>{g.valueTon} TON</div>
                       </div>
-                      <div style={{ fontSize: 11, opacity: 0.7 }}>{g.valueTon} TON</div>
-                    </div>
-                  </button>
-                ))}
+                      <div style={{
+                        width: 22, height: 22, borderRadius: 6,
+                        border: on ? "none" : "2px solid rgba(255,255,255,0.25)",
+                        background: on ? "#3b82f6" : "transparent",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        color: "#fff", fontSize: 13, fontWeight: 900,
+                      }}>
+                        {on ? "✓" : ""}
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             )}
+            <button
+              type="button"
+              disabled={selectedGiftIds.length === 0}
+              onClick={() => setGiftPickerOpen(false)}
+              style={{
+                width: "100%", marginTop: 14, padding: "14px", borderRadius: 14, border: "none",
+                background: selectedGiftIds.length ? "linear-gradient(135deg,#3b82f6,#60a5fa)" : "rgba(255,255,255,0.08)",
+                color: "#fff", fontWeight: 900, fontSize: 14, cursor: selectedGiftIds.length ? "pointer" : "default",
+              }}
+            >
+              {selectedGiftIds.length
+                ? `Готово · ${selectedGiftIds.length} · ${giftStakeTotal.toFixed(2)} TON`
+                : "Выбери хотя бы один"}
+            </button>
           </div>
-        )}
-      </div>
+        </div>
+      )}
+
 
       {players.length > 0 && (
         <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 6 }}>
-          {players.map((p) => (
-            <div
-              key={p.telegramId}
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                padding: "8px 12px",
-                borderRadius: 12,
-                background:
-                  p.telegramId === telegramId ? "rgba(124,92,255,0.12)" : "rgba(255,255,255,0.04)",
-                border: "1px solid rgba(255,255,255,0.08)",
-                fontSize: 13,
-              }}
-            >
-              <span>@{p.username || p.telegramId}</span>
-              <span style={{ fontWeight: 800 }}>
-                {p.stake} TON · {(p.chance ?? 0).toFixed(1)}%
-              </span>
-            </div>
-          ))}
+          {players.map((p) => {
+            const nfts = p.nftStakes ?? [];
+            const isNft = nfts.length > 0;
+            const initials = (p.username || p.telegramId || "?").replace(/^@/, "").slice(0, 2).toUpperCase();
+            return (
+              <div
+                key={p.telegramId}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  padding: "10px 12px",
+                  borderRadius: 14,
+                  background:
+                    p.telegramId === telegramId
+                      ? "rgba(124,92,255,0.12)"
+                      : "rgba(255,255,255,0.04)",
+                  border: "1px solid rgba(255,255,255,0.08)",
+                  fontSize: 13,
+                }}
+              >
+                <div style={{
+                  width: 36, height: 36, borderRadius: "50%", overflow: "hidden", flexShrink: 0,
+                  background: "rgba(255,255,255,0.08)", display: "flex", alignItems: "center", justifyContent: "center",
+                  fontWeight: 900, fontSize: 12, color: "#e2e8f0",
+                }}>
+                  {p.photoUrl
+                    ? <img src={p.photoUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    : initials}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 800, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    @{(p.username || p.telegramId || "").replace(/^@/, "")}
+                    {p.telegramId === telegramId ? " (вы)" : ""}
+                  </div>
+                  {isNft ? (
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 4, alignItems: "center" }}>
+                      {nfts.map((n) => (
+                        <div key={n.inventoryId} style={{
+                          display: "inline-flex", alignItems: "center", gap: 6,
+                          padding: "3px 8px", borderRadius: 999,
+                          background: "rgba(251,191,36,0.12)", border: "1px solid rgba(251,191,36,0.35)",
+                          fontSize: 11, fontWeight: 700, color: "#fde68a",
+                        }}>
+                          {n.imageUrl
+                            ? <img src={n.imageUrl} alt="" style={{ width: 18, height: 18, borderRadius: 5, objectFit: "cover" }} />
+                            : <span>🎁</span>}
+                          <span style={{ maxWidth: 90, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {n.nameRu || n.itemId}
+                          </span>
+                          <span style={{ opacity: 0.9 }}>{n.valueTon} TON</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div style={{ marginTop: 2, fontSize: 12, color: "#94a3b8", fontWeight: 600 }}>
+                      💎 {Number(p.stake).toFixed(2)} TON
+                    </div>
+                  )}
+                </div>
+                <div style={{ textAlign: "right", flexShrink: 0, fontWeight: 800 }}>
+                  <div style={{ fontSize: 13 }}>{Number(p.stake).toFixed(2)}</div>
+                  <div style={{ fontSize: 11, color: "#94a3b8", fontWeight: 700 }}>{(p.chance ?? 0).toFixed(1)}%</div>
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
 

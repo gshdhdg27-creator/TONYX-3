@@ -632,13 +632,16 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
 
       {/* Fixed bets ABOVE bottom menu */}
       <div style={betBar}>
-        {/* Ряд 1: переключатель 🎁 / 💎 — без фона-обводки */}
-        <div style={{ display: "flex", justifyContent: "flex-start", marginBottom: 6 }}>
-          <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+        {/* Ряд 1: переключатель 🎁 / 💎 в общей «пилюле» */}
+        <div style={{ display: "flex", justifyContent: "flex-start", marginBottom: 8 }}>
+          <div style={{
+            display: "inline-flex", alignItems: "center", gap: 2, padding: 3,
+            borderRadius: 999, background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.12)",
+          }}>
             <button type="button" disabled={busy || !canBet}
               onClick={() => { setBetMode("gift"); loadGifts(true); }}
               style={{
-                width: 40, height: 32, borderRadius: 999, border: "none", cursor: canBet && !busy ? "pointer" : "default",
+                width: 40, height: 30, borderRadius: 999, border: "none", cursor: canBet && !busy ? "pointer" : "default",
                 display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16,
                 background: betMode === "gift" ? "#3b82f6" : "transparent",
                 color: betMode === "gift" ? "#fff" : "rgba(255,255,255,0.55)",
@@ -647,7 +650,7 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
             <button type="button" disabled={busy || !canBet}
               onClick={() => setBetMode("ton")}
               style={{
-                width: 40, height: 32, borderRadius: 999, border: "none", cursor: canBet && !busy ? "pointer" : "default",
+                width: 40, height: 30, borderRadius: 999, border: "none", cursor: canBet && !busy ? "pointer" : "default",
                 display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15,
                 background: betMode === "ton" ? "#3b82f6" : "transparent",
                 color: betMode === "ton" ? "#fff" : "rgba(255,255,255,0.55)",
@@ -658,34 +661,37 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
 
         {betMode === "ton" ? (
           <>
-            {/* Ряд 2: ✎ 1 5 10 25 Ва-банк — без фонов, влезают */}
-            <div style={{ display: "flex", gap: 4, alignItems: "center", width: "100%" }}>
+            {/* Ряд 2: ✎ 1 5 10 25 Ва-банк — аккуратные чипы с фоном */}
+            <div style={{ display: "flex", gap: 6, alignItems: "center", width: "100%" }}>
               <button type="button" onClick={openEdit} style={{
-                flex: "0 0 auto", width: 34, height: 34, padding: 0, fontSize: 14,
-                border: "none", background: "transparent", color: "#94a3b8",
+                flex: "0 0 auto", width: 38, height: 38, padding: 0, fontSize: 14,
+                borderRadius: 12, border: "1px solid rgba(255,255,255,0.12)",
+                background: "rgba(255,255,255,0.08)", color: "#cbd5e1",
                 cursor: "pointer", fontFamily: "inherit", fontWeight: 700,
+                display: "flex", alignItems: "center", justifyContent: "center",
               }} title="Изменить">✎</button>
               {chips.map((v, i) => (
                 <button key={i} type="button" disabled={busy || !canBet} onClick={() => placeBet(v)}
                   style={{
-                    flex: "1 1 0", minWidth: 0, opacity: busy || !canBet ? 0.45 : 1,
+                    flex: "1 1 0", minWidth: 0, height: 38, opacity: busy || !canBet ? 0.45 : 1,
                     cursor: busy || !canBet ? "not-allowed" : "pointer",
-                    display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 2,
-                    padding: "10px 2px", borderRadius: 10, fontWeight: 900, fontSize: 13,
-                    background: "transparent", border: "none", color: "#e2e8f0",
-                    fontFamily: "inherit",
+                    display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 3,
+                    padding: "0 4px", borderRadius: 12, fontWeight: 900, fontSize: 13,
+                    background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.12)",
+                    color: "#f1f5f9", fontFamily: "inherit",
                   }}>
-                  {v}<span style={{ opacity: 0.85, fontSize: 10 }}>💎</span>
+                  {v}<span style={{ opacity: 0.9, fontSize: 11 }}>💎</span>
                 </button>
               ))}
               <button type="button" disabled={busy || !canBet || balanceTon < MIN_STAKE}
                 onClick={() => placeBet(Math.floor(balanceTon * 1000) / 1000)}
                 style={{
-                  flex: "1.2 1 0", minWidth: 0, opacity: busy || !canBet || balanceTon < MIN_STAKE ? 0.45 : 1,
+                  flex: "1.25 1 0", minWidth: 0, height: 38,
+                  opacity: busy || !canBet || balanceTon < MIN_STAKE ? 0.45 : 1,
                   cursor: busy || !canBet ? "not-allowed" : "pointer",
-                  padding: "10px 4px", borderRadius: 10, fontWeight: 900, fontSize: 12,
-                  background: "transparent", border: "none", color: "#e2e8f0",
-                  whiteSpace: "nowrap", fontFamily: "inherit",
+                  padding: "0 6px", borderRadius: 12, fontWeight: 900, fontSize: 12,
+                  background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.12)",
+                  color: "#f1f5f9", whiteSpace: "nowrap", fontFamily: "inherit",
                 }}>
                 Ва-банк
               </button>
@@ -993,13 +999,12 @@ const betBar: CSSProperties = {
   borderTop: "none",
 };
 const chip: CSSProperties = {
-  padding: "12px 15px", borderRadius: 14, border: "none",
-  background: "transparent", color: "#e2e8f0", fontWeight: 900, fontSize: 14,
+  padding: "10px 14px", borderRadius: 12, border: "1px solid rgba(255,255,255,0.12)",
+  background: "rgba(255,255,255,0.08)", color: "#f1f5f9", fontWeight: 900, fontSize: 14,
   cursor: "pointer", fontFamily: "inherit", minWidth: 50,
 };
 const editBtn: CSSProperties = {
-  ...chip, minWidth: 44, padding: "12px", color: "#94a3b8",
-  border: "none", background: "transparent",
+  ...chip, minWidth: 38, width: 38, height: 38, padding: 0, color: "#cbd5e1",
 };
 const overlay: CSSProperties = {
   position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", backdropFilter: "blur(6px)",

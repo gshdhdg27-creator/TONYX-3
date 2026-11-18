@@ -238,7 +238,7 @@ function buildStrips(players: ArenaPlayer[]): Strip[] {
         return strips.filter(Boolean) as Strip[];
       }
 
-      // 2+ larges: vertical split of remaining board by relative share
+      // 2+ larges: vertical split; corner strips stay in array and render on top
       const largeTotal = larges.reduce((s, x) => s + x.share, 0) || 1;
       let acc = 0;
       const cuts: number[] = [0];
@@ -718,11 +718,10 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
             <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "#64748b", fontWeight: 700, fontSize: 14, zIndex: 2 }}>
               Сделайте первую ставку
             </div>
-          ) : strips.map((s) => {
-            const width = Math.max(2, s.x1 - s.x0);
+          ) : [...strips].sort((a, b) => (a.shape === "corner" ? 1 : 0) - (b.shape === "corner" ? 1 : 0)).map((s) => {
             const isCorner = s.shape === "corner";
             const av = isCorner
-              ? Math.round(Math.min(36, Math.max(22, 18 + s.share * 80)))
+              ? Math.round(Math.min(40, Math.max(26, 22 + s.share * 90)))
               : Math.round(Math.min(88, Math.max(36, 28 + s.share * 90)));
             const clip = (s.poly && s.poly.length)
               ? `polygon(${s.poly.map((q) => `${(q.x / W) * 100}% ${(q.y / H) * 100}%`).join(", ")})`
@@ -735,7 +734,9 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
                 background: s.color,
                 clipPath: clip,
                 WebkitClipPath: clip,
-                overflow: "hidden", zIndex: 1,
+                overflow: "hidden",
+                // Corners must sit above full-height large strips or they vanish
+                zIndex: isCorner ? 5 : 1,
                 transition: phase === "lobby" ? "clip-path .45s ease" : "none",
               }}>
                 <div className="ar-strip-gloss" />
@@ -763,16 +764,16 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
                       />
                     : initials(s.username, s.telegramId)}
                 </div>
-                {s.share >= 0.12 && (
+                {(isCorner || s.share >= 0.10) && (
                   <div style={{
-                    position: "absolute", left: ax, top: ay + av / 2 + 6,
+                    position: "absolute", left: ax, top: ay + av / 2 + 4,
                     transform: "translateX(-50%)", textAlign: "center", zIndex: 2,
                     textShadow: "0 1px 4px rgba(0,0,0,.55)", pointerEvents: "none",
                   }}>
-                    <div style={{ fontSize: 11, fontWeight: 900, color: "#fff", maxWidth: 88, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    <div style={{ fontSize: isCorner ? 10 : 11, fontWeight: 900, color: "#fff", maxWidth: isCorner ? 72 : 88, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {(s.username || s.telegramId).replace(/^@/, "").slice(0, 10)}
                     </div>
-                    <div style={{ fontSize: 12, fontWeight: 800, color: "rgba(255,255,255,.95)" }}>
+                    <div style={{ fontSize: isCorner ? 11 : 12, fontWeight: 800, color: "rgba(255,255,255,.95)" }}>
                       {(s.chance || s.share * 100).toFixed(1)}%
                     </div>
                   </div>

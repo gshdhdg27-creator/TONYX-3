@@ -569,7 +569,7 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
         <div style={{ fontSize: 11, fontWeight: 800, color: "#94a3b8", letterSpacing: "0.06em", marginBottom: 4 }}>
           ИГРОКИ · {strips.length}
         </div>
-        <div style={{ maxHeight: 140, overflowY: "auto" }}>
+        <div>
           {strips.length === 0 ? (
             <div style={{ color: "#64748b", fontSize: 13, fontWeight: 600 }}>Пока никого</div>
           ) : strips.map((s) => {
@@ -632,98 +632,79 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
 
       {/* Fixed bets ABOVE bottom menu */}
       <div style={betBar}>
+        {/* Ряд 1: переключатель 🎁 / 💎 */}
+        <div style={{ display: "flex", justifyContent: "flex-start", marginBottom: 8 }}>
+          <div style={{
+            display: "inline-flex", alignItems: "center", gap: 2, padding: 3,
+            borderRadius: 999, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)",
+          }}>
+            <button type="button" disabled={busy || !canBet}
+              onClick={() => { setBetMode("gift"); loadGifts(true); }}
+              style={{
+                width: 40, height: 32, borderRadius: 999, border: "none", cursor: canBet && !busy ? "pointer" : "default",
+                display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16,
+                background: betMode === "gift" ? "#3b82f6" : "transparent",
+                color: betMode === "gift" ? "#fff" : "rgba(255,255,255,0.55)",
+                opacity: canBet && !busy ? 1 : 0.5,
+              }}>🎁</button>
+            <button type="button" disabled={busy || !canBet}
+              onClick={() => setBetMode("ton")}
+              style={{
+                width: 40, height: 32, borderRadius: 999, border: "none", cursor: canBet && !busy ? "pointer" : "default",
+                display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15,
+                background: betMode === "ton" ? "#3b82f6" : "transparent",
+                color: betMode === "ton" ? "#fff" : "rgba(255,255,255,0.55)",
+                opacity: canBet && !busy ? 1 : 0.5,
+              }}>💎</button>
+          </div>
+        </div>
+
         {betMode === "ton" ? (
           <>
+            {/* Ряд 2: ✎ 1 5 10 25 Ва-банк — всё влезает без скролла */}
             <div style={{
-              display: "flex", gap: 6, alignItems: "center", justifyContent: "flex-start",
-              flexWrap: "nowrap", overflowX: "auto", width: "100%", paddingBottom: 2,
+              display: "flex", gap: 5, alignItems: "center", width: "100%",
             }}>
-              {/* 🎁 / 💎 слева */}
-              <div style={{
-                display: "inline-flex", alignItems: "center", gap: 2, padding: 3, flexShrink: 0,
-                borderRadius: 999, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)",
-              }}>
-                <button type="button" disabled={busy || !canBet}
-                  onClick={() => { setBetMode("gift"); loadGifts(true); }}
-                  style={{
-                    width: 36, height: 30, borderRadius: 999, border: "none", cursor: canBet && !busy ? "pointer" : "default",
-                    display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15,
-                    background: betMode === "gift" ? "#3b82f6" : "transparent",
-                    color: betMode === "gift" ? "#fff" : "rgba(255,255,255,0.55)",
-                    opacity: canBet && !busy ? 1 : 0.5,
-                  }}>🎁</button>
-                <button type="button" disabled={busy || !canBet}
-                  onClick={() => setBetMode("ton")}
-                  style={{
-                    width: 36, height: 30, borderRadius: 999, border: "none", cursor: canBet && !busy ? "pointer" : "default",
-                    display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14,
-                    background: betMode === "ton" ? "#3b82f6" : "transparent",
-                    color: betMode === "ton" ? "#fff" : "rgba(255,255,255,0.55)",
-                    opacity: canBet && !busy ? 1 : 0.5,
-                  }}>💎</button>
-              </div>
-
-              <button type="button" onClick={openEdit} style={{ ...editBtn, flexShrink: 0 }} title="Изменить">✎</button>
+              <button type="button" onClick={openEdit} style={{
+                ...editBtn, flex: "0 0 auto", width: 36, height: 36, minWidth: 36, padding: 0, fontSize: 14,
+              }} title="Изменить">✎</button>
               {chips.map((v, i) => (
                 <button key={i} type="button" disabled={busy || !canBet} onClick={() => placeBet(v)}
                   style={{
-                    ...chip, opacity: busy || !canBet ? 0.45 : 1, flexShrink: 0,
+                    flex: "1 1 0", minWidth: 0, opacity: busy || !canBet ? 0.45 : 1,
                     cursor: busy || !canBet ? "not-allowed" : "pointer",
-                    display: "inline-flex", alignItems: "center", gap: 3,
-                    padding: "8px 12px",
+                    display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 2,
+                    padding: "10px 4px", borderRadius: 12, fontWeight: 900, fontSize: 13,
                     background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", color: "#e2e8f0",
+                    fontFamily: "inherit",
                   }}>
-                  {v} <span style={{ opacity: 0.85, fontSize: 11 }}>💎</span>
+                  {v}<span style={{ opacity: 0.85, fontSize: 10 }}>💎</span>
                 </button>
               ))}
               <button type="button" disabled={busy || !canBet || balanceTon < MIN_STAKE}
                 onClick={() => placeBet(Math.floor(balanceTon * 1000) / 1000)}
                 style={{
-                  ...chip, opacity: busy || !canBet || balanceTon < MIN_STAKE ? 0.45 : 1, flexShrink: 0,
+                  flex: "1.15 1 0", minWidth: 0, opacity: busy || !canBet || balanceTon < MIN_STAKE ? 0.45 : 1,
                   cursor: busy || !canBet ? "not-allowed" : "pointer",
-                  padding: "8px 14px",
+                  padding: "10px 6px", borderRadius: 12, fontWeight: 900, fontSize: 12,
                   background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", color: "#e2e8f0",
-                  whiteSpace: "nowrap",
+                  whiteSpace: "nowrap", fontFamily: "inherit",
                 }}>
                 Ва-банк
               </button>
             </div>
-            <div style={{ textAlign: "center", marginTop: 6, fontSize: 12, color: "#94a3b8", fontWeight: 600 }}>
+            <div style={{ textAlign: "center", marginTop: 6, fontSize: 11, color: "#94a3b8", fontWeight: 600 }}>
               Баланс: <span style={{ color: "#4ade80", fontWeight: 800 }}>{balanceTon.toFixed(2)} TON</span>
               {meIn ? " · докид" : ""}
             </div>
           </>
         ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             <div style={{ display: "flex", gap: 8, alignItems: "center", width: "100%" }}>
-              {/* 🎁 / 💎 слева и в gift-режиме */}
-              <div style={{
-                display: "inline-flex", alignItems: "center", gap: 2, padding: 3, flexShrink: 0,
-                borderRadius: 999, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)",
-              }}>
-                <button type="button" disabled={busy || !canBet}
-                  onClick={() => { setBetMode("gift"); loadGifts(true); }}
-                  style={{
-                    width: 36, height: 30, borderRadius: 999, border: "none", cursor: canBet && !busy ? "pointer" : "default",
-                    display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15,
-                    background: betMode === "gift" ? "#3b82f6" : "transparent",
-                    color: betMode === "gift" ? "#fff" : "rgba(255,255,255,0.55)",
-                    opacity: canBet && !busy ? 1 : 0.5,
-                  }}>🎁</button>
-                <button type="button" disabled={busy || !canBet}
-                  onClick={() => setBetMode("ton")}
-                  style={{
-                    width: 36, height: 30, borderRadius: 999, border: "none", cursor: canBet && !busy ? "pointer" : "default",
-                    display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14,
-                    background: betMode === "ton" ? "#3b82f6" : "transparent",
-                    color: betMode === "ton" ? "#fff" : "rgba(255,255,255,0.55)",
-                    opacity: canBet && !busy ? 1 : 0.5,
-                  }}>💎</button>
-              </div>
               <button type="button" disabled={!canBet || busy}
                 onClick={() => { setGiftPickerOpen(true); loadGifts(true); }}
                 style={{
-                  flex: 1, padding: "10px 14px", borderRadius: 999, border: "none",
+                  flex: 1, padding: "11px 14px", borderRadius: 999, border: "none",
                   background: "#f8fafc", color: "#0f172a", fontWeight: 800, fontSize: 13,
                   cursor: canBet && !busy ? "pointer" : "not-allowed", opacity: canBet && !busy ? 1 : 0.5,
                 }}>
@@ -732,7 +713,7 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
               <button type="button" disabled={busy || !canBet || selectedGiftIds.length === 0}
                 onClick={placeGiftBet}
                 style={{
-                  padding: "10px 14px", borderRadius: 999, border: "none", flexShrink: 0,
+                  padding: "11px 14px", borderRadius: 999, border: "none", flexShrink: 0,
                   background: selectedGiftIds.length && canBet && !busy ? "linear-gradient(135deg,#3b82f6,#60a5fa)" : "rgba(255,255,255,0.08)",
                   color: "#fff", fontWeight: 900, fontSize: 13, minWidth: 80,
                   cursor: busy || !canBet || !selectedGiftIds.length ? "not-allowed" : "pointer",
@@ -982,10 +963,10 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
 }
 
 const root: CSSProperties = {
-  position: "relative", minHeight: "100%", paddingBottom: 140, color: "#fff",
+  position: "relative", minHeight: "100%", paddingBottom: 200, color: "#fff",
   fontFamily: 'system-ui,-apple-system,"Segoe UI",Roboto,sans-serif', overflowX: "hidden",
 };
-const header: CSSProperties = { display: "flex", alignItems: "center", padding: "10px 12px 2px", position: "relative", zIndex: 2 };
+const header: CSSProperties = { display: "flex", alignItems: "center", padding: "18px 12px 6px", position: "relative", zIndex: 2 };
 const iconBtn: CSSProperties = {
   width: 40, height: 40, borderRadius: 12, border: "1px solid rgba(255,255,255,0.1)",
   background: "rgba(255,255,255,0.06)", color: "#fff", fontSize: 16, fontWeight: 700,
@@ -998,17 +979,18 @@ const statusPill: CSSProperties = {
 };
 const boardWrap: CSSProperties = { display: "flex", justifyContent: "center", margin: "0 12px 4px", position: "relative", zIndex: 1 };
 const playersCard: CSSProperties = {
-  margin: "10px 14px 0", background: "linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.03))",
+  margin: "10px 14px 12px", background: "linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.03))",
   borderRadius: 16, padding: "10px 12px", border: "1px solid rgba(255,255,255,0.08)", position: "relative", zIndex: 1,
+  maxHeight: 160, overflowY: "auto",
 };
 const playerRow: CSSProperties = {
   display: "flex", alignItems: "center", justifyContent: "space-between",
   padding: "5px 0", borderBottom: "1px solid rgba(255,255,255,0.05)",
 };
 const betBar: CSSProperties = {
-  position: "fixed", left: 0, right: 0, bottom: 56, zIndex: 40,
-  padding: "10px 14px 8px",
-  background: "linear-gradient(180deg, transparent, rgba(8,8,15,0.92) 30%, #08080f)",
+  position: "fixed", left: 0, right: 0, bottom: 62, zIndex: 40,
+  padding: "8px 12px 10px",
+  background: "linear-gradient(180deg, transparent, rgba(8,8,15,0.95) 28%, #08080f)",
   borderTop: "1px solid rgba(255,255,255,0.06)",
 };
 const chip: CSSProperties = {

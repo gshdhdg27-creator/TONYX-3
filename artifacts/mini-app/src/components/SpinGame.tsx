@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
+import WinnerModal from "./WinnerModal";
 import FairnessModal, { type FairData } from "@/components/FairnessModal";
 import SpinHistoryModal from "@/components/SpinHistoryModal";
 import { haptic, hapticNotify } from "@/lib/telegram";
@@ -255,6 +256,9 @@ export default function SpinGame({
     name: string;
     payout: number;
     chance: number;
+    mult: number;
+    photo?: string | null;
+    prizes: { name: string; valueTon: number; imageUrl?: string | null }[];
   } | null>(null);
   // Keep last non-empty players so wheel sectors never flash empty
   const [lockedPlayers, setLockedPlayers] = useState<Player[]>([]);
@@ -325,10 +329,30 @@ export default function SpinGame({
             const chance = total > 0 ? (stake / total) * 100 : 0;
             const others = total - stake;
             const payout = Math.round((stake + others * 0.8) * 1000) / 1000;
+            const prizes: { name: string; valueTon: number; imageUrl?: string | null }[] = [];
+            for (const pl of data.players) {
+              if (pl.telegramId === data.winnerId) continue;
+              for (const n of (pl.nftStakes ?? [])) {
+                prizes.push({
+                  name: (n as any).nameRu || (n as any).itemId || "NFT",
+                  valueTon: Number((n as any).valueTon) || 0,
+                  imageUrl: (n as any).imageUrl,
+                });
+              }
+            }
+            const totalPure = data.players.reduce((s, pl) => {
+              const nftSum = (pl.nftStakes ?? []).reduce((a, n) => a + (Number((n as any).valueTon) || 0), 0);
+              return s + Math.max(0, (pl.stake || 0) - nftSum);
+            }, 0);
+            const burned = totalPure + 1e-9 < others * 0.2;
+            const mult = stake > 0 ? Math.round((payout / stake) * 100) / 100 : 0;
             setWinnerBanner({
               name: data.winnerUsername || data.winnerId || "?",
               payout,
               chance,
+              mult,
+              photo: wp?.photoUrl,
+              prizes: burned ? [] : prizes,
             });
             hapticNotify(data.winnerId === telegramId ? "success" : "error");
             onBalanceChange();
@@ -570,22 +594,14 @@ export default function SpinGame({
       </div>
 
       {winnerBanner && (
-        <div
-          style={{
-            marginTop: 12,
-            padding: 14,
-            borderRadius: 16,
-            background: "linear-gradient(135deg, rgba(34,197,94,0.22), rgba(124,92,255,0.18))",
-            border: "1px solid rgba(34,197,94,0.45)",
-            textAlign: "center",
-          }}
-        >
-          <div style={{ fontSize: 12, color: "#94a3b8" }}>Победитель</div>
-          <div style={{ fontSize: 18, fontWeight: 900, color: "#4ade80" }}>@{winnerBanner.name}</div>
-          <div style={{ fontSize: 13, color: "#e2e8f0", marginTop: 4 }}>
-            +{winnerBanner.payout} TON · {winnerBanner.chance.toFixed(1)}%
-          </div>
-        </div>
+        <WinnerModal
+          name={winnerBanner.name}
+          payout={Number(winnerBanner.payout)}
+          mult={winnerBanner.mult ?? 0}
+          photo={winnerBanner.photo}
+          prizes={winnerBanner.prizes || []}
+          onClose={() => setWinnerBanner(null)}
+        />
       )}
 
       {error && (

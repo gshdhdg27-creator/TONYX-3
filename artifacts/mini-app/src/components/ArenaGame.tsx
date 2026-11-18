@@ -9,12 +9,13 @@ import {
   W, H, BALL_R, MARGIN, makeRng,
   planBouncePath, randomInStrip, randomStart, samplePath, pathDirection,
 } from "./arenaPhysics";
+import WinnerModal from "./WinnerModal";
 
 const COMMISSION = 0.2;
 const MIN_STAKE = 0.1;
 const SPIN_MS = 7000;
 const DIR_MS = 350;
-const WINNER_HOLD_MS = 2000;
+const WINNER_HOLD_MS = 4500;
 const DEFAULT_CHIPS = [1, 5, 10, 25];
 const CHIPS_KEY = "tonyx_arena_chips";
 const COLORS = [
@@ -232,7 +233,7 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<{ msg: string; type: "ok" | "err" } | null>(null);
   const [winnerData, setWinnerData] = useState<{
-    name: string; payout: number; mult: number; photo?: string | null; color: string;
+    name: string; payout: number; mult: number; photo?: string | null; color: string; prizes: { name: string; valueTon: number; imageUrl?: string | null }[];
   } | null>(null);
   const [freezeStrips, setFreezeStrips] = useState<Strip[] | null>(null);
   const [freezePool, setFreezePool] = useState(0);
@@ -343,9 +344,23 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
         hapticNotify("success");
         const payout = payoutOf(winner.stake, data.totalPool);
         const mult = winner.stake > 0 ? Math.round((payout / winner.stake) * 100) / 100 : 0;
+        const prizes: { name: string; valueTon: number; imageUrl?: string | null }[] = [];
+        for (const pl of data.players) {
+          if (pl.telegramId === winner.telegramId) continue;
+          for (const n of (pl.nftStakes ?? [])) {
+            prizes.push({ name: n.nameRu || n.itemId || "NFT", valueTon: Number(n.valueTon) || 0, imageUrl: n.imageUrl });
+          }
+        }
+        const totalPure = data.players.reduce((s, pl) => {
+          const nftSum = (pl.nftStakes ?? []).reduce((a, n) => a + (Number(n.valueTon) || 0), 0);
+          return s + Math.max(0, pl.stake - nftSum);
+        }, 0);
+        const othersPool = Math.max(0, data.totalPool - winner.stake);
+        const burned = totalPure + 1e-9 < othersPool * COMMISSION;
         setWinnerData({
           name: data.winnerUsername || winner.username || winner.telegramId,
           payout, mult, photo: winner.photoUrl, color: winner.color,
+          prizes: burned ? [] : prizes,
         });
         rafRef.current = null;
         setTimeout(() => {
@@ -991,19 +1006,14 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
       )}
 
       {phase === "winner" && winnerData && (
-        <div style={overlay}>
-          <div style={{ ...sheet, animation: "arPop .4s ease-out" }}>
-            <div style={{ textAlign: "center", fontSize: 12, fontWeight: 800, color: "#86efac", letterSpacing: "0.12em" }}>ПОБЕДИТЕЛЬ</div>
-            <div style={{ margin: "12px auto 0", width: 60, height: 60, borderRadius: "50%", border: `3px solid ${winnerData.color}`, overflow: "hidden", background: "#0a0a12", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 900, fontSize: 20, color: "#fff" }}>
-              {winnerData.photo
-                ? <img src={winnerData.photo} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                : initials(winnerData.name, "?")}
-            </div>
-            <div style={{ textAlign: "center", marginTop: 8, fontWeight: 900, fontSize: 17 }}>{winnerData.name.replace(/^@/, "")}</div>
-            <div style={{ textAlign: "center", marginTop: 6, fontSize: 26, fontWeight: 900, color: "#4ade80" }}>+{winnerData.payout.toFixed(2)} TON</div>
-            <div style={{ textAlign: "center", marginTop: 2, fontSize: 13, color: "#94a3b8", fontWeight: 700 }}>×{winnerData.mult}</div>
-          </div>
-        </div>
+        <WinnerModal
+          name={winnerData.name}
+          payout={winnerData.payout}
+          mult={winnerData.mult}
+          photo={winnerData.photo}
+          color={winnerData.color}
+          prizes={winnerData.prizes || []}
+        />
       )}
 
       {/* History — Portals-like cards */}

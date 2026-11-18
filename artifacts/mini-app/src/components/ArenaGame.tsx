@@ -96,11 +96,25 @@ function buildStrips(players: ArenaPlayer[]): Strip[] {
     share: number,
     poly: Pt[],
     shape: string,
+    place?: Pt,
   ): Strip => {
-    let sx = 0, sy = 0;
-    for (const q of poly) { sx += q.x; sy += q.y; }
-    const cx = sx / Math.max(1, poly.length);
-    const cy = sy / Math.max(1, poly.length);
+    let a = 0, cx = 0, cy = 0;
+    const nn = poly.length;
+    for (let k = 0; k < nn; k++) {
+      const j = (k + 1) % nn;
+      const cross = poly[k].x * poly[j].y - poly[j].x * poly[k].y;
+      a += cross;
+      cx += (poly[k].x + poly[j].x) * cross;
+      cy += (poly[k].y + poly[j].y) * cross;
+    }
+    a *= 0.5;
+    if (Math.abs(a) > 1e-3) { cx /= (6 * a); cy /= (6 * a); }
+    else {
+      let sx = 0, sy = 0;
+      for (const q of poly) { sx += q.x; sy += q.y; }
+      cx = sx / Math.max(1, nn); cy = sy / Math.max(1, nn);
+    }
+    if (place) { cx = place.x; cy = place.y; }
     const xs = poly.map((q) => q.x);
     const x0 = Math.min(...xs);
     const x1 = Math.max(...xs);
@@ -333,8 +347,9 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
 
       if (raw >= 1) {
         setPuckPos(target);
+        setTrail([]);
         setZoomOrigin(`${(target.x / W) * 100}% ${(target.y / H) * 100}%`);
-        setBoardZoom(1.55);
+        setBoardZoom(1.7);
         setPhase("winner"); setDirVisible(false); setWinnerTag(winName);
         hapticNotify("success");
         const payout = payoutOf(winner.stake, data.totalPool);
@@ -369,11 +384,11 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
         const id = ++trailId.current;
         setTrail((p) => [...p.slice(-20), { x: pos.x, y: pos.y, id }]);
       }
-      if (raw > 0.55) {
-        const k = (raw - 0.55) / 0.45;
+      if (raw > 0.35) {
+        const k = (raw - 0.35) / 0.65;
         const ease = 1 - Math.pow(1 - k, 2);
         setZoomOrigin(`${(pos.x / W) * 100}% ${(pos.y / H) * 100}%`);
-        setBoardZoom(1 + ease * 0.55);
+        setBoardZoom(1 + ease * 0.7);
       }
       rafRef.current = requestAnimationFrame(step);
     };
@@ -592,7 +607,10 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
             </div>
           ) : strips.map((s) => {
             const width = Math.max(2, s.x1 - s.x0);
-            const av = Math.round(Math.min(96, Math.max(28, 22 + s.share * 110)));
+            const isCorner = s.shape === "corner";
+            const av = isCorner
+              ? Math.round(Math.min(36, Math.max(22, 18 + s.share * 80)))
+              : Math.round(Math.min(88, Math.max(36, 28 + s.share * 90)));
             const clip = (s.poly && s.poly.length)
               ? `polygon(${s.poly.map((q) => `${(q.x / W) * 100}% ${(q.y / H) * 100}%`).join(", ")})`
               : undefined;

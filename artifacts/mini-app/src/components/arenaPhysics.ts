@@ -6,7 +6,14 @@ export const BALL_R = 12;
 export const MARGIN = 6;
 
 export type PathPoint = { x: number; y: number; t: number };
-export type StripLike = { x0: number; x1: number };
+export type Pt = { x: number; y: number };
+export type StripLike = {
+  x0: number;
+  x1: number;
+  poly?: Pt[];
+  cx?: number;
+  cy?: number;
+};
 export type Rng = () => number;
 
 /** Mulberry32 PRNG — same seed => same sequence on every device */
@@ -24,6 +31,31 @@ export function makeRng(seedStr: string): Rng {
     t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
+}
+
+function clampBall(x: number, y: number): Pt {
+  const lo = MARGIN + BALL_R;
+  const hiX = W - MARGIN - BALL_R;
+  const hiY = H - MARGIN - BALL_R;
+  return {
+    x: Math.min(hiX, Math.max(lo, x)),
+    y: Math.min(hiY, Math.max(lo, y)),
+  };
+}
+
+/** Ray-cast point-in-polygon */
+export function pointInPoly(pt: Pt, poly: Pt[]): boolean {
+  if (!poly || poly.length < 3) return false;
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const xi = poly[i].x, yi = poly[i].y;
+    const xj = poly[j].x, yj = poly[j].y;
+    const inter =
+      yi > pt.y !== yj > pt.y &&
+      pt.x < ((xj - xi) * (pt.y - yi)) / (yj - yi + 1e-12) + xi;
+    if (inter) inside = !inside;
+  }
+  return inside;
 }
 
 export function planBouncePath(
@@ -54,7 +86,6 @@ export function planBouncePath(
   type Cand = { nx: number; ny: number; dist: number; bounces: number };
   const cands: Cand[] = [];
 
-  // Prefer many wall bounces (8–14) and a longer path so the puck races around
   for (let nx = -12; nx <= 12; nx++) {
     for (let ny = -12; ny <= 12; ny++) {
       if (nx === 0 && ny === 0) continue;
@@ -80,19 +111,14 @@ export function planBouncePath(
         const gy = ny * ph + ry;
         const dist = Math.hypot(gx - sx, gy - sy);
         const bounces = Math.abs(nx) + Math.abs(ny);
-        if (bounces < 4) continue;
+        if (bounces < 2) continue;
         cands.push({ nx, ny, dist, bounces });
       }
     }
   }
 
-  cands.sort((a, b) => {
-    // Prefer ~10 bounces and long travel (~1200–1800)
-    const score = (c: Cand) => Math.abs(c.bounces - 10) * 40 + Math.abs(c.dist - 1400) * 0.15;
-    return score(a) - score(b);
-  });
-
-  const top = cands.slice(0, Math.min(14, cands.length));
+  cands.sort((a, b) => b.bounces - a.bounces || b.dist - a.dist);
+  const top = cands.slice(0, Math.max(6, Math.floor(cands.length * 0.35)));
   const pick = top[Math.floor(rng() * top.length)] ?? { nx: 3, ny: 4, dist: 1200, bounces: 7 };
 
   const rx = pick.nx % 2 === 0 ? tx0 : pw - tx0;
@@ -117,8 +143,7 @@ export function planBouncePath(
     if (cellX % 2 !== 0) lx = pw - lx;
     if (cellY % 2 !== 0) ly = ph - ly;
 
-    const t = u; // linear; ease-out applied in animation loop
-    pts.push({ x: lo + lx, y: lo + ly, t });
+    pts.push({ x: lo + lx, y: lo + ly, t: u });
   }
 
   if (pts.length) {
@@ -127,16 +152,51 @@ export function planBouncePath(
   return pts;
 }
 
+/**
+ * Sample a point INSIDE the winner territory polygon.
+ * Old code used only x0..x1 + full height → often landed on another player's zone.
+ */
 export function randomInStrip(strip: StripLike, rng: Rng = Math.random): { x: number; y: number } {
+  const lo = MARGIN + BALL_R;
+  const hiX = W - MARGIN - BALL_R;
+  const hiY = H - MARGIN - BALL_R;
+
+  if (strip.poly && strip.poly.length >= 3) {
+    const xs = strip.poly.map((p) => p.x);
+    const ys = strip.poly.map((p) => p.y);
+    const minX = Math.min(...xs);
+    const maxX = Math.max(...xs);
+    const minY = Math.min(...ys);
+    const maxY = Math.max(...ys);
+    const bw = Math.max(1, maxX - minX);
+    const bh = Math.max(1, maxY - minY);
+
+    for (let tries = 0; tries < 60; tries++) {
+      let x: number;
+      let y: number;
+      // Prefer near centroid so the puck clearly sits in the zone
+      if (rng() < 0.55 && strip.cx != null && strip.cy != null) {
+        x = strip.cx + (rng() - 0.5) * bw * 0.45;
+        y = strip.cy + (rng() - 0.5) * bh * 0.45;
+      } else {
+        x = minX + rng() * bw;
+        y = minY + rng() * bh;
+      }
+      const p = clampBall(x, y);
+      if (pointInPoly(p, strip.poly)) return p;
+    }
+    if (strip.cx != null && strip.cy != null) {
+      return clampBall(strip.cx, strip.cy);
+    }
+  }
+
+  // Rect fallback (legacy)
   const pad = BALL_R + 4;
   const w = Math.max(2, strip.x1 - strip.x0);
   const innerW = Math.max(1, w - pad * 2);
   const x = strip.x0 + pad + rng() * innerW;
-  const lo = MARGIN + BALL_R;
-  const hiX = W - MARGIN - BALL_R;
-  const cx = Math.min(hiX, Math.max(lo, x));
-  const y = MARGIN + BALL_R + rng() * (H - 2 * (MARGIN + BALL_R));
-  return { x: cx, y };
+  const y = lo + rng() * (hiY - lo);
+  return clampBall(x, y);
 }
 
 export function randomStart(rng: Rng = Math.random): { x: number; y: number } {

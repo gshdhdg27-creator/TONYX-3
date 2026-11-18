@@ -1,0 +1,19 @@
+name: apply-arena-portals
+on:
+  workflow_dispatch:
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run patch script
+        run: python3 .github/scripts/do_patch_arena.py
+      - name: Commit
+        run: |
+          git config user.name "tonyx-bot"
+          git config user.email "bot@tonyx.local"
+          git add artifacts/mini-app/src/components/ArenaGame.tsx
+          git commit -m "feat(arena): Portals-style diagonal + corner triangle territories" || exit 0
+          git push

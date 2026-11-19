@@ -1,9 +1,17 @@
-/** Arena billiard path — deterministic (seeded), no mid-air homing */
+/** Arena billiard path — Portals-style: only the center POINT bounces; ring may cross walls */
 
 export const W = 352;
 export const H = 352;
-export const BALL_R = 12;
-export const MARGIN = 6; // ring crosses wall; collision uses center // center near edge → ring crosses wall ~8px // center stays in; visual ring may cross edge
+/** Visual ring radius (drawn in ArenaGame) */
+export const BALL_R = 13;
+/**
+ * Collision marker — small point inside the puck.
+ * Only THIS point bounces off walls / can enter corners.
+ * Ring (BALL_R) is free to overhang the wall.
+ */
+export const POINT_R = 1.5;
+/** Playfield inset for the point (not the ring) */
+export const MARGIN = 1;
 
 export type PathPoint = { x: number; y: number; t: number };
 export type Pt = { x: number; y: number };
@@ -33,10 +41,11 @@ export function makeRng(seedStr: string): Rng {
   };
 }
 
-function clampBall(x: number, y: number): Pt {
-  const lo = MARGIN + BALL_R;
-  const hiX = W - MARGIN - BALL_R;
-  const hiY = H - MARGIN - BALL_R;
+/** Clamp the collision POINT (not the visual ring) */
+function clampPoint(x: number, y: number): Pt {
+  const lo = MARGIN + POINT_R;
+  const hiX = W - MARGIN - POINT_R;
+  const hiY = H - MARGIN - POINT_R;
   return {
     x: Math.min(hiX, Math.max(lo, x)),
     y: Math.min(hiY, Math.max(lo, y)),
@@ -63,20 +72,15 @@ export function planBouncePath(
   target: { x: number; y: number },
   rng: Rng = Math.random,
 ): PathPoint[] {
-  const lo = MARGIN + BALL_R;
-  const hiX = W - MARGIN - BALL_R;
-  const hiY = H - MARGIN - BALL_R;
+  // Unfolded-table billiards on the POINT bounds (ring may hang past walls)
+  const lo = MARGIN + POINT_R;
+  const hiX = W - MARGIN - POINT_R;
+  const hiY = H - MARGIN - POINT_R;
   const pw = hiX - lo;
   const ph = hiY - lo;
 
-  const clampStart = {
-    x: Math.min(hiX, Math.max(lo, start.x)),
-    y: Math.min(hiY, Math.max(lo, start.y)),
-  };
-  const clampTarget = {
-    x: Math.min(hiX, Math.max(lo, target.x)),
-    y: Math.min(hiY, Math.max(lo, target.y)),
-  };
+  const clampStart = clampPoint(start.x, start.y);
+  const clampTarget = clampPoint(target.x, target.y);
 
   const sx = clampStart.x - lo;
   const sy = clampStart.y - lo;
@@ -155,14 +159,10 @@ export function planBouncePath(
 
 /**
  * Sample a point INSIDE the winner territory polygon.
- * Old code used only x0..x1 + full height → often landed on another player's zone.
+ * Uses soft clamp so tiny corner zones (0.01%) are reachable by the POINT.
  */
 export function randomInStrip(strip: StripLike, rng: Rng = Math.random): { x: number; y: number } {
-  // Soft clamp — keep on board but allow landing in tiny corner zones
-  const softClamp = (x: number, y: number): Pt => ({
-    x: Math.min(W - 2, Math.max(2, x)),
-    y: Math.min(H - 2, Math.max(2, y)),
-  });
+  const softClamp = (x: number, y: number): Pt => clampPoint(x, y);
 
   if (strip.poly && strip.poly.length >= 3) {
     const xs = strip.poly.map((p) => p.x);
@@ -175,7 +175,7 @@ export function randomInStrip(strip: StripLike, rng: Rng = Math.random): { x: nu
     const bh = Math.max(1, maxY - minY);
     const area = bw * bh;
 
-    // Tiny territory (e.g. 0.01%): always land on centroid — guaranteed inside
+    // Tiny territory: land on centroid — point can sit in the corner
     if (area < 900 || (strip.cx != null && strip.cy != null && bw < 28 && bh < 28)) {
       if (strip.cx != null && strip.cy != null) {
         return softClamp(strip.cx, strip.cy);
@@ -195,15 +195,14 @@ export function randomInStrip(strip: StripLike, rng: Rng = Math.random): { x: nu
       const p = softClamp(x, y);
       if (pointInPoly(p, strip.poly)) return p;
     }
-    // Fallback: centroid (do NOT hard-clamp out of tiny poly)
     if (strip.cx != null && strip.cy != null) {
       return softClamp(strip.cx, strip.cy);
     }
   }
 
-  const lo = 2 + BALL_R;
-  const hiY = H - 2 - BALL_R;
-  const pad = 4;
+  const lo = MARGIN + POINT_R;
+  const hiY = H - MARGIN - POINT_R;
+  const pad = 2;
   const w = Math.max(2, strip.x1 - strip.x0);
   const innerW = Math.max(1, w - pad * 2);
   const x = strip.x0 + pad + rng() * innerW;
@@ -212,9 +211,9 @@ export function randomInStrip(strip: StripLike, rng: Rng = Math.random): { x: nu
 }
 
 export function randomStart(rng: Rng = Math.random): { x: number; y: number } {
-  const lo = MARGIN + BALL_R;
-  const hiX = W - MARGIN - BALL_R;
-  const hiY = H - MARGIN - BALL_R;
+  const lo = MARGIN + POINT_R;
+  const hiX = W - MARGIN - POINT_R;
+  const hiY = H - MARGIN - POINT_R;
   return {
     x: lo + rng() * (hiX - lo),
     y: lo + rng() * (hiY - lo),

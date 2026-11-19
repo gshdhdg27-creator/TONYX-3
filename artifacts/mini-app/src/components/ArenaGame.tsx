@@ -6,7 +6,7 @@ import {
   useGetUserProfile, getGetUserProfileQueryKey,
 } from "@workspace/api-client-react";
 import {
-  W, H, BALL_R, MARGIN, makeRng,
+  W, H, BALL_R, POINT_R, MARGIN, makeRng,
   planBouncePath, randomInStrip, randomStart, samplePath, pathDirection, pointInPoly,
 } from "./arenaPhysics";
 import WinnerModal from "./WinnerModal";
@@ -592,8 +592,8 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
       const pos = samplePath(path, eased);
       const prev = lastPosRef.current;
       const near =
-        pos.x <= MARGIN + BALL_R + 2 || pos.x >= W - MARGIN - BALL_R - 2 ||
-        pos.y <= MARGIN + BALL_R + 2 || pos.y >= H - MARGIN - BALL_R - 2;
+        pos.x <= MARGIN + POINT_R + 3 || pos.x >= W - MARGIN - POINT_R - 3 ||
+        pos.y <= MARGIN + POINT_R + 3 || pos.y >= H - MARGIN - POINT_R - 3;
       if (near && Math.hypot(pos.x - prev.x, pos.y - prev.y) > 0.6 && now - lastHitRef.current > 100) {
         lastHitRef.current = now; haptic("light");
       }
@@ -1021,7 +1021,8 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
                     <circle cx={puckPos.x} cy={puckPos.y} r={BALL_R - 3.4} fill="rgba(255,255,255,0.10)" stroke="rgba(255,255,255,0.45)" strokeWidth={1.1} />
                     <line x1={puckPos.x - (BALL_R - 2)} y1={puckPos.y} x2={puckPos.x + (BALL_R - 2)} y2={puckPos.y} stroke="rgba(255,255,255,0.92)" strokeWidth={2.2} strokeLinecap="round" />
                     <line x1={puckPos.x} y1={puckPos.y - (BALL_R - 2)} x2={puckPos.x} y2={puckPos.y + (BALL_R - 2)} stroke="rgba(255,255,255,0.92)" strokeWidth={2.2} strokeLinecap="round" />
-                    <circle cx={puckPos.x} cy={puckPos.y} r={2.0} fill="rgba(255,255,255,0.95)" />
+                    <circle cx={puckPos.x} cy={puckPos.y} r={3.2} fill="rgba(255,255,255,0.25)" />
+                    <circle cx={puckPos.x} cy={puckPos.y} r={1.8} fill="#fff" />
                   </svg>
                   {(zoneTag || winnerTag) && (
                     <div style={{

@@ -86,8 +86,9 @@ export function planBouncePath(
   type Cand = { nx: number; ny: number; dist: number; bounces: number };
   const cands: Cand[] = [];
 
-  for (let nx = -12; nx <= 12; nx++) {
-    for (let ny = -12; ny <= 12; ny++) {
+  // Prefer long multi-bounce paths so the puck travels a lot before stopping
+  for (let nx = -18; nx <= 18; nx++) {
+    for (let ny = -18; ny <= 18; ny++) {
       if (nx === 0 && ny === 0) continue;
       const rx = nx % 2 === 0 ? tx0 : pw - tx0;
       const ry = ny % 2 === 0 ? ty0 : ph - ty0;
@@ -95,15 +96,15 @@ export function planBouncePath(
       const gy = ny * ph + ry;
       const dist = Math.hypot(gx - sx, gy - sy);
       const bounces = Math.abs(nx) + Math.abs(ny);
-      if (bounces < 6 || bounces > 16) continue;
-      if (dist < 500 || dist > 3200) continue;
+      if (bounces < 10 || bounces > 28) continue;
+      if (dist < 900 || dist > 5600) continue;
       cands.push({ nx, ny, dist, bounces });
     }
   }
 
   if (cands.length === 0) {
-    for (let nx = -8; nx <= 8; nx++) {
-      for (let ny = -8; ny <= 8; ny++) {
+    for (let nx = -12; nx <= 12; nx++) {
+      for (let ny = -12; ny <= 12; ny++) {
         if (nx === 0 && ny === 0) continue;
         const rx = nx % 2 === 0 ? tx0 : pw - tx0;
         const ry = ny % 2 === 0 ? ty0 : ph - ty0;
@@ -111,22 +112,22 @@ export function planBouncePath(
         const gy = ny * ph + ry;
         const dist = Math.hypot(gx - sx, gy - sy);
         const bounces = Math.abs(nx) + Math.abs(ny);
-        if (bounces < 2) continue;
+        if (bounces < 4) continue;
         cands.push({ nx, ny, dist, bounces });
       }
     }
   }
 
   cands.sort((a, b) => b.bounces - a.bounces || b.dist - a.dist);
-  const top = cands.slice(0, Math.max(6, Math.floor(cands.length * 0.35)));
-  const pick = top[Math.floor(rng() * top.length)] ?? { nx: 3, ny: 4, dist: 1200, bounces: 7 };
+  const top = cands.slice(0, Math.max(10, Math.floor(cands.length * 0.4)));
+  const pick = top[Math.floor(rng() * top.length)] ?? { nx: 5, ny: 6, dist: 2200, bounces: 11 };
 
   const rx = pick.nx % 2 === 0 ? tx0 : pw - tx0;
   const ry = pick.ny % 2 === 0 ? ty0 : ph - ty0;
   const gx = pick.nx * pw + rx;
   const gy = pick.ny * ph + ry;
 
-  const samples = Math.max(120, Math.floor(pick.dist / 3));
+  const samples = Math.max(200, Math.floor(pick.dist / 2.2));
   const pts: PathPoint[] = [];
 
   for (let i = 0; i <= samples; i++) {

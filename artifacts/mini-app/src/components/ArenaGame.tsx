@@ -13,7 +13,7 @@ import WinnerModal from "./WinnerModal";
 
 const COMMISSION = 0.2;
 const MIN_STAKE = 0.1;
-const SPIN_MS = 7000;
+const SPIN_MS = 9500;
 const DIR_MS = 350;
 const WINNER_HOLD_MS = 4500;
 const DEFAULT_CHIPS = [5, 10, 100];
@@ -540,13 +540,14 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
       if (!dirHidden && elapsed > DIR_MS) { dirHidden = true; setDirVisible(false); }
       const play = Math.max(0, elapsed - DIR_MS * 0.25);
       const raw = Math.min(1, play / SPIN_MS);
-      const eased = raw >= 1 ? 1 : 1 - Math.pow(1 - raw, 3.8);
+      // Strong ease-out: fast start, very smooth slow stop
+      const eased = raw >= 1 ? 1 : 1 - Math.pow(1 - raw, 5.2);
 
       if (raw >= 1) {
         setPuckPos(target);
         setTrail([]);
         setZoomOrigin(`${(target.x / W) * 100}% ${(target.y / H) * 100}%`);
-        setBoardZoom(2);
+        setBoardZoom(3);
         setPhase("winner"); setDirVisible(false); setWinnerTag(winName);
         hapticNotify("success");
         const payout = payoutOf(winner.stake, data.totalPool);
@@ -590,16 +591,16 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
       }
       lastPosRef.current = pos;
       setPuckPos(pos);
-      if (now - lastTrail > 36) {
+      if (now - lastTrail > 28) {
         lastTrail = now;
         const id = ++trailId.current;
-        setTrail((p) => [...p.slice(-20), { x: pos.x, y: pos.y, id }]);
+        setTrail((p) => [...p.slice(-28), { x: pos.x, y: pos.y, id }]);
       }
-      if (raw > 0.35) {
-        const k = (raw - 0.35) / 0.65;
-        const ease = 1 - Math.pow(1 - k, 2);
+      if (raw > 0.30) {
+        const k = (raw - 0.30) / 0.70;
+        const ease = 1 - Math.pow(1 - k, 2.4);
         setZoomOrigin(`${(pos.x / W) * 100}% ${(pos.y / H) * 100}%`);
-        setBoardZoom(1 + ease * 1.0);
+        setBoardZoom(1 + ease * 2.0); // up to 3x
       }
       rafRef.current = requestAnimationFrame(step);
     };

@@ -1004,7 +1004,7 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
                     </defs>
                     {trail.map((t, i) => {
                       const k = (i + 1) / Math.max(1, trail.length);
-                      return <circle key={t.id} cx={t.x} cy={t.y} r={1.5 + k * 4} fill="#fff" opacity={0.04 + k * 0.32} />;
+                      return <circle key={t.id} cx={t.x} cy={t.y} r={BALL_R * (0.35 + k * 0.25)} fill="rgba(255,255,255,0.08)" opacity={0.08 + k * 0.22} />;
                     })}
                     {dirVisible && (
                       <g style={{ animation: "arDir .35s ease-out" }}>
@@ -1016,12 +1016,21 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
                         />
                       </g>
                     )}
-                    <circle cx={puckPos.x} cy={puckPos.y} r={BALL_R + 3} fill="rgba(0,0,0,0.22)" />
-                    <circle cx={puckPos.x} cy={puckPos.y} r={BALL_R + 0.5} fill="rgba(255,255,255,0.18)" stroke="rgba(255,255,255,0.95)" strokeWidth={3.4} />
-                    <circle cx={puckPos.x} cy={puckPos.y} r={BALL_R - 3.4} fill="rgba(255,255,255,0.10)" stroke="rgba(255,255,255,0.45)" strokeWidth={1.1} />
-                    <line x1={puckPos.x - (BALL_R - 2)} y1={puckPos.y} x2={puckPos.x + (BALL_R - 2)} y2={puckPos.y} stroke="rgba(255,255,255,0.92)" strokeWidth={2.2} strokeLinecap="round" />
-                    <line x1={puckPos.x} y1={puckPos.y - (BALL_R - 2)} x2={puckPos.x} y2={puckPos.y + (BALL_R - 2)} stroke="rgba(255,255,255,0.92)" strokeWidth={2.2} strokeLinecap="round" />
-                    <circle cx={puckPos.x} cy={puckPos.y} r={2.0} fill="rgba(255,255,255,0.95)" />
+                    {/* Portals-style glass puck: transparent center, thick ring, crosshair */}
+                    <ellipse cx={puckPos.x} cy={puckPos.y + 2} rx={BALL_R + 1} ry={BALL_R * 0.35} fill="rgba(0,0,0,0.28)" />
+                    <circle cx={puckPos.x} cy={puckPos.y} r={BALL_R} fill="rgba(255,255,255,0.12)" stroke="rgba(255,255,255,0.92)" strokeWidth={3.8} />
+                    <circle cx={puckPos.x} cy={puckPos.y} r={BALL_R - 3.2} fill="rgba(255,255,255,0.06)" stroke="rgba(255,255,255,0.28)" strokeWidth={1} />
+                    <line
+                      x1={puckPos.x - (BALL_R - 5)} y1={puckPos.y}
+                      x2={puckPos.x + (BALL_R - 5)} y2={puckPos.y}
+                      stroke="rgba(255,255,255,0.95)" strokeWidth={2.4} strokeLinecap="round"
+                    />
+                    <line
+                      x1={puckPos.x} y1={puckPos.y - (BALL_R - 5)}
+                      x2={puckPos.x} y2={puckPos.y + (BALL_R - 5)}
+                      stroke="rgba(255,255,255,0.95)" strokeWidth={2.4} strokeLinecap="round"
+                    />
+                    <circle cx={puckPos.x} cy={puckPos.y} r={1.6} fill="rgba(255,255,255,0.95)" />
                   </svg>
                   {(zoneTag || winnerTag) && (
                     <div style={{

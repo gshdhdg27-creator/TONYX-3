@@ -419,9 +419,8 @@ const CSS = `
 @keyframes arPulse{0%,100%{opacity:.55}50%{opacity:1}}
 @keyframes arPop{0%{opacity:0;transform:translateY(10px) scale(.96)}100%{opacity:1;transform:none}}
 @keyframes arDir{0%{opacity:0;transform:scale(.4)}40%{opacity:1;transform:scale(1.15)}100%{opacity:1;transform:scale(1)}}
-.ar-board{position:relative;border-radius:18px;overflow:hidden;background:#0a0a12}
-.ar-board::before{content:"";position:absolute;inset:0;border-radius:18px;pointer-events:none;box-shadow:inset 0 0 0 2px rgba(255,255,255,.14),inset 0 0 0 5px rgba(0,0,0,.4);z-index:5}
-.ar-strip-gloss{position:absolute;inset:0;background:linear-gradient(180deg,rgba(255,255,255,.18),rgba(255,255,255,.04) 18%,transparent 42%,rgba(0,0,0,.12));pointer-events:none}
+.ar-board{position:relative;border-radius:0;overflow:hidden;background:#05050a}
+.ar-strip-gloss{display:none}
 `;
 
 export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onClose }: Props) {
@@ -838,10 +837,10 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
         {/* Board */}
         <div style={{
           margin: "0 12px",
-          borderRadius: 16,
+          borderRadius: 0,
           overflow: "hidden",
-          border: "1px solid rgba(255,255,255,0.06)",
-          background: "#111118",
+          border: "none",
+          background: "#05050a",
         }}>
           <div style={boardWrap}>
             <div className="ar-board" style={{
@@ -1527,7 +1526,7 @@ const statusPill: CSSProperties = {
   background: "rgba(34,197,94,0.12)", border: "1px solid rgba(34,197,94,0.28)",
   color: "#86efac", fontWeight: 800, fontSize: 12,
 };
-const boardWrap: CSSProperties = { display: "flex", justifyContent: "center", margin: "0 auto", position: "relative", zIndex: 1, width: W, height: H, maxWidth: "100%", overflow: "hidden", borderRadius: 16 };
+const boardWrap: CSSProperties = { display: "flex", justifyContent: "center", margin: "0 auto", position: "relative", zIndex: 1, width: W, height: H, maxWidth: "100%", overflow: "hidden", borderRadius: 0 };
 const playersCard: CSSProperties = {
   margin: "10px 14px 12px", background: "linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.03))",
   borderRadius: 16, padding: "10px 12px", border: "1px solid rgba(255,255,255,0.08)", position: "relative", zIndex: 1,

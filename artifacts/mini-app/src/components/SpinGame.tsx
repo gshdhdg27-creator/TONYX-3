@@ -216,6 +216,20 @@ export function JackpotWheel({
   );
 }
 
+
+function TonIcon({ size = 16 }: { size?: number }) {
+  return (
+    <img
+      src="/toncoin.png"
+      alt="TON"
+      width={size}
+      height={size}
+      style={{ width: size, height: size, objectFit: "contain", display: "inline-block", verticalAlign: "middle", borderRadius: size > 20 ? 8 : 4 }}
+      draggable={false}
+    />
+  );
+}
+
 export default function SpinGame({
   telegramId,
   tonBalance,
@@ -699,7 +713,7 @@ export default function SpinGame({
                           border: "1px solid rgba(96,165,250,0.55)",
                           boxShadow: "0 4px 12px rgba(37,99,235,0.25)",
                         }}>
-                          <span style={{ fontSize: 20, lineHeight: 1 }}>💎</span>
+                          <TonIcon size={20} />
                           <span style={{
                             position: "absolute", left: 4, bottom: 3, fontSize: 10, fontWeight: 900, color: "#fff",
                             textShadow: "0 1px 2px #000",
@@ -769,7 +783,7 @@ export default function SpinGame({
               opacity: canBet ? 1 : 0.5,
             }}
             title="TON"
-          >💎</button>
+          ><TonIcon size={18} /></button>
         </div>
       </div>
 
@@ -804,7 +818,7 @@ export default function SpinGame({
                 fontFamily: "inherit",
               }}
             >
-              {v}<span style={{ opacity: 0.9, fontSize: 11 }}>💎</span>
+              {v}<span style={{ marginLeft: 3, display: "inline-flex", alignItems: "center" }}><TonIcon size={12} /></span>
             </button>
           ))}
           <button
@@ -1026,7 +1040,7 @@ export default function SpinGame({
                         display: "flex", alignItems: "center", justifyContent: "center",
                         border: "1px solid rgba(96,165,250,0.45)",
                       }}>
-                        <span style={{ fontSize: 28 }}>💎</span>
+                        <TonIcon size={28} />
                         <span style={{
                           position: "absolute", left: 6, bottom: 4, fontSize: 12, fontWeight: 900, color: "#fff",
                           textShadow: "0 1px 3px #000",

@@ -18,10 +18,24 @@ const DIR_MS = 350;
 const WINNER_HOLD_MS = 4500;
 const DEFAULT_CHIPS = [5, 10, 100];
 const CHIPS_KEY = "tonyx_arena_chips_v2";
+/** Bright distinct territory colors (spaced so neighbors never look the same) */
 const COLORS = [
-  "#22c55e", "#ef4444", "#f59e0b", "#06b6d4",
-  "#a855f7", "#eab308", "#ec4899", "#14b8a6",
-  "#f97316", "#3b82f6",
+  "#22c55e", // green
+  "#3b82f6", // blue
+  "#f59e0b", // amber
+  "#a855f7", // purple
+  "#ef4444", // red
+  "#06b6d4", // cyan
+  "#ec4899", // pink
+  "#84cc16", // lime
+  "#f97316", // orange
+  "#8b5cf6", // violet
+  "#14b8a6", // teal
+  "#eab308", // yellow
+  "#f43f5e", // rose
+  "#0ea5e9", // sky
+  "#d946ef", // fuchsia
+  "#10b981", // emerald
 ];
 
 /** Official TON logo */
@@ -148,7 +162,14 @@ function avatarSrc(photoUrl?: string | null, username?: string | null): string |
 function initials(name: string | null | undefined, id: string) {
   return (name || id || "?").replace(/^@/, "").slice(0, 2).toUpperCase();
 }
-function colorFor(i: number) { return COLORS[i % COLORS.length]; }
+/** Color by player index — spaced across palette so neighbors never share similar hues */
+function colorFor(i: number, seed = 0) {
+  const n = COLORS.length;
+  const start = Math.abs(seed) % n;
+  // step ~ half palette so consecutive players get far-apart colors
+  const step = Math.max(3, Math.floor(n / 2) - 1);
+  return COLORS[(start + i * step) % n];
+}
 function payoutOf(stake: number, pool: number) {
   return Math.round((stake + (pool - stake) * (1 - COMMISSION)) * 1000) / 1000;
 }
@@ -163,7 +184,7 @@ function hash01(s: string): number {
  * - 2 players -> diagonal split, area ~ stake %
  * - 3+ -> corner triangles + main zone for leader
  */
-function buildStrips(players: ArenaPlayer[]): Strip[] {
+function buildStrips(players: ArenaPlayer[], roomSeed = 0): Strip[] {
   const list = [...players].filter((p) => p && p.stake > 0);
   const total = list.reduce((s, p) => s + p.stake, 0) || 1;
   const n = list.length;
@@ -198,7 +219,7 @@ function buildStrips(players: ArenaPlayer[]): Strip[] {
     const x0 = Math.min(...xs);
     const x1 = Math.max(...xs);
     return {
-      ...p, color: colorFor(i), index: i, share,
+      ...p, color: colorFor(i, roomSeed), index: i, share,
       x0, x1, midX: (x0 + x1) / 2, poly, cx, cy, shape,
     };
   };
@@ -492,7 +513,7 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
     totalPool: number; fair?: ArenaState["fair"];
   }) {
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    const strips = buildStrips(data.players);
+    const strips = buildStrips(data.players, data.id ?? 0);
     const winner = strips.find((s) => s.telegramId === data.winnerId) ?? strips[0];
     if (!winner) return;
 
@@ -618,7 +639,10 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
     return () => clearTimeout(t);
   }, [arena?.status, arena?.startAt, fetchState]);
 
-  const liveStrips = useMemo(() => buildStrips(arena?.players ?? []), [arena?.players]);
+  const liveStrips = useMemo(
+    () => buildStrips(arena?.players ?? [], arena?.id ?? 0),
+    [arena?.players, arena?.id],
+  );
   const strips = freezeStrips ?? liveStrips;
   const pool = freezeStrips ? freezePool : (arena?.totalPool ?? 0);
   const meIn = arena?.players.some((p) => p.telegramId === telegramId);
@@ -824,15 +848,15 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
               width: W, height: H, transform: `scale(${boardZoom})`, transformOrigin: zoomOrigin,
               transition: phase === "winner" ? "transform 0.55s cubic-bezier(0.22,1,0.36,1)" : "none",
               background: strips.length === 0
-                ? "linear-gradient(160deg,#6366f1 0%,#8b5cf6 45%,#a855f7 100%)"
+                ? "#05050a"
                 : strips.length === 1
-                  ? (strips[0].color || "linear-gradient(160deg,#6366f1,#a855f7)")
-                  : "#0a0a12",
+                  ? (strips[0].color || "#22c55e")
+                  : "#05050a",
             }}>
               {strips.length === 0 ? (
                 <div style={{
                   position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center",
-                  color: "rgba(255,255,255,0.75)", fontWeight: 800, fontSize: 15, zIndex: 2, textAlign: "center", padding: 20,
+                  color: "rgba(255,255,255,0.35)", fontWeight: 800, fontSize: 15, zIndex: 2, textAlign: "center", padding: 20,
                 }}>
                   Сделайте первую ставку
                 </div>

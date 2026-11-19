@@ -2,7 +2,7 @@
 
 export const W = 352;
 export const H = 352;
-export const BALL_R = 12;
+export const BALL_R = 16;
 export const MARGIN = 1; // center stays in; visual ring may cross edge
 
 export type PathPoint = { x: number; y: number; t: number };

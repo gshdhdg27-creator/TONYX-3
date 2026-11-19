@@ -24,55 +24,72 @@ const COLORS = [
   "#f97316", "#3b82f6",
 ];
 
-/** Official TON mark — replaces diamond emoji in stakes UI */
-function TonIcon({ size = 16 }: { size?: number }) {
+/** Blue diamond icon (like Portals / gift style) */
+function DiamondIcon({ size = 28 }: { size?: number }) {
   return (
-    <img
-      src="/toncoin.png"
-      alt="TON"
-      width={size}
-      height={size}
-      style={{ width: size, height: size, objectFit: "contain", display: "inline-block", verticalAlign: "middle", borderRadius: size > 20 ? 8 : 4 }}
-      draggable={false}
-    />
+    <svg width={size} height={size} viewBox="0 0 48 48" fill="none" style={{ display: "block" }}>
+      <path d="M24 6L38 20L24 42L10 20L24 6Z" fill="white" />
+      <path d="M24 6L38 20H10L24 6Z" fill="rgba(255,255,255,0.55)" />
+      <path d="M18 20H30L24 42L18 20Z" fill="rgba(200,220,255,0.35)" />
+      <path d="M34 12l1.2 2.4 2.4 1.2-2.4 1.2L34 19l-1.2-2.4-2.4-1.2 2.4-1.2L34 12z" fill="white" />
+    </svg>
   );
 }
 
-/** Stake chip: bigger TON logo + amount centered */
-function TonChip({ amount, size = 52 }: { amount: number | string; size?: number }) {
+/** Small diamond for bet chips / mode toggle */
+function TonIcon({ size = 16 }: { size?: number }) {
+  return <DiamondIcon size={size} />;
+}
+
+/** Stake chip: blue card + diamond + amount badge at bottom (as on screenshots) */
+function TonChip({ amount, size = 56 }: { amount: number | string; size?: number }) {
   const label = typeof amount === "number"
     ? (Math.abs(amount - Math.round(amount)) < 1e-9 ? String(Math.round(amount)) : amount.toFixed(2))
     : String(amount);
-  const fontSize = Math.max(12, Math.round(size * 0.30));
+  const badgeFs = Math.max(10, Math.round(size * 0.20));
+  const iconSize = Math.round(size * 0.48);
   return (
     <div style={{
       width: size,
       height: size,
       borderRadius: Math.round(size * 0.22),
-      background: "linear-gradient(145deg,#3b82f6 0%,#1d4ed8 100%)",
-      border: "1px solid rgba(255,255,255,0.28)",
-      boxShadow: "0 4px 12px rgba(37,99,235,0.35)",
+      background: "linear-gradient(160deg,#4da3ff 0%,#2563eb 55%,#1d4ed8 100%)",
+      border: "1px solid rgba(255,255,255,0.25)",
+      boxShadow: "0 4px 14px rgba(37,99,235,0.4)",
       display: "flex",
+      flexDirection: "column",
       alignItems: "center",
       justifyContent: "center",
       position: "relative",
       flexShrink: 0,
       overflow: "hidden",
+      paddingBottom: Math.round(size * 0.14),
     }}>
-      <TonIcon size={Math.round(size * 0.64)} />
-      <span style={{
+      <DiamondIcon size={iconSize} />
+      <div style={{
         position: "absolute",
-        inset: 0,
+        left: "50%",
+        bottom: Math.round(size * 0.06),
+        transform: "translateX(-50%)",
         display: "flex",
         alignItems: "center",
-        justifyContent: "center",
-        fontWeight: 900,
-        fontSize,
-        color: "#fff",
-        textShadow: "0 1px 3px rgba(0,0,0,0.9), 0 0 10px rgba(0,0,0,0.45)",
-        letterSpacing: "-0.02em",
-        pointerEvents: "none",
-      }}>{label}</span>
+        gap: 2,
+        background: "rgba(15,23,42,0.55)",
+        borderRadius: 999,
+        padding: `2px ${Math.max(6, Math.round(size * 0.1))}px`,
+        border: "1px solid rgba(255,255,255,0.2)",
+      }}>
+        <span style={{
+          fontWeight: 900,
+          fontSize: badgeFs,
+          color: "#fff",
+          lineHeight: 1.2,
+          letterSpacing: "-0.02em",
+        }}>{label}</span>
+        <svg width={badgeFs} height={badgeFs} viewBox="0 0 16 16" fill="none">
+          <path d="M8 1.5L13 7L8 14.5L3 7L8 1.5Z" fill="white" />
+        </svg>
+      </div>
     </div>
   );
 }
@@ -904,13 +921,17 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
             const nfts = s.nftStakes ?? [];
             const isNft = nfts.length > 0;
             return (
-              <button type="button" key={s.telegramId} onClick={() => setStakeDetail(s)} style={{ ...playerRow, alignItems: "flex-start", paddingTop: 6, paddingBottom: 6, width: "100%", textAlign: "left", cursor: "pointer", fontFamily: "inherit", color: "inherit", background: "transparent" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, flex: 1 }}>
+              <button type="button" key={s.telegramId} onClick={() => setStakeDetail(s)} style={{
+                display: "block", width: "100%", textAlign: "left", cursor: "pointer", fontFamily: "inherit", color: "inherit",
+                background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)",
+                borderRadius: 14, padding: "10px 12px", marginBottom: 8,
+              }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                   <div style={{
-                    width: 28, height: 28, borderRadius: "50%", overflow: "hidden", flexShrink: 0,
+                    width: 36, height: 36, borderRadius: "50%", overflow: "hidden", flexShrink: 0,
                     border: `2px solid ${s.color}`, background: "#0a0a12",
                     display: "flex", alignItems: "center", justifyContent: "center",
-                    fontWeight: 900, fontSize: 10, color: "#fff",
+                    fontWeight: 900, fontSize: 11, color: "#fff",
                   }}>
                     {avatarSrc(s.photoUrl, s.username)
                       ? <img
@@ -927,45 +948,50 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
                   </div>
                   <div style={{ minWidth: 0, flex: 1 }}>
                     <div style={{
-                      fontWeight: 700, fontSize: 13,
+                      fontWeight: 800, fontSize: 14,
                       color: s.telegramId === telegramId ? "#4ade80" : "#e2e8f0",
                       overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                     }}>
-                      {(s.username || s.telegramId).replace(/^@/, "").slice(0, 14)}
+                      @{(s.username || s.telegramId).replace(/^@/, "").slice(0, 16)}
                       {s.telegramId === telegramId ? " (вы)" : ""}
                     </div>
+                    <div style={{ fontSize: 12, marginTop: 2, fontWeight: 700, display: "flex", alignItems: "center", gap: 5, color: "#94a3b8" }}>
+                      <span style={{ width: 7, height: 7, borderRadius: "50%", background: s.color, flexShrink: 0 }} />
+                      {(s.chance || s.share * 100).toFixed(2)}%
+                    </div>
+                  </div>
+                  <div style={{ fontWeight: 900, fontSize: 16, flexShrink: 0, color: "#f1f5f9", letterSpacing: "-0.02em" }}>
                     {(() => {
-                      const nftSum = nfts.reduce((a, n) => a + (Number(n.valueTon) || 0), 0);
-                      const pureTon = Math.max(0, Math.round((Number(s.stake) - nftSum) * 1000) / 1000);
-                      return (
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 }}>
-                          {pureTon > 1e-9 && (
-                            <TonChip amount={pureTon} size={52} />
-                          )}
-                          {nfts.map((n) => (
-                            <div key={n.inventoryId} style={{
-                              width: 40, height: 40, borderRadius: 10, overflow: "hidden", position: "relative",
-                              background: "rgba(59,130,246,0.2)", border: "1px solid rgba(59,130,246,0.35)",
-                              display: "flex", alignItems: "center", justifyContent: "center",
-                            }}>
-                              {n.imageUrl
-                                ? <img src={n.imageUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                                : <span style={{ fontSize: 14 }}>🎁</span>}
-                              <span style={{
-                                position: "absolute", left: 3, bottom: 2, fontSize: 9, fontWeight: 900, color: "#fff",
-                                textShadow: "0 1px 2px #000",
-                              }}>{n.valueTon}</span>
-                            </div>
-                          ))}
-                        </div>
-                      );
-                    })()}
+                      const v = Number(s.stake);
+                      return Math.abs(v - Math.round(v)) < 1e-9 ? String(Math.round(v)) : v.toFixed(2);
+                    })()} TON
                   </div>
                 </div>
-                <div style={{ textAlign: "right", flexShrink: 0, paddingTop: 2 }}>
-                  <div style={{ fontWeight: 800, fontSize: 12 }}>{s.stake.toFixed(2)}</div>
-                  <div style={{ fontSize: 10, color: "#94a3b8" }}>{(s.chance || s.share * 100).toFixed(1)}%</div>
-                </div>
+                {(() => {
+                  const nftSum = nfts.reduce((a, n) => a + (Number(n.valueTon) || 0), 0);
+                  const pureTon = Math.max(0, Math.round((Number(s.stake) - nftSum) * 1000) / 1000);
+                  if (pureTon < 1e-9 && nfts.length === 0) return null;
+                  return (
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10 }}>
+                      {pureTon > 1e-9 && <TonChip amount={pureTon} size={56} />}
+                      {nfts.map((n) => (
+                        <div key={n.inventoryId} style={{
+                          width: 56, height: 56, borderRadius: 14, overflow: "hidden", position: "relative",
+                          background: "rgba(59,130,246,0.2)", border: "1px solid rgba(59,130,246,0.35)",
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                        }}>
+                          {n.imageUrl
+                            ? <img src={n.imageUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                            : <span style={{ fontSize: 18 }}>🎁</span>}
+                          <span style={{
+                            position: "absolute", left: 5, bottom: 4, fontSize: 11, fontWeight: 900, color: "#fff",
+                            textShadow: "0 1px 2px #000",
+                          }}>{n.valueTon}</span>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
               </button>
             );
           })}
@@ -1320,8 +1346,11 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
               <button type="button" onClick={() => setStakeDetail(null)}
                 style={{ border: "none", background: "transparent", color: "#94a3b8", fontSize: 18, cursor: "pointer" }}>×</button>
             </div>
-            <div style={{ fontSize: 22, fontWeight: 900, marginBottom: 14 }}>
-              {Number(stakeDetail.stake).toFixed(2)} TON
+            <div style={{ fontSize: 26, fontWeight: 900, marginBottom: 16, letterSpacing: "-0.02em" }}>
+              {(() => {
+                const v = Number(stakeDetail.stake);
+                return Math.abs(v - Math.round(v)) < 1e-9 ? String(Math.round(v)) : v.toFixed(2);
+              })()} TON
             </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
               {(() => {
@@ -1331,19 +1360,19 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
                 return (
                   <>
                     {pureTon > 1e-9 && (
-                      <TonChip amount={pureTon} size={72} />
+                      <TonChip amount={pureTon} size={88} />
                     )}
                     {nfts.map((n) => (
                       <div key={n.inventoryId} style={{
-                        width: 72, height: 72, borderRadius: 14, overflow: "hidden", position: "relative",
+                        width: 88, height: 88, borderRadius: 18, overflow: "hidden", position: "relative",
                         background: "rgba(59,130,246,0.15)", border: "1px solid rgba(59,130,246,0.3)",
                         display: "flex", alignItems: "center", justifyContent: "center",
                       }}>
                         {n.imageUrl
                           ? <img src={n.imageUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                          : <span style={{ fontSize: 24 }}>🎁</span>}
+                          : <span style={{ fontSize: 28 }}>🎁</span>}
                         <span style={{
-                          position: "absolute", left: 6, bottom: 4, fontSize: 11, fontWeight: 900, color: "#fff",
+                          position: "absolute", left: 7, bottom: 5, fontSize: 12, fontWeight: 900, color: "#fff",
                           textShadow: "0 1px 3px #000",
                         }}>{n.valueTon}</span>
                       </div>

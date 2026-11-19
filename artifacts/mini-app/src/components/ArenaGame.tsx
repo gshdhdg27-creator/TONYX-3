@@ -759,161 +759,247 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
     });
   }
 
+  const playerCount = arena?.players.length ?? strips.length;
   const statusLabel =
     phase === "spin" ? "Шайба в игре…" :
     phase === "winner" ? "Победитель!" :
     arena?.status === "starting" ? (countdown > 0 ? `Старт через ${countdown}с` : "Скоро…") :
-    (arena?.players.length ?? 0) < 2 ? "Ждём игроков…" : "Набор ставок";
+    playerCount < 2 ? `Ожидание игроков ${playerCount}/2` : "Набор ставок";
+
+  const poolLabel = (() => {
+    const v = Number(pool) || 0;
+    return Math.abs(v - Math.round(v)) < 1e-9 ? String(Math.round(v)) : v.toFixed(2);
+  })();
 
   return (
     <div style={root}>
       <style>{CSS}</style>
-      <div style={{ position: "absolute", inset: 0, pointerEvents: "none", background: "radial-gradient(ellipse 80% 35% at 50% 0%, rgba(34,197,94,0.1), transparent 60%)" }} />
+      <div style={{ position: "absolute", inset: 0, pointerEvents: "none", background: "radial-gradient(ellipse 80% 35% at 50% 0%, rgba(99,102,241,0.12), transparent 60%)" }} />
 
       <div style={header}>
         <button type="button" onClick={onClose} style={iconBtn}>←</button>
-        <div style={{ flex: 1, textAlign: "center" }}>
-          <div style={{ fontSize: 10, color: "#86efac", fontWeight: 800, letterSpacing: "0.14em" }}>ARENA</div>
-          <div style={{ fontSize: 24, fontWeight: 900, letterSpacing: "-0.03em", lineHeight: 1.1 }}>
-            {pool.toFixed(2)} <span style={{ color: "#4ade80", fontSize: 12, fontWeight: 800 }}>TON</span>
-          </div>
-        </div>
+        <div style={{ flex: 1, textAlign: "center", fontWeight: 900, fontSize: 16, letterSpacing: "0.04em" }}>ARENA</div>
         <button type="button" onClick={openHistory} style={iconBtn} title="История">⏱</button>
       </div>
 
-      <div style={{ textAlign: "center", marginBottom: 8 }}>
-        <span style={{ ...statusPill, animation: phase === "spin" ? "arPulse 1s ease-in-out infinite" : undefined }}>{statusLabel}</span>
-        {arena?.id != null && <span style={{ marginLeft: 8, fontSize: 11, color: "#64748b", fontWeight: 700 }}>#{arena.id}</span>}
-      </div>
-
-      <div style={boardWrap}>
-        <div className="ar-board" style={{
-          width: W, height: H, transform: `scale(${boardZoom})`, transformOrigin: zoomOrigin,
-          transition: phase === "winner" ? "transform 0.55s cubic-bezier(0.22,1,0.36,1)" : "none",
-          boxShadow: "0 20px 50px rgba(0,0,0,0.5)",
+      {/* Card like Portals screenshot */}
+      <div style={{
+        margin: "0 14px 10px",
+        borderRadius: 22,
+        background: "#0c0c12",
+        border: "1px solid rgba(255,255,255,0.08)",
+        boxShadow: "0 16px 40px rgba(0,0,0,0.45)",
+        overflow: "hidden",
+        position: "relative",
+        zIndex: 1,
+      }}>
+        {/* Top bar: Тотал + status */}
+        <div style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          padding: "12px 16px 10px",
         }}>
-          {strips.length === 0 ? (
-            <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "#64748b", fontWeight: 700, fontSize: 14, zIndex: 2 }}>
-              Сделайте первую ставку
-            </div>
-          ) : [...strips].sort((a, b) => (a.shape === "corner" ? 1 : 0) - (b.shape === "corner" ? 1 : 0)).map((s) => {
-            const isCorner = s.shape === "corner";
-            // Avatar scales with territory so it stays inside small corner triangles
-            let av: number;
-            if (isCorner) {
-              const f = Math.sqrt(2 * Math.max(0.008, s.share));
-              const maxFit = Math.floor(f * Math.min(W, H) * 0.38);
-              av = Math.max(14, Math.min(34, maxFit));
-            } else {
-              av = Math.round(Math.min(88, Math.max(36, 28 + s.share * 90)));
-            }
-            const clip = (s.poly && s.poly.length)
-              ? `polygon(${s.poly.map((q) => `${(q.x / W) * 100}% ${(q.y / H) * 100}%`).join(", ")})`
-              : undefined;
-            const pad = av / 2 + 2;
-            const ax = Math.max(pad, Math.min(W - pad, s.cx || W / 2));
-            const ay = Math.max(pad, Math.min(H - pad, s.cy || H / 2));
-            return (
-              <div key={s.telegramId} style={{
-                position: "absolute", left: 0, top: 0, width: W, height: H,
-                background: s.color,
-                clipPath: clip,
-                WebkitClipPath: clip,
-                overflow: "hidden",
-                // Corners must sit above full-height large strips or they vanish
-                zIndex: isCorner ? 5 : 1,
-                transition: phase === "lobby" ? "clip-path .45s ease" : "none",
-              }}>
-                <div className="ar-strip-gloss" />
-                <div style={{
-                  position: "absolute",
-                  left: ax - av / 2,
-                  top: ay - av / 2,
-                  width: av, height: av, borderRadius: "50%",
-                  border: `${av < 22 ? 2 : 3}px solid rgba(255,255,255,0.95)`, overflow: "hidden",
-                  background: "rgba(10,10,18,0.55)",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  fontWeight: 900, fontSize: av * 0.32, color: "#fff", zIndex: 2,
-                  boxShadow: "0 6px 16px rgba(0,0,0,0.4)",
-                }}>
-                  {avatarSrc(s.photoUrl, s.username)
-                    ? <img
-                        src={avatarSrc(s.photoUrl, s.username)!}
-                        alt=""
-                        style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                        onError={(e) => {
-                          const el = e.currentTarget;
-                          el.style.display = "none";
-                          if (el.parentElement) el.parentElement.textContent = initials(s.username, s.telegramId);
-                        }}
-                      />
-                    : initials(s.username, s.telegramId)}
-                </div>
-                {(isCorner || s.share >= 0.10) && (
-                  <div style={{
-                    position: "absolute", left: ax, top: ay + av / 2 + 4,
-                    transform: "translateX(-50%)", textAlign: "center", zIndex: 2,
-                    textShadow: "0 1px 4px rgba(0,0,0,.55)", pointerEvents: "none",
-                  }}>
-                    <div style={{ fontSize: isCorner ? 10 : 11, fontWeight: 900, color: "#fff", maxWidth: isCorner ? 72 : 88, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {(s.username || s.telegramId).replace(/^@/, "").slice(0, 10)}
-                    </div>
-                    <div style={{ fontSize: isCorner ? 11 : 12, fontWeight: 800, color: "rgba(255,255,255,.95)" }}>
-                      {(s.chance || s.share * 100).toFixed(1)}%
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })}
+          <div style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 800, fontSize: 15, color: "#e2e8f0" }}>
+            <span style={{ color: "#94a3b8", fontWeight: 700 }}>Тотал</span>
+            <span style={{ fontWeight: 900 }}>{poolLabel}</span>
+            <TonIcon size={16} />
+          </div>
+          <div style={{
+            fontSize: 13, fontWeight: 700, color: "#94a3b8",
+            animation: phase === "spin" ? "arPulse 1s ease-in-out infinite" : undefined,
+          }}>
+            {statusLabel}
+          </div>
+        </div>
 
-          {(puckVisible || phase === "spin" || phase === "winner") && (
-            <>
-              <svg width={W} height={H} style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 6 }}>
-                <defs>
-                  <radialGradient id="puckG" cx="35%" cy="30%" r="65%">
-                    <stop offset="0%" stopColor="#fff" /><stop offset="45%" stopColor="#e8e8ef" /><stop offset="100%" stopColor="#9ca3af" />
-                  </radialGradient>
-                  <marker id="arrH" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
-                    <path d="M0,0 L6,3 L0,6 Z" fill="#111" />
-                  </marker>
-                </defs>
-                {trail.map((t, i) => {
-                  const k = (i + 1) / Math.max(1, trail.length);
-                  return <circle key={t.id} cx={t.x} cy={t.y} r={1.5 + k * 4} fill="#fff" opacity={0.04 + k * 0.32} />;
-                })}
-                {/* direction only at start */}
-                {dirVisible && (
-                  <g style={{ animation: "arDir .35s ease-out" }}>
-                    <line
-                      x1={puckPos.x} y1={puckPos.y}
-                      x2={puckPos.x + Math.cos(dirAngle) * 40}
-                      y2={puckPos.y + Math.sin(dirAngle) * 40}
-                      stroke="#111" strokeWidth={3} strokeLinecap="round" markerEnd="url(#arrH)" opacity={0.95}
-                    />
-                  </g>
-                )}
-                {/* glass target puck — white ring + cross */}
-                <circle cx={puckPos.x} cy={puckPos.y} r={BALL_R + 3} fill="rgba(0,0,0,0.22)" />
-                <circle cx={puckPos.x} cy={puckPos.y} r={BALL_R + 0.5} fill="rgba(255,255,255,0.18)" stroke="rgba(255,255,255,0.95)" strokeWidth={3.4} />
-                <circle cx={puckPos.x} cy={puckPos.y} r={BALL_R - 3.4} fill="rgba(255,255,255,0.10)" stroke="rgba(255,255,255,0.45)" strokeWidth={1.1} />
-                <line x1={puckPos.x - (BALL_R - 2)} y1={puckPos.y} x2={puckPos.x + (BALL_R - 2)} y2={puckPos.y} stroke="rgba(255,255,255,0.92)" strokeWidth={2.2} strokeLinecap="round" />
-                <line x1={puckPos.x} y1={puckPos.y - (BALL_R - 2)} x2={puckPos.x} y2={puckPos.y + (BALL_R - 2)} stroke="rgba(255,255,255,0.92)" strokeWidth={2.2} strokeLinecap="round" />
-                <circle cx={puckPos.x} cy={puckPos.y} r={2.0} fill="rgba(255,255,255,0.95)" />
-              </svg>
-              {winnerTag && (
+        {/* Board */}
+        <div style={{
+          margin: "0 12px",
+          borderRadius: 16,
+          overflow: "hidden",
+          border: "1px solid rgba(255,255,255,0.06)",
+          background: "#111118",
+        }}>
+          <div style={boardWrap}>
+            <div className="ar-board" style={{
+              width: W, height: H, transform: `scale(${boardZoom})`, transformOrigin: zoomOrigin,
+              transition: phase === "winner" ? "transform 0.55s cubic-bezier(0.22,1,0.36,1)" : "none",
+              background: strips.length === 0
+                ? "linear-gradient(160deg,#6366f1 0%,#8b5cf6 45%,#a855f7 100%)"
+                : strips.length === 1
+                  ? (strips[0].color || "linear-gradient(160deg,#6366f1,#a855f7)")
+                  : "#0a0a12",
+            }}>
+              {strips.length === 0 ? (
                 <div style={{
-                  position: "absolute", left: puckPos.x, top: puckPos.y - BALL_R - 24,
-                  transform: "translateX(-50%)", zIndex: 8, pointerEvents: "none",
-                  background: "rgba(0,0,0,0.8)", color: "#fff", fontWeight: 800, fontSize: 12,
-                  padding: "4px 11px", borderRadius: 8, whiteSpace: "nowrap",
-                  boxShadow: "0 4px 14px rgba(0,0,0,0.45)", animation: "arPop .35s ease-out",
+                  position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center",
+                  color: "rgba(255,255,255,0.75)", fontWeight: 800, fontSize: 15, zIndex: 2, textAlign: "center", padding: 20,
                 }}>
-                  {winnerTag}
+                  Сделайте первую ставку
                 </div>
+              ) : strips.length === 1 ? (
+                /* Single player — large centered avatar like screenshot */
+                (() => {
+                  const s = strips[0];
+                  const av = Math.round(Math.min(W, H) * 0.52);
+                  return (
+                    <div style={{
+                      position: "absolute", inset: 0,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      background: s.color || "linear-gradient(160deg,#6366f1,#a855f7)",
+                    }}>
+                      <div style={{
+                        width: av, height: av, borderRadius: "50%", overflow: "hidden",
+                        border: "4px solid rgba(255,255,255,0.95)",
+                        boxShadow: "0 12px 40px rgba(0,0,0,0.45)",
+                        background: "rgba(10,10,18,0.4)",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        fontWeight: 900, fontSize: av * 0.28, color: "#fff",
+                      }}>
+                        {avatarSrc(s.photoUrl, s.username)
+                          ? <img
+                              src={avatarSrc(s.photoUrl, s.username)!}
+                              alt=""
+                              style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                              onError={(e) => {
+                                const el = e.currentTarget;
+                                el.style.display = "none";
+                                if (el.parentElement) el.parentElement.textContent = initials(s.username, s.telegramId);
+                              }}
+                            />
+                          : initials(s.username, s.telegramId)}
+                      </div>
+                    </div>
+                  );
+                })()
+              ) : [...strips].sort((a, b) => (a.shape === "corner" ? 1 : 0) - (b.shape === "corner" ? 1 : 0)).map((s) => {
+                const isCorner = s.shape === "corner";
+                let av: number;
+                if (isCorner) {
+                  const f = Math.sqrt(2 * Math.max(0.008, s.share));
+                  const maxFit = Math.floor(f * Math.min(W, H) * 0.38);
+                  av = Math.max(14, Math.min(34, maxFit));
+                } else {
+                  av = Math.round(Math.min(88, Math.max(36, 28 + s.share * 90)));
+                }
+                const clip = (s.poly && s.poly.length)
+                  ? `polygon(${s.poly.map((q) => `${(q.x / W) * 100}% ${(q.y / H) * 100}%`).join(", ")})`
+                  : undefined;
+                const pad = av / 2 + 2;
+                const ax = Math.max(pad, Math.min(W - pad, s.cx || W / 2));
+                const ay = Math.max(pad, Math.min(H - pad, s.cy || H / 2));
+                return (
+                  <div key={s.telegramId} style={{
+                    position: "absolute", left: 0, top: 0, width: W, height: H,
+                    background: s.color,
+                    clipPath: clip,
+                    WebkitClipPath: clip,
+                    overflow: "hidden",
+                    zIndex: isCorner ? 5 : 1,
+                    transition: phase === "lobby" ? "clip-path .45s ease" : "none",
+                  }}>
+                    <div className="ar-strip-gloss" />
+                    <div style={{
+                      position: "absolute",
+                      left: ax - av / 2,
+                      top: ay - av / 2,
+                      width: av, height: av, borderRadius: "50%",
+                      border: `${av < 22 ? 2 : 3}px solid rgba(255,255,255,0.95)`, overflow: "hidden",
+                      background: "rgba(10,10,18,0.55)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      fontWeight: 900, fontSize: av * 0.32, color: "#fff", zIndex: 2,
+                      boxShadow: "0 6px 16px rgba(0,0,0,0.4)",
+                    }}>
+                      {avatarSrc(s.photoUrl, s.username)
+                        ? <img
+                            src={avatarSrc(s.photoUrl, s.username)!}
+                            alt=""
+                            style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                            onError={(e) => {
+                              const el = e.currentTarget;
+                              el.style.display = "none";
+                              if (el.parentElement) el.parentElement.textContent = initials(s.username, s.telegramId);
+                            }}
+                          />
+                        : initials(s.username, s.telegramId)}
+                    </div>
+                    {(isCorner || s.share >= 0.10) && (
+                      <div style={{
+                        position: "absolute", left: ax, top: ay + av / 2 + 4,
+                        transform: "translateX(-50%)", textAlign: "center", zIndex: 2,
+                        textShadow: "0 1px 4px rgba(0,0,0,.55)", pointerEvents: "none",
+                      }}>
+                        <div style={{ fontSize: isCorner ? 10 : 11, fontWeight: 900, color: "#fff", maxWidth: isCorner ? 72 : 88, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {(s.username || s.telegramId).replace(/^@/, "").slice(0, 10)}
+                        </div>
+                        <div style={{ fontSize: isCorner ? 11 : 12, fontWeight: 800, color: "rgba(255,255,255,.95)" }}>
+                          {(s.chance || s.share * 100).toFixed(1)}%
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+
+              {(puckVisible || phase === "spin" || phase === "winner") && (
+                <>
+                  <svg width={W} height={H} style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 6 }}>
+                    <defs>
+                      <radialGradient id="puckG" cx="35%" cy="30%" r="65%">
+                        <stop offset="0%" stopColor="#fff" /><stop offset="45%" stopColor="#e8e8ef" /><stop offset="100%" stopColor="#9ca3af" />
+                      </radialGradient>
+                      <marker id="arrH" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                        <path d="M0,0 L6,3 L0,6 Z" fill="#111" />
+                      </marker>
+                    </defs>
+                    {trail.map((t, i) => {
+                      const k = (i + 1) / Math.max(1, trail.length);
+                      return <circle key={t.id} cx={t.x} cy={t.y} r={1.5 + k * 4} fill="#fff" opacity={0.04 + k * 0.32} />;
+                    })}
+                    {dirVisible && (
+                      <g style={{ animation: "arDir .35s ease-out" }}>
+                        <line
+                          x1={puckPos.x} y1={puckPos.y}
+                          x2={puckPos.x + Math.cos(dirAngle) * 40}
+                          y2={puckPos.y + Math.sin(dirAngle) * 40}
+                          stroke="#111" strokeWidth={3} strokeLinecap="round" markerEnd="url(#arrH)" opacity={0.95}
+                        />
+                      </g>
+                    )}
+                    <circle cx={puckPos.x} cy={puckPos.y} r={BALL_R + 3} fill="rgba(0,0,0,0.22)" />
+                    <circle cx={puckPos.x} cy={puckPos.y} r={BALL_R + 0.5} fill="rgba(255,255,255,0.18)" stroke="rgba(255,255,255,0.95)" strokeWidth={3.4} />
+                    <circle cx={puckPos.x} cy={puckPos.y} r={BALL_R - 3.4} fill="rgba(255,255,255,0.10)" stroke="rgba(255,255,255,0.45)" strokeWidth={1.1} />
+                    <line x1={puckPos.x - (BALL_R - 2)} y1={puckPos.y} x2={puckPos.x + (BALL_R - 2)} y2={puckPos.y} stroke="rgba(255,255,255,0.92)" strokeWidth={2.2} strokeLinecap="round" />
+                    <line x1={puckPos.x} y1={puckPos.y - (BALL_R - 2)} x2={puckPos.x} y2={puckPos.y + (BALL_R - 2)} stroke="rgba(255,255,255,0.92)" strokeWidth={2.2} strokeLinecap="round" />
+                    <circle cx={puckPos.x} cy={puckPos.y} r={2.0} fill="rgba(255,255,255,0.95)" />
+                  </svg>
+                  {winnerTag && (
+                    <div style={{
+                      position: "absolute", left: puckPos.x, top: puckPos.y - BALL_R - 24,
+                      transform: "translateX(-50%)", zIndex: 8, pointerEvents: "none",
+                      background: "rgba(0,0,0,0.8)", color: "#fff", fontWeight: 800, fontSize: 12,
+                      padding: "4px 11px", borderRadius: 8, whiteSpace: "nowrap",
+                      boxShadow: "0 4px 14px rgba(0,0,0,0.45)", animation: "arPop .35s ease-out",
+                    }}>
+                      {winnerTag}
+                    </div>
+                  )}
+                </>
               )}
-            </>
-          )}
+            </div>
+          </div>
+        </div>
+
+        {/* Footer: Игроки · N | Игра #id */}
+        <div style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          padding: "12px 16px 14px",
+        }}>
+          <div style={{ fontSize: 14, fontWeight: 800, color: "#e2e8f0" }}>
+            Игроки <span style={{ color: "#64748b", fontWeight: 700 }}>·</span> {playerCount}
+          </div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: "#64748b" }}>
+            {arena?.id != null ? `Игра #${arena.id}` : "—"}
+          </div>
         </div>
       </div>
 
@@ -1417,7 +1503,7 @@ const statusPill: CSSProperties = {
   background: "rgba(34,197,94,0.12)", border: "1px solid rgba(34,197,94,0.28)",
   color: "#86efac", fontWeight: 800, fontSize: 12,
 };
-const boardWrap: CSSProperties = { display: "flex", justifyContent: "center", margin: "0 auto 4px", position: "relative", zIndex: 1, width: W, height: H, overflow: "hidden", borderRadius: 18 };
+const boardWrap: CSSProperties = { display: "flex", justifyContent: "center", margin: "0 auto", position: "relative", zIndex: 1, width: W, height: H, maxWidth: "100%", overflow: "hidden", borderRadius: 16 };
 const playersCard: CSSProperties = {
   margin: "10px 14px 12px", background: "linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.03))",
   borderRadius: 16, padding: "10px 12px", border: "1px solid rgba(255,255,255,0.08)", position: "relative", zIndex: 1,

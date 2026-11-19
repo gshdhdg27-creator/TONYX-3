@@ -230,6 +230,32 @@ function TonIcon({ size = 16 }: { size?: number }) {
   );
 }
 
+function TonChip({ amount, size = 52 }: { amount: number | string; size?: number }) {
+  const label = typeof amount === "number"
+    ? (Math.abs(amount - Math.round(amount)) < 1e-9 ? String(Math.round(amount)) : amount.toFixed(2))
+    : String(amount);
+  const fontSize = Math.max(12, Math.round(size * 0.30));
+  return (
+    <div style={{
+      width: size, height: size, borderRadius: Math.round(size * 0.22),
+      background: "linear-gradient(145deg,#3b82f6 0%,#1d4ed8 100%)",
+      border: "1px solid rgba(255,255,255,0.28)",
+      boxShadow: "0 4px 12px rgba(37,99,235,0.35)",
+      display: "flex", alignItems: "center", justifyContent: "center",
+      position: "relative", flexShrink: 0, overflow: "hidden",
+    }}>
+      <TonIcon size={Math.round(size * 0.64)} />
+      <span style={{
+        position: "absolute", inset: 0,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        fontWeight: 900, fontSize, color: "#fff",
+        textShadow: "0 1px 3px rgba(0,0,0,0.9), 0 0 10px rgba(0,0,0,0.45)",
+        letterSpacing: "-0.02em", pointerEvents: "none",
+      }}>{label}</span>
+    </div>
+  );
+}
+
 export default function SpinGame({
   telegramId,
   tonBalance,
@@ -706,19 +732,7 @@ export default function SpinGame({
                   return (
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10, paddingLeft: 2 }}>
                       {pureTon > 1e-9 && (
-                        <div style={{
-                          width: 48, height: 48, borderRadius: 12, position: "relative",
-                          background: "linear-gradient(145deg,#3b82f6,#1d4ed8)",
-                          display: "flex", alignItems: "center", justifyContent: "center",
-                          border: "1px solid rgba(96,165,250,0.55)",
-                          boxShadow: "0 4px 12px rgba(37,99,235,0.25)",
-                        }}>
-                          <TonIcon size={20} />
-                          <span style={{
-                            position: "absolute", left: 4, bottom: 3, fontSize: 10, fontWeight: 900, color: "#fff",
-                            textShadow: "0 1px 2px #000",
-                          }}>{pureTon % 1 === 0 ? pureTon.toFixed(0) : pureTon.toFixed(2)}</span>
-                        </div>
+                        <TonChip amount={pureTon} size={52} />
                       )}
                       {nfts.map((n) => (
                         <div key={n.inventoryId} style={{
@@ -783,7 +797,7 @@ export default function SpinGame({
               opacity: canBet ? 1 : 0.5,
             }}
             title="TON"
-          ><TonIcon size={18} /></button>
+          ><TonIcon size={22} /></button>
         </div>
       </div>
 
@@ -818,7 +832,7 @@ export default function SpinGame({
                 fontFamily: "inherit",
               }}
             >
-              {v}<span style={{ marginLeft: 3, display: "inline-flex", alignItems: "center" }}><TonIcon size={12} /></span>
+              {v}<span style={{ marginLeft: 4, display: "inline-flex", alignItems: "center" }}><TonIcon size={15} /></span>
             </button>
           ))}
           <button
@@ -1034,19 +1048,8 @@ export default function SpinGame({
                 return (
                   <>
                     {pureTon > 1e-9 && (
-                      <div style={{
-                        width: 72, height: 72, borderRadius: 14, position: "relative",
-                        background: "linear-gradient(145deg,#3b82f6,#1d4ed8)",
-                        display: "flex", alignItems: "center", justifyContent: "center",
-                        border: "1px solid rgba(96,165,250,0.45)",
-                      }}>
-                        <TonIcon size={28} />
-                        <span style={{
-                          position: "absolute", left: 6, bottom: 4, fontSize: 12, fontWeight: 900, color: "#fff",
-                          textShadow: "0 1px 3px #000",
-                        }}>{pureTon % 1 === 0 ? pureTon.toFixed(0) : pureTon.toFixed(2)}</span>
-                      </div>
-                    )}
+                        <TonChip amount={pureTon} size={72} />
+                      )}
                     {nfts.map((n) => (
                       <div key={n.inventoryId} style={{
                         width: 72, height: 72, borderRadius: 14, overflow: "hidden", position: "relative",

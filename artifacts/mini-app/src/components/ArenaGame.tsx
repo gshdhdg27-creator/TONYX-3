@@ -7,7 +7,7 @@ import {
 } from "@workspace/api-client-react";
 import {
   W, H, BALL_R, MARGIN, makeRng,
-  planBouncePath, randomInStrip, randomStart, samplePath, pathDirection,
+  planBouncePath, randomInStrip, randomStart, samplePath, pathDirection, pointInPoly,
 } from "./arenaPhysics";
 import WinnerModal from "./WinnerModal";
 
@@ -185,13 +185,60 @@ function hash01(s: string): number {
  * - 3+ -> corner triangles + main zone for leader
  */
 function buildStrips(players: ArenaPlayer[], roomSeed = 0): Strip[] {
-  // Stable order on every client (API may return players in any order)
+  // Stable order on every client
   const list = [...players]
     .filter((p) => p && p.stake > 0)
     .sort((a, b) => String(a.telegramId).localeCompare(String(b.telegramId)));
   const total = list.reduce((s, p) => s + p.stake, 0) || 1;
   const n = list.length;
   if (n === 0) return [];
+
+  const cx = W / 2;
+  const cy = H / 2;
+
+  /** Ray from center to square border */
+  const rayEdge = (ang: number): Pt => {
+    const dx = Math.cos(ang);
+    const dy = Math.sin(ang);
+    const ts: number[] = [];
+    if (Math.abs(dx) > 1e-9) {
+      ts.push((0 - cx) / dx);
+      ts.push((W - cx) / dx);
+    }
+    if (Math.abs(dy) > 1e-9) {
+      ts.push((0 - cy) / dy);
+      ts.push((H - cy) / dy);
+    }
+    let best = Infinity;
+    for (const t of ts) {
+      if (t <= 1e-6) continue;
+      const x = cx + dx * t;
+      const y = cy + dy * t;
+      if (x >= -0.5 && x <= W + 0.5 && y >= -0.5 && y <= H + 0.5) {
+        best = Math.min(best, t);
+      }
+    }
+    if (!Number.isFinite(best)) return { x: cx, y: cy };
+    return {
+      x: Math.min(W, Math.max(0, cx + dx * best)),
+      y: Math.min(H, Math.max(0, cy + dy * best)),
+    };
+  };
+
+  /** Pie-slice polygon for angle range [a0, a1] */
+  const piePoly = (a0: number, a1: number): Pt[] => {
+    // normalize span
+    let span = a1 - a0;
+    while (span < 0) span += Math.PI * 2;
+    while (span > Math.PI * 2) span -= Math.PI * 2;
+    const steps = Math.max(8, Math.ceil((span / (Math.PI * 2)) * 48));
+    const pts: Pt[] = [{ x: cx, y: cy }];
+    for (let i = 0; i <= steps; i++) {
+      const a = a0 + (span * i) / steps;
+      pts.push(rayEdge(a));
+    }
+    return pts;
+  };
 
   const mk = (
     p: ArenaPlayer,
@@ -201,29 +248,40 @@ function buildStrips(players: ArenaPlayer[], roomSeed = 0): Strip[] {
     shape: string,
     place?: Pt,
   ): Strip => {
-    let a = 0, cx = 0, cy = 0;
+    let a = 0, ox = 0, oy = 0;
     const nn = poly.length;
     for (let k = 0; k < nn; k++) {
       const j = (k + 1) % nn;
       const cross = poly[k].x * poly[j].y - poly[j].x * poly[k].y;
       a += cross;
-      cx += (poly[k].x + poly[j].x) * cross;
-      cy += (poly[k].y + poly[j].y) * cross;
+      ox += (poly[k].x + poly[j].x) * cross;
+      oy += (poly[k].y + poly[j].y) * cross;
     }
     a *= 0.5;
-    if (Math.abs(a) > 1e-3) { cx /= (6 * a); cy /= (6 * a); }
-    else {
+    let pcx: number, pcy: number;
+    if (Math.abs(a) > 1e-3) {
+      pcx = ox / (6 * a);
+      pcy = oy / (6 * a);
+    } else {
       let sx = 0, sy = 0;
       for (const q of poly) { sx += q.x; sy += q.y; }
-      cx = sx / Math.max(1, nn); cy = sy / Math.max(1, nn);
+      pcx = sx / Math.max(1, nn);
+      pcy = sy / Math.max(1, nn);
     }
-    if (place) { cx = place.x; cy = place.y; }
+    // Avatar sits between center and outer arc (Portals look)
+    if (!place) {
+      pcx = cx + (pcx - cx) * 0.62;
+      pcy = cy + (pcy - cy) * 0.62;
+    } else {
+      pcx = place.x;
+      pcy = place.y;
+    }
     const xs = poly.map((q) => q.x);
     const x0 = Math.min(...xs);
     const x1 = Math.max(...xs);
     return {
       ...p, color: colorFor(i, roomSeed), index: i, share,
-      x0, x1, midX: (x0 + x1) / 2, poly, cx, cy, shape,
+      x0, x1, midX: (x0 + x1) / 2, poly, cx: pcx, cy: pcy, shape,
     };
   };
 
@@ -231,157 +289,24 @@ function buildStrips(players: ArenaPlayer[], roomSeed = 0): Strip[] {
     const p = list[0];
     return [mk(p, 0, 1, [
       { x: 0, y: 0 }, { x: W, y: 0 }, { x: W, y: H }, { x: 0, y: H },
-    ], "rect")];
+    ], "rect", { x: cx, y: cy })];
   }
 
-  if (n === 2) {
-    const [a, b] = list;
-    const sa = a.stake / total;
-    const sb = b.stake / total;
-    const seed = hash01([a.telegramId, b.telegramId].map(String).sort().join("|"));
-
-    // Small share → corner triangle (not a thin full-height strip)
-    const CORNER_MAX = 0.22;
-    const smallIsA = sa <= sb;
-    const ss = Math.min(sa, sb);
-    const ls = Math.max(sa, sb);
-
-    if (ss < CORNER_MAX) {
-      // isosceles right triangle: area = (f*W)*(f*H)/2 ⇒ share = f²/2 ⇒ f = √(2·share)
-      const f = Math.min(0.95, Math.max(0.06, Math.sqrt(2 * ss)));
-      const corner = Math.floor(seed * 4); // 0=TL 1=TR 2=BR 3=BL
-      let polyS: Pt[];
-      let polyL: Pt[];
-      if (corner === 0) {
-        polyS = [{ x: 0, y: 0 }, { x: f * W, y: 0 }, { x: 0, y: f * H }];
-        polyL = [{ x: f * W, y: 0 }, { x: W, y: 0 }, { x: W, y: H }, { x: 0, y: H }, { x: 0, y: f * H }];
-      } else if (corner === 1) {
-        polyS = [{ x: W, y: 0 }, { x: W, y: f * H }, { x: (1 - f) * W, y: 0 }];
-        polyL = [{ x: 0, y: 0 }, { x: (1 - f) * W, y: 0 }, { x: W, y: f * H }, { x: W, y: H }, { x: 0, y: H }];
-      } else if (corner === 2) {
-        polyS = [{ x: W, y: H }, { x: (1 - f) * W, y: H }, { x: W, y: (1 - f) * H }];
-        polyL = [{ x: 0, y: 0 }, { x: W, y: 0 }, { x: W, y: (1 - f) * H }, { x: (1 - f) * W, y: H }, { x: 0, y: H }];
-      } else {
-        polyS = [{ x: 0, y: H }, { x: 0, y: (1 - f) * H }, { x: f * W, y: H }];
-        polyL = [{ x: 0, y: 0 }, { x: W, y: 0 }, { x: W, y: H }, { x: f * W, y: H }, { x: 0, y: (1 - f) * H }];
-      }
-      const stripS = mk(smallIsA ? a : b, smallIsA ? 0 : 1, ss, polyS, "corner");
-      const stripL = mk(smallIsA ? b : a, smallIsA ? 1 : 0, ls, polyL, "main");
-      return smallIsA ? [stripS, stripL] : [stripL, stripS];
-    }
-
-    // Balanced 2-way: diagonal wedge, area ≈ share
-    const maxTilt = Math.min(sa, sb) * 0.35;
-    const tilt = (seed - 0.5) * 2 * maxTilt;
-    const minCut = Math.max(2 / W, 0.004);
-    const maxCut = 1 - minCut;
-    let cutTop = Math.max(minCut, Math.min(maxCut, sa + tilt));
-    let cutBot = Math.max(minCut, Math.min(maxCut, sa - tilt));
-    const mean = (cutTop + cutBot) / 2;
-    if (Math.abs(mean - sa) > 1e-6) {
-      const d = sa - mean;
-      cutTop = Math.max(minCut, Math.min(maxCut, cutTop + d));
-      cutBot = Math.max(minCut, Math.min(maxCut, cutBot + d));
-    }
-    const polyA: Pt[] = [
-      { x: 0, y: 0 }, { x: cutTop * W, y: 0 }, { x: cutBot * W, y: H }, { x: 0, y: H },
-    ];
-    const polyB: Pt[] = [
-      { x: cutTop * W, y: 0 }, { x: W, y: 0 }, { x: W, y: H }, { x: cutBot * W, y: H },
-    ];
-    return [mk(a, 0, sa, polyA, "wedge"), mk(b, 1, sb, polyB, "wedge")];
+  // Portals pie: each player gets a sector, angle ∝ stake share
+  const rotSeed = hash01(list.map((p) => p.telegramId).join("|") + "|" + roomSeed);
+  let angle = rotSeed * Math.PI * 2;
+  const out: Strip[] = [];
+  for (let i = 0; i < n; i++) {
+    const p = list[i];
+    const share = p.stake / total;
+    const a0 = angle;
+    const a1 = angle + share * Math.PI * 2;
+    const poly = piePoly(a0, a1);
+    out.push(mk(p, i, share, poly, "pie"));
+    angle = a1;
   }
-
-
-  // 3+ players:
-  //  - small share (< 22%) → corner triangle (never a thin middle strip)
-  //  - big players → diagonal wedges of the full board (corners drawn on top)
-  {
-    const CORNER_MAX = 0.22;
-    const withShare = list.map((p, i) => ({ p, i, share: p.stake / total }));
-    const smalls = withShare.filter((x) => x.share < CORNER_MAX).sort((a, b) => a.share - b.share);
-    const bigs = withShare.filter((x) => x.share >= CORNER_MAX).sort((a, b) => b.share - a.share);
-
-    const cornerOrder = [0, 2, 1, 3]; // TL, BR, TR, BL — opposite first so they don't cluster
-    const usedCorners = new Set<number>();
-    const result: Strip[] = [];
-
-    // --- smalls → corners ---
-    for (let si = 0; si < smalls.length; si++) {
-      const { p, i, share } = smalls[si];
-      const f = Math.min(0.92, Math.max(0.08, Math.sqrt(2 * share)));
-      let corner = cornerOrder[si % 4];
-      // pick free corner
-      for (let k = 0; k < 4; k++) {
-        const c = cornerOrder[(si + k) % 4];
-        if (!usedCorners.has(c)) { corner = c; break; }
-      }
-      usedCorners.add(corner);
-      let polyS: Pt[];
-      if (corner === 0) {
-        polyS = [{ x: 0, y: 0 }, { x: f * W, y: 0 }, { x: 0, y: f * H }];
-      } else if (corner === 1) {
-        polyS = [{ x: W, y: 0 }, { x: W, y: f * H }, { x: (1 - f) * W, y: 0 }];
-      } else if (corner === 2) {
-        polyS = [{ x: W, y: H }, { x: (1 - f) * W, y: H }, { x: W, y: (1 - f) * H }];
-      } else {
-        polyS = [{ x: 0, y: H }, { x: 0, y: (1 - f) * H }, { x: f * W, y: H }];
-      }
-      result.push(mk(p, i, share, polyS, "corner"));
-    }
-
-    // --- bigs → diagonal wedges across full board ---
-    if (bigs.length === 0) {
-      // all small — already in corners; nothing else
-      return result;
-    }
-    if (bigs.length === 1) {
-      const { p, i, share } = bigs[0];
-      const poly: Pt[] = [
-        { x: 0, y: 0 }, { x: W, y: 0 }, { x: W, y: H }, { x: 0, y: H },
-      ];
-      result.push(mk(p, i, share, poly, "main"));
-      return result;
-    }
-
-    // 2+ bigs: sequential diagonal wedges by their relative shares
-    const bigTotal = bigs.reduce((s, x) => s + x.share, 0) || 1;
-    const cuts: number[] = [0];
-    let acc = 0;
-    for (let bi = 0; bi < bigs.length; bi++) {
-      acc += bigs[bi].share / bigTotal;
-      cuts.push(bi === bigs.length - 1 ? 1 : Math.min(0.999, Math.max(0.001, acc)));
-    }
-    const bn = bigs.length;
-    const topX: number[] = [];
-    const botX: number[] = [];
-    for (let i = 0; i <= bn; i++) {
-      if (i === 0) { topX.push(0); botX.push(0); continue; }
-      if (i === bn) { topX.push(W); botX.push(W); continue; }
-      const base = cuts[i];
-      const seed = hash01(bigs[i - 1].p.telegramId + "|" + bigs[i].p.telegramId + "|" + i + "|" + roomSeed);
-      const tilt = (seed - 0.5) * 0.12;
-      const shareL = cuts[i] - cuts[i - 1];
-      const shareR = cuts[i + 1] - cuts[i];
-      const maxT = Math.min(shareL, shareR) * 0.45;
-      const tt = Math.max(-maxT, Math.min(maxT, tilt));
-      topX.push(Math.max(0, Math.min(W, (base + tt) * W)));
-      botX.push(Math.max(0, Math.min(W, (base - tt) * W)));
-    }
-    for (let bi = 0; bi < bn; bi++) {
-      const { p, i, share } = bigs[bi];
-      const poly: Pt[] = [
-        { x: topX[bi], y: 0 },
-        { x: topX[bi + 1], y: 0 },
-        { x: botX[bi + 1], y: H },
-        { x: botX[bi], y: H },
-      ];
-      result.push(mk(p, i, share, poly, "wedge"));
-    }
-    return result;
-  }
+  return out;
 }
-
 
 function loadChips(): number[] {
   try {
@@ -445,6 +370,7 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
   const [dirAngle, setDirAngle] = useState(0);
   const [dirVisible, setDirVisible] = useState(false);
   const [winnerTag, setWinnerTag] = useState<string | null>(null);
+  const [zoneTag, setZoneTag] = useState<string | null>(null);
   const [stakeDetail, setStakeDetail] = useState<(ArenaPlayer & { color?: string; share?: number }) | null>(null);
 
   const [chips, setChips] = useState<number[]>(DEFAULT_CHIPS);
@@ -511,7 +437,7 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
     setPuckPos({ x: W / 2, y: H / 2 });
     setWinnerData(null); setFreezeStrips(null); setFreezePool(0);
     setBoardZoom(1); setBoardCam({ x: 0, y: 0 });
-    setPuckVisible(false); setTrail([]); setDirVisible(false); setWinnerTag(null);
+    setPuckVisible(false); setTrail([]); setDirVisible(false); setWinnerTag(null); setZoneTag(null);
   }
 
   function runSpinAnimation(data: {
@@ -555,7 +481,7 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
         setTrail([]);
         setBoardZoom(3);
         setBoardCam(cameraFor(target.x, target.y, 3));
-        setPhase("winner"); setDirVisible(false); setWinnerTag(winName);
+        setPhase("winner"); setDirVisible(false); setWinnerTag(winName); setZoneTag(winName);
         hapticNotify("success");
         const payout = payoutOf(winner.stake, data.totalPool);
         const mult = winner.stake > 0 ? Math.round((payout / winner.stake) * 100) / 100 : 0;
@@ -589,15 +515,17 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
       }
 
       const pos = samplePath(path, eased);
-      const prev = lastPosRef.current;
-      const near =
-        pos.x <= MARGIN + BALL_R + 2 || pos.x >= W - MARGIN - BALL_R - 2 ||
-        pos.y <= MARGIN + BALL_R + 2 || pos.y >= H - MARGIN - BALL_R - 2;
-      if (near && Math.hypot(pos.x - prev.x, pos.y - prev.y) > 0.6 && now - lastHitRef.current > 100) {
-        lastHitRef.current = now; haptic("light");
-      }
       lastPosRef.current = pos;
       setPuckPos(pos);
+      // Whose territory is the puck on right now?
+      let owner: string | null = null;
+      for (const s of strips) {
+        if (s.poly && s.poly.length >= 3 && pointInPoly(pos, s.poly)) {
+          owner = (s.username || s.telegramId || "").replace(/^@/, "");
+          break;
+        }
+      }
+      setZoneTag(owner);
       if (now - lastTrail > 28) {
         lastTrail = now;
         const id = ++trailId.current;
@@ -912,15 +840,16 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
                     </div>
                   );
                 })()
-              ) : [...strips].sort((a, b) => (a.shape === "corner" ? 1 : 0) - (b.shape === "corner" ? 1 : 0)).map((s) => {
+              ) : strips.map((s) => {
                 const isCorner = s.shape === "corner";
+                // Portals: big stake = big avatar (up to ~55% of board for leader)
                 let av: number;
-                if (isCorner) {
-                  const f = Math.sqrt(2 * Math.max(0.008, s.share));
-                  const maxFit = Math.floor(f * Math.min(W, H) * 0.38);
-                  av = Math.max(14, Math.min(34, maxFit));
+                if (s.share >= 0.45) {
+                  av = Math.round(Math.min(150, 70 + s.share * 120));
+                } else if (s.share >= 0.18) {
+                  av = Math.round(48 + s.share * 70);
                 } else {
-                  av = Math.round(Math.min(88, Math.max(36, 28 + s.share * 90)));
+                  av = Math.round(Math.max(22, 18 + s.share * 90));
                 }
                 const clip = (s.poly && s.poly.length)
                   ? `polygon(${s.poly.map((q) => `${(q.x / W) * 100}% ${(q.y / H) * 100}%`).join(", ")})`
@@ -963,7 +892,7 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
                           />
                         : initials(s.username, s.telegramId)}
                     </div>
-                    {(isCorner || s.share >= 0.10) && (
+                    {s.share >= 0.06 && (
                       <div style={{
                         position: "absolute", left: ax, top: ay + av / 2 + 4,
                         transform: "translateX(-50%)", textAlign: "center", zIndex: 2,
@@ -1013,15 +942,16 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
                     <line x1={puckPos.x} y1={puckPos.y - (BALL_R - 2)} x2={puckPos.x} y2={puckPos.y + (BALL_R - 2)} stroke="rgba(255,255,255,0.92)" strokeWidth={2.2} strokeLinecap="round" />
                     <circle cx={puckPos.x} cy={puckPos.y} r={2.0} fill="rgba(255,255,255,0.95)" />
                   </svg>
-                  {winnerTag && (
+                  {(zoneTag || winnerTag) && (
                     <div style={{
-                      position: "absolute", left: puckPos.x, top: puckPos.y - BALL_R - 24,
+                      position: "absolute", left: puckPos.x, top: puckPos.y - BALL_R - 28,
                       transform: "translateX(-50%)", zIndex: 8, pointerEvents: "none",
-                      background: "rgba(0,0,0,0.8)", color: "#fff", fontWeight: 800, fontSize: 12,
-                      padding: "4px 11px", borderRadius: 8, whiteSpace: "nowrap",
-                      boxShadow: "0 4px 14px rgba(0,0,0,0.45)", animation: "arPop .35s ease-out",
+                      color: "#fff", fontWeight: 900, fontSize: 13,
+                      padding: "0 4px", whiteSpace: "nowrap",
+                      textShadow: "0 2px 8px rgba(0,0,0,0.85), 0 0 2px rgba(0,0,0,0.9)",
+                      letterSpacing: "0.02em",
                     }}>
-                      {winnerTag}
+                      @{(winnerTag || zoneTag || "").replace(/^@/, "")}
                     </div>
                   )}
                 </>

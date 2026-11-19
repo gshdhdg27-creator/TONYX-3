@@ -1016,13 +1016,26 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
                         />
                       </g>
                     )}
-                    <circle cx={puckPos.x} cy={puckPos.y} r={BALL_R + 3} fill="rgba(0,0,0,0.22)" />
-                    <circle cx={puckPos.x} cy={puckPos.y} r={BALL_R + 0.5} fill="rgba(255,255,255,0.18)" stroke="rgba(255,255,255,0.95)" strokeWidth={3.4} />
-                    <circle cx={puckPos.x} cy={puckPos.y} r={BALL_R - 3.4} fill="rgba(255,255,255,0.10)" stroke="rgba(255,255,255,0.45)" strokeWidth={1.1} />
-                    <line x1={puckPos.x - (BALL_R - 2)} y1={puckPos.y} x2={puckPos.x + (BALL_R - 2)} y2={puckPos.y} stroke="rgba(255,255,255,0.92)" strokeWidth={2.2} strokeLinecap="round" />
-                    <line x1={puckPos.x} y1={puckPos.y - (BALL_R - 2)} x2={puckPos.x} y2={puckPos.y + (BALL_R - 2)} stroke="rgba(255,255,255,0.92)" strokeWidth={2.2} strokeLinecap="round" />
-                    <circle cx={puckPos.x} cy={puckPos.y} r={3.2} fill="rgba(255,255,255,0.25)" />
-                    <circle cx={puckPos.x} cy={puckPos.y} r={1.8} fill="#fff" />
+                    {/* Portals-style frosted ring + cross (collision = center point only) */}
+                    <circle cx={puckPos.x} cy={puckPos.y} r={BALL_R + 2.5} fill="rgba(0,0,0,0.18)" />
+                    {/* outer soft rim */}
+                    <circle cx={puckPos.x} cy={puckPos.y} r={BALL_R} fill="rgba(255,255,255,0.22)" stroke="rgba(255,255,255,0.95)" strokeWidth={5.5} />
+                    {/* inner clear hole */}
+                    <circle cx={puckPos.x} cy={puckPos.y} r={BALL_R - 5.2} fill="rgba(255,255,255,0.06)" />
+                    {/* cross — full diameter like the screenshot */}
+                    <line
+                      x1={puckPos.x - (BALL_R - 1)} y1={puckPos.y}
+                      x2={puckPos.x + (BALL_R - 1)} y2={puckPos.y}
+                      stroke="rgba(255,255,255,0.92)" strokeWidth={2.4} strokeLinecap="round"
+                    />
+                    <line
+                      x1={puckPos.x} y1={puckPos.y - (BALL_R - 1)}
+                      x2={puckPos.x} y2={puckPos.y + (BALL_R - 1)}
+                      stroke="rgba(255,255,255,0.92)" strokeWidth={2.4} strokeLinecap="round"
+                    />
+                    {/* collision marker (point) */}
+                    <circle cx={puckPos.x} cy={puckPos.y} r={2.2} fill="rgba(255,255,255,0.35)" />
+                    <circle cx={puckPos.x} cy={puckPos.y} r={1.3} fill="#fff" />
                   </svg>
                   {(zoneTag || winnerTag) && (
                     <div style={{

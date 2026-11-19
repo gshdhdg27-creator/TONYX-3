@@ -3,7 +3,7 @@
 export const W = 352;
 export const H = 352;
 export const BALL_R = 16;
-export const MARGIN = 1; // center stays in; visual ring may cross edge
+export const MARGIN = -8; // ring crosses wall; collision uses center // center near edge → ring crosses wall ~8px // center stays in; visual ring may cross edge
 
 export type PathPoint = { x: number; y: number; t: number };
 export type Pt = { x: number; y: number };

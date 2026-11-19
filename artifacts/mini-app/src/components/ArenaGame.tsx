@@ -412,7 +412,7 @@ const CSS = `
 @keyframes arPulse{0%,100%{opacity:.55}50%{opacity:1}}
 @keyframes arPop{0%{opacity:0;transform:translateY(10px) scale(.96)}100%{opacity:1;transform:none}}
 @keyframes arDir{0%{opacity:0;transform:scale(.4)}40%{opacity:1;transform:scale(1.15)}100%{opacity:1;transform:scale(1)}}
-.ar-board{position:relative;border-radius:0;overflow:visible;background:#05050a}
+.ar-board{position:relative;border-radius:0;overflow:hidden;background:#05050a}
 .ar-strip-gloss{display:none}
 `;
 
@@ -862,11 +862,10 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
         {/* Board */}
         <div style={{
           margin: "0 12px",
-          padding: 10,
           borderRadius: 0,
-          overflow: "visible",
+          overflow: "hidden",
           border: "none",
-          background: "transparent",
+          background: "#05050a",
         }}>
           <div style={boardWrap}>
             <div className="ar-board" style={{
@@ -1017,13 +1016,12 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
                         />
                       </g>
                     )}
-                    {/* Portals glass puck — ring can cross wall (center is collision) */}
-                    <ellipse cx={puckPos.x} cy={puckPos.y + 2.5} rx={BALL_R + 1} ry={BALL_R * 0.32} fill="rgba(0,0,0,0.3)" />
-                    <circle cx={puckPos.x} cy={puckPos.y} r={BALL_R} fill="rgba(255,255,255,0.10)" stroke="rgba(255,255,255,0.95)" strokeWidth={3.6} />
-                    <circle cx={puckPos.x} cy={puckPos.y} r={BALL_R - 3.5} fill="rgba(255,255,255,0.05)" stroke="rgba(255,255,255,0.25)" strokeWidth={1} />
-                    <line x1={puckPos.x - (BALL_R - 5)} y1={puckPos.y} x2={puckPos.x + (BALL_R - 5)} y2={puckPos.y} stroke="rgba(255,255,255,0.95)" strokeWidth={2.3} strokeLinecap="round" />
-                    <line x1={puckPos.x} y1={puckPos.y - (BALL_R - 5)} x2={puckPos.x} y2={puckPos.y + (BALL_R - 5)} stroke="rgba(255,255,255,0.95)" strokeWidth={2.3} strokeLinecap="round" />
-                    <circle cx={puckPos.x} cy={puckPos.y} r={1.5} fill="rgba(255,255,255,0.95)" />
+                    <circle cx={puckPos.x} cy={puckPos.y} r={BALL_R + 3} fill="rgba(0,0,0,0.22)" />
+                    <circle cx={puckPos.x} cy={puckPos.y} r={BALL_R + 0.5} fill="rgba(255,255,255,0.18)" stroke="rgba(255,255,255,0.95)" strokeWidth={3.4} />
+                    <circle cx={puckPos.x} cy={puckPos.y} r={BALL_R - 3.4} fill="rgba(255,255,255,0.10)" stroke="rgba(255,255,255,0.45)" strokeWidth={1.1} />
+                    <line x1={puckPos.x - (BALL_R - 2)} y1={puckPos.y} x2={puckPos.x + (BALL_R - 2)} y2={puckPos.y} stroke="rgba(255,255,255,0.92)" strokeWidth={2.2} strokeLinecap="round" />
+                    <line x1={puckPos.x} y1={puckPos.y - (BALL_R - 2)} x2={puckPos.x} y2={puckPos.y + (BALL_R - 2)} stroke="rgba(255,255,255,0.92)" strokeWidth={2.2} strokeLinecap="round" />
+                    <circle cx={puckPos.x} cy={puckPos.y} r={2.0} fill="rgba(255,255,255,0.95)" />
                   </svg>
                   {(zoneTag || winnerTag) && (
                     <div style={{
@@ -1558,7 +1556,7 @@ const statusPill: CSSProperties = {
   background: "rgba(34,197,94,0.12)", border: "1px solid rgba(34,197,94,0.28)",
   color: "#86efac", fontWeight: 800, fontSize: 12,
 };
-const boardWrap: CSSProperties = { display: "flex", justifyContent: "center", margin: "0 auto", position: "relative", zIndex: 1, width: W, height: H, maxWidth: "100%", overflow: "visible", borderRadius: 0 };
+const boardWrap: CSSProperties = { display: "flex", justifyContent: "center", margin: "0 auto", position: "relative", zIndex: 1, width: W, height: H, maxWidth: "100%", overflow: "hidden", borderRadius: 0 };
 const playersCard: CSSProperties = {
   margin: "10px 14px 12px", background: "linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.03))",
   borderRadius: 16, padding: "10px 12px", border: "1px solid rgba(255,255,255,0.08)", position: "relative", zIndex: 1,

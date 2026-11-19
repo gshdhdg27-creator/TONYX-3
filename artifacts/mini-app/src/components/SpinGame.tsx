@@ -306,13 +306,13 @@ export default function SpinGame({
   const [round, setRound] = useState<Round | null>(null);
   const [bet, setBet] = useState("1");
   const [betMode, setBetMode] = useState<"ton" | "gift">("ton");
-  const DEFAULT_SPIN_CHIPS = [0.1, 0.15, 1, 10];
+  const DEFAULT_SPIN_CHIPS = [5, 10, 100];
   const [spinChips, setSpinChips] = useState<number[]>(() => {
     try {
-      const raw = localStorage.getItem("tonyx_spin_chips");
+      const raw = localStorage.getItem("tonyx_spin_chips_v2");
       if (raw) {
         const arr = JSON.parse(raw);
-        if (Array.isArray(arr) && arr.length >= 4) return arr.slice(0, 4).map((x: any) => Number(x) || 0.1);
+        if (Array.isArray(arr) && arr.length === 3) return arr.slice(0, 3).map((x: any) => Number(x) || 5);
       }
     } catch { /* */ }
     return DEFAULT_SPIN_CHIPS;
@@ -848,14 +848,14 @@ export default function SpinGame({
       </div>
 
       {betMode === "ton" ? (
-        <div style={{ display: "flex", gap: 6, alignItems: "center", width: "100%" }}>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", width: "100%" }}>
           <button
             type="button"
             onClick={() => { setEditIdx(0); setEditVal(String(spinChips[0] ?? "")); setEditOpen(true); }}
             style={{
-              flex: "0 0 auto", width: 38, height: 38, padding: 0, fontSize: 14,
-              borderRadius: 12, border: "1px solid rgba(255,255,255,0.14)",
-              background: "#0a0a0f", color: "#cbd5e1", cursor: "pointer", fontFamily: "inherit", fontWeight: 700,
+              flex: "0 0 auto", width: 52, height: 52, padding: 0, fontSize: 18,
+              borderRadius: 16, border: "1px solid rgba(255,255,255,0.12)",
+              background: "#12121a", color: "#94a3b8", cursor: "pointer", fontFamily: "inherit", fontWeight: 700,
               display: "flex", alignItems: "center", justifyContent: "center",
             }}
             title="Изменить чипы"
@@ -867,18 +867,19 @@ export default function SpinGame({
               disabled={loading || !canBet}
               onClick={() => { setBet(String(v)); placeBet(Number(v)); }}
               style={{
-                flex: "1 1 0", minWidth: 0, height: 38,
-                padding: "0 4px", borderRadius: 12,
-                border: "1px solid rgba(255,255,255,0.14)",
-                background: "#0a0a0f",
-                color: "#f1f5f9", fontWeight: 900, fontSize: 13,
+                flex: "1 1 0", minWidth: 0, height: 52,
+                padding: "0 6px", borderRadius: 16,
+                border: "1px solid rgba(255,255,255,0.12)",
+                background: "#12121a",
+                color: "#f1f5f9", fontWeight: 900, fontSize: 17,
                 cursor: loading || !canBet ? "not-allowed" : "pointer",
                 opacity: loading || !canBet ? 0.45 : 1,
-                display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 3,
+                display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6,
                 fontFamily: "inherit",
               }}
             >
-              {v}<span style={{ marginLeft: 4, display: "inline-flex", alignItems: "center" }}><TonIcon size={15} /></span>
+              <span>{v}</span>
+              <TonIcon size={18} />
             </button>
           ))}
           <button
@@ -889,11 +890,11 @@ export default function SpinGame({
               if (all >= 0.1) { setBet(String(all)); placeBet(all); }
             }}
             style={{
-              flex: "1.25 1 0", minWidth: 0, height: 38,
-              padding: "0 6px", borderRadius: 12,
-              border: "1px solid rgba(255,255,255,0.14)",
-              background: "#0a0a0f",
-              color: "#f1f5f9", fontWeight: 900, fontSize: 12,
+              flex: "1.15 1 0", minWidth: 0, height: 52,
+              padding: "0 8px", borderRadius: 16,
+              border: "1px solid rgba(255,255,255,0.12)",
+              background: "#12121a",
+              color: "#f1f5f9", fontWeight: 900, fontSize: 14,
               cursor: loading || !canBet ? "not-allowed" : "pointer",
               opacity: loading || !canBet || tonBalance < 0.1 ? 0.45 : 1,
               whiteSpace: "nowrap", fontFamily: "inherit",
@@ -1168,7 +1169,7 @@ export default function SpinGame({
                 const next = [...spinChips];
                 next[editIdx] = Math.round(n * 1000) / 1000;
                 setSpinChips(next);
-                try { localStorage.setItem("tonyx_spin_chips", JSON.stringify(next)); } catch { /* */ }
+                try { localStorage.setItem("tonyx_spin_chips_v2", JSON.stringify(next)); } catch { /* */ }
                 setEditOpen(false);
               }}
               style={{

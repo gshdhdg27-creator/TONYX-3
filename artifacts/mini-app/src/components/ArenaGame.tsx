@@ -16,8 +16,8 @@ const MIN_STAKE = 0.1;
 const SPIN_MS = 7000;
 const DIR_MS = 350;
 const WINNER_HOLD_MS = 4500;
-const DEFAULT_CHIPS = [1, 5, 10, 25];
-const CHIPS_KEY = "tonyx_arena_chips";
+const DEFAULT_CHIPS = [5, 10, 100];
+const CHIPS_KEY = "tonyx_arena_chips_v2";
 const COLORS = [
   "#22c55e", "#ef4444", "#f59e0b", "#06b6d4",
   "#a855f7", "#eab308", "#ec4899", "#14b8a6",
@@ -378,7 +378,7 @@ function loadChips(): number[] {
     const raw = localStorage.getItem(CHIPS_KEY);
     if (!raw) return [...DEFAULT_CHIPS];
     const arr = JSON.parse(raw);
-    if (Array.isArray(arr) && arr.length === 4 && arr.every((n) => typeof n === "number" && n > 0)) return arr;
+    if (Array.isArray(arr) && arr.length === 3 && arr.every((n) => typeof n === "number" && n > 0)) return arr;
   } catch { /* */ }
   return [...DEFAULT_CHIPS];
 }
@@ -1036,36 +1036,37 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
 
         {betMode === "ton" ? (
           <>
-            {/* Ряд 2: ✎ 1 5 10 25 Ва-банк — аккуратные чипы с фоном */}
-            <div style={{ display: "flex", gap: 6, alignItems: "center", width: "100%" }}>
+            {/* ✎ + 3 чипа + Ва-банк */}
+            <div style={{ display: "flex", gap: 8, alignItems: "center", width: "100%" }}>
               <button type="button" onClick={openEdit} style={{
-                flex: "0 0 auto", width: 57, height: 57, padding: 0, fontSize: 18,
-                borderRadius: 14, border: "1px solid rgba(255,255,255,0.14)",
-                background: "#0a0a0f", color: "#cbd5e1",
+                flex: "0 0 auto", width: 52, height: 52, padding: 0, fontSize: 18,
+                borderRadius: 16, border: "1px solid rgba(255,255,255,0.12)",
+                background: "#12121a", color: "#94a3b8",
                 cursor: "pointer", fontFamily: "inherit", fontWeight: 700,
                 display: "flex", alignItems: "center", justifyContent: "center",
               }} title="Изменить">✎</button>
               {chips.map((v, i) => (
                 <button key={i} type="button" disabled={busy || !canBet} onClick={() => placeBet(v)}
                   style={{
-                    flex: "1 1 0", minWidth: 0, height: 57, opacity: busy || !canBet ? 0.45 : 1,
+                    flex: "1 1 0", minWidth: 0, height: 52, opacity: busy || !canBet ? 0.45 : 1,
                     cursor: busy || !canBet ? "not-allowed" : "pointer",
-                    display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 3,
-                    padding: "0 4px", borderRadius: 14, fontWeight: 900, fontSize: 16,
-                    background: "#0a0a0f", border: "1px solid rgba(255,255,255,0.14)",
+                    display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6,
+                    padding: "0 6px", borderRadius: 16, fontWeight: 900, fontSize: 17,
+                    background: "#12121a", border: "1px solid rgba(255,255,255,0.12)",
                     color: "#f1f5f9", fontFamily: "inherit",
                   }}>
-                  {v}<span style={{ marginLeft: 4, display: "inline-flex", alignItems: "center" }}><TonIcon size={15} /></span>
+                  <span>{v}</span>
+                  <TonIcon size={18} />
                 </button>
               ))}
               <button type="button" disabled={busy || !canBet || balanceTon < MIN_STAKE}
                 onClick={() => placeBet(Math.floor(balanceTon * 1000) / 1000)}
                 style={{
-                  flex: "1.25 1 0", minWidth: 0, height: 57,
+                  flex: "1.15 1 0", minWidth: 0, height: 52,
                   opacity: busy || !canBet || balanceTon < MIN_STAKE ? 0.45 : 1,
                   cursor: busy || !canBet ? "not-allowed" : "pointer",
-                  padding: "0 6px", borderRadius: 14, fontWeight: 900, fontSize: 14,
-                  background: "#0a0a0f", border: "1px solid rgba(255,255,255,0.14)",
+                  padding: "0 8px", borderRadius: 16, fontWeight: 900, fontSize: 14,
+                  background: "#12121a", border: "1px solid rgba(255,255,255,0.12)",
                   color: "#f1f5f9", whiteSpace: "nowrap", fontFamily: "inherit",
                 }}>
                 Ва-банк

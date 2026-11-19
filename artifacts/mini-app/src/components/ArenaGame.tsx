@@ -185,7 +185,10 @@ function hash01(s: string): number {
  * - 3+ -> corner triangles + main zone for leader
  */
 function buildStrips(players: ArenaPlayer[], roomSeed = 0): Strip[] {
-  const list = [...players].filter((p) => p && p.stake > 0);
+  // Stable order on every client (API may return players in any order)
+  const list = [...players]
+    .filter((p) => p && p.stake > 0)
+    .sort((a, b) => String(a.telegramId).localeCompare(String(b.telegramId)));
   const total = list.reduce((s, p) => s + p.stake, 0) || 1;
   const n = list.length;
   if (n === 0) return [];
@@ -235,7 +238,7 @@ function buildStrips(players: ArenaPlayer[], roomSeed = 0): Strip[] {
     const [a, b] = list;
     const sa = a.stake / total;
     const sb = b.stake / total;
-    const seed = hash01(a.telegramId + "|" + b.telegramId);
+    const seed = hash01([a.telegramId, b.telegramId].map(String).sort().join("|"));
 
     // Small share → corner triangle (not a thin full-height strip)
     const CORNER_MAX = 0.22;
@@ -391,7 +394,11 @@ function loadChips(): number[] {
 }
 /** Same seed string on every client for a finished room */
 function animSeed(data: { id?: number; winnerId: string | null; totalPool: number; fair?: ArenaState["fair"]; players: ArenaPlayer[] }) {
-  const stakes = data.players.map((p) => `${p.telegramId}:${p.stake}`).join("|");
+  // Same string on every client regardless of player array order
+  const stakes = [...data.players]
+    .map((p) => `${p.telegramId}:${p.stake}`)
+    .sort()
+    .join("|");
   return [
     data.id ?? 0,
     data.winnerId ?? "",
@@ -804,7 +811,13 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
       <div style={header}>
         <button type="button" onClick={onClose} style={iconBtn}>←</button>
         <div style={{ flex: 1, textAlign: "center", fontWeight: 900, fontSize: 16, letterSpacing: "0.04em" }}>ARENA</div>
-        <button type="button" onClick={openHistory} style={iconBtn} title="История">⏱</button>
+        <button type="button" onClick={openHistory} style={{
+          ...iconBtn,
+          width: 40, height: 40, borderRadius: 12,
+          background: "rgba(255,255,255,0.06)",
+          border: "1px solid rgba(255,255,255,0.1)",
+          fontSize: 17,
+        }} title="История">⏱</button>
       </div>
 
       {/* Card like Portals screenshot */}
@@ -1389,9 +1402,11 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
                     </div>
                   </div>
                   <div style={{ display: "flex", gap: 8 }}>
-                    <button type="button" onClick={() => replayRoom(room)} style={histBtn}>Открыть повтор</button>
-                    <button type="button" onClick={() => setFairInfo(room)} style={{ ...histBtn, background: "#3b82f6", color: "#fff", border: "none" }}>
-                      Проверка честности
+                    <button type="button" onClick={() => replayRoom(room)} style={histBtnReplay}>
+                      <span style={{ fontSize: 15 }}>▶</span> Повтор
+                    </button>
+                    <button type="button" onClick={() => setFairInfo(room)} style={histBtnFair}>
+                      <span style={{ fontSize: 14 }}>✦</span> Честность
                     </button>
                   </div>
                 </div>
@@ -1573,11 +1588,27 @@ const toastStyle: CSSProperties = {
   padding: "10px 16px", borderRadius: 12, fontWeight: 700, zIndex: 700, boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
 };
 const histCard: CSSProperties = {
-  background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)",
-  borderRadius: 16, padding: 14, marginBottom: 12,
+  background: "linear-gradient(145deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02))",
+  border: "1px solid rgba(255,255,255,0.09)",
+  borderRadius: 18, padding: 14, marginBottom: 12,
+  boxShadow: "0 8px 24px rgba(0,0,0,0.25)",
 };
 const histBtn: CSSProperties = {
-  flex: 1, padding: "10px 8px", borderRadius: 12, border: "1px solid rgba(255,255,255,0.1)",
-  background: "rgba(255,255,255,0.06)", color: "#e2e8f0", fontWeight: 700, fontSize: 12,
+  flex: 1, padding: "11px 10px", borderRadius: 14, border: "1px solid rgba(255,255,255,0.1)",
+  background: "rgba(255,255,255,0.06)", color: "#e2e8f0", fontWeight: 800, fontSize: 13,
   cursor: "pointer", fontFamily: "inherit",
+  display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+};
+const histBtnReplay: CSSProperties = {
+  ...histBtn,
+  background: "linear-gradient(135deg, #1e293b, #0f172a)",
+  border: "1px solid rgba(148,163,184,0.25)",
+  color: "#f1f5f9",
+};
+const histBtnFair: CSSProperties = {
+  ...histBtn,
+  background: "linear-gradient(135deg, #3b82f6, #2563eb)",
+  border: "none",
+  color: "#fff",
+  boxShadow: "0 4px 14px rgba(37,99,235,0.35)",
 };

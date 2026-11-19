@@ -445,7 +445,7 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
   const [freezePool, setFreezePool] = useState(0);
   const [countdown, setCountdown] = useState(0);
   const [boardZoom, setBoardZoom] = useState(1);
-  const [zoomOrigin, setZoomOrigin] = useState("50% 50%");
+  const [boardCam, setBoardCam] = useState({ x: 0, y: 0 });
   const [puckVisible, setPuckVisible] = useState(false);
   const [puckPos, setPuckPos] = useState({ x: W / 2, y: H / 2 });
   const [trail, setTrail] = useState<{ x: number; y: number; id: number }[]>([]);
@@ -498,12 +498,26 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
     setTimeout(() => setToast(null), 2000);
   };
 
+  /** Camera so puck stays centered; clamps so board edges stay in view (corners ok) */
+  function cameraFor(px: number, py: number, z: number) {
+    if (z <= 1.001) return { x: 0, y: 0 };
+    // Ideal: puck at viewport center
+    let tx = W / 2 - px * z;
+    let ty = H / 2 - py * z;
+    // Clamp so we don't scroll past board edges (keeps corners fully visible)
+    const minX = W - W * z;
+    const minY = H - H * z;
+    tx = Math.max(minX, Math.min(0, tx));
+    ty = Math.max(minY, Math.min(0, ty));
+    return { x: tx, y: ty };
+  }
+
   function resetAnim() {
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
     rafRef.current = null;
     setPuckPos({ x: W / 2, y: H / 2 });
     setWinnerData(null); setFreezeStrips(null); setFreezePool(0);
-    setBoardZoom(1); setZoomOrigin("50% 50%");
+    setBoardZoom(1); setBoardCam({ x: 0, y: 0 });
     setPuckVisible(false); setTrail([]); setDirVisible(false); setWinnerTag(null);
   }
 
@@ -524,7 +538,7 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
     const dir = pathDirection(path);
 
     setFreezeStrips(strips); setFreezePool(data.totalPool);
-    setPhase("spin"); setWinnerData(null); setBoardZoom(1);
+    setPhase("spin"); setWinnerData(null); setBoardZoom(1); setBoardCam({ x: 0, y: 0 });
     setPuckVisible(true); setTrail([]); setDirVisible(true); setDirAngle(dir);
     setWinnerTag(null); setPuckPos(start); lastPosRef.current = start;
     haptic("medium");
@@ -546,8 +560,8 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
       if (raw >= 1) {
         setPuckPos(target);
         setTrail([]);
-        setZoomOrigin(`${(target.x / W) * 100}% ${(target.y / H) * 100}%`);
         setBoardZoom(3);
+        setBoardCam(cameraFor(target.x, target.y, 3));
         setPhase("winner"); setDirVisible(false); setWinnerTag(winName);
         hapticNotify("success");
         const payout = payoutOf(winner.stake, data.totalPool);
@@ -599,8 +613,9 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
       if (raw > 0.30) {
         const k = (raw - 0.30) / 0.70;
         const ease = 1 - Math.pow(1 - k, 2.4);
-        setZoomOrigin(`${(pos.x / W) * 100}% ${(pos.y / H) * 100}%`);
-        setBoardZoom(1 + ease * 2.0); // up to 3x
+        const z = 1 + ease * 2.0; // up to 3x
+        setBoardZoom(z);
+        setBoardCam(cameraFor(pos.x, pos.y, z));
       }
       rafRef.current = requestAnimationFrame(step);
     };
@@ -845,8 +860,11 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
         }}>
           <div style={boardWrap}>
             <div className="ar-board" style={{
-              width: W, height: H, transform: `scale(${boardZoom})`, transformOrigin: zoomOrigin,
-              transition: phase === "winner" ? "transform 0.55s cubic-bezier(0.22,1,0.36,1)" : "none",
+              width: W, height: H,
+              transform: `translate(${boardCam.x}px, ${boardCam.y}px) scale(${boardZoom})`,
+              transformOrigin: "0 0",
+              transition: phase === "winner" ? "transform 0.45s cubic-bezier(0.22,1,0.36,1)" : "none",
+              willChange: phase === "spin" || phase === "winner" ? "transform" : "auto",
               background: strips.length === 0
                 ? "#05050a"
                 : strips.length === 1

@@ -24,60 +24,70 @@ const COLORS = [
   "#f97316", "#3b82f6",
 ];
 
-/** Blue diamond icon (like Portals / gift style) */
-function DiamondIcon({ size = 28 }: { size?: number }) {
+/** Official TON logo */
+function TonIcon({ size = 16 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 48 48" fill="none" style={{ display: "block" }}>
-      <path d="M24 6L38 20L24 42L10 20L24 6Z" fill="white" />
-      <path d="M24 6L38 20H10L24 6Z" fill="rgba(255,255,255,0.55)" />
-      <path d="M18 20H30L24 42L18 20Z" fill="rgba(200,220,255,0.35)" />
-      <path d="M34 12l1.2 2.4 2.4 1.2-2.4 1.2L34 19l-1.2-2.4-2.4-1.2 2.4-1.2L34 12z" fill="white" />
-    </svg>
+    <img
+      src="/toncoin.png"
+      alt="TON"
+      width={size}
+      height={size}
+      style={{
+        width: size,
+        height: size,
+        objectFit: "cover",
+        display: "inline-block",
+        verticalAlign: "middle",
+        borderRadius: Math.round(size * 0.22),
+      }}
+      draggable={false}
+    />
   );
 }
 
-/** Small diamond for bet chips / mode toggle */
-function TonIcon({ size = 16 }: { size?: number }) {
-  return <DiamondIcon size={size} />;
-}
-
-/** Stake chip: blue card + diamond + amount badge at bottom (as on screenshots) */
+/** Stake chip: full TON logo photo + amount badge at bottom */
 function TonChip({ amount, size = 56 }: { amount: number | string; size?: number }) {
   const label = typeof amount === "number"
     ? (Math.abs(amount - Math.round(amount)) < 1e-9 ? String(Math.round(amount)) : amount.toFixed(2))
     : String(amount);
-  const badgeFs = Math.max(10, Math.round(size * 0.20));
-  const iconSize = Math.round(size * 0.48);
+  const badgeFs = Math.max(11, Math.round(size * 0.22));
   return (
     <div style={{
       width: size,
       height: size,
       borderRadius: Math.round(size * 0.22),
-      background: "linear-gradient(160deg,#4da3ff 0%,#2563eb 55%,#1d4ed8 100%)",
-      border: "1px solid rgba(255,255,255,0.25)",
       boxShadow: "0 4px 14px rgba(37,99,235,0.4)",
-      display: "flex",
-      flexDirection: "column",
-      alignItems: "center",
-      justifyContent: "center",
       position: "relative",
       flexShrink: 0,
       overflow: "hidden",
-      paddingBottom: Math.round(size * 0.14),
+      border: "1px solid rgba(255,255,255,0.2)",
     }}>
-      <DiamondIcon size={iconSize} />
+      <img
+        src="/toncoin.png"
+        alt="TON"
+        style={{
+          position: "absolute",
+          inset: 0,
+          width: "100%",
+          height: "100%",
+          objectFit: "cover",
+          display: "block",
+        }}
+        draggable={false}
+      />
       <div style={{
         position: "absolute",
         left: "50%",
-        bottom: Math.round(size * 0.06),
+        bottom: Math.round(size * 0.07),
         transform: "translateX(-50%)",
         display: "flex",
         alignItems: "center",
-        gap: 2,
-        background: "rgba(15,23,42,0.55)",
+        gap: 3,
+        background: "rgba(0,0,0,0.45)",
         borderRadius: 999,
-        padding: `2px ${Math.max(6, Math.round(size * 0.1))}px`,
-        border: "1px solid rgba(255,255,255,0.2)",
+        padding: `2px ${Math.max(7, Math.round(size * 0.12))}px`,
+        border: "1px solid rgba(255,255,255,0.25)",
+        backdropFilter: "blur(4px)",
       }}>
         <span style={{
           fontWeight: 900,
@@ -86,9 +96,6 @@ function TonChip({ amount, size = 56 }: { amount: number | string; size?: number
           lineHeight: 1.2,
           letterSpacing: "-0.02em",
         }}>{label}</span>
-        <svg width={badgeFs} height={badgeFs} viewBox="0 0 16 16" fill="none">
-          <path d="M8 1.5L13 7L8 14.5L3 7L8 1.5Z" fill="white" />
-        </svg>
       </div>
     </div>
   );

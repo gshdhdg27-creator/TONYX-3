@@ -290,51 +290,92 @@ function buildStrips(players: ArenaPlayer[], roomSeed = 0): Strip[] {
   }
 
 
-  // 3+ players: sequential diagonal wedges by stake share.
-  // Every player always gets a non-overlapping visible zone (no cover-up bugs).
+  // 3+ players:
+  //  - small share (< 22%) → corner triangle (never a thin middle strip)
+  //  - big players → diagonal wedges of the full board (corners drawn on top)
   {
+    const CORNER_MAX = 0.22;
+    const withShare = list.map((p, i) => ({ p, i, share: p.stake / total }));
+    const smalls = withShare.filter((x) => x.share < CORNER_MAX).sort((a, b) => a.share - b.share);
+    const bigs = withShare.filter((x) => x.share >= CORNER_MAX).sort((a, b) => b.share - a.share);
+
+    const cornerOrder = [0, 2, 1, 3]; // TL, BR, TR, BL — opposite first so they don't cluster
+    const usedCorners = new Set<number>();
+    const result: Strip[] = [];
+
+    // --- smalls → corners ---
+    for (let si = 0; si < smalls.length; si++) {
+      const { p, i, share } = smalls[si];
+      const f = Math.min(0.92, Math.max(0.08, Math.sqrt(2 * share)));
+      let corner = cornerOrder[si % 4];
+      // pick free corner
+      for (let k = 0; k < 4; k++) {
+        const c = cornerOrder[(si + k) % 4];
+        if (!usedCorners.has(c)) { corner = c; break; }
+      }
+      usedCorners.add(corner);
+      let polyS: Pt[];
+      if (corner === 0) {
+        polyS = [{ x: 0, y: 0 }, { x: f * W, y: 0 }, { x: 0, y: f * H }];
+      } else if (corner === 1) {
+        polyS = [{ x: W, y: 0 }, { x: W, y: f * H }, { x: (1 - f) * W, y: 0 }];
+      } else if (corner === 2) {
+        polyS = [{ x: W, y: H }, { x: (1 - f) * W, y: H }, { x: W, y: (1 - f) * H }];
+      } else {
+        polyS = [{ x: 0, y: H }, { x: 0, y: (1 - f) * H }, { x: f * W, y: H }];
+      }
+      result.push(mk(p, i, share, polyS, "corner"));
+    }
+
+    // --- bigs → diagonal wedges across full board ---
+    if (bigs.length === 0) {
+      // all small — already in corners; nothing else
+      return result;
+    }
+    if (bigs.length === 1) {
+      const { p, i, share } = bigs[0];
+      const poly: Pt[] = [
+        { x: 0, y: 0 }, { x: W, y: 0 }, { x: W, y: H }, { x: 0, y: H },
+      ];
+      result.push(mk(p, i, share, poly, "main"));
+      return result;
+    }
+
+    // 2+ bigs: sequential diagonal wedges by their relative shares
+    const bigTotal = bigs.reduce((s, x) => s + x.share, 0) || 1;
     const cuts: number[] = [0];
     let acc = 0;
-    for (let i = 0; i < n; i++) {
-      acc += list[i].stake / total;
-      cuts.push(i === n - 1 ? 1 : Math.min(0.999, Math.max(0.001, acc)));
+    for (let bi = 0; bi < bigs.length; bi++) {
+      acc += bigs[bi].share / bigTotal;
+      cuts.push(bi === bigs.length - 1 ? 1 : Math.min(0.999, Math.max(0.001, acc)));
     }
-    // Enforce minimum visible width so tiny stakes still show
-    const MIN_W = 0.04;
-    for (let i = 1; i < n; i++) {
-      if (cuts[i] - cuts[i - 1] < MIN_W) cuts[i] = Math.min(1 - MIN_W * (n - i), cuts[i - 1] + MIN_W);
-    }
-    for (let i = n - 1; i >= 1; i--) {
-      if (cuts[i] - cuts[i - 1] < MIN_W) cuts[i - 1] = Math.max(MIN_W * (i - 1), cuts[i] - MIN_W);
-    }
-    cuts[0] = 0;
-    cuts[n] = 1;
-
+    const bn = bigs.length;
     const topX: number[] = [];
     const botX: number[] = [];
-    for (let i = 0; i <= n; i++) {
+    for (let i = 0; i <= bn; i++) {
       if (i === 0) { topX.push(0); botX.push(0); continue; }
-      if (i === n) { topX.push(W); botX.push(W); continue; }
+      if (i === bn) { topX.push(W); botX.push(W); continue; }
       const base = cuts[i];
-      const seed = hash01(list[i - 1].telegramId + "|" + list[i].telegramId + "|" + i + "|" + roomSeed);
-      const tilt = (seed - 0.5) * 0.10;
+      const seed = hash01(bigs[i - 1].p.telegramId + "|" + bigs[i].p.telegramId + "|" + i + "|" + roomSeed);
+      const tilt = (seed - 0.5) * 0.12;
       const shareL = cuts[i] - cuts[i - 1];
       const shareR = cuts[i + 1] - cuts[i];
-      const maxT = Math.min(shareL, shareR) * 0.4;
+      const maxT = Math.min(shareL, shareR) * 0.45;
       const tt = Math.max(-maxT, Math.min(maxT, tilt));
       topX.push(Math.max(0, Math.min(W, (base + tt) * W)));
       botX.push(Math.max(0, Math.min(W, (base - tt) * W)));
     }
-    return list.map((p, i) => {
-      const share = p.stake / total;
+    for (let bi = 0; bi < bn; bi++) {
+      const { p, i, share } = bigs[bi];
       const poly: Pt[] = [
-        { x: topX[i], y: 0 },
-        { x: topX[i + 1], y: 0 },
-        { x: botX[i + 1], y: H },
-        { x: botX[i], y: H },
+        { x: topX[bi], y: 0 },
+        { x: topX[bi + 1], y: 0 },
+        { x: botX[bi + 1], y: H },
+        { x: botX[bi], y: H },
       ];
-      return mk(p, i, share, poly, "wedge");
-    });
+      result.push(mk(p, i, share, poly, "wedge"));
+    }
+    return result;
   }
 }
 

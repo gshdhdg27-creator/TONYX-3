@@ -1332,8 +1332,6 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
                   <>
                     {pureTon > 1e-9 && (
                       <TonChip amount={pureTon} size={72} />
-                    )}</span>
-                      </div>
                     )}
                     {nfts.map((n) => (
                       <div key={n.inventoryId} style={{

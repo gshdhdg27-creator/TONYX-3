@@ -2,8 +2,8 @@
 
 export const W = 352;
 export const H = 352;
-export const BALL_R = 16;
-export const MARGIN = -8; // ring crosses wall; collision uses center // center near edge → ring crosses wall ~8px // center stays in; visual ring may cross edge
+export const BALL_R = 12;
+export const MARGIN = 6; // ring crosses wall; collision uses center // center near edge → ring crosses wall ~8px // center stays in; visual ring may cross edge
 
 export type PathPoint = { x: number; y: number; t: number };
 export type Pt = { x: number; y: number };
@@ -158,9 +158,11 @@ export function planBouncePath(
  * Old code used only x0..x1 + full height → often landed on another player's zone.
  */
 export function randomInStrip(strip: StripLike, rng: Rng = Math.random): { x: number; y: number } {
-  const lo = MARGIN + BALL_R;
-  const hiX = W - MARGIN - BALL_R;
-  const hiY = H - MARGIN - BALL_R;
+  // Soft clamp — keep on board but allow landing in tiny corner zones
+  const softClamp = (x: number, y: number): Pt => ({
+    x: Math.min(W - 2, Math.max(2, x)),
+    y: Math.min(H - 2, Math.max(2, y)),
+  });
 
   if (strip.poly && strip.poly.length >= 3) {
     const xs = strip.poly.map((p) => p.x);
@@ -171,33 +173,42 @@ export function randomInStrip(strip: StripLike, rng: Rng = Math.random): { x: nu
     const maxY = Math.max(...ys);
     const bw = Math.max(1, maxX - minX);
     const bh = Math.max(1, maxY - minY);
+    const area = bw * bh;
 
-    for (let tries = 0; tries < 60; tries++) {
+    // Tiny territory (e.g. 0.01%): always land on centroid — guaranteed inside
+    if (area < 900 || (strip.cx != null && strip.cy != null && bw < 28 && bh < 28)) {
+      if (strip.cx != null && strip.cy != null) {
+        return softClamp(strip.cx, strip.cy);
+      }
+    }
+
+    for (let tries = 0; tries < 80; tries++) {
       let x: number;
       let y: number;
-      // Prefer near centroid so the puck clearly sits in the zone
-      if (rng() < 0.55 && strip.cx != null && strip.cy != null) {
-        x = strip.cx + (rng() - 0.5) * bw * 0.45;
-        y = strip.cy + (rng() - 0.5) * bh * 0.45;
+      if (rng() < 0.7 && strip.cx != null && strip.cy != null) {
+        x = strip.cx + (rng() - 0.5) * bw * 0.35;
+        y = strip.cy + (rng() - 0.5) * bh * 0.35;
       } else {
         x = minX + rng() * bw;
         y = minY + rng() * bh;
       }
-      const p = clampBall(x, y);
+      const p = softClamp(x, y);
       if (pointInPoly(p, strip.poly)) return p;
     }
+    // Fallback: centroid (do NOT hard-clamp out of tiny poly)
     if (strip.cx != null && strip.cy != null) {
-      return clampBall(strip.cx, strip.cy);
+      return softClamp(strip.cx, strip.cy);
     }
   }
 
-  // Rect fallback (legacy)
-  const pad = BALL_R + 4;
+  const lo = 2 + BALL_R;
+  const hiY = H - 2 - BALL_R;
+  const pad = 4;
   const w = Math.max(2, strip.x1 - strip.x0);
   const innerW = Math.max(1, w - pad * 2);
   const x = strip.x0 + pad + rng() * innerW;
-  const y = lo + rng() * (hiY - lo);
-  return clampBall(x, y);
+  const y = lo + rng() * Math.max(1, hiY - lo);
+  return softClamp(x, y);
 }
 
 export function randomStart(rng: Rng = Math.random): { x: number; y: number } {

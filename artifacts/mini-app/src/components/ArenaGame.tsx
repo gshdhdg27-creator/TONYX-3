@@ -24,6 +24,21 @@ const COLORS = [
   "#f97316", "#3b82f6",
 ];
 
+/** Official TON mark — replaces diamond emoji in stakes UI */
+function TonIcon({ size = 16 }: { size?: number }) {
+  return (
+    <img
+      src="/toncoin.png"
+      alt="TON"
+      width={size}
+      height={size}
+      style={{ width: size, height: size, objectFit: "contain", display: "inline-block", verticalAlign: "middle", borderRadius: size > 20 ? 8 : 4 }}
+      draggable={false}
+    />
+  );
+}
+
+
 interface NftStakeInfo {
   inventoryId: number; itemId: string; valueTon: number; nameRu?: string; imageUrl?: string | null;
 }
@@ -885,7 +900,7 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
                               display: "flex", alignItems: "center", justifyContent: "center",
                               border: "1px solid rgba(96,165,250,0.55)",
                             }}>
-                              <span style={{ fontSize: 16 }}>💎</span>
+                              <TonIcon size={18} />
                               <span style={{
                                 position: "absolute", left: 3, bottom: 2, fontSize: 9, fontWeight: 900, color: "#fff",
                                 textShadow: "0 1px 2px #000",
@@ -924,7 +939,7 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
 
       {/* Fixed bets ABOVE bottom menu */}
       <div style={betBar}>
-        {/* Ряд 1: переключатель 🎁 / 💎 в общей «пилюле» */}
+        {/* Ряд 1: переключатель 🎁 / TON в общей «пилюле» */}
         <div style={{ display: "flex", justifyContent: "flex-start", marginBottom: 8 }}>
           <div style={{
             display: "inline-flex", alignItems: "center", gap: 2, padding: 3,
@@ -947,7 +962,7 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
                 background: betMode === "ton" ? "#3b82f6" : "transparent",
                 color: betMode === "ton" ? "#fff" : "rgba(255,255,255,0.55)",
                 opacity: canBet && !busy ? 1 : 0.5,
-              }}>💎</button>
+              }}><TonIcon size={18} /></button>
           </div>
         </div>
 
@@ -972,7 +987,7 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
                     background: "#0a0a0f", border: "1px solid rgba(255,255,255,0.14)",
                     color: "#f1f5f9", fontFamily: "inherit",
                   }}>
-                  {v}<span style={{ opacity: 0.9, fontSize: 11 }}>💎</span>
+                  {v}<span style={{ marginLeft: 3, display: "inline-flex", alignItems: "center" }}><TonIcon size={12} /></span>
                 </button>
               ))}
               <button type="button" disabled={busy || !canBet || balanceTon < MIN_STAKE}
@@ -1287,7 +1302,7 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
                         display: "flex", alignItems: "center", justifyContent: "center",
                         border: "1px solid rgba(96,165,250,0.45)",
                       }}>
-                        <span style={{ fontSize: 28 }}>💎</span>
+                        <TonIcon size={28} />
                         <span style={{
                           position: "absolute", left: 6, bottom: 4, fontSize: 12, fontWeight: 900, color: "#fff",
                           textShadow: "0 1px 3px #000",
@@ -1345,7 +1360,8 @@ const boardWrap: CSSProperties = { display: "flex", justifyContent: "center", ma
 const playersCard: CSSProperties = {
   margin: "10px 14px 12px", background: "linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.03))",
   borderRadius: 16, padding: "10px 12px", border: "1px solid rgba(255,255,255,0.08)", position: "relative", zIndex: 1,
-  maxHeight: 160, overflowY: "auto",
+  // List grows with players; page scrolls down (no cramped inner scrollbar)
+  maxHeight: "none", overflow: "visible",
 };
 const playerRow: CSSProperties = {
   display: "flex", alignItems: "center", justifyContent: "space-between",

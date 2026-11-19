@@ -1,9 +1,9 @@
-/** Arena path — Portals-style: bounce via center, never scrape walls */
+/** Arena billiard path — deterministic (seeded), no mid-air homing */
 
 export const W = 352;
 export const H = 352;
 export const BALL_R = 12;
-export const MARGIN = 14;
+export const MARGIN = 1; // center stays in; visual ring may cross edge
 
 export type PathPoint = { x: number; y: number; t: number };
 export type Pt = { x: number; y: number };
@@ -58,81 +58,95 @@ export function pointInPoly(pt: Pt, poly: Pt[]): boolean {
   return inside;
 }
 
-/**
- * Portals-style path: ball never rides the walls.
- * Waypoints bounce around the CENTER of the board, then settle on target.
- */
 export function planBouncePath(
   start: { x: number; y: number },
   target: { x: number; y: number },
   rng: Rng = Math.random,
 ): PathPoint[] {
-  const cx = W / 2;
-  const cy = H / 2;
   const lo = MARGIN + BALL_R;
   const hiX = W - MARGIN - BALL_R;
   const hiY = H - MARGIN - BALL_R;
-  // keep well inside — never touch walls
-  const inset = 36;
-  const ix0 = lo + inset;
-  const iy0 = lo + inset;
-  const ix1 = hiX - inset;
-  const iy1 = hiY - inset;
+  const pw = hiX - lo;
+  const ph = hiY - lo;
 
-  const clampStart = clampBall(start.x, start.y);
-  const clampTarget = clampBall(target.x, target.y);
+  const clampStart = {
+    x: Math.min(hiX, Math.max(lo, start.x)),
+    y: Math.min(hiY, Math.max(lo, start.y)),
+  };
+  const clampTarget = {
+    x: Math.min(hiX, Math.max(lo, target.x)),
+    y: Math.min(hiY, Math.max(lo, target.y)),
+  };
 
-  // number of center bounces (long interesting path)
-  const hops = 6 + Math.floor(rng() * 7); // 6..12
-  const waypoints: Pt[] = [clampStart];
+  const sx = clampStart.x - lo;
+  const sy = clampStart.y - lo;
+  const tx0 = clampTarget.x - lo;
+  const ty0 = clampTarget.y - lo;
 
-  for (let i = 0; i < hops; i++) {
-    // orbit around center with varying radius — "point in the middle bounces"
-    const ang = rng() * Math.PI * 2;
-    const rad = 28 + rng() * 90;
-    let x = cx + Math.cos(ang) * rad;
-    let y = cy + Math.sin(ang) * rad;
-    // slight drift so path isn't a perfect circle
-    x += (rng() - 0.5) * 40;
-    y += (rng() - 0.5) * 40;
-    x = Math.min(ix1, Math.max(ix0, x));
-    y = Math.min(iy1, Math.max(iy0, y));
-    waypoints.push({ x, y });
-  }
-  // last approach: pass near center then to target
-  waypoints.push({
-    x: cx + (rng() - 0.5) * 30,
-    y: cy + (rng() - 0.5) * 30,
-  });
-  waypoints.push(clampTarget);
+  type Cand = { nx: number; ny: number; dist: number; bounces: number };
+  const cands: Cand[] = [];
 
-  // cumulative length for even t sampling
-  const segLens: number[] = [0];
-  let total = 0;
-  for (let i = 1; i < waypoints.length; i++) {
-    const d = Math.hypot(
-      waypoints[i].x - waypoints[i - 1].x,
-      waypoints[i].y - waypoints[i - 1].y,
-    );
-    total += Math.max(1, d);
-    segLens.push(total);
+  // Prefer long multi-bounce paths so the puck travels a lot before stopping
+  for (let nx = -18; nx <= 18; nx++) {
+    for (let ny = -18; ny <= 18; ny++) {
+      if (nx === 0 && ny === 0) continue;
+      const rx = nx % 2 === 0 ? tx0 : pw - tx0;
+      const ry = ny % 2 === 0 ? ty0 : ph - ty0;
+      const gx = nx * pw + rx;
+      const gy = ny * ph + ry;
+      const dist = Math.hypot(gx - sx, gy - sy);
+      const bounces = Math.abs(nx) + Math.abs(ny);
+      if (bounces < 10 || bounces > 28) continue;
+      if (dist < 900 || dist > 5600) continue;
+      cands.push({ nx, ny, dist, bounces });
+    }
   }
 
-  const samples = Math.max(220, Math.floor(total / 2.5));
+  if (cands.length === 0) {
+    for (let nx = -12; nx <= 12; nx++) {
+      for (let ny = -12; ny <= 12; ny++) {
+        if (nx === 0 && ny === 0) continue;
+        const rx = nx % 2 === 0 ? tx0 : pw - tx0;
+        const ry = ny % 2 === 0 ? ty0 : ph - ty0;
+        const gx = nx * pw + rx;
+        const gy = ny * ph + ry;
+        const dist = Math.hypot(gx - sx, gy - sy);
+        const bounces = Math.abs(nx) + Math.abs(ny);
+        if (bounces < 4) continue;
+        cands.push({ nx, ny, dist, bounces });
+      }
+    }
+  }
+
+  cands.sort((a, b) => b.bounces - a.bounces || b.dist - a.dist);
+  const top = cands.slice(0, Math.max(10, Math.floor(cands.length * 0.4)));
+  const pick = top[Math.floor(rng() * top.length)] ?? { nx: 5, ny: 6, dist: 2200, bounces: 11 };
+
+  const rx = pick.nx % 2 === 0 ? tx0 : pw - tx0;
+  const ry = pick.ny % 2 === 0 ? ty0 : ph - ty0;
+  const gx = pick.nx * pw + rx;
+  const gy = pick.ny * ph + ry;
+
+  const samples = Math.max(200, Math.floor(pick.dist / 2.2));
   const pts: PathPoint[] = [];
+
   for (let i = 0; i <= samples; i++) {
     const u = i / samples;
-    const dist = u * total;
-    let si = 0;
-    while (si < segLens.length - 1 && segLens[si + 1] < dist) si++;
-    const a = waypoints[si];
-    const b = waypoints[Math.min(si + 1, waypoints.length - 1)];
-    const span = Math.max(1e-6, segLens[Math.min(si + 1, segLens.length - 1)] - segLens[si]);
-    const k = (dist - segLens[si]) / span;
-    const x = a.x + (b.x - a.x) * k;
-    const y = a.y + (b.y - a.y) * k;
-    pts.push({ x, y, t: u });
+    let ux = sx + (gx - sx) * u;
+    let uy = sy + (gy - sy) * u;
+
+    let cellX = Math.floor(ux / pw);
+    let cellY = Math.floor(uy / ph);
+    let lx = ux - cellX * pw;
+    let ly = uy - cellY * ph;
+    if (lx < 0) { lx += pw; cellX -= 1; }
+    if (ly < 0) { ly += ph; cellY -= 1; }
+    if (cellX % 2 !== 0) lx = pw - lx;
+    if (cellY % 2 !== 0) ly = ph - ly;
+
+    pts.push({ x: lo + lx, y: lo + ly, t: u });
   }
+
   if (pts.length) {
     pts[pts.length - 1] = { x: clampTarget.x, y: clampTarget.y, t: 1 };
   }
@@ -141,8 +155,13 @@ export function planBouncePath(
 
 /**
  * Sample a point INSIDE the winner territory polygon.
+ * Old code used only x0..x1 + full height → often landed on another player's zone.
  */
 export function randomInStrip(strip: StripLike, rng: Rng = Math.random): { x: number; y: number } {
+  const lo = MARGIN + BALL_R;
+  const hiX = W - MARGIN - BALL_R;
+  const hiY = H - MARGIN - BALL_R;
+
   if (strip.poly && strip.poly.length >= 3) {
     const xs = strip.poly.map((p) => p.x);
     const ys = strip.poly.map((p) => p.y);
@@ -153,12 +172,13 @@ export function randomInStrip(strip: StripLike, rng: Rng = Math.random): { x: nu
     const bw = Math.max(1, maxX - minX);
     const bh = Math.max(1, maxY - minY);
 
-    for (let tries = 0; tries < 80; tries++) {
+    for (let tries = 0; tries < 60; tries++) {
       let x: number;
       let y: number;
-      if (rng() < 0.6 && strip.cx != null && strip.cy != null) {
-        x = strip.cx + (rng() - 0.5) * bw * 0.4;
-        y = strip.cy + (rng() - 0.5) * bh * 0.4;
+      // Prefer near centroid so the puck clearly sits in the zone
+      if (rng() < 0.55 && strip.cx != null && strip.cy != null) {
+        x = strip.cx + (rng() - 0.5) * bw * 0.45;
+        y = strip.cy + (rng() - 0.5) * bh * 0.45;
       } else {
         x = minX + rng() * bw;
         y = minY + rng() * bh;
@@ -171,8 +191,7 @@ export function randomInStrip(strip: StripLike, rng: Rng = Math.random): { x: nu
     }
   }
 
-  const lo = MARGIN + BALL_R;
-  const hiY = H - MARGIN - BALL_R;
+  // Rect fallback (legacy)
   const pad = BALL_R + 4;
   const w = Math.max(2, strip.x1 - strip.x0);
   const innerW = Math.max(1, w - pad * 2);
@@ -182,12 +201,13 @@ export function randomInStrip(strip: StripLike, rng: Rng = Math.random): { x: nu
 }
 
 export function randomStart(rng: Rng = Math.random): { x: number; y: number } {
-  // start near center ring — Portals feel
-  const cx = W / 2;
-  const cy = H / 2;
-  const ang = rng() * Math.PI * 2;
-  const rad = 40 + rng() * 70;
-  return clampBall(cx + Math.cos(ang) * rad, cy + Math.sin(ang) * rad);
+  const lo = MARGIN + BALL_R;
+  const hiX = W - MARGIN - BALL_R;
+  const hiY = H - MARGIN - BALL_R;
+  return {
+    x: lo + rng() * (hiX - lo),
+    y: lo + rng() * (hiY - lo),
+  };
 }
 
 export function samplePath(path: PathPoint[], t: number): { x: number; y: number } {

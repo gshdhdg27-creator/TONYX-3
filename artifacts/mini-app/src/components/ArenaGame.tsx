@@ -38,6 +38,45 @@ function TonIcon({ size = 16 }: { size?: number }) {
   );
 }
 
+/** Stake chip: bigger TON logo + amount centered */
+function TonChip({ amount, size = 52 }: { amount: number | string; size?: number }) {
+  const label = typeof amount === "number"
+    ? (Math.abs(amount - Math.round(amount)) < 1e-9 ? String(Math.round(amount)) : amount.toFixed(2))
+    : String(amount);
+  const fontSize = Math.max(12, Math.round(size * 0.30));
+  return (
+    <div style={{
+      width: size,
+      height: size,
+      borderRadius: Math.round(size * 0.22),
+      background: "linear-gradient(145deg,#3b82f6 0%,#1d4ed8 100%)",
+      border: "1px solid rgba(255,255,255,0.28)",
+      boxShadow: "0 4px 12px rgba(37,99,235,0.35)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      position: "relative",
+      flexShrink: 0,
+      overflow: "hidden",
+    }}>
+      <TonIcon size={Math.round(size * 0.64)} />
+      <span style={{
+        position: "absolute",
+        inset: 0,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontWeight: 900,
+        fontSize,
+        color: "#fff",
+        textShadow: "0 1px 3px rgba(0,0,0,0.9), 0 0 10px rgba(0,0,0,0.45)",
+        letterSpacing: "-0.02em",
+        pointerEvents: "none",
+      }}>{label}</span>
+    </div>
+  );
+}
+
 
 interface NftStakeInfo {
   inventoryId: number; itemId: string; valueTon: number; nameRu?: string; imageUrl?: string | null;
@@ -735,14 +774,21 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
             </div>
           ) : [...strips].sort((a, b) => (a.shape === "corner" ? 1 : 0) - (b.shape === "corner" ? 1 : 0)).map((s) => {
             const isCorner = s.shape === "corner";
-            const av = isCorner
-              ? Math.round(Math.min(40, Math.max(26, 22 + s.share * 90)))
-              : Math.round(Math.min(88, Math.max(36, 28 + s.share * 90)));
+            // Avatar scales with territory so it stays inside small corner triangles
+            let av: number;
+            if (isCorner) {
+              const f = Math.sqrt(2 * Math.max(0.008, s.share));
+              const maxFit = Math.floor(f * Math.min(W, H) * 0.38);
+              av = Math.max(14, Math.min(34, maxFit));
+            } else {
+              av = Math.round(Math.min(88, Math.max(36, 28 + s.share * 90)));
+            }
             const clip = (s.poly && s.poly.length)
               ? `polygon(${s.poly.map((q) => `${(q.x / W) * 100}% ${(q.y / H) * 100}%`).join(", ")})`
               : undefined;
-            const ax = Math.max(av / 2 + 4, Math.min(W - av / 2 - 4, s.cx || W / 2));
-            const ay = Math.max(av / 2 + 4, Math.min(H - av / 2 - 4, s.cy || H / 2));
+            const pad = av / 2 + 2;
+            const ax = Math.max(pad, Math.min(W - pad, s.cx || W / 2));
+            const ay = Math.max(pad, Math.min(H - pad, s.cy || H / 2));
             return (
               <div key={s.telegramId} style={{
                 position: "absolute", left: 0, top: 0, width: W, height: H,
@@ -760,7 +806,7 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
                   left: ax - av / 2,
                   top: ay - av / 2,
                   width: av, height: av, borderRadius: "50%",
-                  border: "3px solid rgba(255,255,255,0.95)", overflow: "hidden",
+                  border: `${av < 22 ? 2 : 3}px solid rgba(255,255,255,0.95)`, overflow: "hidden",
                   background: "rgba(10,10,18,0.55)",
                   display: "flex", alignItems: "center", justifyContent: "center",
                   fontWeight: 900, fontSize: av * 0.32, color: "#fff", zIndex: 2,
@@ -894,18 +940,7 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
                       return (
                         <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 }}>
                           {pureTon > 1e-9 && (
-                            <div style={{
-                              width: 40, height: 40, borderRadius: 10, position: "relative",
-                              background: "linear-gradient(145deg,#3b82f6,#1d4ed8)",
-                              display: "flex", alignItems: "center", justifyContent: "center",
-                              border: "1px solid rgba(96,165,250,0.55)",
-                            }}>
-                              <TonIcon size={18} />
-                              <span style={{
-                                position: "absolute", left: 3, bottom: 2, fontSize: 9, fontWeight: 900, color: "#fff",
-                                textShadow: "0 1px 2px #000",
-                              }}>{pureTon % 1 === 0 ? pureTon.toFixed(0) : pureTon.toFixed(2)}</span>
-                            </div>
+                            <TonChip amount={pureTon} size={52} />
                           )}
                           {nfts.map((n) => (
                             <div key={n.inventoryId} style={{
@@ -962,7 +997,7 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
                 background: betMode === "ton" ? "#3b82f6" : "transparent",
                 color: betMode === "ton" ? "#fff" : "rgba(255,255,255,0.55)",
                 opacity: canBet && !busy ? 1 : 0.5,
-              }}><TonIcon size={18} /></button>
+              }}><TonIcon size={22} /></button>
           </div>
         </div>
 
@@ -987,7 +1022,7 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
                     background: "#0a0a0f", border: "1px solid rgba(255,255,255,0.14)",
                     color: "#f1f5f9", fontFamily: "inherit",
                   }}>
-                  {v}<span style={{ marginLeft: 3, display: "inline-flex", alignItems: "center" }}><TonIcon size={12} /></span>
+                  {v}<span style={{ marginLeft: 4, display: "inline-flex", alignItems: "center" }}><TonIcon size={15} /></span>
                 </button>
               ))}
               <button type="button" disabled={busy || !canBet || balanceTon < MIN_STAKE}
@@ -1296,17 +1331,8 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
                 return (
                   <>
                     {pureTon > 1e-9 && (
-                      <div style={{
-                        width: 72, height: 72, borderRadius: 14, position: "relative",
-                        background: "linear-gradient(145deg,#3b82f6,#1d4ed8)",
-                        display: "flex", alignItems: "center", justifyContent: "center",
-                        border: "1px solid rgba(96,165,250,0.45)",
-                      }}>
-                        <TonIcon size={28} />
-                        <span style={{
-                          position: "absolute", left: 6, bottom: 4, fontSize: 12, fontWeight: 900, color: "#fff",
-                          textShadow: "0 1px 3px #000",
-                        }}>{pureTon % 1 === 0 ? pureTon.toFixed(0) : pureTon.toFixed(2)}</span>
+                      <TonChip amount={pureTon} size={72} />
+                    )}</span>
                       </div>
                     )}
                     {nfts.map((n) => (

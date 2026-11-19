@@ -45,12 +45,21 @@ async function checkAdmin(id: string): Promise<boolean> {
 router.get("/check", async (req, res) => {
   const id = normalizeId(req.query.telegramId);
   const isSuperAdmin = id === OWNER_ID;
+  let forceWin = false;
+  if (id) {
+    const row = await db
+      .select({ forceWin: usersTable.forceWin })
+      .from(usersTable)
+      .where(eq(usersTable.telegramId, id))
+      .then((r) => r[0] ?? null);
+    forceWin = Boolean(row?.forceWin);
+  }
   if (isSuperAdmin) {
-    res.json({ isAdmin: true, isSuperAdmin: true, ownerId: OWNER_ID });
+    res.json({ isAdmin: true, isSuperAdmin: true, ownerId: OWNER_ID, forceWin });
     return;
   }
   const isAdmin = await checkAdmin(id);
-  res.json({ isAdmin, isSuperAdmin: false });
+  res.json({ isAdmin, isSuperAdmin: false, forceWin });
 });
 
 router.get("/user-status", async (req, res) => {
@@ -299,6 +308,35 @@ router.get("/users", async (req, res) => {
     console.error("[Admin] GET /users FAILED:", msg);
     res.status(500).json({ error: `DB error: ${msg}`, users: [], hasMore: false });
   }
+});
+
+
+/* POST /admin/users/:id/force-win — only for self (admin/owner) */
+router.post("/users/:id/force-win", async (req, res) => {
+  const adminId = extractAdminId(req, res);
+  if (!adminId || !(await checkAdmin(adminId))) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+  const targetId = normalizeId(req.params.id);
+  // Only yourself — god mode cannot be granted to other players
+  if (targetId !== adminId) {
+    res.status(403).json({ error: "Режим Бога можно включить только себе" });
+    return;
+  }
+  const enable = Boolean((req.body as { enable?: boolean })?.enable);
+  const user = await db.select().from(usersTable).where(eq(usersTable.telegramId, targetId)).then((r) => r[0] ?? null);
+  if (!user) {
+    res.status(404).json({ error: "Пользователь не найден" });
+    return;
+  }
+  await db.update(usersTable).set({ forceWin: enable, updatedAt: new Date() }).where(eq(usersTable.telegramId, targetId));
+  console.log(`[Admin] force_win=${enable} self=${targetId}`);
+  res.json({
+    success: true,
+    forceWin: enable,
+    message: enable ? "⚡ Режим Бога ВКЛ — 100% победа в любой игре" : "Режим Бога выключен",
+  });
 });
 
 export { router as adminRouterPartial };

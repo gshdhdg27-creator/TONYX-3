@@ -1,6 +1,7 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { haptic, useTelegram } from "@/lib/telegram";
+import { useLang } from "@/lib/LanguageContext";
 
 export type MenuMode = 1 | 2 | 3;
 type Section =
@@ -61,19 +62,19 @@ interface TabDef {
 
 const MODE_TABS: Record<MenuMode, TabDef[]> = {
   1: [
-    { section: "market", label: "Market", icon: MarketIcon },
-    { section: "nft", label: "NFT", icon: NftIcon },
-    { section: "inventory", label: "Инвентарь", icon: InventoryIcon },
+    { section: "market", label: "market", icon: MarketIcon },
+    { section: "nft", label: "nft", icon: NftIcon },
+    { section: "inventory", label: "inventory", icon: InventoryIcon },
   ],
   2: [
-    { section: "cases", label: "Кейсы", icon: CasesIcon },
-    { section: "pvp", label: "Арена", icon: PvpIcon },
-    { section: "solo", label: "Solo", icon: SoloIcon },
+    { section: "cases", label: "cases", icon: CasesIcon },
+    { section: "pvp", label: "pvp", icon: PvpIcon },
+    { section: "solo", label: "solo", icon: SoloIcon },
   ],
   3: [
-    { section: "bosses", label: "Боссы", icon: BossIcon },
-    { section: "cards", label: "Карточки", icon: CardsIcon },
-    { section: "collection", label: "Коллекция", icon: CollectionIcon },
+    { section: "bosses", label: "bosses", icon: BossIcon },
+    { section: "cards", label: "cards", icon: CardsIcon },
+    { section: "collection", label: "collection", icon: CollectionIcon },
   ],
 };
 
@@ -102,7 +103,7 @@ function sectionFromLocation(location: string): Section | null {
   if (location === "/solo") return "solo";
   if (location === "/" || location === "") {
     const open = sessionStorage.getItem("tonyx-open");
-    if (open === "cards" || open === "collection" || open === "bosses") return open;
+    if (open === "cards" || open === "collection" || open === "bosses") return open as Section;
     return "bosses";
   }
   return null;
@@ -117,6 +118,7 @@ function modeForSection(section: Section): MenuMode {
 export default function BottomNav() {
   const [location, setLocation] = useLocation();
   const { telegramId } = useTelegram();
+  const { t } = useLang();
   const profileTaps = useRef(0);
   const profileTapAt = useRef(0);
   const [mode, setMode] = useState<MenuMode>(3);
@@ -221,7 +223,7 @@ export default function BottomNav() {
         ref={buttonRef}
         type="button"
         onClick={switchMode}
-        aria-label="Сменить режим"
+        aria-label="mode"
         className="tonyx-mode-btn"
         style={{
           position: "fixed",
@@ -314,6 +316,7 @@ export default function BottomNav() {
         {MODE_TABS[mode].map(({ section, label, icon }) => {
           const active = !profileActive && activeSection === section;
           const av = SECTION_AVATAR[section];
+          const sectionLabel = t.nav.sections[label as keyof typeof t.nav.sections] ?? label;
           return (
             <button
               key={section}
@@ -368,7 +371,7 @@ export default function BottomNav() {
                 transition: "color 0.25s ease, font-weight 0.2s ease",
                 textShadow: active ? `0 0 12px ${av.glow}` : "none",
               }}>
-                {label}
+                {sectionLabel}
               </span>
             </button>
           );
@@ -486,46 +489,44 @@ function SoloIcon(active: boolean, _c: string) {
       <circle cx="8.2" cy="13" r="1.35" fill={active ? "#15803d" : "#0a0612"}/>
       <circle cx="15.8" cy="12.2" r="1.05" fill={active ? "#15803d" : "#0a0612"}/>
       <circle cx="17.3" cy="13.8" r="1.05" fill={active ? "#15803d" : "#0a0612"}/>
-      <path d="M7.1 11.2v3.6M5.3 13h3.6" stroke={active ? "#15803d" : "#0a0612"} strokeWidth="1.5" strokeLinecap="round"/>
+      <path d="M7.1 11.2v3.6M5.3 13h3.6" stroke={active ? "#15803d" : "#0a0612"} strokeWidth="1.7" strokeLinecap="round"/>
     </svg>
   );
 }
 function BossIcon(active: boolean, _c: string) {
-  const f = active ? "#0b1020" : "#fde047";
+  const s = active ? "#0b1020" : "#fde047";
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-      <path d="M12 2.8l2.4 5.1 5.6.8-4.1 4 1 5.5L12 15.6 7.1 18.2l1-5.5-4.1-4 5.6-.8L12 2.8z" fill={f} opacity="0.95"/>
-      <path d="M12 8.2l.9 1.9 2.1.3-1.5 1.5.4 2.1L12 12.9l-1.9 1.1.4-2.1-1.5-1.5 2.1-.3.9-1.9z" fill={active ? "#a16207" : "#854d0e"} opacity="0.85"/>
+      <path d="M12 3l2.4 4.2 4.8.7-3.5 3.4.8 4.8L12 13.8 7.5 16.1l.8-4.8L4.8 7.9l4.8-.7L12 3z" fill={s} opacity="0.95"/>
     </svg>
   );
 }
 function CardsIcon(active: boolean, _c: string) {
-  const f = active ? "#0b1020" : "#f9a8d4";
+  const s = active ? "#0b1020" : "#f9a8d4";
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-      <rect x="5" y="4.5" width="11" height="15" rx="2" fill={f} opacity="0.55" transform="rotate(-8 10.5 12)"/>
-      <rect x="7.5" y="4" width="11" height="15.5" rx="2" fill={f} opacity="0.95"/>
-      <path d="M10.5 9.5h5M10.5 12.5h4" stroke={active ? "#9d174d" : "#9f1239"} strokeWidth="1.5" strokeLinecap="round"/>
+      <rect x="4" y="4" width="11" height="15" rx="2" fill={s} opacity="0.55" transform="rotate(-8 9.5 11.5)"/>
+      <rect x="7" y="3.5" width="11" height="15" rx="2" fill={s} opacity="0.95"/>
     </svg>
   );
 }
 function CollectionIcon(active: boolean, _c: string) {
-  const f = active ? "#0b1020" : "#c4b5fd";
+  const s = active ? "#0b1020" : "#c4b5fd";
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-      <rect x="3.5" y="5" width="7" height="7" rx="1.8" fill={f} opacity="0.95"/>
-      <rect x="13.5" y="5" width="7" height="7" rx="1.8" fill={f} opacity="0.7"/>
-      <rect x="3.5" y="14" width="7" height="7" rx="1.8" fill={f} opacity="0.7"/>
-      <rect x="13.5" y="14" width="7" height="7" rx="1.8" fill={f} opacity="0.95"/>
+      <rect x="3" y="4" width="7" height="7" rx="1.5" fill={s} opacity="0.9"/>
+      <rect x="14" y="4" width="7" height="7" rx="1.5" fill={s} opacity="0.7"/>
+      <rect x="3" y="13" width="7" height="7" rx="1.5" fill={s} opacity="0.7"/>
+      <rect x="14" y="13" width="7" height="7" rx="1.5" fill={s} opacity="0.9"/>
     </svg>
   );
 }
 function ProfileIcon({ active }: { active: boolean }) {
-  const c = active ? "#0b1020" : "#94a3b8";
+  const s = active ? "#0f172a" : "#94a3b8";
   return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" />
-      <circle cx="12" cy="7" r="4" />
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="8" r="3.5" fill={s}/>
+      <path d="M5 19c0-3.5 3-5.5 7-5.5s7 2 7 5.5" stroke={s} strokeWidth="2" strokeLinecap="round" fill="none"/>
     </svg>
   );
 }

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, type CSSProperties } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTonConnectUI, useTonAddress } from "@tonconnect/ui-react";
 const tonyxLogoSrc = "/tonyx-logo.jpg";
@@ -87,10 +87,6 @@ function StatusBadge({ status }: { status: string }) {
 interface WithdrawalHistoryItem {
   id: number; tonAmount: number | null; amount: number;
   address: string; status: string; txHash: string | null; createdAt: string;
-}
-interface DepositHistoryItem {
-  id: number; tonAmount: number | null;
-  memo: string | null; txHash: string | null; status: string; createdAt: string;
 }
 
 type ActivePanel = null | "topup" | "withdraw";
@@ -233,7 +229,7 @@ export default function ProfilePage() {
   const userTon = Number((profile as { ton?: string | number } | undefined)?.ton ?? 0);
   const userTonyx = Number((profile as { tonyxCoins?: number } | undefined)?.tonyxCoins ?? 0);
   const memo = String(telegramId);
-  const inputStyle: React.CSSProperties = {
+  const inputStyle: CSSProperties = {
     width: "100%", padding: "12px 14px", borderRadius: 12, border: "1px solid rgba(96,165,250,0.25)",
     background: "rgba(15,23,42,0.8)", color: "#f1f5f9", fontSize: 14, fontFamily: "inherit", outline: "none", boxSizing: "border-box",
   };

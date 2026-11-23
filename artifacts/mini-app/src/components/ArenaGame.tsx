@@ -18,48 +18,20 @@ const DIR_MS = 350;
 const WINNER_HOLD_MS = 4500;
 const DEFAULT_CHIPS = [5, 10, 100];
 const CHIPS_KEY = "tonyx_arena_chips_v2";
-/** Bright distinct territory colors (spaced so neighbors never look the same) */
 const COLORS = [
-  "#22c55e", // green
-  "#3b82f6", // blue
-  "#f59e0b", // amber
-  "#a855f7", // purple
-  "#ef4444", // red
-  "#06b6d4", // cyan
-  "#ec4899", // pink
-  "#84cc16", // lime
-  "#f97316", // orange
-  "#8b5cf6", // violet
-  "#14b8a6", // teal
-  "#eab308", // yellow
-  "#f43f5e", // rose
-  "#0ea5e9", // sky
-  "#d946ef", // fuchsia
-  "#10b981", // emerald
+  "#22c55e", "#3b82f6", "#f59e0b", "#a855f7", "#ef4444", "#06b6d4", "#ec4899", "#84cc16",
+  "#f97316", "#8b5cf6", "#14b8a6", "#eab308", "#f43f5e", "#0ea5e9", "#d946ef", "#10b981",
 ];
 
-/** Official TON logo */
 function TonIcon({ size = 16 }: { size?: number }) {
   return (
-    <img
-      src="/toncoin.png"
-      alt="TON"
-      width={size}
-      height={size}
-      style={{
-        width: size,
-        height: size,
-        objectFit: "cover",
-        display: "inline-block",
-        verticalAlign: "middle",
-        borderRadius: Math.round(size * 0.22),
-      }}
-      draggable={false}
-    />
+    <img src="/toncoin.png" alt="TON" width={size} height={size} style={{
+      width: size, height: size, objectFit: "cover", display: "inline-block",
+      verticalAlign: "middle", borderRadius: Math.round(size * 0.22),
+    }} draggable={false} />
   );
 }
 
-/** Stake chip: full TON logo photo + amount badge at bottom */
 function TonChip({ amount, size = 56 }: { amount: number | string; size?: number }) {
   const label = typeof amount === "number"
     ? (Math.abs(amount - Math.round(amount)) < 1e-9 ? String(Math.round(amount)) : amount.toFixed(2))
@@ -67,49 +39,20 @@ function TonChip({ amount, size = 56 }: { amount: number | string; size?: number
   const badgeFs = Math.max(11, Math.round(size * 0.22));
   return (
     <div style={{
-      width: size,
-      height: size,
-      borderRadius: Math.round(size * 0.22),
-      boxShadow: "0 4px 14px rgba(37,99,235,0.4)",
-      position: "relative",
-      flexShrink: 0,
-      overflow: "hidden",
-      border: "1px solid rgba(255,255,255,0.2)",
+      width: size, height: size, borderRadius: Math.round(size * 0.22),
+      boxShadow: "0 4px 14px rgba(37,99,235,0.4)", position: "relative", flexShrink: 0,
+      overflow: "hidden", border: "1px solid rgba(255,255,255,0.2)",
     }}>
-      <img
-        src="/toncoin.png"
-        alt="TON"
-        style={{
-          position: "absolute",
-          inset: 0,
-          width: "100%",
-          height: "100%",
-          objectFit: "cover",
-          display: "block",
-        }}
-        draggable={false}
-      />
+      <img src="/toncoin.png" alt="TON" style={{
+        position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", display: "block",
+      }} draggable={false} />
       <div style={{
-        position: "absolute",
-        left: "50%",
-        bottom: Math.round(size * 0.07),
-        transform: "translateX(-50%)",
-        display: "flex",
-        alignItems: "center",
-        gap: 3,
-        background: "rgba(0,0,0,0.45)",
-        borderRadius: 999,
-        padding: `2px ${Math.max(7, Math.round(size * 0.12))}px`,
-        border: "1px solid rgba(255,255,255,0.25)",
+        position: "absolute", left: "50%", bottom: Math.round(size * 0.07), transform: "translateX(-50%)",
+        display: "flex", alignItems: "center", gap: 3, background: "rgba(0,0,0,0.45)", borderRadius: 999,
+        padding: `2px ${Math.max(7, Math.round(size * 0.12))}px`, border: "1px solid rgba(255,255,255,0.25)",
         backdropFilter: "blur(4px)",
       }}>
-        <span style={{
-          fontWeight: 900,
-          fontSize: badgeFs,
-          color: "#fff",
-          lineHeight: 1.2,
-          letterSpacing: "-0.02em",
-        }}>{label}</span>
+        <span style={{ fontWeight: 900, fontSize: badgeFs, color: "#fff", lineHeight: 1.2 }}>{label}</span>
       </div>
     </div>
   );
@@ -178,7 +121,7 @@ function buildStrips(players: ArenaPlayer[], roomSeed = 0): Strip[] {
   const total = list.reduce((s, p) => s + p.stake, 0) || 1;
   const n = list.length;
   if (n === 0) return [];
-  const mk = (p: ArenaPlayer, i: number, share: number, poly: Pt[], shape: string, place?: Pt): Strip => {
+  const mk = (p: ArenaPlayer, i: number, share: number, poly: Pt[], shape: string): Strip => {
     let a = 0, cx = 0, cy = 0;
     const nn = poly.length;
     for (let k = 0; k < nn; k++) {
@@ -193,7 +136,6 @@ function buildStrips(players: ArenaPlayer[], roomSeed = 0): Strip[] {
       for (const q of poly) { sx += q.x; sy += q.y; }
       cx = sx / Math.max(1, nn); cy = sy / Math.max(1, nn);
     }
-    if (place) { cx = place.x; cy = place.y; }
     const xs = poly.map((q) => q.x);
     const x0 = Math.min(...xs); const x1 = Math.max(...xs);
     return { ...p, color: colorFor(i, roomSeed), index: i, share, x0, x1, midX: (x0 + x1) / 2, poly, cx, cy, shape };
@@ -322,9 +264,7 @@ function animSeed(data: { id?: number; winnerId: string | null; totalPool: numbe
 const CSS = `
 @keyframes arPulse{0%,100%{opacity:.55}50%{opacity:1}}
 @keyframes arPop{0%{opacity:0;transform:translateY(10px) scale(.96)}100%{opacity:1;transform:none}}
-@keyframes arDir{0%{opacity:0;transform:scale(.4)}40%{opacity:1;transform:scale(1.15)}100%{opacity:1;transform:scale(1)}}
 .ar-board{position:relative;border-radius:0;overflow:hidden;background:#05050a}
-.ar-strip-gloss{display:none}
 `;
 
 export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onClose }: Props) {
@@ -410,12 +350,13 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
 
   const poll = useCallback(async () => {
     try {
-      const r = await fetch("/api/mini/games/arena/current");
+      const r = await fetch("/api/mini/games/arena/state");
       if (!r.ok) return;
-      const d = await r.json();
-      const room = (d.room ?? d.arena ?? d) as ArenaState;
-      if (!room || !room.id) return;
-      setArena(room);
+      const raw = await r.json();
+      const d = (raw?.room ?? raw?.arena ?? raw) as ArenaState;
+      if (!d || !d.id) return;
+      if (phaseRef.current === "lobby") setArena(d);
+      else if (d.status === "finished") setArena(d);
     } catch { /* */ }
   }, []);
 
@@ -539,14 +480,19 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
     if (amount > balanceTon + 1e-9) { flash("Недостаточно TON", "err"); return; }
     setBusy(true);
     try {
-      const r = await fetch("/api/mini/games/arena/join", {
+      const me = arena?.players?.find((p) => p.telegramId === telegramId);
+      const url = me ? "/api/mini/games/arena/increase" : "/api/mini/games/arena/join";
+      const body = me
+        ? { telegramId, additionalStake: amount }
+        : { telegramId, stake: amount };
+      const r = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ telegramId, stake: amount }),
+        body: JSON.stringify(body),
       });
       const d = await r.json().catch(() => ({}));
       if (!r.ok) { flash(d.error || d.message || `Ошибка ${r.status}`, "err"); return; }
-      flash(`Ставка ${amount} TON`, "ok");
+      flash(me ? `Докид ${amount} TON` : `Ставка ${amount} TON`, "ok");
       haptic("medium");
       refreshBalance();
       await poll();

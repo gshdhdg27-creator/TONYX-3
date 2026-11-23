@@ -46,21 +46,66 @@ function fmtTime(iso: string | null) {
   if (!iso) return "—";
   try {
     const d = new Date(iso);
-    return d.toLocaleString("ru-RU", {
-      day: "2-digit",
-      month: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    const dd = String(d.getDate()).padStart(2, "0");
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const hh = String(d.getHours()).padStart(2, "0");
+    const mi = String(d.getMinutes()).padStart(2, "0");
+    return `${dd}.${mm} · ${hh}:${mi}`;
   } catch {
     return iso;
   }
+}
+
+function fmtFull(iso: string | null) {
+  if (!iso) return "—";
+  try {
+    const d = new Date(iso);
+    const dd = String(d.getDate()).padStart(2, "0");
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const yyyy = d.getFullYear();
+    const hh = String(d.getHours()).padStart(2, "0");
+    const mi = String(d.getMinutes()).padStart(2, "0");
+    return `${dd}.${mm}.${yyyy} · ${hh}:${mi}`;
+  } catch {
+    return iso;
+  }
+}
+
+function avatarSrc(photoUrl?: string | null, username?: string | null): string | null {
+  if (photoUrl && String(photoUrl).startsWith("http")) return photoUrl;
+  const u = (username || "").replace(/^@/, "").trim();
+  if (u) return `https://t.me/i/userpic/320/${encodeURIComponent(u)}.jpg`;
+  return null;
+}
+
+function initials(name: string | null | undefined, id: string) {
+  return (name || id || "?").replace(/^@/, "").slice(0, 1).toUpperCase();
 }
 
 function winnerMult(item: SpinHistoryItem): number {
   const wp = item.players?.find((p) => p.telegramId === item.winnerId);
   if (!wp || !wp.stake || wp.stake <= 0) return 0;
   return item.winnerPayout / wp.stake;
+}
+
+function winnerChance(item: SpinHistoryItem): number {
+  const wp = item.players?.find((p) => p.telegramId === item.winnerId);
+  if (wp?.chance != null) return Number(wp.chance);
+  if (!wp || item.totalPool <= 0) return 0;
+  return (wp.stake / item.totalPool) * 100;
+}
+
+function shortHash(h?: string | null) {
+  if (!h) return "—";
+  if (h.length <= 12) return h;
+  return `${h.slice(0, 4)}…${h.slice(-4)}`;
+}
+
+function fmtAmt(n: number) {
+  if (!Number.isFinite(n)) return "0";
+  if (Math.abs(n - Math.round(n)) < 1e-9) return String(Math.round(n));
+  const s = n.toFixed(2);
+  return s.replace(/\.?0+$/, "");
 }
 
 export default function SpinHistoryModal({ onClose, onReplay, telegramId }: Props) {
@@ -128,8 +173,8 @@ export default function SpinHistoryModal({ onClose, onReplay, telegramId }: Prop
       style={{
         position: "fixed",
         inset: 0,
-        zIndex: 80,
-        background: "rgba(8,4,16,0.78)",
+        zIndex: 90,
+        background: "rgba(0,0,0,0.72)",
         display: "flex",
         alignItems: "flex-end",
         justifyContent: "center",
@@ -140,133 +185,329 @@ export default function SpinHistoryModal({ onClose, onReplay, telegramId }: Prop
         onClick={(e) => e.stopPropagation()}
         style={{
           width: "100%",
-          maxWidth: 480,
-          maxHeight: "90vh",
-          borderRadius: "20px 20px 0 0",
-          background: "linear-gradient(180deg,#14141c,#0c0c12)",
-          border: "1px solid rgba(255,255,255,0.08)",
-          padding: "14px 14px 28px",
+          maxWidth: 440,
+          maxHeight: "92vh",
+          borderRadius: "18px 18px 0 0",
+          background: "#12121a",
+          border: "1px solid rgba(255,255,255,0.06)",
+          padding: "12px 12px 24px",
           overflow: "auto",
           color: "#f1f5f9",
+          fontFamily: "inherit",
         }}
       >
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-          <div style={{ fontWeight: 900, fontSize: 17 }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginBottom: 12,
+            padding: "0 2px",
+          }}
+        >
+          <div style={{ fontWeight: 800, fontSize: 16, letterSpacing: "-0.01em" }}>
             {detail ? `Игра #${detail.id}` : "История игр"}
           </div>
           <button
             type="button"
             onClick={() => (detail ? setDetail(null) : onClose())}
             style={{
+              width: 32,
+              height: 32,
+              borderRadius: 10,
               border: "none",
               background: "rgba(255,255,255,0.06)",
               color: "#94a3b8",
               fontSize: 16,
               cursor: "pointer",
-              width: 34,
-              height: 34,
-              borderRadius: 10,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
             }}
           >
-            {detail ? "←" : "✕"}
+            {detail ? "←" : "×"}
           </button>
         </div>
 
         {!detail && (
           <>
-            <div style={{ display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap" }}>
-              {TABS.map((t) => (
-                <button
-                  key={t.id}
-                  type="button"
-                  onClick={() => setTab(t.id)}
-                  style={{
-                    padding: "7px 12px",
-                    borderRadius: 20,
-                    border: "none",
-                    background: tab === t.id ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.04)",
-                    color: tab === t.id ? "#fff" : "#94a3b8",
-                    fontWeight: 700,
-                    fontSize: 12,
-                    cursor: "pointer",
-                  }}
-                >
-                  {t.label}
-                </button>
-              ))}
-            </div>
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Поиск по ID игры"
+            <div
               style={{
-                width: "100%",
-                marginBottom: 12,
-                padding: "11px 12px",
-                borderRadius: 14,
-                border: "1px solid rgba(255,255,255,0.1)",
-                background: "rgba(0,0,0,0.28)",
-                color: "#f1f5f9",
-                outline: "none",
-                boxSizing: "border-box",
-                fontSize: 13,
-                fontWeight: 600,
+                display: "flex",
+                gap: 6,
+                marginBottom: 10,
+                overflowX: "auto",
+                WebkitOverflowScrolling: "touch",
+                paddingBottom: 2,
               }}
-            />
+            >
+              {TABS.map((t) => {
+                const active = tab === t.id;
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => setTab(t.id)}
+                    style={{
+                      flexShrink: 0,
+                      padding: "8px 14px",
+                      borderRadius: 999,
+                      border: "none",
+                      background: active ? "rgba(255,255,255,0.12)" : "transparent",
+                      color: active ? "#fff" : "#8b8b9a",
+                      fontWeight: 600,
+                      fontSize: 13,
+                      cursor: "pointer",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {t.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div style={{ position: "relative", marginBottom: 12 }}>
+              <span
+                style={{
+                  position: "absolute",
+                  left: 14,
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  color: "#6b6b7b",
+                  fontSize: 14,
+                  pointerEvents: "none",
+                }}
+              >
+                ⌕
+              </span>
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Поиск по ID игры"
+                style={{
+                  width: "100%",
+                  padding: "12px 14px 12px 38px",
+                  borderRadius: 14,
+                  border: "1px solid rgba(255,255,255,0.07)",
+                  background: "rgba(255,255,255,0.04)",
+                  color: "#e8e8f0",
+                  outline: "none",
+                  boxSizing: "border-box",
+                  fontSize: 14,
+                  fontWeight: 500,
+                }}
+              />
+            </div>
           </>
         )}
 
         {loading ? (
-          <div style={{ opacity: 0.7, padding: 24, textAlign: "center" }}>Загрузка…</div>
+          <div style={{ opacity: 0.6, padding: 32, textAlign: "center", fontSize: 14 }}>Загрузка…</div>
         ) : err ? (
-          <div style={{ color: "#fecaca", padding: 16, textAlign: "center" }}>{err}</div>
+          <div style={{ color: "#fca5a5", padding: 20, textAlign: "center", fontSize: 14 }}>{err}</div>
         ) : detail ? (
           <div>
-            <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 10 }}>{fmtTime(detail.finishedAt)}</div>
-            <div style={{ fontWeight: 800, color: "#4ade80", marginBottom: 10 }}>
-              🏆 @{detail.winnerUsername || detail.winnerId}
-              {detail.winnerPayout ? ` · +${detail.winnerPayout} TON` : ""}
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 14 }}>
+            <div style={{ fontSize: 13, color: "#8b8b9a", marginBottom: 12 }}>{fmtFull(detail.finishedAt)}</div>
+
+            {detail.fair && (
+              <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const v = detail.fair?.hash || detail.fair?.serverSeedHash || "";
+                    if (v) navigator.clipboard?.writeText(v).catch(() => {});
+                  }}
+                  style={{
+                    padding: "7px 11px",
+                    borderRadius: 10,
+                    border: "1px solid rgba(255,255,255,0.08)",
+                    background: "rgba(255,255,255,0.04)",
+                    color: "#9ca3af",
+                    fontSize: 12,
+                    fontFamily: "ui-monospace, monospace",
+                    cursor: "pointer",
+                  }}
+                >
+                  Хеш: {shortHash(detail.fair.hash || detail.fair.serverSeedHash)} 📋
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const v = detail.fair?.serverSeed || "";
+                    if (v) navigator.clipboard?.writeText(v).catch(() => {});
+                  }}
+                  style={{
+                    padding: "7px 11px",
+                    borderRadius: 10,
+                    border: "1px solid rgba(255,255,255,0.08)",
+                    background: "rgba(255,255,255,0.04)",
+                    color: "#9ca3af",
+                    fontSize: 12,
+                    fontFamily: "ui-monospace, monospace",
+                    cursor: "pointer",
+                  }}
+                >
+                  Сид: {shortHash(detail.fair.serverSeed)} 📋
+                </button>
+              </div>
+            )}
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
               {(detail.players || []).map((p) => {
                 const isW = p.telegramId === detail.winnerId;
+                const nfts = p.nftStakes ?? [];
+                const av = avatarSrc(p.photoUrl, p.username);
+                const ch =
+                  p.chance ?? (detail.totalPool > 0 ? (p.stake / detail.totalPool) * 100 : 0);
                 return (
                   <div
                     key={p.telegramId}
                     style={{
-                      padding: 12,
+                      padding: "12px 12px 10px",
                       borderRadius: 16,
-                      background: isW ? "rgba(34,197,94,0.15)" : "rgba(255,255,255,0.04)",
-                      border: isW ? "1px solid rgba(34,197,94,0.45)" : "1px solid rgba(255,255,255,0.08)",
+                      background: isW ? "rgba(22, 101, 52, 0.28)" : "rgba(255,255,255,0.03)",
+                      border: isW ? "1.5px solid rgba(74, 222, 128, 0.55)" : "1px solid rgba(255,255,255,0.06)",
+                      boxShadow: isW ? "0 0 0 1px rgba(34,197,94,0.12)" : undefined,
                     }}
                   >
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                      <div>
-                        <div style={{ fontWeight: 800 }}>@{(p.username || p.telegramId || "").replace(/^@/, "")}</div>
-                        <div style={{ fontSize: 12, color: isW ? "#4ade80" : "#94a3b8" }}>
-                          {isW ? "Победитель " : ""}{(p.chance ?? 0).toFixed(2)}%
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <div
+                        style={{
+                          width: 40,
+                          height: 40,
+                          borderRadius: "50%",
+                          overflow: "hidden",
+                          flexShrink: 0,
+                          background: "#2a2a35",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          fontWeight: 800,
+                          fontSize: 15,
+                          color: "#fff",
+                          border: isW ? "2px solid #4ade80" : "2px solid transparent",
+                        }}
+                      >
+                        {av ? (
+                          <img
+                            src={av}
+                            alt=""
+                            style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                            onError={(e) => {
+                              (e.currentTarget as HTMLImageElement).style.display = "none";
+                            }}
+                          />
+                        ) : (
+                          initials(p.username, p.telegramId)
+                        )}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 700, fontSize: 14 }}>
+                          @{(p.username || p.telegramId || "").replace(/^@/, "")}
+                        </div>
+                        <div style={{ fontSize: 12, fontWeight: 600, marginTop: 2 }}>
+                          {isW ? (
+                            <span style={{ color: "#4ade80" }}>
+                              Победитель <span style={{ opacity: 0.9 }}>{ch.toFixed(2)}%</span>
+                            </span>
+                          ) : (
+                            <span style={{ color: "#8b8b9a" }}>{ch.toFixed(2)}%</span>
+                          )}
                         </div>
                       </div>
-                      <div style={{ fontWeight: 900, color: isW ? "#4ade80" : "#e2e8f0" }}>
-                        {Number(p.stake).toFixed(2)} TON
+                      <div
+                        style={{
+                          fontWeight: 800,
+                          fontSize: 15,
+                          color: isW ? "#4ade80" : "#e8e8f0",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {fmtAmt(Number(p.stake))} TON
                       </div>
+                    </div>
+
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 10 }}>
+                      {nfts.length > 0 ? (
+                        nfts.map((n) => (
+                          <div
+                            key={n.inventoryId}
+                            style={{
+                              width: 44,
+                              height: 44,
+                              borderRadius: 12,
+                              overflow: "hidden",
+                              position: "relative",
+                              background: "rgba(59,130,246,0.18)",
+                              border: "1px solid rgba(59,130,246,0.28)",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                            }}
+                          >
+                            {n.imageUrl ? (
+                              <img
+                                src={n.imageUrl}
+                                alt=""
+                                style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                              />
+                            ) : (
+                              <span style={{ fontSize: 14 }}>🎁</span>
+                            )}
+                            <span
+                              style={{
+                                position: "absolute",
+                                left: 3,
+                                bottom: 2,
+                                fontSize: 10,
+                                fontWeight: 800,
+                                color: "#fff",
+                                textShadow: "0 1px 2px #000",
+                              }}
+                            >
+                              {fmtAmt(n.valueTon)}
+                            </span>
+                          </div>
+                        ))
+                      ) : (
+                        <div
+                          style={{
+                            width: 44,
+                            height: 44,
+                            borderRadius: 12,
+                            background: "linear-gradient(145deg,#3b82f6,#1d4ed8)",
+                            display: "flex",
+                            flexDirection: "column",
+                            alignItems: "center",
+                            justifyContent: "center",
+                          }}
+                        >
+                          <span style={{ fontSize: 13, lineHeight: 1 }}>💎</span>
+                          <span style={{ fontSize: 10, fontWeight: 800, color: "#fff" }}>
+                            {fmtAmt(Number(p.stake))}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 );
               })}
             </div>
+
             <div style={{ display: "flex", gap: 8 }}>
               <button
                 type="button"
                 onClick={() => onReplay(detail)}
                 style={{
                   flex: 1,
-                  padding: "13px",
+                  height: 48,
                   borderRadius: 14,
-                  border: "1px solid rgba(255,255,255,0.12)",
-                  background: "rgba(255,255,255,0.06)",
-                  color: "#e2e8f0",
-                  fontWeight: 800,
+                  border: "1px solid rgba(255,255,255,0.1)",
+                  background: "rgba(255,255,255,0.05)",
+                  color: "#e8e8f0",
+                  fontWeight: 700,
+                  fontSize: 14,
                   cursor: "pointer",
                 }}
               >
@@ -278,12 +519,13 @@ export default function SpinHistoryModal({ onClose, onReplay, telegramId }: Prop
                 disabled={!detail.fair}
                 style={{
                   flex: 1,
-                  padding: "13px",
+                  height: 48,
                   borderRadius: 14,
                   border: "none",
-                  background: "#3b82f6",
+                  background: detail.fair ? "#2563eb" : "rgba(37,99,235,0.3)",
                   color: "#fff",
-                  fontWeight: 800,
+                  fontWeight: 700,
+                  fontSize: 14,
                   cursor: detail.fair ? "pointer" : "not-allowed",
                   opacity: detail.fair ? 1 : 0.5,
                 }}
@@ -293,65 +535,169 @@ export default function SpinHistoryModal({ onClose, onReplay, telegramId }: Prop
             </div>
           </div>
         ) : filtered.length === 0 ? (
-          <div style={{ opacity: 0.65, padding: 28, textAlign: "center", fontWeight: 600 }}>Пока пусто</div>
+          <div style={{ opacity: 0.55, padding: 36, textAlign: "center", fontWeight: 600, fontSize: 14 }}>
+            Пока пусто
+          </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {filtered.map((h) => {
               const mult = winnerMult(h);
+              const chance = winnerChance(h);
               const wp = h.players?.find((p) => p.telegramId === h.winnerId);
-              const chance = wp?.chance ?? (h.totalPool > 0 && wp ? (wp.stake / h.totalPool) * 100 : 0);
+              const av = avatarSrc(wp?.photoUrl, h.winnerUsername);
+              const rooms = h.playerCount || h.players?.length || 1;
+              const allNfts = (h.players || []).flatMap((p) => p.nftStakes ?? []).slice(0, 5);
+
               return (
                 <div
                   key={h.id}
                   style={{
-                    padding: 14,
+                    padding: "12px 12px 12px",
                     borderRadius: 16,
-                    border: "1px solid rgba(255,255,255,0.08)",
-                    background: "rgba(255,255,255,0.035)",
+                    border: "1px solid rgba(255,255,255,0.06)",
+                    background: "rgba(255,255,255,0.03)",
                   }}
                 >
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      marginBottom: 10,
+                    }}
+                  >
                     <div
                       style={{
-                        background: "rgba(59,130,246,0.22)",
+                        background: "rgba(37, 99, 235, 0.22)",
                         color: "#93c5fd",
-                        fontWeight: 900,
+                        fontWeight: 800,
                         fontSize: 13,
                         padding: "4px 10px",
                         borderRadius: 10,
+                        letterSpacing: "-0.01em",
                       }}
                     >
                       {mult > 0 ? `${mult.toFixed(2)}x` : "—"}
                     </div>
-                    <div style={{ fontSize: 12, color: "#64748b", fontWeight: 700 }}>#{h.id}</div>
+                    <div style={{ fontSize: 12, color: "#6b6b7b", fontWeight: 600 }}>
+                      #{h.id} · {rooms} Комната
+                    </div>
                   </div>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
-                    <div>
-                      <div style={{ fontWeight: 800, fontSize: 14 }}>
+
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+                    <div
+                      style={{
+                        width: 42,
+                        height: 42,
+                        borderRadius: "50%",
+                        background: "#2a2a38",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontWeight: 800,
+                        color: "#fff",
+                        overflow: "hidden",
+                        flexShrink: 0,
+                        fontSize: 16,
+                      }}
+                    >
+                      {av ? (
+                        <img src={av} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                      ) : (
+                        initials(h.winnerUsername, h.winnerId || "?")
+                      )}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 700, fontSize: 14, lineHeight: 1.2 }}>
                         @{(h.winnerUsername || h.winnerId || "?").replace(/^@/, "").slice(0, 18)}
                       </div>
-                      <div style={{ fontSize: 11, color: "#94a3b8" }}>{fmtTime(h.finishedAt)}</div>
+                      <div style={{ fontSize: 12, color: "#8b8b9a", marginTop: 3 }}>{fmtTime(h.finishedAt)}</div>
                     </div>
-                    <div style={{ textAlign: "right" }}>
-                      <div style={{ fontWeight: 900, fontSize: 14 }}>
-                        {Number(h.winnerPayout || h.totalPool).toFixed(2)} TON
+                    <div style={{ textAlign: "right", flexShrink: 0 }}>
+                      <div style={{ fontWeight: 800, fontSize: 14, color: "#f1f5f9" }}>
+                        {fmtAmt(Number(h.winnerPayout || h.totalPool))} TON
                       </div>
-                      <div style={{ fontSize: 11, color: "#94a3b8" }}>Шанс {Number(chance).toFixed(2)}%</div>
+                      <div style={{ fontSize: 12, color: "#8b8b9a", marginTop: 3 }}>
+                        Шанс {chance.toFixed(2)}%
+                      </div>
                     </div>
                   </div>
+
+                  <div style={{ display: "flex", gap: 6, marginBottom: 12, flexWrap: "wrap" }}>
+                    {allNfts.length > 0 ? (
+                      allNfts.map((n) => (
+                        <div
+                          key={n.inventoryId}
+                          style={{
+                            width: 36,
+                            height: 36,
+                            borderRadius: 10,
+                            overflow: "hidden",
+                            position: "relative",
+                            background: "rgba(59,130,246,0.16)",
+                            border: "1px solid rgba(59,130,246,0.28)",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                          }}
+                        >
+                          {n.imageUrl ? (
+                            <img
+                              src={n.imageUrl}
+                              alt=""
+                              style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                            />
+                          ) : (
+                            <span style={{ fontSize: 12 }}>🎁</span>
+                          )}
+                          <span
+                            style={{
+                              position: "absolute",
+                              left: 2,
+                              bottom: 1,
+                              fontSize: 9,
+                              fontWeight: 800,
+                              color: "#fff",
+                              textShadow: "0 1px 2px #000",
+                            }}
+                          >
+                            {fmtAmt(n.valueTon)}
+                          </span>
+                        </div>
+                      ))
+                    ) : (
+                      <div
+                        style={{
+                          width: 36,
+                          height: 36,
+                          borderRadius: 10,
+                          background: "linear-gradient(145deg,#3b82f6,#1d4ed8)",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          fontSize: 10,
+                          fontWeight: 800,
+                          color: "#fff",
+                        }}
+                      >
+                        {fmtAmt(Number(h.totalPool))}
+                      </div>
+                    )}
+                  </div>
+
                   <div style={{ display: "flex", gap: 8 }}>
                     <button
                       type="button"
                       onClick={() => onReplay(h)}
                       style={{
                         flex: 1,
-                        padding: "11px 8px",
+                        height: 42,
                         borderRadius: 12,
-                        border: "1px solid rgba(255,255,255,0.12)",
+                        border: "1px solid rgba(255,255,255,0.1)",
                         background: "rgba(255,255,255,0.05)",
-                        color: "#e2e8f0",
-                        fontWeight: 700,
-                        fontSize: 12,
+                        color: "#e8e8f0",
+                        fontWeight: 650,
+                        fontSize: 13,
                         cursor: "pointer",
                       }}
                     >
@@ -362,13 +708,13 @@ export default function SpinHistoryModal({ onClose, onReplay, telegramId }: Prop
                       onClick={() => setDetail(h)}
                       style={{
                         flex: 1,
-                        padding: "11px 8px",
+                        height: 42,
                         borderRadius: 12,
                         border: "none",
-                        background: "#3b82f6",
+                        background: "#2563eb",
                         color: "#fff",
-                        fontWeight: 700,
-                        fontSize: 12,
+                        fontWeight: 650,
+                        fontSize: 13,
                         cursor: "pointer",
                       }}
                     >

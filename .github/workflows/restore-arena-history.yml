@@ -1,0 +1,119 @@
+name: restore-arena-history
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/restore-arena-history.yml'
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Restore ArenaGame from known-good and wire history
+        run: |
+          git show c2c301c07ad6f0129c39d6396c52c5bda258a83a:artifacts/mini-app/src/components/ArenaGame.tsx > /tmp/ag.tsx
+          python3 << 'PY'
+          from pathlib import Path
+          text = Path("/tmp/ag.tsx").read_text()
+          old_imp = 'import WinnerModal from "./WinnerModal";'
+          new_imp = old_imp + '\nimport ArenaHistoryModal, { type ArenaHistoryItem } from "./ArenaHistoryModal";'
+          if "ArenaHistoryModal" not in text:
+              text = text.replace(old_imp, new_imp, 1)
+          old_state = '''  const [showHistory, setShowHistory] = useState(false);
+  const [history, setHistory] = useState<HistoryRoom[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [fairInfo, setFairInfo] = useState<HistoryRoom | null>(null);
+  const replayingRef = useRef(false);'''
+          new_state = '''  const [showHistory, setShowHistory] = useState(false);
+  const replayingRef = useRef(false);'''
+          if old_state not in text:
+              raise SystemExit("state block missing")
+          text = text.replace(old_state, new_state, 1)
+          old_funcs = '''  async function loadHistory() {
+    setHistoryLoading(true);
+    try {
+      const r = await fetch("/api/mini/games/arena/history?limit=40");
+      if (!r.ok) return;
+      const d = await r.json();
+      setHistory((d.rooms as HistoryRoom[]) ?? []);
+    } catch { /* */ }
+    finally { setHistoryLoading(false); }
+  }
+  function openHistory() { setShowHistory(true); setFairInfo(null); loadHistory(); }
+  function replayRoom(room: HistoryRoom) {
+    if (phase === "spin") return;
+    if (!room.winnerId || !room.players?.length) return;
+    setShowHistory(false); setFairInfo(null);
+    replayingRef.current = true;
+    settledRef.current.add(room.id);
+    runSpinAnimation({
+      id: room.id,
+      players: room.players.map((p) => ({
+        ...p,
+        chance: room.totalPool > 0 ? Math.round((p.stake / room.totalPool) * 10000) / 100 : 0,
+      })),
+      winnerId: room.winnerId,
+      winnerUsername: room.winnerUsername,
+      totalPool: room.totalPool,
+      fair: room.fair,
+    });
+  }'''
+          new_funcs = '''  function openHistory() { setShowHistory(true); }
+  function replayRoom(room: ArenaHistoryItem | HistoryRoom) {
+    if (phase === "spin") return;
+    if (!room.winnerId || !room.players?.length) return;
+    setShowHistory(false);
+    replayingRef.current = true;
+    settledRef.current.add(room.id);
+    runSpinAnimation({
+      id: room.id,
+      players: room.players.map((p: any) => ({
+        ...p,
+        chance: p.chance != null
+          ? Number(p.chance)
+          : (room.totalPool > 0 ? Math.round((p.stake / room.totalPool) * 10000) / 100 : 0),
+      })),
+      winnerId: room.winnerId,
+      winnerUsername: room.winnerUsername,
+      totalPool: room.totalPool,
+      fair: room.fair || undefined,
+    });
+  }'''
+          if old_funcs not in text:
+              raise SystemExit("funcs block missing")
+          text = text.replace(old_funcs, new_funcs, 1)
+          start = text.find("      {/* History — Portals-like cards */}")
+          end = text.find("      {stakeDetail && (", start)
+          if start < 0 or end < 0:
+              raise SystemExit(f"ui markers {start} {end}")
+          new_ui = '''      {showHistory && (
+        <ArenaHistoryModal
+          telegramId={telegramId}
+          onClose={() => setShowHistory(false)}
+          onReplay={(item) => replayRoom(item)}
+        />
+      )}
+
+
+'''
+          text = text[:start] + new_ui + text[end:]
+          Path("artifacts/mini-app/src/components/ArenaGame.tsx").write_text(text)
+          print("patched", len(text))
+          PY
+          if [ -f artifacts/mini-app/src/components/ArenaHistoryModal.tsx ]; then
+            sed -i 's/zIndex: 300,/zIndex: 500,/' artifacts/mini-app/src/components/ArenaHistoryModal.tsx || true
+          fi
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add artifacts/mini-app/src/components/ArenaGame.tsx artifacts/mini-app/src/components/ArenaHistoryModal.tsx || true
+          git status
+          git diff --cached --stat
+          git commit -m "fix(arena): restore full ArenaGame + Portal history modal" || echo "no changes"
+          git push origin HEAD:main

@@ -71,7 +71,7 @@ export default function PvpPage() {
         <GameCard
           name="Spin"
           scene="spin"
-          badge="🔥 НОВИНКА"
+          badge="НОВИНКА"
           badgeColor="#f97316"
           online={8}
           maxBet="25 TON"

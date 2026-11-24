@@ -1,6 +1,5 @@
 /**
- * GameCard — cinematic full-bleed covers
- * One hero art, glass footer, smooth motion. No clutter.
+ * GameCard — dedicated SVG covers per game + glass UI
  */
 import type { ReactNode } from "react";
 
@@ -21,25 +20,16 @@ export type GameCardProps = {
   disabled?: boolean;
 };
 
-/** Full-bleed hero art per scene — premium character covers */
-const COVER: Record<NonNullable<GameCardProps["scene"]>, string> = {
-  arena: "/mages/kalen-inferno-blaze.jpg",
-  spin: "/mages/lyra-cosmic-weaver.jpg",
-  mines: "/mages/aethel-abyss-weaver.jpg",
-  cases: "/mages/elara-void-weaver.jpg",
-  coin: "/nft/royal_dogg.jpg",
-  crash: "/rocket.png",
-  plinko: "/mages/lyra-emerald-chronomancer.jpg",
-  upgrade: "/nft/telegram_premium.jpg",
-  generic: "/mages/solaris-chronos-shaper.jpg",
-};
-
-/** Secondary floating accent for depth (optional) */
-const ACCENT_ART: Partial<Record<NonNullable<GameCardProps["scene"]>, string>> = {
-  arena: "/mages/frost-weaver.jpg",
-  spin: "/mages/silas-starsinger.jpg",
-  coin: "/toncoin.png",
-  crash: "/toncoin.png",
+const COVER: Record<string, string> = {
+  arena: "/game-cards/arena.svg",
+  spin: "/game-cards/spin.svg",
+  mines: "/game-cards/mines.svg",
+  cases: "/game-cards/upgrade.svg",
+  coin: "/game-cards/coin.svg",
+  crash: "/game-cards/crash.svg",
+  plinko: "/game-cards/plinko.svg",
+  upgrade: "/game-cards/upgrade.svg",
+  generic: "/game-cards/spin.svg",
 };
 
 export function GameCard({
@@ -57,8 +47,6 @@ export function GameCard({
   disabled,
 }: GameCardProps) {
   const cover = COVER[scene] ?? COVER.generic;
-  const secondary = ACCENT_ART[scene];
-  const isRocket = scene === "crash";
 
   return (
     <button
@@ -74,40 +62,22 @@ export function GameCard({
       }}
     >
       <style>{CSS}</style>
-
       <div className="gc-rim" />
-
       <div className="gc-cover" style={{ background: gradient }}>
-        <img
-          className={`gc-cover-img${isRocket ? " rocket" : ""}`}
-          src={cover}
-          alt=""
-          draggable={false}
-        />
-        {secondary ? (
-          <img className="gc-accent-img" src={secondary} alt="" draggable={false} />
-        ) : null}
+        <img className="gc-cover-img" src={cover} alt="" draggable={false} />
         <div className="gc-cover-shade" />
       </div>
-
       <div className="gc-sweep" />
-
       <div className="gc-top">
         {badge ? (
-          <span className="gc-badge" style={{ background: badgeColor }}>
-            {badge}
-          </span>
+          <span className="gc-badge" style={{ background: badgeColor }}>{badge}</span>
         ) : (
           <span />
         )}
         {online != null ? (
-          <span className="gc-online">
-            <i />
-            {online}
-          </span>
+          <span className="gc-online"><i />{online}</span>
         ) : null}
       </div>
-
       <div className="gc-glass">
         <div className="gc-name">{name}</div>
         {maxBet != null ? <div className="gc-max">макс {maxBet}</div> : null}
@@ -118,42 +88,23 @@ export function GameCard({
 
 const CSS = `
 @keyframes gcEnter {
-  from {
-    opacity: 0;
-    transform: translateY(24px) scale(0.94);
-    filter: blur(6px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-    filter: none;
-  }
+  from { opacity: 0; transform: translateY(22px) scale(0.94); filter: blur(5px); }
+  to { opacity: 1; transform: none; filter: none; }
 }
 @keyframes ken {
-  0%, 100% { transform: scale(1.08) translate(0, 0); }
-  50% { transform: scale(1.16) translate(-2%, -1%); }
-}
-@keyframes kenRocket {
-  0%, 100% { transform: scale(1) translate(0, 4%) rotate(-8deg); }
-  50% { transform: scale(1.08) translate(3%, -6%) rotate(6deg); }
-}
-@keyframes floatAccent {
-  0%, 100% { transform: translateY(0) scale(1); }
-  50% { transform: translateY(-10px) scale(1.06); }
+  0%, 100% { transform: scale(1.05); }
+  50% { transform: scale(1.12); }
 }
 @keyframes sweep {
-  0% { transform: translateX(-140%) skewX(-16deg); opacity: 0; }
-  15% { opacity: 0.55; }
-  45% { opacity: 0.35; }
+  0% { transform: translateX(-130%) skewX(-16deg); opacity: 0; }
+  20% { opacity: 0.5; }
   100% { transform: translateX(180%) skewX(-16deg); opacity: 0; }
 }
 @keyframes pulseDot {
-  0%, 100% { transform: scale(1); opacity: 1; box-shadow: 0 0 0 0 rgba(34,197,94,0.7); }
-  50% { transform: scale(0.85); opacity: 0.85; box-shadow: 0 0 0 6px rgba(34,197,94,0); }
+  0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(34,197,94,0.7); }
+  50% { transform: scale(0.85); box-shadow: 0 0 0 6px rgba(34,197,94,0); }
 }
-@keyframes rimSpin {
-  to { transform: rotate(360deg); }
-}
+@keyframes rimSpin { to { transform: rotate(360deg); } }
 
 .gc {
   --r: 22px;
@@ -171,210 +122,94 @@ const CSS = `
   color: #fff;
   text-align: left;
   -webkit-tap-highlight-color: transparent;
-  animation: gcEnter 0.65s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: gcEnter 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
   animation-delay: var(--delay, 0ms);
-  transition:
-    transform 0.35s cubic-bezier(0.16, 1, 0.3, 1),
-    box-shadow 0.35s ease;
-  box-shadow:
-    0 14px 36px rgba(0,0,0,0.55),
-    0 0 0 1px rgba(255,255,255,0.06);
+  transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.35s ease;
+  box-shadow: 0 14px 36px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.06);
 }
 .gc.wide { aspect-ratio: 2.05 / 1; }
-
 .gc:hover:not(:disabled) {
   transform: translateY(-6px) scale(1.025);
-  box-shadow:
-    0 28px 56px rgba(0,0,0,0.6),
-    0 0 0 1px rgba(255,255,255,0.12),
-    0 0 48px color-mix(in srgb, var(--accent) 45%, transparent);
+  box-shadow: 0 28px 56px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.12), 0 0 48px color-mix(in srgb, var(--accent) 45%, transparent);
 }
-.gc:active:not(:disabled) {
-  transform: translateY(-2px) scale(0.985);
-  transition-duration: 0.12s;
-}
-.gc:hover:not(:disabled) .gc-cover-img {
-  animation-duration: 8s;
-}
-.gc:hover:not(:disabled) .gc-sweep::after {
-  animation-duration: 1.6s;
-}
+.gc:active:not(:disabled) { transform: translateY(-2px) scale(0.985); transition-duration: 0.12s; }
 
 .gc-rim {
-  position: absolute;
-  inset: -50%;
-  z-index: 0;
-  background: conic-gradient(
-    from 180deg,
-    transparent 0 62%,
-    var(--accent) 72%,
-    rgba(255,255,255,0.7) 80%,
-    transparent 90%
-  );
+  position: absolute; inset: -50%; z-index: 0;
+  background: conic-gradient(from 180deg, transparent 0 62%, var(--accent) 72%, rgba(255,255,255,0.7) 80%, transparent 90%);
   animation: rimSpin 7s linear infinite;
-  opacity: 0.4;
-  pointer-events: none;
+  opacity: 0.4; pointer-events: none;
 }
-
 .gc-cover {
-  position: absolute;
-  inset: 1.5px;
+  position: absolute; inset: 1.5px;
   border-radius: calc(var(--r) - 1.5px);
-  overflow: hidden;
-  z-index: 1;
+  overflow: hidden; z-index: 1;
 }
 .gc-cover-img {
-  position: absolute;
-  inset: -8%;
-  width: 116%;
-  height: 116%;
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
   object-fit: cover;
-  object-position: center 20%;
   display: block;
-  animation: ken 14s ease-in-out infinite;
+  animation: ken 12s ease-in-out infinite;
   will-change: transform;
 }
-.gc-cover-img.rocket {
-  inset: 18% 12% 28%;
-  width: auto;
-  height: auto;
-  max-width: 70%;
-  max-height: 55%;
-  margin: auto;
-  left: 0; right: 0; top: 0; bottom: 0;
-  object-fit: contain;
-  object-position: center;
-  animation: kenRocket 3.2s ease-in-out infinite;
-  filter: drop-shadow(0 16px 28px rgba(0,0,0,0.55));
-}
-.gc-accent-img {
-  position: absolute;
-  width: 42%;
-  height: 42%;
-  right: 6%;
-  bottom: 28%;
-  object-fit: cover;
-  border-radius: 50%;
-  box-shadow:
-    0 12px 28px rgba(0,0,0,0.55),
-    inset 0 0 0 2px rgba(255,255,255,0.35);
-  animation: floatAccent 3.2s ease-in-out infinite;
-  z-index: 2;
-}
-.gc.wide .gc-accent-img {
-  width: 22%;
-  height: auto;
-  aspect-ratio: 1;
-  right: 8%;
-  bottom: 22%;
-}
-
 .gc-cover-shade {
-  position: absolute;
-  inset: 0;
-  z-index: 3;
-  pointer-events: none;
+  position: absolute; inset: 0; z-index: 3; pointer-events: none;
   background:
-    radial-gradient(ellipse 90% 55% at 50% 0%, rgba(255,255,255,0.14), transparent 55%),
-    linear-gradient(180deg, rgba(0,0,0,0.15) 0%, transparent 35%, rgba(0,0,0,0.45) 60%, rgba(0,0,0,0.88) 100%);
+    radial-gradient(ellipse 90% 50% at 50% 0%, rgba(255,255,255,0.12), transparent 55%),
+    linear-gradient(180deg, rgba(0,0,0,0.1) 0%, transparent 40%, rgba(0,0,0,0.35) 65%, rgba(0,0,0,0.55) 100%);
 }
-
 .gc-sweep {
-  position: absolute;
-  inset: 1.5px;
+  position: absolute; inset: 1.5px;
   border-radius: calc(var(--r) - 1.5px);
-  overflow: hidden;
-  z-index: 4;
-  pointer-events: none;
+  overflow: hidden; z-index: 4; pointer-events: none;
 }
 .gc-sweep::after {
   content: "";
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 40%;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    rgba(255,255,255,0.22),
-    transparent
-  );
+  position: absolute; top: 0; bottom: 0; width: 40%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.22), transparent);
   animation: sweep 4.5s ease-in-out infinite;
 }
-
 .gc-top {
-  position: absolute;
-  top: 11px;
-  left: 11px;
-  right: 11px;
-  z-index: 6;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  position: absolute; top: 11px; left: 11px; right: 11px; z-index: 6;
+  display: flex; align-items: center; justify-content: space-between;
   pointer-events: none;
 }
 .gc-badge {
-  font-size: 10px;
-  font-weight: 900;
-  letter-spacing: 0.05em;
-  color: #fff;
-  border-radius: 999px;
-  padding: 5px 11px;
+  font-size: 10px; font-weight: 900; letter-spacing: 0.05em; color: #fff;
+  border-radius: 999px; padding: 5px 11px;
   box-shadow: 0 6px 16px rgba(0,0,0,0.4);
 }
 .gc-online {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 11px;
-  font-weight: 800;
-  color: #fff;
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 11px; font-weight: 800; color: #fff;
   background: rgba(0,0,0,0.5);
   border: 1px solid rgba(255,255,255,0.1);
-  border-radius: 999px;
-  padding: 5px 10px;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  border-radius: 999px; padding: 5px 10px;
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
   box-shadow: 0 6px 16px rgba(0,0,0,0.3);
 }
 .gc-online i {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: #22c55e;
-  display: inline-block;
-  animation: pulseDot 1.6s ease-out infinite;
+  width: 7px; height: 7px; border-radius: 50%; background: #22c55e;
+  display: inline-block; animation: pulseDot 1.6s ease-out infinite;
 }
-
 .gc-glass {
-  position: absolute;
-  left: 8px;
-  right: 8px;
-  bottom: 8px;
-  z-index: 6;
-  padding: 12px 14px 11px;
-  border-radius: 16px;
+  position: absolute; left: 8px; right: 8px; bottom: 8px; z-index: 6;
+  padding: 12px 14px 11px; border-radius: 16px;
   background: rgba(8, 8, 14, 0.55);
   border: 1px solid rgba(255,255,255,0.12);
   backdrop-filter: blur(16px) saturate(1.3);
   -webkit-backdrop-filter: blur(16px) saturate(1.3);
-  box-shadow:
-    0 8px 24px rgba(0,0,0,0.35),
-    inset 0 1px 0 rgba(255,255,255,0.1);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.1);
   pointer-events: none;
 }
 .gc-name {
-  font-size: 20px;
-  font-weight: 900;
-  letter-spacing: -0.03em;
-  line-height: 1.15;
-  color: #fff;
+  font-size: 20px; font-weight: 900; letter-spacing: -0.03em;
+  line-height: 1.15; color: #fff;
   text-shadow: 0 1px 12px rgba(0,0,0,0.5);
 }
 .gc-max {
-  margin-top: 3px;
-  font-size: 11px;
-  font-weight: 700;
+  margin-top: 3px; font-size: 11px; font-weight: 700;
   color: rgba(255,255,255,0.55);
 }
 `;

@@ -1,0 +1,28 @@
+name: restore-arena-simple
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/restore-arena-simple.yml'
+permissions:
+  contents: write
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Restore ArenaGame
+        run: |
+          set -eux
+          git show c2c301c07ad6f0129c39d6396c52c5bda258a83a:artifacts/mini-app/src/components/ArenaGame.tsx > artifacts/mini-app/src/components/ArenaGame.tsx
+          wc -c artifacts/mini-app/src/components/ArenaGame.tsx
+          grep -q "export default function ArenaGame" artifacts/mini-app/src/components/ArenaGame.tsx
+          grep -q "runSpinAnimation" artifacts/mini-app/src/components/ArenaGame.tsx
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add artifacts/mini-app/src/components/ArenaGame.tsx
+          git status
+          git commit -m "fix(arena): restore full working ArenaGame from c2c301c0" || echo "no change"
+          git push origin HEAD:main

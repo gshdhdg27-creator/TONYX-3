@@ -1,5 +1,5 @@
 /**
- * GameCard — illustrated SVG scenes + float animations (hub video style)
+ * GameCard — premium illustrated cards using real public assets + layered motion
  * Path: artifacts/mini-app/src/components/GameCard.tsx
  */
 import type { ReactNode } from "react";
@@ -21,139 +21,22 @@ export type GameCardProps = {
   disabled?: boolean;
 };
 
-function Bird() {
-  return (
-    <svg viewBox="0 0 64 64" width="100%" height="100%">
-      <circle cx="32" cy="34" r="22" fill="#3b82f6" />
-      <circle cx="32" cy="34" r="22" fill="url(#g1)" />
-      <ellipse cx="24" cy="32" rx="7" ry="8" fill="#fff" />
-      <ellipse cx="40" cy="32" rx="7" ry="8" fill="#fff" />
-      <circle cx="25" cy="33" r="3.2" fill="#0f172a" />
-      <circle cx="41" cy="33" r="3.2" fill="#0f172a" />
-      <circle cx="26.2" cy="31.5" r="1.1" fill="#fff" />
-      <circle cx="42.2" cy="31.5" r="1.1" fill="#fff" />
-      <path d="M28 42 Q32 48 36 42" stroke="#1e3a8a" strokeWidth="2.2" fill="none" strokeLinecap="round" />
-      <path d="M48 36 L58 32 L48 40 Z" fill="#fbbf24" />
-      <rect x="16" y="26" width="14" height="6" rx="3" fill="#0f172a" opacity="0.85" />
-      <rect x="34" y="26" width="14" height="6" rx="3" fill="#0f172a" opacity="0.85" />
-      <defs>
-        <radialGradient id="g1" cx="35%" cy="30%">
-          <stop offset="0%" stopColor="#93c5fd" />
-          <stop offset="100%" stopColor="#2563eb" />
-        </radialGradient>
-      </defs>
-    </svg>
-  );
-}
-
-function Duck() {
-  return (
-    <svg viewBox="0 0 64 64" width="100%" height="100%">
-      <ellipse cx="32" cy="38" rx="20" ry="16" fill="#facc15" />
-      <circle cx="32" cy="24" r="14" fill="#fde047" />
-      <circle cx="27" cy="22" r="2.8" fill="#0f172a" />
-      <circle cx="37" cy="22" r="2.8" fill="#0f172a" />
-      <circle cx="28" cy="21" r="1" fill="#fff" />
-      <circle cx="38" cy="21" r="1" fill="#fff" />
-      <ellipse cx="32" cy="28" rx="5" ry="3.5" fill="#f97316" />
-      <ellipse cx="46" cy="40" rx="7" ry="4" fill="#eab308" transform="rotate(20 46 40)" />
-    </svg>
-  );
-}
-
-function Cherry() {
-  return (
-    <svg viewBox="0 0 64 64" width="100%" height="100%">
-      <circle cx="24" cy="40" r="14" fill="#ef4444" />
-      <circle cx="42" cy="38" r="13" fill="#dc2626" />
-      <ellipse cx="20" cy="34" rx="4" ry="3" fill="#fca5a5" opacity="0.7" />
-      <path d="M24 28 Q32 8 42 26" stroke="#166534" strokeWidth="3" fill="none" />
-      <ellipse cx="34" cy="14" rx="8" ry="5" fill="#22c55e" transform="rotate(-20 34 14)" />
-      <circle cx="22" cy="42" r="2" fill="#0f172a" />
-      <circle cx="28" cy="42" r="2" fill="#0f172a" />
-      <path d="M22 48 Q25 51 28 48" stroke="#7f1d1d" strokeWidth="1.5" fill="none" />
-    </svg>
-  );
-}
-
-function Fox() {
-  return (
-    <svg viewBox="0 0 64 64" width="100%" height="100%">
-      <ellipse cx="32" cy="36" rx="20" ry="18" fill="#f97316" />
-      <circle cx="32" cy="28" r="16" fill="#fb923c" />
-      <path d="M18 18 L22 28 L28 22 Z" fill="#ea580c" />
-      <path d="M46 18 L42 28 L36 22 Z" fill="#ea580c" />
-      <circle cx="26" cy="28" r="3" fill="#0f172a" />
-      <circle cx="38" cy="28" r="3" fill="#0f172a" />
-      <ellipse cx="32" cy="36" rx="6" ry="4" fill="#fdba74" />
-      <circle cx="32" cy="34" r="2" fill="#0f172a" />
-    </svg>
-  );
-}
-
-function Pepe() {
-  return (
-    <svg viewBox="0 0 80 80" width="100%" height="100%">
-      <ellipse cx="40" cy="48" rx="22" ry="18" fill="#1e293b" />
-      <rect x="28" y="44" width="24" height="8" rx="2" fill="#334155" />
-      <circle cx="40" cy="32" r="24" fill="#4ade80" />
-      <ellipse cx="40" cy="36" rx="20" ry="16" fill="#86efac" />
-      <ellipse cx="30" cy="28" rx="9" ry="10" fill="#fff" />
-      <ellipse cx="50" cy="28" rx="9" ry="10" fill="#fff" />
-      <circle cx="31" cy="30" r="4" fill="#0f172a" />
-      <circle cx="51" cy="30" r="4" fill="#0f172a" />
-      <circle cx="32.5" cy="28" r="1.4" fill="#fff" />
-      <circle cx="52.5" cy="28" r="1.4" fill="#fff" />
-      <ellipse cx="40" cy="42" rx="10" ry="6" fill="#ef4444" />
-      <path d="M30 42 Q40 50 50 42" fill="#dc2626" />
-      <path d="M22 22 Q18 12 28 18" stroke="#22c55e" strokeWidth="3" fill="none" />
-      <path d="M58 22 Q62 12 52 18" stroke="#22c55e" strokeWidth="3" fill="none" />
-    </svg>
-  );
-}
-
-function RocketArt() {
-  return (
-    <svg viewBox="0 0 64 64" width="100%" height="100%">
-      <path d="M32 6 C40 18 42 34 40 48 L24 48 C22 34 24 18 32 6Z" fill="#e2e8f0" />
-      <path d="M32 6 C36 16 38 30 37 44 L32 44 Z" fill="#94a3b8" opacity="0.5" />
-      <circle cx="32" cy="28" r="6" fill="#38bdf8" />
-      <circle cx="32" cy="28" r="3.5" fill="#e0f2fe" />
-      <path d="M24 48 L18 58 L28 52 Z" fill="#ef4444" />
-      <path d="M40 48 L46 58 L36 52 Z" fill="#ef4444" />
-      <path d="M28 50 L32 62 L36 50 Z" fill="#f97316" />
-      <path d="M30 54 L32 64 L34 54 Z" fill="#fbbf24" />
-    </svg>
-  );
-}
-
-function Gem() {
-  return (
-    <svg viewBox="0 0 32 32" width="100%" height="100%">
-      <path d="M16 2 L28 12 L16 30 L4 12 Z" fill="#22d3ee" />
-      <path d="M16 2 L28 12 L16 16 Z" fill="#67e8f9" />
-      <path d="M16 2 L4 12 L16 16 Z" fill="#a5f3fc" />
-      <path d="M4 12 L16 30 L16 16 Z" fill="#0891b2" />
-    </svg>
-  );
-}
-
-function CharBubble({
-  children,
-  style,
-  size = 52,
+function Sticker({
+  src,
+  size,
   delay = 0,
   className = "",
+  style,
 }: {
-  children: ReactNode;
-  style?: Record<string, string | number | undefined>;
-  size?: number;
+  src: string;
+  size: number;
   delay?: number;
   className?: string;
+  style?: Record<string, string | number | undefined>;
 }) {
   return (
     <div
-      className={`gc-char ${className}`}
+      className={`gc-sticker ${className}`}
       style={{
         width: size,
         height: size,
@@ -161,7 +44,7 @@ function CharBubble({
         ...style,
       }}
     >
-      {children}
+      <img src={src} alt="" draggable={false} />
     </div>
   );
 }
@@ -171,15 +54,11 @@ function Scene({ kind }: { kind: GameCardProps["scene"] }) {
     return (
       <div className="gc-sc">
         <div className="gc-arena-bg" />
-        <CharBubble size={58} delay={0} style={{ left: "8%", top: "30%" }}>
-          <Bird />
-        </CharBubble>
-        <CharBubble size={48} delay={0.4} style={{ left: "40%", top: "12%" }}>
-          <Duck />
-        </CharBubble>
-        <CharBubble size={54} delay={0.8} style={{ right: "8%", top: "34%" }}>
-          <Cherry />
-        </CharBubble>
+        <div className="gc-grid-fx" />
+        <Sticker src="/nft/neko_helmet.jpg" size={64} delay={0} style={{ left: "6%", top: "26%" }} />
+        <Sticker src="/nft/royal_dogg.jpg" size={52} delay={0.35} style={{ left: "38%", top: "10%" }} className="gc-bob2" />
+        <Sticker src="/nft/electric_skull.jpg" size={58} delay={0.7} style={{ right: "6%", top: "30%" }} className="gc-bob3" />
+        <Sticker src="/nft/moon_pendant.jpg" size={36} delay={1.1} style={{ left: "22%", bottom: "36%" }} className="gc-drift" />
       </div>
     );
   }
@@ -187,16 +66,14 @@ function Scene({ kind }: { kind: GameCardProps["scene"] }) {
   if (kind === "spin") {
     return (
       <div className="gc-sc">
-        <div className="gc-spin-bg" />
+        <div className="gc-spin-bars" />
         <div className="gc-wheel">
           <div className="gc-wheel-inner" />
+          <div className="gc-wheel-shine" />
         </div>
-        <CharBubble size={44} delay={0.2} style={{ right: "10%", top: "14%" }} className="gc-drift">
-          <Fox />
-        </CharBubble>
-        <CharBubble size={36} delay={0.7} style={{ left: "12%", bottom: "34%" }} className="gc-drift2">
-          <Gem />
-        </CharBubble>
+        <Sticker src="/nft/snoop_cigar.jpg" size={46} delay={0.2} style={{ right: "8%", top: "12%" }} className="gc-drift" />
+        <Sticker src="/nft/hypno_lollipop.jpg" size={40} delay={0.6} style={{ left: "8%", bottom: "32%" }} className="gc-drift2" />
+        <Sticker src="/nft/bday_candle.jpg" size={34} delay={1} style={{ right: "18%", bottom: "38%" }} className="gc-bob2" />
       </div>
     );
   }
@@ -204,15 +81,25 @@ function Scene({ kind }: { kind: GameCardProps["scene"] }) {
   if (kind === "mines") {
     return (
       <div className="gc-sc" style={{ alignItems: "center", justifyContent: "center" }}>
+        <div className="gc-mines-glow" />
         <div className="gc-mines">
           {Array.from({ length: 9 }).map((_, i) => {
-            const lit = i === 1 || i === 4 || i === 7;
+            const lit = i === 1 || i === 3 || i === 4 || i === 7;
+            const imgs = [
+              "",
+              "/nft/moon_pendant.jpg",
+              "",
+              "/nft/electric_skull.jpg",
+              "/nft/neko_helmet.jpg",
+              "",
+              "",
+              "/nft/royal_dogg.jpg",
+              "",
+            ];
             return (
               <div key={i} className={lit ? "gc-m gc-m-on" : "gc-m"}>
-                {lit && (
-                  <div className="gc-m-icon">
-                    <Gem />
-                  </div>
+                {lit && imgs[i] && (
+                  <img src={imgs[i]} alt="" className="gc-m-img" draggable={false} />
                 )}
               </div>
             );
@@ -225,10 +112,12 @@ function Scene({ kind }: { kind: GameCardProps["scene"] }) {
   if (kind === "coin") {
     return (
       <div className="gc-sc">
-        <div className="gc-coin-bg" />
-        <CharBubble size={110} delay={0} style={{ left: "50%", top: "42%", transform: "translate(-50%,-50%)" }} className="gc-pepe-wrap">
-          <Pepe />
-        </CharBubble>
+        <div className="gc-coin-glow" />
+        <div className="gc-hero">
+          <img src="/nft/royal_dogg.jpg" alt="" draggable={false} />
+        </div>
+        <Sticker src="/toncoin.png" size={28} delay={0.3} style={{ left: "12%", top: "18%" }} className="gc-drift" />
+        <Sticker src="/toncoin.png" size={22} delay={0.8} style={{ right: "14%", top: "22%" }} className="gc-drift2" />
       </div>
     );
   }
@@ -237,23 +126,25 @@ function Scene({ kind }: { kind: GameCardProps["scene"] }) {
     return (
       <div className="gc-sc">
         <div className="gc-crash-glow" />
-        <div className="gc-rocket-wrap">
-          <RocketArt />
+        <div className="gc-rocket">
+          <img src="/rocket.png" alt="" draggable={false} />
         </div>
         <div className="gc-mult">×2.4</div>
+        <div className="gc-trail" />
       </div>
     );
   }
 
   if (kind === "plinko") {
     return (
-      <div className="gc-sc" style={{ justifyContent: "flex-start", paddingTop: 18 }}>
+      <div className="gc-sc" style={{ justifyContent: "flex-start", paddingTop: 16 }}>
+        <div className="gc-plinko-glow" />
         <div className="gc-ball" />
         <div className="gc-plinko">
-          {[1, 2, 3, 4, 5].map((r) => (
+          {[1, 2, 3, 4, 5, 6].map((r) => (
             <div key={r} className="gc-prow">
               {Array.from({ length: r }).map((_, i) => (
-                <i key={i} className="gc-peg" style={{ animationDelay: `${(r + i) * 0.08}s` }} />
+                <i key={i} className="gc-peg" style={{ animationDelay: `${(r + i) * 0.07}s` }} />
               ))}
             </div>
           ))}
@@ -264,25 +155,33 @@ function Scene({ kind }: { kind: GameCardProps["scene"] }) {
 
   if (kind === "upgrade") {
     return (
-      <div className="gc-sc" style={{ flexDirection: "row", gap: 10 }}>
-        <CharBubble size={44} delay={0} style={{ position: "relative" }}>
-          <div className="gc-up-box" style={{ background: "#78716c" }} />
-        </CharBubble>
+      <div className="gc-sc" style={{ flexDirection: "row", gap: 8, padding: "0 12px" }}>
+        <Sticker src="/nft/hypno_lollipop.jpg" size={48} delay={0} style={{ position: "relative" }} />
         <span className="gc-arr">››</span>
-        <CharBubble size={44} delay={0.25} style={{ position: "relative" }}>
-          <div className="gc-up-box" style={{ background: "#f59e0b" }} />
-        </CharBubble>
+        <Sticker src="/nft/neko_helmet.jpg" size={52} delay={0.25} style={{ position: "relative" }} className="gc-bob2" />
         <span className="gc-arr">››</span>
-        <CharBubble size={52} delay={0.5} style={{ position: "relative" }} className="gc-up-win">
-          <div className="gc-up-box" style={{ background: "linear-gradient(135deg,#fbbf24,#f472b6)", boxShadow: "0 0 16px rgba(251,191,36,0.7)" }} />
-        </CharBubble>
+        <Sticker
+          src="/nft/moon_pendant.jpg"
+          size={60}
+          delay={0.5}
+          style={{ position: "relative" }}
+          className="gc-win"
+        />
+      </div>
+    );
+  }
+
+  if (kind === "cases") {
+    return (
+      <div className="gc-sc">
+        <Sticker src="/nft/telegram_premium.jpg" size={88} delay={0} style={{ left: "50%", top: "40%", transform: "translate(-50%,-50%)" }} className="gc-hero-sticker" />
       </div>
     );
   }
 
   return (
     <div className="gc-sc">
-      <div className="gc-wheel" style={{ width: 70, height: 70 }} />
+      <Sticker src="/tonyx-logo.jpg" size={72} delay={0} style={{ left: "50%", top: "40%", transform: "translate(-50%,-50%)" }} className="gc-hero-sticker" />
     </div>
   );
 }
@@ -314,6 +213,7 @@ export function GameCard({
     >
       <style>{CSS}</style>
       <div className="gc-bg" style={{ background: gradient }} />
+      <div className="gc-noise" />
       <div className="gc-shade" />
       <Scene kind={scene} />
 
@@ -343,58 +243,72 @@ export function GameCard({
 
 const CSS = `
 @keyframes gcIn {
-  from { opacity: 0; transform: translateY(14px) scale(0.96); }
+  from { opacity: 0; transform: translateY(16px) scale(0.94); }
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
 @keyframes gcFloat {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-10px); }
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(-11px) rotate(2deg); }
 }
-@keyframes gcFloatC {
-  0%, 100% { transform: translate(-50%, -50%) translateY(0); }
-  50% { transform: translate(-50%, -50%) translateY(-10px); }
+@keyframes gcFloat2 {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(-8px) rotate(-3deg); }
+}
+@keyframes gcFloat3 {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-13px) scale(1.04); }
+}
+@keyframes gcHero {
+  0%, 100% { transform: translate(-50%, -50%) translateY(0) scale(1); }
+  50% { transform: translate(-50%, -50%) translateY(-8px) scale(1.03); }
 }
 @keyframes gcDrift {
   0%, 100% { transform: translate(0, 0); }
-  50% { transform: translate(-12px, -8px); }
+  33% { transform: translate(-10px, -8px); }
+  66% { transform: translate(8px, -14px); }
 }
 @keyframes gcDrift2 {
   0%, 100% { transform: translate(0, 0); }
-  50% { transform: translate(10px, -12px); }
+  50% { transform: translate(12px, -10px); }
 }
 @keyframes gcPulse {
   0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.35; transform: scale(0.7); }
+  50% { opacity: 0.35; transform: scale(0.65); }
 }
 @keyframes gcSpin {
   to { transform: rotate(360deg); }
 }
 @keyframes gcRocket {
-  0%, 100% { transform: translate(0, 6px) rotate(-10deg); }
-  50% { transform: translate(8px, -14px) rotate(8deg); }
+  0%, 100% { transform: translate(0, 8px) rotate(-12deg); }
+  50% { transform: translate(10px, -16px) rotate(8deg); }
 }
 @keyframes gcMult {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.12); }
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.15); opacity: 0.9; }
 }
 @keyframes gcPeg {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.25); box-shadow: 0 0 8px 2px rgba(56,189,248,0.6); }
+  0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255,255,255,0.2); }
+  50% { transform: scale(1.3); box-shadow: 0 0 10px 2px rgba(56,189,248,0.7); }
 }
 @keyframes gcBall {
-  0% { top: 8%; left: 48%; }
-  25% { top: 28%; left: 38%; }
-  50% { top: 48%; left: 58%; }
-  75% { top: 68%; left: 42%; }
-  100% { top: 82%; left: 50%; }
+  0% { top: 6%; left: 50%; }
+  20% { top: 22%; left: 40%; }
+  40% { top: 40%; left: 58%; }
+  60% { top: 58%; left: 44%; }
+  80% { top: 74%; left: 54%; }
+  100% { top: 88%; left: 48%; }
 }
 @keyframes gcBars {
   0% { transform: translateX(0); }
-  100% { transform: translateX(-48px); }
+  100% { transform: translateX(-56px); }
 }
-@keyframes gcGemPop {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.15); }
+@keyframes gcShine {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+@keyframes gcWin {
+  0%, 100% { transform: translateY(0) scale(1); filter: brightness(1); }
+  50% { transform: translateY(-10px) scale(1.08); filter: brightness(1.2); }
 }
 
 .gc-card {
@@ -410,23 +324,31 @@ const CSS = `
   color: #fff;
   text-align: left;
   isolation: isolate;
-  animation: gcIn 0.5s cubic-bezier(0.22,1,0.36,1) both;
-  transition: transform 0.2s ease, filter 0.2s ease;
-  box-shadow: 0 12px 32px rgba(0,0,0,0.45);
+  animation: gcIn 0.55s cubic-bezier(0.22,1,0.36,1) both;
+  transition: transform 0.22s ease, filter 0.22s ease, box-shadow 0.22s ease;
+  box-shadow: 0 14px 36px rgba(0,0,0,0.5);
 }
 .gc-card.gc-wide { aspect-ratio: 2.05 / 1; }
 .gc-card:hover:not(:disabled) {
-  transform: translateY(-4px) scale(1.02);
-  filter: brightness(1.06);
+  transform: translateY(-5px) scale(1.025);
+  filter: brightness(1.07);
+  box-shadow: 0 20px 44px rgba(0,0,0,0.55);
 }
 .gc-card:active:not(:disabled) { transform: scale(0.98); }
 
 .gc-bg { position: absolute; inset: 0; }
+.gc-noise {
+  position: absolute; inset: 0;
+  opacity: 0.04;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 1;
+}
 .gc-shade {
   position: absolute; inset: 0;
   background:
-    radial-gradient(ellipse 90% 50% at 50% 0%, rgba(255,255,255,0.14), transparent 55%),
-    linear-gradient(180deg, transparent 40%, rgba(0,0,0,0.75) 100%);
+    radial-gradient(ellipse 90% 45% at 50% 0%, rgba(255,255,255,0.16), transparent 55%),
+    linear-gradient(180deg, transparent 38%, rgba(0,0,0,0.78) 100%);
   pointer-events: none;
   z-index: 1;
 }
@@ -438,122 +360,195 @@ const CSS = `
   overflow: hidden;
 }
 
-.gc-char {
+.gc-sticker {
   position: absolute;
   border-radius: 50%;
-  background: rgba(255,255,255,0.12);
-  box-shadow: 0 8px 20px rgba(0,0,0,0.35), inset 0 0 0 2px rgba(255,255,255,0.2);
   overflow: hidden;
-  animation: gcFloat 2.6s ease-in-out infinite;
+  background: rgba(255,255,255,0.08);
+  box-shadow:
+    0 10px 24px rgba(0,0,0,0.45),
+    inset 0 0 0 2px rgba(255,255,255,0.25);
+  animation: gcFloat 2.7s ease-in-out infinite;
   z-index: 3;
 }
-.gc-char.gc-drift { animation: gcDrift 3.2s ease-in-out infinite; }
-.gc-char.gc-drift2 { animation: gcDrift2 2.8s ease-in-out infinite; }
-.gc-pepe-wrap {
-  background: transparent !important;
-  box-shadow: none !important;
-  animation: gcFloatC 2.8s ease-in-out infinite !important;
+.gc-sticker img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.gc-sticker.gc-bob2 { animation-name: gcFloat2; animation-duration: 3.1s; }
+.gc-sticker.gc-bob3 { animation-name: gcFloat3; animation-duration: 2.4s; }
+.gc-sticker.gc-drift { animation-name: gcDrift; animation-duration: 3.6s; }
+.gc-sticker.gc-drift2 { animation-name: gcDrift2; animation-duration: 3s; }
+.gc-sticker.gc-win {
+  animation-name: gcWin;
+  animation-duration: 1.8s;
+  box-shadow: 0 0 22px rgba(251,191,36,0.65), 0 10px 24px rgba(0,0,0,0.4), inset 0 0 0 2px rgba(255,255,255,0.35);
+}
+.gc-sticker.gc-hero-sticker {
+  animation-name: gcHero;
+  background: transparent;
+  box-shadow: 0 12px 28px rgba(0,0,0,0.4);
+  border-radius: 18px;
 }
 
 .gc-arena-bg {
   position: absolute; inset: 0;
   background: linear-gradient(135deg,
-    #1d4ed8 0%, #1d4ed8 32%,
-    #eab308 32%, #eab308 58%,
-    #dc2626 58%, #dc2626 100%);
-  opacity: 0.5;
+    #1d4ed8 0%, #1d4ed8 30%,
+    #eab308 30%, #eab308 56%,
+    #dc2626 56%, #dc2626 100%);
+  opacity: 0.55;
   mix-blend-mode: soft-light;
 }
+.gc-grid-fx {
+  position: absolute; inset: 0;
+  background-image:
+    linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px);
+  background-size: 28px 28px;
+  opacity: 0.5;
+}
 
-.gc-spin-bg {
-  position: absolute; inset: -30%;
+.gc-spin-bars {
+  position: absolute; inset: -40%;
   background: repeating-linear-gradient(
     -35deg,
-    transparent 0 30px,
-    rgba(168,85,247,0.22) 30px 44px
+    transparent 0 32px,
+    rgba(168,85,247,0.22) 32px 48px
   );
-  animation: gcBars 7s linear infinite;
+  animation: gcBars 8s linear infinite;
 }
 .gc-wheel {
-  width: 86px; height: 86px; border-radius: 50%;
-  background: conic-gradient(from 0deg, #22d3ee, #a855f7, #f472b6, #fbbf24, #22d3ee);
-  box-shadow: 0 0 28px rgba(34,211,238,0.45);
-  animation: gcSpin 7s linear infinite;
+  width: 92px; height: 92px; border-radius: 50%;
+  background: conic-gradient(from 0deg, #22d3ee, #a855f7, #f472b6, #fbbf24, #34d399, #22d3ee);
+  box-shadow: 0 0 32px rgba(34,211,238,0.5), 0 8px 24px rgba(0,0,0,0.4);
+  animation: gcSpin 6.5s linear infinite;
   display: flex; align-items: center; justify-content: center;
+  position: relative;
   z-index: 2;
 }
 .gc-wheel-inner {
-  width: 36px; height: 36px; border-radius: 50%;
-  background: #0b0b0f;
-  box-shadow: inset 0 0 0 3px rgba(255,255,255,0.15);
-}
-
-.gc-mines {
-  display: grid;
-  grid-template-columns: repeat(3, 30px);
-  gap: 6px;
-}
-.gc-m {
-  width: 30px; height: 30px; border-radius: 9px;
-  background: rgba(0,0,0,0.35);
-  border: 1px solid rgba(255,255,255,0.12);
-  display: flex; align-items: center; justify-content: center;
-}
-.gc-m-on {
-  background: linear-gradient(145deg, rgba(255,255,255,0.28), rgba(255,255,255,0.08));
-}
-.gc-m-icon { width: 16px; height: 16px; animation: gcGemPop 2s ease-in-out infinite; }
-
-.gc-coin-bg {
-  position: absolute; inset: 0;
-  background: radial-gradient(circle at 50% 40%, rgba(56,189,248,0.35), transparent 60%);
-}
-
-.gc-rocket-wrap {
-  width: 72px; height: 72px;
-  animation: gcRocket 2.4s ease-in-out infinite;
-  filter: drop-shadow(0 8px 16px rgba(0,0,0,0.4));
+  width: 38px; height: 38px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #1e1b4b, #0b0b0f);
+  box-shadow: inset 0 0 0 3px rgba(255,255,255,0.18);
   z-index: 2;
 }
+.gc-wheel-shine {
+  position: absolute; inset: 0; border-radius: 50%;
+  background: conic-gradient(from 0deg, transparent 0 60%, rgba(255,255,255,0.35) 70%, transparent 80%);
+  animation: gcShine 3s linear infinite;
+}
+
+.gc-mines-glow {
+  position: absolute; width: 120px; height: 120px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(168,85,247,0.35), transparent 70%);
+  filter: blur(16px);
+}
+.gc-mines {
+  display: grid;
+  grid-template-columns: repeat(3, 32px);
+  gap: 6px;
+  z-index: 2;
+}
+.gc-m {
+  width: 32px; height: 32px; border-radius: 10px;
+  background: rgba(0,0,0,0.4);
+  border: 1px solid rgba(255,255,255,0.1);
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden;
+}
+.gc-m-on {
+  background: linear-gradient(145deg, rgba(255,255,255,0.22), rgba(255,255,255,0.06));
+  border-color: rgba(255,255,255,0.25);
+}
+.gc-m-img {
+  width: 100%; height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.gc-coin-glow {
+  position: absolute; width: 140px; height: 140px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(56,189,248,0.4), transparent 65%);
+  filter: blur(18px);
+}
+.gc-hero {
+  width: 108px; height: 108px;
+  border-radius: 24px;
+  overflow: hidden;
+  box-shadow: 0 14px 32px rgba(0,0,0,0.45), inset 0 0 0 2px rgba(255,255,255,0.2);
+  animation: gcFloat 2.8s ease-in-out infinite;
+  z-index: 2;
+}
+.gc-hero img {
+  width: 100%; height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
 .gc-crash-glow {
-  position: absolute; width: 100px; height: 100px; border-radius: 50%;
-  background: radial-gradient(circle, rgba(249,115,22,0.5), transparent 70%);
-  filter: blur(12px);
+  position: absolute; width: 120px; height: 120px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(249,115,22,0.55), transparent 70%);
+  filter: blur(14px);
+}
+.gc-rocket {
+  width: 88px; height: 88px;
+  animation: gcRocket 2.3s ease-in-out infinite;
+  filter: drop-shadow(0 10px 18px rgba(0,0,0,0.45));
+  z-index: 2;
+}
+.gc-rocket img {
+  width: 100%; height: 100%;
+  object-fit: contain;
+  display: block;
+}
+.gc-trail {
+  position: absolute;
+  width: 40px; height: 60px;
+  left: 42%; top: 48%;
+  background: linear-gradient(180deg, rgba(251,146,60,0.5), transparent);
+  filter: blur(8px);
+  border-radius: 50%;
+  pointer-events: none;
 }
 .gc-mult {
   position: absolute; right: 12px; top: 36px;
-  font-weight: 900; font-size: 15px; color: #fdba74;
-  text-shadow: 0 0 12px rgba(249,115,22,0.85);
-  animation: gcMult 1.8s ease-in-out infinite;
+  font-weight: 900; font-size: 16px; color: #fdba74;
+  text-shadow: 0 0 14px rgba(249,115,22,0.9);
+  animation: gcMult 1.7s ease-in-out infinite;
   z-index: 3;
 }
 
-.gc-plinko { display: flex; flex-direction: column; gap: 5px; }
-.gc-prow { display: flex; gap: 8px; justify-content: center; }
+.gc-plinko-glow {
+  position: absolute; width: 100px; height: 100px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(14,165,233,0.4), transparent 70%);
+  filter: blur(14px);
+  top: 20%;
+}
+.gc-plinko { display: flex; flex-direction: column; gap: 4px; z-index: 2; }
+.gc-prow { display: flex; gap: 7px; justify-content: center; }
 .gc-peg {
   width: 7px; height: 7px; border-radius: 50%;
-  background: rgba(255,255,255,0.9);
+  background: rgba(255,255,255,0.92);
   display: inline-block;
   animation: gcPeg 2s ease-in-out infinite;
 }
 .gc-ball {
-  position: absolute; width: 10px; height: 10px; border-radius: 50%;
+  position: absolute; width: 11px; height: 11px; border-radius: 50%;
   background: radial-gradient(circle at 30% 30%, #fff, #38bdf8);
-  box-shadow: 0 0 10px rgba(56,189,248,0.9);
-  animation: gcBall 2.6s cubic-bezier(0.4,0,0.2,1) infinite;
+  box-shadow: 0 0 12px rgba(56,189,248,0.95);
+  animation: gcBall 2.8s cubic-bezier(0.4,0,0.2,1) infinite;
   z-index: 3;
 }
 
-.gc-up-box {
-  width: 100%; height: 100%;
-  border-radius: 12px;
-}
 .gc-arr {
-  color: rgba(255,255,255,0.65);
+  color: rgba(255,255,255,0.7);
   font-weight: 900;
-  font-size: 16px;
+  font-size: 15px;
+  text-shadow: 0 2px 8px rgba(0,0,0,0.4);
 }
-.gc-up-win { animation: gcFloat 1.6s ease-in-out infinite !important; }
 
 .gc-top {
   position: absolute; top: 10px; left: 10px; right: 10px;
@@ -564,15 +559,15 @@ const CSS = `
 .gc-badge {
   font-size: 10px; font-weight: 900; letter-spacing: 0.04em;
   color: #fff; border-radius: 999px; padding: 4px 9px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  box-shadow: 0 4px 14px rgba(0,0,0,0.35);
 }
 .gc-on {
   display: flex; align-items: center; gap: 5px;
   font-size: 11px; font-weight: 800; color: #fff;
-  background: rgba(0,0,0,0.4);
+  background: rgba(0,0,0,0.42);
   border-radius: 999px;
   padding: 3px 8px;
-  backdrop-filter: blur(6px);
+  backdrop-filter: blur(8px);
 }
 .gc-on i {
   width: 7px; height: 7px; border-radius: 50%;
@@ -592,7 +587,7 @@ const CSS = `
   font-weight: 900;
   letter-spacing: -0.02em;
   color: #fff;
-  text-shadow: 0 2px 12px rgba(0,0,0,0.65);
+  text-shadow: 0 2px 14px rgba(0,0,0,0.7);
   line-height: 1.1;
 }
 .gc-max {

@@ -1,5 +1,5 @@
 /**
- * GameCard — real artwork covers (mages/nft), not SVG placeholders
+ * GameCard — PvP-first: Arena dual fighters, Spin wheel+hero
  */
 import type { ReactNode } from "react";
 
@@ -20,7 +20,6 @@ export type GameCardProps = {
   disabled?: boolean;
 };
 
-/** Real project art — intentional mapping, not random */
 const COVER: Record<string, string> = {
   arena: "/mages/kalen-inferno-blaze.jpg",
   spin: "/mages/lyra-cosmic-weaver.jpg",
@@ -33,11 +32,47 @@ const COVER: Record<string, string> = {
   generic: "/mages/solaris-chronos-shaper.jpg",
 };
 
-const SECONDARY: Partial<Record<string, string>> = {
-  arena: "/mages/frost-weaver.jpg",
-  spin: "/mages/silas-starsinger.jpg",
-  upgrade: "/nft/moon_pendant.jpg",
-};
+function ArenaArt() {
+  return (
+    <div className="gc-art arena">
+      <div className="gc-split" />
+      <div className="gc-glow left" />
+      <div className="gc-glow right" />
+      <div className="gc-fighter f1">
+        <img src="/mages/frost-weaver.jpg" alt="" draggable={false} />
+      </div>
+      <div className="gc-fighter f2">
+        <img src="/mages/kalen-inferno-blaze.jpg" alt="" draggable={false} />
+      </div>
+      <div className="gc-vs">VS</div>
+      <div className="gc-clash" />
+    </div>
+  );
+}
+
+function SpinArt() {
+  return (
+    <div className="gc-art spin">
+      <div className="gc-spin-bg" />
+      <div className="gc-wheel" />
+      <div className="gc-hero-spin">
+        <img src="/mages/lyra-cosmic-weaver.jpg" alt="" draggable={false} />
+      </div>
+      <div className="gc-orb o1" />
+      <div className="gc-orb o2" />
+    </div>
+  );
+}
+
+function DefaultArt({ scene }: { scene: string }) {
+  const src = COVER[scene] ?? COVER.generic;
+  const isRocket = scene === "crash";
+  return (
+    <div className={`gc-art default${isRocket ? " rocket" : ""}`}>
+      <img className="gc-cover-img" src={src} alt="" draggable={false} />
+    </div>
+  );
+}
 
 export function GameCard({
   name,
@@ -53,14 +88,10 @@ export function GameCard({
   enterDelay = 0,
   disabled,
 }: GameCardProps) {
-  const cover = COVER[scene] ?? COVER.generic;
-  const secondary = SECONDARY[scene];
-  const isRocket = scene === "crash";
-
   return (
     <button
       type="button"
-      className={`gc${wide ? " wide" : ""}${isRocket ? " rocket" : ""}`}
+      className={`gc${wide ? " wide" : ""}`}
       onClick={disabled ? undefined : onClick}
       disabled={disabled}
       style={{
@@ -72,13 +103,9 @@ export function GameCard({
     >
       <style>{CSS}</style>
       <div className="gc-rim" />
-      <div className="gc-cover" style={{ background: gradient }}>
-        <img className="gc-cover-img" src={cover} alt="" draggable={false} />
-        {secondary ? (
-          <img className="gc-sec" src={secondary} alt="" draggable={false} />
-        ) : null}
-        <div className="gc-cover-shade" />
-      </div>
+      <div className="gc-fill" style={{ background: gradient }} />
+      {scene === "arena" ? <ArenaArt /> : scene === "spin" ? <SpinArt /> : <DefaultArt scene={scene} />}
+      <div className="gc-shade" />
       <div className="gc-sweep" />
       <div className="gc-top">
         {badge ? (
@@ -100,31 +127,36 @@ export function GameCard({
 
 const CSS = `
 @keyframes gcEnter {
-  from { opacity: 0; transform: translateY(24px) scale(0.92); filter: blur(6px); }
+  from { opacity: 0; transform: translateY(22px) scale(0.93); filter: blur(5px); }
   to { opacity: 1; transform: none; filter: none; }
 }
-@keyframes ken {
-  0%, 100% { transform: scale(1.06) translate(0,0); }
-  50% { transform: scale(1.14) translate(-1.5%, -1%); }
-}
-@keyframes kenRocket {
-  0%, 100% { transform: translate(0, 6%) rotate(-10deg) scale(1); }
-  50% { transform: translate(4%, -8%) rotate(8deg) scale(1.06); }
-}
-@keyframes floatSec {
+@keyframes float {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-10px); }
 }
+@keyframes floatR {
+  0%, 100% { transform: translateY(0) rotate(-3deg); }
+  50% { transform: translateY(-8px) rotate(3deg); }
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.55; transform: scale(0.85); }
+}
+@keyframes clash {
+  0%, 100% { opacity: 0.7; transform: translate(-50%, -50%) scale(1); }
+  50% { opacity: 1; transform: translate(-50%, -50%) scale(1.15); }
+}
 @keyframes sweep {
-  0% { transform: translateX(-140%) skewX(-16deg); opacity: 0; }
+  0% { transform: translateX(-130%) skewX(-16deg); opacity: 0; }
   20% { opacity: 0.55; }
   100% { transform: translateX(190%) skewX(-16deg); opacity: 0; }
 }
-@keyframes pulseDot {
-  0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(34,197,94,0.7); }
-  50% { transform: scale(0.85); box-shadow: 0 0 0 6px rgba(34,197,94,0); }
-}
 @keyframes rimSpin { to { transform: rotate(360deg); } }
+@keyframes ken {
+  0%, 100% { transform: scale(1.05); }
+  50% { transform: scale(1.12); }
+}
 
 .gc {
   --r: 22px;
@@ -142,69 +174,146 @@ const CSS = `
   color: #fff;
   text-align: left;
   -webkit-tap-highlight-color: transparent;
-  animation: gcEnter 0.65s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: gcEnter 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
   animation-delay: var(--delay, 0ms);
   transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.35s ease;
-  box-shadow: 0 14px 36px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.06);
+  box-shadow: 0 14px 36px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.07);
 }
 .gc.wide { aspect-ratio: 2.05 / 1; }
 .gc:hover:not(:disabled) {
   transform: translateY(-6px) scale(1.025);
-  box-shadow:
-    0 28px 56px rgba(0,0,0,0.6),
-    0 0 0 1px rgba(255,255,255,0.12),
-    0 0 48px color-mix(in srgb, var(--accent) 45%, transparent);
+  box-shadow: 0 28px 56px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.12), 0 0 48px color-mix(in srgb, var(--accent) 45%, transparent);
 }
 .gc:active:not(:disabled) { transform: translateY(-2px) scale(0.985); transition-duration: 0.12s; }
 
 .gc-rim {
   position: absolute; inset: -50%; z-index: 0;
-  background: conic-gradient(from 180deg, transparent 0 60%, var(--accent) 72%, rgba(255,255,255,0.75) 82%, transparent 92%);
-  animation: rimSpin 6s linear infinite;
-  opacity: 0.45;
-  pointer-events: none;
+  background: conic-gradient(from 160deg, transparent 0 58%, var(--accent) 70%, rgba(255,255,255,0.8) 80%, transparent 90%);
+  animation: rimSpin 5.5s linear infinite;
+  opacity: 0.5; pointer-events: none;
 }
-.gc-cover {
+.gc-fill {
   position: absolute; inset: 1.5px;
   border-radius: calc(var(--r) - 1.5px);
-  overflow: hidden; z-index: 1;
+  z-index: 1;
 }
-.gc-cover-img {
-  position: absolute; inset: -6%;
-  width: 112%; height: 112%;
-  object-fit: cover;
-  object-position: center 18%;
-  display: block;
-  animation: ken 12s ease-in-out infinite;
-  will-change: transform;
+
+.gc-art {
+  position: absolute; inset: 1.5px;
+  border-radius: calc(var(--r) - 1.5px);
+  overflow: hidden; z-index: 2;
 }
-.gc.rocket .gc-cover-img {
-  inset: 16% 14% 30%;
-  width: auto; height: auto;
-  max-width: 72%; max-height: 55%;
-  margin: auto; left: 0; right: 0; top: 0; bottom: 0;
-  object-fit: contain;
-  animation: kenRocket 2.8s ease-in-out infinite;
-  filter: drop-shadow(0 14px 24px rgba(0,0,0,0.5));
+
+.gc-art.arena .gc-split {
+  position: absolute; inset: 0;
+  background: linear-gradient(122deg, #1d4ed8 0 34%, #ca8a04 34% 48%, #b91c1c 48% 100%);
 }
-.gc-sec {
+.gc-glow {
+  position: absolute; width: 120px; height: 120px; border-radius: 50%;
+  filter: blur(30px); pointer-events: none;
+}
+.gc-glow.left { left: 5%; top: 25%; background: rgba(56,189,248,0.55); }
+.gc-glow.right { right: 5%; top: 25%; background: rgba(249,115,22,0.5); }
+
+.gc-fighter {
   position: absolute;
-  width: 38%; height: 38%;
-  right: 7%; bottom: 30%;
-  object-fit: cover;
+  width: 44%;
+  aspect-ratio: 1;
   border-radius: 50%;
-  border: 2px solid rgba(255,255,255,0.4);
-  box-shadow: 0 12px 28px rgba(0,0,0,0.5);
-  animation: floatSec 3s ease-in-out infinite;
+  overflow: hidden;
+  top: 18%;
+  box-shadow: 0 14px 32px rgba(0,0,0,0.5), inset 0 0 0 3px rgba(255,255,255,0.35);
+  background: #111;
+  z-index: 3;
+}
+.gc-fighter img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.gc-fighter.f1 { left: 6%; animation: float 2.6s ease-in-out infinite; }
+.gc-fighter.f2 { right: 6%; animation: floatR 2.8s ease-in-out infinite 0.15s; }
+
+.gc-vs {
+  position: absolute; left: 50%; top: 58%;
+  transform: translateX(-50%);
+  font-weight: 900; font-size: 18px; letter-spacing: 0.12em;
+  color: #fff;
+  text-shadow: 0 2px 14px rgba(0,0,0,0.8), 0 0 20px rgba(255,255,255,0.35);
+  z-index: 4;
+}
+.gc-clash {
+  position: absolute; left: 50%; top: 42%;
+  width: 28px; height: 28px; margin: -14px 0 0 -14px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #fde68a, #f59e0b 50%, transparent 70%);
+  animation: clash 1.4s ease-in-out infinite;
+  z-index: 4;
+  filter: blur(1px);
+}
+
+.gc-spin-bg {
+  position: absolute; inset: 0;
+  background: radial-gradient(circle at 50% 40%, rgba(34,211,238,0.25), transparent 55%);
+}
+.gc-wheel {
+  position: absolute;
+  left: 50%; top: 40%;
+  width: 58%; aspect-ratio: 1;
+  margin: -29% 0 0 -29%;
+  border-radius: 50%;
+  background: conic-gradient(
+    #ef4444 0 45deg, #eab308 45deg 90deg, #22c55e 90deg 135deg, #3b82f6 135deg 180deg,
+    #a855f7 180deg 225deg, #f97316 225deg 270deg, #ec4899 270deg 315deg, #06b6d4 315deg 360deg
+  );
+  box-shadow: 0 0 0 4px rgba(255,255,255,0.22), 0 12px 28px rgba(0,0,0,0.45);
+  animation: spin 7s linear infinite;
   z-index: 2;
 }
-.gc.wide .gc-sec { width: 20%; height: auto; aspect-ratio: 1; bottom: 24%; }
+.gc-wheel::after {
+  content: "";
+  position: absolute; inset: 28%;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #2e1065, #0b0b0f);
+  box-shadow: inset 0 0 0 2px rgba(255,255,255,0.2);
+}
+.gc-hero-spin {
+  position: absolute;
+  width: 36%; aspect-ratio: 1;
+  left: 50%; bottom: 22%;
+  margin-left: -18%;
+  border-radius: 50%;
+  overflow: hidden;
+  box-shadow: 0 12px 28px rgba(0,0,0,0.5), inset 0 0 0 2px rgba(255,255,255,0.35);
+  animation: float 2.7s ease-in-out infinite;
+  z-index: 3;
+  background: #111;
+}
+.gc-hero-spin img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.gc-orb {
+  position: absolute; width: 14px; height: 14px; border-radius: 50%;
+  z-index: 3; box-shadow: 0 0 12px currentColor;
+}
+.gc-orb.o1 { left: 12%; top: 22%; background: #22d3ee; color: #22d3ee; animation: float 2.4s ease-in-out infinite; }
+.gc-orb.o2 { right: 12%; top: 28%; background: #f472b6; color: #f472b6; animation: floatR 2.9s ease-in-out infinite; }
 
-.gc-cover-shade {
-  position: absolute; inset: 0; z-index: 3; pointer-events: none;
+.gc-art.default .gc-cover-img {
+  position: absolute; inset: -6%; width: 112%; height: 112%;
+  object-fit: cover; object-position: center 18%;
+  animation: ken 12s ease-in-out infinite;
+}
+.gc-art.rocket .gc-cover-img {
+  inset: 18% 14% 30%; width: auto; height: auto;
+  max-width: 70%; max-height: 55%; margin: auto;
+  left: 0; right: 0; top: 0; bottom: 0;
+  object-fit: contain;
+  animation: float 2.5s ease-in-out infinite;
+  filter: drop-shadow(0 14px 22px rgba(0,0,0,0.5));
+}
+
+.gc-shade {
+  position: absolute; inset: 1.5px;
+  border-radius: calc(var(--r) - 1.5px);
+  z-index: 3; pointer-events: none;
   background:
-    radial-gradient(ellipse 90% 50% at 50% 0%, rgba(255,255,255,0.12), transparent 55%),
-    linear-gradient(180deg, rgba(0,0,0,0.12) 0%, transparent 40%, rgba(0,0,0,0.45) 70%, rgba(0,0,0,0.72) 100%);
+    radial-gradient(ellipse 90% 50% at 50% 0%, rgba(255,255,255,0.1), transparent 50%),
+    linear-gradient(180deg, transparent 40%, rgba(0,0,0,0.55) 100%);
 }
 .gc-sweep {
   position: absolute; inset: 1.5px;
@@ -215,8 +324,9 @@ const CSS = `
   content: "";
   position: absolute; top: 0; bottom: 0; width: 40%;
   background: linear-gradient(90deg, transparent, rgba(255,255,255,0.22), transparent);
-  animation: sweep 4.2s ease-in-out infinite;
+  animation: sweep 4s ease-in-out infinite;
 }
+
 .gc-top {
   position: absolute; top: 11px; left: 11px; right: 11px; z-index: 6;
   display: flex; align-items: center; justify-content: space-between;
@@ -237,12 +347,12 @@ const CSS = `
 }
 .gc-online i {
   width: 7px; height: 7px; border-radius: 50%; background: #22c55e;
-  display: inline-block; animation: pulseDot 1.5s ease-out infinite;
+  display: inline-block; animation: pulse 1.4s ease-in-out infinite;
 }
 .gc-glass {
   position: absolute; left: 8px; right: 8px; bottom: 8px; z-index: 6;
   padding: 12px 14px 11px; border-radius: 16px;
-  background: rgba(8, 8, 14, 0.55);
+  background: rgba(8,8,14,0.55);
   border: 1px solid rgba(255,255,255,0.12);
   backdrop-filter: blur(16px) saturate(1.3);
   -webkit-backdrop-filter: blur(16px) saturate(1.3);

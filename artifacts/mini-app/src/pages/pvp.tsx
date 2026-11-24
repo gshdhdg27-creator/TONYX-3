@@ -64,7 +64,7 @@ export default function PvpPage() {
           online={6}
           maxBet="50 TON"
           gradient="linear-gradient(145deg, #1e3a8a 0%, #ca8a04 45%, #b91c1c 100%)"
-          accent="rgba(99,102,241,0.45)"
+          accent="rgba(99,102,241,0.55)"
           enterDelay={0}
           onClick={() => setTab("arena")}
         />
@@ -76,8 +76,8 @@ export default function PvpPage() {
           online={8}
           maxBet="25 TON"
           gradient="linear-gradient(160deg, #4c1d95 0%, #7c3aed 50%, #312e81 100%)"
-          accent="rgba(168,85,247,0.5)"
-          enterDelay={60}
+          accent="rgba(168,85,247,0.55)"
+          enterDelay={80}
           onClick={() => setTab("spin")}
         />
       </div>
@@ -87,22 +87,22 @@ export default function PvpPage() {
 
 const page: CSSProperties = {
   minHeight: "100dvh",
-  background: "#0b0b0f",
+  background: "radial-gradient(ellipse at 50% 0%, #16122a 0%, #0b0b0f 55%)",
   color: "#fff",
   fontFamily: "Inter, system-ui, sans-serif",
-  padding: "16px 14px 120px",
+  padding: "18px 14px 120px",
 };
 const secTitle: CSSProperties = {
-  fontSize: 18,
-  fontWeight: 800,
-  color: "rgba(255,255,255,0.92)",
-  marginBottom: 12,
-  letterSpacing: "-0.02em",
+  fontSize: 20,
+  fontWeight: 900,
+  color: "#fff",
+  marginBottom: 14,
+  letterSpacing: "-0.03em",
 };
 const grid: CSSProperties = {
   display: "grid",
   gridTemplateColumns: "1fr 1fr",
-  gap: 12,
+  gap: 14,
 };
 const back: CSSProperties = {
   margin: "12px 16px",

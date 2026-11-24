@@ -10,6 +10,7 @@ import {
   planBouncePath, randomInStrip, randomStart, samplePath, pathDirection, pointInPoly,
 } from "./arenaPhysics";
 import WinnerModal from "./WinnerModal";
+import ArenaHistoryModal from "./ArenaHistoryModal";
 
 const COMMISSION = 0.2;
 const MIN_STAKE = 0.1;
@@ -781,7 +782,7 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
     } catch { /* */ }
     finally { setHistoryLoading(false); }
   }
-  function openHistory() { setShowHistory(true); setFairInfo(null); loadHistory(); }
+  function openHistory() { setShowHistory(true); setFairInfo(null); }
   function replayRoom(room: HistoryRoom) {
     if (phase === "spin") return;
     if (!room.winnerId || !room.players?.length) return;
@@ -1377,117 +1378,25 @@ export default function ArenaGame({ telegramId, tonBalance, onBalanceChange, onC
         />
       )}
 
-      {/* History — Portals-like cards */}
-      {showHistory && !fairInfo && (
-        <div style={overlay} onClick={() => setShowHistory(false)}>
-          <div style={{ ...sheet, maxHeight: "80vh", overflow: "auto", animation: "arPop .3s ease-out" }} onClick={(e) => e.stopPropagation()}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-              <div style={{ fontWeight: 900, fontSize: 16 }}>История игр</div>
-              <button type="button" onClick={() => setShowHistory(false)} style={{ ...iconBtn, width: 36, height: 36 }}>✕</button>
-            </div>
-            {historyLoading && <div style={{ color: "#94a3b8", fontWeight: 600 }}>Загрузка…</div>}
-            {!historyLoading && history.length === 0 && <div style={{ color: "#64748b", fontWeight: 600 }}>Пока пусто</div>}
-            {history.map((room) => {
-              const wp = room.players?.find((p) => p.telegramId === room.winnerId);
-              const chance = wp && room.totalPool > 0 ? (wp.stake / room.totalPool) * 100 : 0;
-              const mult = wp && wp.stake > 0 ? room.winnerPayout / wp.stake : 0;
-              return (
-                <div key={room.id} style={histCard}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
-                    <div style={{
-                      background: "rgba(59,130,246,0.2)", color: "#93c5fd", fontWeight: 900, fontSize: 13,
-                      padding: "4px 10px", borderRadius: 10,
-                    }}>
-                      {mult.toFixed(2)}x
-                    </div>
-                    <div style={{ fontSize: 12, color: "#64748b", fontWeight: 700 }}>#{room.id}</div>
-                  </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-                    <div style={{
-                      width: 40, height: 40, borderRadius: "50%", background: colorFor(0),
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      fontWeight: 900, color: "#fff", overflow: "hidden", flexShrink: 0,
-                    }}>
-                      {wp?.photoUrl
-                        ? <img src={wp.photoUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                        : initials(room.winnerUsername, room.winnerId || "?")}
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontWeight: 800, fontSize: 14 }}>
-                        {(room.winnerUsername || room.winnerId || "?").replace(/^@/, "").slice(0, 16)}
-                      </div>
-                      <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>
-                        {room.finishedAt ? new Date(room.finishedAt).toLocaleString() : ""}
-                      </div>
-                    </div>
-                    <div style={{ textAlign: "right" }}>
-                      <div style={{ fontWeight: 900, fontSize: 14, color: "#e2e8f0" }}>{room.winnerPayout.toFixed(3)} TON</div>
-                      <div style={{ fontSize: 11, color: "#94a3b8" }}>Шанс {chance.toFixed(1)}%</div>
-                    </div>
-                  </div>
-                  <div style={{ display: "flex", gap: 8 }}>
-                    <button type="button" onClick={() => replayRoom(room)} style={histBtnReplay}>
-                      <span style={{ fontSize: 15 }}>▶</span> Повтор
-                    </button>
-                    <button type="button" onClick={() => setFairInfo(room)} style={histBtnFair}>
-                      <span style={{ fontSize: 14 }}>✦</span> Честность
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
+      {showHistory && (
+        <ArenaHistoryModal
+          telegramId={telegramId}
+          onClose={() => setShowHistory(false)}
+          onReplay={(item) => {
+            replayRoom({
+              id: item.id,
+              winnerId: item.winnerId,
+              winnerUsername: item.winnerUsername,
+              winnerPayout: item.winnerPayout,
+              totalPool: item.totalPool,
+              playerCount: item.playerCount,
+              players: item.players as ArenaPlayer[],
+              finishedAt: item.finishedAt,
+              fair: item.fair as HistoryRoom["fair"],
+            });
+          }}
+        />
       )}
-
-      {/* Fairness detail */}
-      {fairInfo && (
-        <div style={overlay} onClick={() => setFairInfo(null)}>
-          <div style={{ ...sheet, maxHeight: "80vh", overflow: "auto" }} onClick={(e) => e.stopPropagation()}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-              <div>
-                <div style={{ fontWeight: 900, fontSize: 16 }}>Игра #{fairInfo.id}</div>
-                <div style={{ fontSize: 12, color: "#94a3b8" }}>
-                  {fairInfo.finishedAt ? new Date(fairInfo.finishedAt).toLocaleString() : ""}
-                </div>
-              </div>
-              <button type="button" onClick={() => setFairInfo(null)} style={{ ...iconBtn, width: 36, height: 36 }}>✕</button>
-            </div>
-            {fairInfo.fair && (
-              <div style={{ fontSize: 11, color: "#94a3b8", marginBottom: 12, wordBreak: "break-all" }}>
-                <div>Хеш: {fairInfo.fair.hash || fairInfo.fair.serverSeedHash || "—"}</div>
-                <div style={{ marginTop: 4 }}>Сид: {fairInfo.fair.serverSeed || "—"}</div>
-              </div>
-            )}
-            {fairInfo.players?.map((p) => {
-              const isW = p.telegramId === fairInfo.winnerId;
-              const ch = fairInfo.totalPool > 0 ? (p.stake / fairInfo.totalPool) * 100 : 0;
-              return (
-                <div key={p.telegramId} style={{
-                  ...histCard, marginBottom: 8,
-                  border: isW ? "1px solid rgba(74,222,128,0.45)" : histCard.border,
-                  background: isW ? "rgba(22,101,52,0.25)" : histCard.background,
-                }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <div>
-                      <div style={{ fontWeight: 800 }}>
-                        {(p.username || p.telegramId).replace(/^@/, "")}
-                        {isW && <span style={{ color: "#4ade80", marginLeft: 8, fontSize: 12 }}>Победитель</span>}
-                      </div>
-                      <div style={{ fontSize: 12, color: "#94a3b8" }}>{ch.toFixed(2)}%</div>
-                    </div>
-                    <div style={{ fontWeight: 900 }}>{p.stake.toFixed(2)} TON</div>
-                  </div>
-                </div>
-              );
-            })}
-            <button type="button" onClick={() => replayRoom(fairInfo)} style={{ ...chip, width: "100%", marginTop: 8 }}>
-              Открыть повтор
-            </button>
-          </div>
-        </div>
-      )}
-
 
       {stakeDetail && (
         <div onClick={() => setStakeDetail(null)} style={{

@@ -173,7 +173,7 @@ export default function ArenaHistoryModal({ onClose, onReplay, telegramId }: Pro
       style={{
         position: "fixed",
         inset: 0,
-        zIndex: 300,
+        zIndex: 500,
         background: "rgba(0,0,0,0.72)",
         display: "flex",
         alignItems: "flex-end",

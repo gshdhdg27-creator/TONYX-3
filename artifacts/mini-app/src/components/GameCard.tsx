@@ -1,9 +1,8 @@
 /**
- * Premium GameCard — Portals-style
- * Premium Portals-style GameCard
+ * Premium GameCard — Portals / high-end mini-app style
  * Path: artifacts/mini-app/src/components/GameCard.tsx
  */
-import type { CSSProperties, ReactNode } from "react";
+import type { ReactNode } from "react";
 
 export type GameCardProps = {
   name: string;
@@ -22,55 +21,45 @@ export type GameCardProps = {
   disabled?: boolean;
 };
 
-/* ───────── Animated scenes ───────── */
+/* ───────── Scenes ───────── */
 function Scene({ kind, wide }: { kind: GameCardProps["scene"]; wide?: boolean }) {
-  const h = wide ? 128 : 110;
-
   if (kind === "arena") {
     return (
-      <div style={{ ...sceneWrap, height: h }}>
-        <div className="gc-arena-glow" />
-        <span className="gc-float" style={{ fontSize: wide ? 42 : 36, position: "absolute", left: "12%", top: "18%" }}>⚔️</span>
-        <span className="gc-float" style={{ fontSize: wide ? 38 : 32, position: "absolute", right: "14%", top: "28%", animationDelay: "0.4s" }}>🛡️</span>
-        <span className="gc-float" style={{ fontSize: 28, position: "absolute", left: "42%", bottom: "12%", animationDelay: "0.8s" }}>💥</span>
-        <div className="gc-particles" aria-hidden>
-          <span /><span /><span /><span />
-        </div>
+      <div className="gc-scene">
+        <div className="gc-floor" />
+        <div className="gc-arena-ring" />
+        <span className="gc-float gc-big" style={{ left: "8%", bottom: "18%", animationDelay: "0s" }}>⚔️</span>
+        <span className="gc-float gc-mid" style={{ right: "10%", bottom: "22%", animationDelay: "0.5s" }}>🛡️</span>
+        <span className="gc-float gc-sm" style={{ left: "42%", top: "12%", animationDelay: "0.9s" }}>💥</span>
+        <span className="gc-float gc-sm" style={{ right: "28%", top: "28%", animationDelay: "1.2s" }}>✨</span>
+        <div className="gc-orb gc-orb-purple" />
       </div>
     );
   }
 
   if (kind === "spin") {
     return (
-      <div style={{ ...sceneWrap, height: h }}>
-        <div className="gc-spin-wheel">🎡</div>
-        <div className="gc-spin-spark" />
-        <span className="gc-float" style={{ position: "absolute", right: "16%", top: "20%", fontSize: 22, animationDelay: "0.3s" }}>✨</span>
+      <div className="gc-scene">
+        <div className="gc-spin-disc">
+          <div className="gc-spin-inner">🎡</div>
+        </div>
+        <span className="gc-float gc-sm" style={{ right: "12%", top: "16%", animationDelay: "0.3s" }}>✨</span>
+        <span className="gc-float gc-sm" style={{ left: "14%", bottom: "20%", animationDelay: "0.8s" }}>💎</span>
+        <div className="gc-orb gc-orb-cyan" />
       </div>
     );
   }
 
   if (kind === "mines") {
     return (
-      <div style={{ ...sceneWrap, height: h }}>
-        <div style={minesGrid}>
+      <div className="gc-scene" style={{ paddingTop: 8 }}>
+        <div className="gc-mines">
           {Array.from({ length: 9 }).map((_, i) => {
-            const special = i === 1 || i === 5 || i === 7;
+            const lit = i === 1 || i === 4 || i === 7;
+            const icons = ["", "💎", "", "", "🐸", "", "", "💠", ""];
             return (
-              <div
-                key={i}
-                className={special ? "gc-mine-lit" : "gc-mine-cell"}
-                style={{
-                  ...mineCell,
-                  background: special
-                    ? "linear-gradient(145deg, rgba(255,255,255,0.32), rgba(255,255,255,0.08))"
-                    : "rgba(0,0,0,0.38)",
-                  animationDelay: `${i * 0.07}s`,
-                }}
-              >
-                {i === 1 && <span className="gc-gem">💎</span>}
-                {i === 5 && <span className="gc-gem" style={{ animationDelay: "0.25s" }}>🐸</span>}
-                {i === 7 && <span className="gc-gem" style={{ animationDelay: "0.5s" }}>💠</span>}
+              <div key={i} className={lit ? "gc-mine gc-mine-on" : "gc-mine"} style={{ animationDelay: `${i * 0.06}s` }}>
+                {icons[i] && <span className="gc-gem">{icons[i]}</span>}
               </div>
             );
           })}
@@ -81,54 +70,53 @@ function Scene({ kind, wide }: { kind: GameCardProps["scene"]; wide?: boolean })
 
   if (kind === "cases") {
     return (
-      <div style={{ ...sceneWrap, height: h }}>
-        <span className="gc-float" style={{ fontSize: wide ? 56 : 48 }}>📦</span>
-        <span className="gc-float" style={{ position: "absolute", left: "18%", top: "22%", fontSize: 20, animationDelay: "0.35s" }}>🔑</span>
-        <span className="gc-float" style={{ position: "absolute", right: "16%", bottom: "20%", fontSize: 18, animationDelay: "0.7s" }}>✨</span>
+      <div className="gc-scene">
+        <span className="gc-float gc-xl" style={{ left: "50%", top: "42%", transform: "translate(-50%, -50%)" }}>📦</span>
+        <span className="gc-float gc-sm" style={{ left: "16%", top: "22%", animationDelay: "0.4s" }}>🔑</span>
+        <span className="gc-float gc-sm" style={{ right: "14%", bottom: "18%", animationDelay: "0.75s" }}>✨</span>
+        <div className="gc-orb gc-orb-gold" />
       </div>
     );
   }
 
   if (kind === "coin") {
     return (
-      <div style={{ ...sceneWrap, height: h }}>
-        <div className="gc-coin" style={coinOrb}>🪙</div>
-        <div className="gc-coin-side" style={{ position: "absolute", left: "12%", top: "24%", fontSize: 20 }}>🦅</div>
-        <div className="gc-coin-side" style={{ position: "absolute", right: "12%", top: "28%", fontSize: 18, animationDelay: "0.45s" }}>⚪</div>
-        <div className="gc-coin-spark" />
+      <div className="gc-scene">
+        <div className="gc-coin-3d">🪙</div>
+        <span className="gc-float gc-sm" style={{ left: "12%", top: "24%", animationDelay: "0.2s" }}>🦅</span>
+        <span className="gc-float gc-sm" style={{ right: "12%", top: "28%", animationDelay: "0.55s" }}>⚪</span>
+        <div className="gc-orb gc-orb-gold" />
       </div>
     );
   }
 
   if (kind === "crash") {
     return (
-      <div style={{ ...sceneWrap, height: h }}>
-        <div className="gc-crash-glow" style={crashGlow} />
-        <div className="gc-rocket" style={{ fontSize: wide ? 58 : 48, filter: "drop-shadow(0 8px 22px rgba(0,0,0,0.5))", zIndex: 2 }}>
-          🚀
-        </div>
-        <div className="gc-crash-mult" style={crashMult}>×2.05</div>
-        <div className="gc-crash-trail" />
+      <div className="gc-scene">
+        <div className="gc-crash-glow" />
+        <div className="gc-rocket">🚀</div>
+        <div className="gc-mult">×2.05</div>
+        <div className="gc-trail" />
       </div>
     );
   }
 
   if (kind === "plinko") {
     return (
-      <div style={{ ...sceneWrap, height: h }}>
+      <div className="gc-scene" style={{ justifyContent: "flex-start", paddingTop: 10 }}>
         <div className="gc-plinko-ball" />
-        <div style={plinkoGrid}>
+        <div className="gc-plinko-rows">
           {[1, 2, 3, 4, 5].map((row) => (
-            <div key={row} style={{ display: "flex", gap: 9, justifyContent: "center" }}>
+            <div key={row} className="gc-plinko-row">
               {Array.from({ length: row }).map((_, i) => (
-                <span key={i} className="gc-peg" style={{ ...peg, animationDelay: `${(row * 3 + i) * 0.11}s` }} />
+                <span key={i} className="gc-peg" style={{ animationDelay: `${(row * 2 + i) * 0.1}s` }} />
               ))}
             </div>
           ))}
         </div>
-        <div style={plinkoBuckets}>
+        <div className="gc-buckets">
           {[0, 1, 2, 3].map((i) => (
-            <span key={i} className="gc-bucket" style={{ ...bucket, animationDelay: `${i * 0.14}s` }} />
+            <span key={i} className="gc-bucket" style={{ animationDelay: `${i * 0.12}s` }} />
           ))}
         </div>
       </div>
@@ -137,24 +125,24 @@ function Scene({ kind, wide }: { kind: GameCardProps["scene"]; wide?: boolean })
 
   if (kind === "upgrade") {
     return (
-      <div style={{ ...sceneWrap, height: h, flexDirection: "row", gap: 8 }}>
-        <span className="gc-up-item" style={{ ...upItem, animationDelay: "0s" }}>🚽</span>
-        <span className="gc-up-arrow" style={upArrow}>››</span>
-        <span className="gc-up-item" style={{ ...upItem, animationDelay: "0.2s" }}>🧸</span>
-        <span className="gc-up-arrow" style={{ ...upArrow, animationDelay: "0.15s" }}>››</span>
-        <span className="gc-up-item gc-up-win" style={{ ...upItem, transform: "scale(1.18)", animationDelay: "0.4s" }}>💍</span>
+      <div className="gc-scene" style={{ flexDirection: "row", gap: 6 }}>
+        <span className="gc-up" style={{ animationDelay: "0s" }}>🚽</span>
+        <span className="gc-up-arr">››</span>
+        <span className="gc-up" style={{ animationDelay: "0.2s" }}>🧸</span>
+        <span className="gc-up-arr" style={{ animationDelay: "0.15s" }}>››</span>
+        <span className="gc-up gc-up-win" style={{ animationDelay: "0.4s" }}>💍</span>
       </div>
     );
   }
 
   return (
-    <div style={{ ...sceneWrap, height: h }}>
-      <span className="gc-float" style={{ fontSize: wide ? 60 : 50 }}>🎮</span>
+    <div className="gc-scene">
+      <span className="gc-float gc-xl">🎮</span>
     </div>
   );
 }
 
-/* ───────── Main component ───────── */
+/* ───────── Card ───────── */
 export function GameCard({
   name,
   scene = "generic",
@@ -164,7 +152,7 @@ export function GameCard({
   maxBet,
   emoji,
   gradient,
-  accent = "rgba(168,85,247,0.5)",
+  accent = "rgba(168,85,247,0.55)",
   wide,
   onClick,
   footer,
@@ -178,396 +166,390 @@ export function GameCard({
       className="gc-card"
       disabled={disabled}
       style={{
-        ...cardBase,
-        height: wide ? 178 : 198,
-        boxShadow: `0 16px 40px rgba(0,0,0,0.5), 0 0 0 1px ${accent}, 0 0 28px ${accent}`,
+        ["--gc-accent" as string]: accent,
+        ["--gc-badge" as string]: badgeColor,
+        height: wide ? 168 : 210,
         animationDelay: `${enterDelay}ms`,
-        opacity: disabled ? 0.55 : 1,
-        filter: disabled ? "grayscale(0.55)" : undefined,
+        opacity: disabled ? 0.5 : 1,
+        filter: disabled ? "grayscale(0.5)" : undefined,
         cursor: disabled ? "not-allowed" : "pointer",
       }}
     >
-      <style>{CARD_CSS}</style>
+      <style>{CSS}</style>
 
-      {/* Base gradient */}
-      <div style={{ position: "absolute", inset: 0, background: gradient }} />
-
-      {/* Soft top light + bottom fade */}
-      <div
-        style={{
-          position: "absolute",
-          inset: 0,
-          background:
-            "radial-gradient(ellipse 90% 55% at 50% 8%, rgba(255,255,255,0.22), transparent 55%), linear-gradient(180deg, transparent 28%, rgba(0,0,0,0.62) 100%)",
-        }}
-      />
-
-      {/* Shine sweep */}
+      {/* layers */}
+      <div className="gc-bg" style={{ background: gradient }} />
+      <div className="gc-vignette" />
+      <div className="gc-noise" />
       <div className="gc-shine" />
+      <div className="gc-ring" />
 
-      {/* Floating particles */}
-      <div className="gc-particles" aria-hidden>
-        <span /><span /><span /><span /><span />
+      {/* top: online + badge */}
+      <div className="gc-top">
+        {badge ? (
+          <span className="gc-badge" style={{ background: badgeColor, boxShadow: `0 0 16px ${badgeColor}aa` }}>
+            {badge}
+          </span>
+        ) : (
+          <span />
+        )}
+        {online != null && (
+          <span className="gc-online">
+            <i className="gc-dot" />
+            {online}
+          </span>
+        )}
       </div>
 
-      {/* Content */}
-      <div
-        style={{
-          position: "relative",
-          zIndex: 2,
-          padding: wide ? "13px 15px 0" : "13px 13px 0",
-          flex: 1,
-          display: "flex",
-          flexDirection: "column",
-        }}
-      >
-        {/* Top row: title + badge */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 4 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 7, minWidth: 0 }}>
-            {emoji && <span style={{ fontSize: 17 }}>{emoji}</span>}
-            <span
-              style={{
-                fontWeight: 900,
-                fontSize: wide ? 17 : 15,
-                letterSpacing: "0.04em",
-                color: "#fff",
-                textShadow: "0 2px 14px rgba(0,0,0,0.5)",
-                whiteSpace: "nowrap",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-              }}
-            >
-              {name}
-            </span>
+      {/* main scene */}
+      <div className="gc-scene-wrap">
+        <Scene kind={scene} wide={wide} />
+      </div>
+
+      {/* glass footer */}
+      <div className="gc-foot">
+        <div className="gc-foot-left">
+          <div className="gc-title">
+            {emoji && <span className="gc-emoji">{emoji}</span>}
+            {name}
           </div>
-          {badge && (
-            <span
-              className="gc-badge"
-              style={{
-                flexShrink: 0,
-                fontSize: 10,
-                fontWeight: 900,
-                letterSpacing: "0.07em",
-                color: "#fff",
-                background: badgeColor,
-                borderRadius: 999,
-                padding: "3px 9px",
-                boxShadow: `0 0 14px ${badgeColor}99`,
-              }}
-            >
-              {badge}
-            </span>
-          )}
+          {maxBet != null && <div className="gc-max">макс {maxBet}</div>}
         </div>
-
-        {/* Scene */}
-        <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <Scene kind={scene} wide={wide} />
-        </div>
-
-        {/* Bottom row */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            paddingBottom: 13,
-            marginTop: 2,
-          }}
-        >
-          {online != null ? (
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 6,
-                fontSize: 11,
-                fontWeight: 700,
-                color: "rgba(255,255,255,0.88)",
-              }}
-            >
-              <span className="gc-online-dot" />
-              {online}
-            </div>
-          ) : (
-            <span />
-          )}
-
-          {maxBet != null && (
-            <span style={{ fontSize: 10, fontWeight: 700, color: "rgba(255,255,255,0.55)", letterSpacing: "0.02em" }}>
-              макс {maxBet}
-            </span>
-          )}
-
+        <div className="gc-foot-right">
           {footer}
-
-          <span className="gc-play-chip">PLAY →</span>
+          <span className="gc-play">PLAY</span>
         </div>
       </div>
     </button>
   );
 }
 
-/* ───────── CSS animations ───────── */
-const CARD_CSS = `
-  @keyframes gcEnter {
-    0% { opacity: 0; transform: translateY(22px) scale(0.94); }
-    100% { opacity: 1; transform: translateY(0) scale(1); }
+const CSS = `
+  @keyframes gcIn {
+    from { opacity: 0; transform: translateY(18px) scale(0.94); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
   }
   @keyframes gcShine {
-    0% { transform: translateX(-150%) rotate(18deg); opacity: 0; }
-    10% { opacity: 0.6; }
-    35% { opacity: 0.12; }
-    100% { transform: translateX(250%) rotate(18deg); opacity: 0; }
+    0% { transform: translateX(-160%) skewX(-18deg); opacity: 0; }
+    12% { opacity: 0.55; }
+    40% { opacity: 0.08; }
+    100% { transform: translateX(220%) skewX(-18deg); opacity: 0; }
   }
   @keyframes gcPulse {
     0%, 100% { opacity: 1; transform: scale(1); }
-    50% { opacity: 0.35; transform: scale(0.75); }
+    50% { opacity: 0.35; transform: scale(0.7); }
   }
   @keyframes gcFloat {
     0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-8px); }
+    50% { transform: translateY(-10px); }
   }
-  @keyframes gcRocket {
-    0%, 100% { transform: translate(0, 5px) rotate(-9deg); }
-    50% { transform: translate(7px, -12px) rotate(7deg); }
+  @keyframes gcFloatC {
+    0%, 100% { transform: translate(-50%, -50%) translateY(0); }
+    50% { transform: translate(-50%, -50%) translateY(-10px); }
   }
-  @keyframes gcMult {
-    0%, 100% { transform: scale(1); opacity: 0.92; }
-    50% { transform: scale(1.14); opacity: 1; }
+  @keyframes gcSpin {
+    to { transform: rotate(360deg); }
   }
-  @keyframes gcTrail {
-    0% { opacity: 0; transform: scaleY(0.35) translateY(10px); }
-    40% { opacity: 0.75; }
-    100% { opacity: 0; transform: scaleY(1.25) translateY(-8px); }
-  }
-  @keyframes gcCoinSpin {
-    0% { transform: rotateY(0deg) translateY(0); }
-    50% { transform: rotateY(180deg) translateY(-9px); }
+  @keyframes gcCoin {
+    0% { transform: rotateY(0) translateY(0); }
+    50% { transform: rotateY(180deg) translateY(-10px); }
     100% { transform: rotateY(360deg) translateY(0); }
   }
-  @keyframes gcCoinSide {
-    0%, 100% { transform: translateY(0) scale(1); opacity: 0.7; }
-    50% { transform: translateY(-6px) scale(1.1); opacity: 1; }
+  @keyframes gcRocket {
+    0%, 100% { transform: translate(0, 6px) rotate(-10deg); }
+    50% { transform: translate(8px, -14px) rotate(8deg); }
   }
-  @keyframes gcSpark {
-    0%, 100% { opacity: 0; transform: scale(0.55); }
-    40% { opacity: 0.95; transform: scale(1.2); }
+  @keyframes gcMult {
+    0%, 100% { transform: scale(1); opacity: 0.9; }
+    50% { transform: scale(1.15); opacity: 1; }
   }
-  @keyframes gcPegPulse {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(255,255,255,0.3); transform: scale(1); }
-    50% { box-shadow: 0 0 10px 2px rgba(56,189,248,0.6); transform: scale(1.18); }
-  }
-  @keyframes gcBallDrop {
-    0% { top: 5%; left: 48%; opacity: 1; }
-    22% { top: 24%; left: 40%; }
-    45% { top: 42%; left: 56%; }
-    65% { top: 60%; left: 44%; }
-    85% { top: 76%; left: 53%; }
-    100% { top: 90%; left: 48%; opacity: 0.8; }
-  }
-  @keyframes gcBucketGlow {
-    0%, 100% { opacity: 0.5; filter: brightness(1); }
-    50% { opacity: 1; filter: brightness(1.4); }
+  @keyframes gcTrail {
+    0% { opacity: 0; transform: scaleY(0.3) translateY(12px); }
+    40% { opacity: 0.85; }
+    100% { opacity: 0; transform: scaleY(1.3) translateY(-10px); }
   }
   @keyframes gcGem {
-    0%, 100% { transform: scale(1) rotate(0deg); filter: brightness(1); }
-    50% { transform: scale(1.2) rotate(-10deg); filter: brightness(1.4); }
+    0%, 100% { transform: scale(1) rotate(0); }
+    50% { transform: scale(1.22) rotate(-12deg); }
   }
   @keyframes gcMinePop {
     0%, 100% { transform: scale(1); }
-    50% { transform: scale(1.05); }
+    50% { transform: scale(1.06); }
   }
-  @keyframes gcUpBounce {
+  @keyframes gcUp {
     0%, 100% { transform: translateY(0) scale(1); }
-    50% { transform: translateY(-7px) scale(1.1); }
+    50% { transform: translateY(-8px) scale(1.1); }
   }
   @keyframes gcUpWin {
-    0%, 100% { transform: scale(1.18); filter: drop-shadow(0 0 8px rgba(251,191,36,0.45)); }
-    50% { transform: scale(1.32); filter: drop-shadow(0 0 18px rgba(251,191,36,0.9)); }
+    0%, 100% { transform: scale(1.2); filter: drop-shadow(0 0 10px rgba(251,191,36,0.5)); }
+    50% { transform: scale(1.35); filter: drop-shadow(0 0 20px rgba(251,191,36,0.95)); }
   }
-  @keyframes gcArrow {
+  @keyframes gcArr {
     0%, 100% { opacity: 0.4; transform: translateX(0); }
     50% { opacity: 1; transform: translateX(4px); }
   }
+  @keyframes gcPeg {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(255,255,255,0.25); transform: scale(1); }
+    50% { box-shadow: 0 0 10px 2px rgba(56,189,248,0.7); transform: scale(1.2); }
+  }
+  @keyframes gcBall {
+    0% { top: 4%; left: 48%; }
+    20% { top: 20%; left: 40%; }
+    40% { top: 38%; left: 56%; }
+    60% { top: 56%; left: 44%; }
+    80% { top: 72%; left: 52%; }
+    100% { top: 86%; left: 48%; }
+  }
+  @keyframes gcBucket {
+    0%, 100% { opacity: 0.5; }
+    50% { opacity: 1; filter: brightness(1.4); }
+  }
+  @keyframes gcOrb {
+    0%, 100% { opacity: 0.45; transform: scale(1); }
+    50% { opacity: 0.75; transform: scale(1.15); }
+  }
   @keyframes gcBadge {
     0%, 100% { transform: scale(1); }
-    50% { transform: scale(1.07); }
-  }
-  @keyframes gcParticle {
-    0% { transform: translateY(0) scale(1); opacity: 0; }
-    18% { opacity: 0.75; }
-    100% { transform: translateY(-32px) scale(0.35); opacity: 0; }
-  }
-  @keyframes gcSpin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
-  }
-  @keyframes gcArenaGlow {
-    0%, 100% { opacity: 0.45; transform: scale(1); }
-    50% { opacity: 0.8; transform: scale(1.12); }
+    50% { transform: scale(1.06); }
   }
 
   .gc-card {
-    animation: gcEnter 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
-    transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.22s ease, filter 0.22s ease;
+    position: relative;
+    width: 100%;
+    border: none;
+    border-radius: 22px;
+    overflow: hidden;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    font-family: inherit;
+    color: #fff;
+    text-align: left;
+    isolation: isolate;
+    animation: gcIn 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+    transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1), filter 0.2s ease;
+    box-shadow: 0 18px 44px rgba(0,0,0,0.55), 0 0 0 1px var(--gc-accent), 0 0 32px var(--gc-accent);
   }
   .gc-card:hover:not(:disabled) {
-    transform: translateY(-6px) scale(1.025);
-    filter: brightness(1.1);
+    transform: translateY(-7px) scale(1.03);
+    filter: brightness(1.08);
   }
   .gc-card:active:not(:disabled) {
-    transform: translateY(-1px) scale(0.98);
-    filter: brightness(1.15);
+    transform: translateY(-2px) scale(0.99);
   }
 
-  .gc-shine {
-    position: absolute;
-    top: -35%;
-    left: 0;
-    width: 42%;
-    height: 170%;
-    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.32), transparent);
+  .gc-bg { position: absolute; inset: 0; }
+  .gc-vignette {
+    position: absolute; inset: 0;
+    background:
+      radial-gradient(ellipse 100% 70% at 50% 0%, rgba(255,255,255,0.2), transparent 50%),
+      linear-gradient(180deg, transparent 35%, rgba(0,0,0,0.75) 100%);
     pointer-events: none;
-    z-index: 3;
-    animation: gcShine 4.2s ease-in-out infinite;
+  }
+  .gc-noise {
+    position: absolute; inset: 0;
+    opacity: 0.04;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    pointer-events: none;
+  }
+  .gc-shine {
+    position: absolute; top: -40%; left: 0; width: 40%; height: 180%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.35), transparent);
+    pointer-events: none; z-index: 5;
+    animation: gcShine 4.5s ease-in-out infinite;
+  }
+  .gc-ring {
+    position: absolute; inset: 0; border-radius: 22px;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.12);
+    pointer-events: none; z-index: 6;
   }
 
-  .gc-online-dot {
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: #22c55e;
-       box-shadow: 0 0 10px #22c55e;
-    animation: gcPulse 1.5s ease-in-out infinite;
+  .gc-top {
+    position: relative; z-index: 4;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 10px 0;
+  }
+  .gc-badge {
+    font-size: 10px; font-weight: 900; letter-spacing: 0.08em;
+    color: #fff; border-radius: 999px; padding: 4px 10px;
+    animation: gcBadge 2.4s ease-in-out infinite;
+  }
+  .gc-online {
+    display: flex; align-items: center; gap: 5px;
+    font-size: 11px; font-weight: 800;
+    color: #fff;
+    background: rgba(0,0,0,0.35);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 999px;
+    padding: 4px 9px;
+    backdrop-filter: blur(8px);
+  }
+  .gc-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: #22c55e; box-shadow: 0 0 10px #22c55e;
+    animation: gcPulse 1.4s ease-in-out infinite;
     display: inline-block;
   }
 
-  .gc-play-chip {
-    font-size: 10px;
-    font-weight: 900;
-    letter-spacing: 0.09em;
-    color: rgba(255,255,255,0.95);
-    background: rgba(255,255,255,0.14);
-    border: 1px solid rgba(255,255,255,0.22);
-    border-radius: 999px;
-    padding: 4px 10px;
-    backdrop-filter: blur(4px);
+  .gc-scene-wrap {
+    position: relative; z-index: 2;
+    flex: 1; min-height: 0;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .gc-scene {
+    position: relative; width: 100%; height: 100%;
+    display: flex; align-items: center; justify-content: center;
+    overflow: hidden;
+  }
+  .gc-floor {
+    position: absolute; left: 10%; right: 10%; bottom: 8%;
+    height: 18px; border-radius: 50%;
+    background: radial-gradient(ellipse, rgba(0,0,0,0.45), transparent 70%);
+  }
+  .gc-arena-ring {
+    position: absolute; width: 90px; height: 90px; border-radius: 50%;
+    border: 2px solid rgba(168,85,247,0.35);
+    box-shadow: 0 0 24px rgba(168,85,247,0.3), inset 0 0 20px rgba(168,85,247,0.15);
+  }
+  .gc-float { position: absolute; display: inline-block; animation: gcFloat 2.6s ease-in-out infinite; filter: drop-shadow(0 6px 14px rgba(0,0,0,0.45)); }
+  .gc-float.gc-xl { font-size: 56px; left: 50%; top: 50%; animation-name: gcFloatC; }
+  .gc-float.gc-big { font-size: 40px; }
+  .gc-float.gc-mid { font-size: 36px; }
+  .gc-float.gc-sm { font-size: 20px; }
+
+  .gc-orb {
+    position: absolute; width: 110px; height: 110px; border-radius: 50%;
+    filter: blur(18px); animation: gcOrb 3s ease-in-out infinite; pointer-events: none;
+  }
+  .gc-orb-purple { background: radial-gradient(circle, rgba(168,85,247,0.55), transparent 70%); }
+  .gc-orb-cyan { background: radial-gradient(circle, rgba(34,211,238,0.5), transparent 70%); }
+  .gc-orb-gold { background: radial-gradient(circle, rgba(251,191,36,0.5), transparent 70%); }
+
+  .gc-spin-disc {
+    width: 88px; height: 88px; border-radius: 50%;
+    background: conic-gradient(from 0deg, #22d3ee, #a855f7, #f472b6, #22d3ee);
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 0 28px rgba(34,211,238,0.4);
+    animation: gcSpin 7s linear infinite;
+  }
+  .gc-spin-inner {
+    width: 62px; height: 62px; border-radius: 50%;
+    background: rgba(10,6,18,0.85);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 32px;
   }
 
-  .gc-badge { animation: gcBadge 2.4s ease-in-out infinite; }
-  .gc-rocket { animation: gcRocket 2.5s ease-in-out infinite; display: inline-block; }
-  .gc-crash-mult { animation: gcMult 1.9s ease-in-out infinite; }
-  .gc-crash-glow { animation: gcPulse 2.8s ease-in-out infinite; }
-  .gc-crash-trail {
-    position: absolute; left: 41%; bottom: 16%; width: 7px; height: 30px; border-radius: 8px;
+  .gc-mines {
+    display: grid; grid-template-columns: repeat(3, 30px); gap: 6px;
+  }
+  .gc-mine {
+    width: 30px; height: 30px; border-radius: 9px;
+    background: rgba(0,0,0,0.4);
+    border: 1px solid rgba(255,255,255,0.12);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .gc-mine-on {
+    background: linear-gradient(145deg, rgba(255,255,255,0.28), rgba(255,255,255,0.08));
+    animation: gcMinePop 2.4s ease-in-out infinite;
+  }
+  .gc-gem { display: inline-block; font-size: 14px; animation: gcGem 2s ease-in-out infinite; }
+
+  .gc-coin-3d {
+    font-size: 54px;
+    filter: drop-shadow(0 10px 22px rgba(234,179,8,0.55));
+    animation: gcCoin 3s ease-in-out infinite;
+    transform-style: preserve-3d;
+  }
+
+  .gc-rocket {
+    font-size: 52px; z-index: 2;
+    filter: drop-shadow(0 8px 20px rgba(0,0,0,0.5));
+    animation: gcRocket 2.4s ease-in-out infinite;
+  }
+  .gc-mult {
+    position: absolute; right: 14px; top: 8px;
+    font-weight: 900; font-size: 16px; color: #fdba74;
+    text-shadow: 0 0 14px rgba(249,115,22,0.9);
+    animation: gcMult 1.8s ease-in-out infinite; z-index: 3;
+  }
+  .gc-crash-glow {
+    position: absolute; width: 100px; height: 100px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(249,115,22,0.55), transparent 70%);
+    filter: blur(12px); animation: gcOrb 2.8s ease-in-out infinite;
+  }
+  .gc-trail {
+    position: absolute; left: 42%; bottom: 14%; width: 8px; height: 32px; border-radius: 8px;
     background: linear-gradient(180deg, rgba(251,146,60,0.95), transparent);
-    filter: blur(1.5px); animation: gcTrail 1.7s ease-in-out infinite; z-index: 1;
+    filter: blur(1.5px); animation: gcTrail 1.6s ease-in-out infinite; z-index: 1;
   }
-  .gc-coin { animation: gcCoinSpin 3s ease-in-out infinite; transform-style: preserve-3d; }
-  .gc-coin-side { animation: gcCoinSide 2.3s ease-in-out infinite; }
-  .gc-coin-spark {
-    position: absolute; width: 44px; height: 44px; border-radius: 50%;
-    background: radial-gradient(circle, rgba(253,224,71,0.6), transparent 70%);
-    animation: gcSpark 3s ease-in-out infinite; pointer-events: none;
+
+  .gc-plinko-rows { display: flex; flex-direction: column; gap: 5px; z-index: 2; }
+  .gc-plinko-row { display: flex; gap: 9px; justify-content: center; }
+  .gc-peg {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: rgba(255,255,255,0.9);
+    box-shadow: 0 0 6px rgba(255,255,255,0.4);
+    animation: gcPeg 2s ease-in-out infinite;
   }
-  .gc-peg { animation: gcPegPulse 2.1s ease-in-out infinite; }
   .gc-plinko-ball {
     position: absolute; width: 11px; height: 11px; border-radius: 50%;
     background: radial-gradient(circle at 30% 30%, #fff, #38bdf8 40%, #0369a1);
-    box-shadow: 0 0 12px rgba(56,189,248,0.85); z-index: 3;
-    animation: gcBallDrop 2.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+    box-shadow: 0 0 12px rgba(56,189,248,0.9); z-index: 3;
+    animation: gcBall 2.7s cubic-bezier(0.4,0,0.2,1) infinite;
   }
-  .gc-bucket { animation: gcBucketGlow 2.1s ease-in-out infinite; }
-  .gc-gem { display: inline-block; animation: gcGem 2.1s ease-in-out infinite; }
-  .gc-mine-lit { animation: gcMinePop 2.5s ease-in-out infinite; }
-  .gc-up-item { display: inline-block; animation: gcUpBounce 2.1s ease-in-out infinite; }
-  .gc-up-win { animation: gcUpWin 1.7s ease-in-out infinite !important; }
-  .gc-up-arrow { animation: gcArrow 1.3s ease-in-out infinite; display: inline-block; }
-  .gc-float { display: inline-block; animation: gcFloat 2.6s ease-in-out infinite; }
-  .gc-spin-wheel {
-    font-size: 52px;
-    filter: drop-shadow(0 8px 20px rgba(0,0,0,0.4));
-    animation: gcSpin 8s linear infinite;
+  .gc-buckets {
+    position: absolute; bottom: 6px; left: 14%; right: 14%;
+    display: flex; gap: 5px;
   }
-  .gc-spin-spark {
-    position: absolute; width: 50px; height: 50px; border-radius: 50%;
-    background: radial-gradient(circle, rgba(34,211,238,0.5), transparent 70%);
-    animation: gcSpark 2.4s ease-in-out infinite;
-  }
-  .gc-arena-glow {
-    position: absolute; width: 100px; height: 100px; border-radius: 50%;
-    background: radial-gradient(circle, rgba(168,85,247,0.5), transparent 70%);
-    filter: blur(10px); animation: gcArenaGlow 3s ease-in-out infinite;
+  .gc-bucket {
+    flex: 1; height: 8px; border-radius: 3px;
+    background: linear-gradient(180deg, rgba(56,189,248,0.9), rgba(14,165,233,0.35));
+    animation: gcBucket 2s ease-in-out infinite;
   }
 
-  .gc-particles { position: absolute; inset: 0; pointer-events: none; z-index: 1; overflow: hidden; }
-  .gc-particles span {
-    position: absolute; width: 4px; height: 4px; border-radius: 50%;
-    background: rgba(255,255,255,0.6); bottom: 28%;
-    animation: gcParticle 3.4s ease-in-out infinite;
+  .gc-up {
+    font-size: 28px; display: inline-block;
+    filter: drop-shadow(0 4px 12px rgba(0,0,0,0.4));
+    animation: gcUp 2s ease-in-out infinite;
   }
-  .gc-particles span:nth-child(1) { left: 16%; animation-delay: 0s; }
-  .gc-particles span:nth-child(2) { left: 34%; animation-delay: 0.55s; width: 3px; height: 3px; }
-  .gc-particles span:nth-child(3) { left: 51%; animation-delay: 1.1s; }
-  .gc-particles span:nth-child(4) { left: 67%; animation-delay: 0.25s; width: 5px; height: 5px; }
-  .gc-particles span:nth-child(5) { left: 83%; animation-delay: 1.6s; width: 3px; height: 3px; }
+  .gc-up-win { animation: gcUpWin 1.6s ease-in-out infinite !important; }
+  .gc-up-arr {
+    font-size: 15px; font-weight: 900; color: rgba(255,255,255,0.7);
+    animation: gcArr 1.2s ease-in-out infinite; display: inline-block;
+  }
+
+  .gc-foot {
+    position: relative; z-index: 4;
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 8px;
+    margin: 0 8px 8px;
+    padding: 10px 12px;
+    border-radius: 14px;
+    background: rgba(0,0,0,0.42);
+    border: 1px solid rgba(255,255,255,0.1);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+  .gc-foot-left { min-width: 0; flex: 1; }
+  .gc-title {
+    font-weight: 900; font-size: 14px; letter-spacing: 0.04em;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    text-shadow: 0 2px 10px rgba(0,0,0,0.5);
+    display: flex; align-items: center; gap: 6px;
+  }
+  .gc-emoji { font-size: 15px; }
+  .gc-max {
+    margin-top: 2px;
+    font-size: 10px; font-weight: 700;
+    color: rgba(255,255,255,0.55);
+  }
+  .gc-foot-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+  .gc-play {
+    font-size: 11px; font-weight: 900; letter-spacing: 0.1em;
+    color: #0a0612;
+    background: linear-gradient(135deg, #fff 0%, #e2e8f0 100%);
+    border-radius: 999px;
+    padding: 6px 12px;
+    box-shadow: 0 4px 14px rgba(255,255,255,0.25);
+  }
 `;
-
-const cardBase: CSSProperties = {
-  position: "relative",
-  width: "100%",
-  border: "none",
-  borderRadius: 24,
-  overflow: "hidden",
-  fontFamily: "inherit",
-  color: "#fff",
-  textAlign: "left",
-  padding: 0,
-  display: "flex",
-  flexDirection: "column",
-  isolation: "isolate",
-};
-
-const sceneWrap: CSSProperties = {
-  position: "relative",
-  width: "100%",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  overflow: "hidden",
-};
-
-const plinkoGrid: CSSProperties = { display: "flex", flexDirection: "column", gap: 5, zIndex: 2 };
-const peg: CSSProperties = {
-  width: 7, height: 7, borderRadius: "50%", background: "rgba(255,255,255,0.88)",
-  boxShadow: "0 0 7px rgba(255,255,255,0.4)", display: "inline-block",
-};
-const plinkoBuckets: CSSProperties = {
-  position: "absolute", bottom: 3, left: "11%", right: "11%", display: "flex", gap: 5, justifyContent: "center",
-};
-const bucket: CSSProperties = {
-  flex: 1, height: 8, borderRadius: 3,
-  background: "linear-gradient(180deg, rgba(56,189,248,0.9), rgba(14,165,233,0.35))",
-};
-
-const minesGrid: CSSProperties = { display: "grid", gridTemplateColumns: "repeat(3, 27px)", gap: 5 };
-const mineCell: CSSProperties = {
-  width: 27, height: 27, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center",
-  border: "1px solid rgba(255,255,255,0.14)",
-};
-
-const crashGlow: CSSProperties = {
-  position: "absolute", width: 95, height: 95, borderRadius: "50%",
-  background: "radial-gradient(circle, rgba(249,115,22,0.55), transparent 70%)", filter: "blur(9px)",
-};
-const crashMult: CSSProperties = {
-  position: "absolute", right: 11, top: 8, fontWeight: 900, fontSize: 15, color: "#fdba74",
-  textShadow: "0 0 14px rgba(249,115,22,0.85)", zIndex: 3,
-};
-
-const upItem: CSSProperties = { fontSize: 26, filter: "drop-shadow(0 4px 12px rgba(0,0,0,0.4))" };
-const upArrow: CSSProperties = { fontSize: 15, fontWeight: 900, color: "rgba(255,255,255,0.7)" };
-const coinOrb: CSSProperties = {
-  fontSize: 50, filter: "drop-shadow(0 8px 20px rgba(234,179,8,0.6))", zIndex: 2,
-};

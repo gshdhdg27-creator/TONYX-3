@@ -49,6 +49,28 @@ function Sticker({
   );
 }
 
+/** Square gift tile for upgrade chain */
+function Gift({
+  src,
+  size,
+  delay = 0,
+  className = "",
+}: {
+  src: string;
+  size: number;
+  delay?: number;
+  className?: string;
+}) {
+  return (
+    <div
+      className={`gc-gift ${className}`}
+      style={{ width: size, height: size, animationDelay: `${delay}s` }}
+    >
+      <img src={src} alt="" draggable={false} />
+    </div>
+  );
+}
+
 function Scene({ kind }: { kind: GameCardProps["scene"] }) {
   if (kind === "arena") {
     return (
@@ -129,7 +151,7 @@ function Scene({ kind }: { kind: GameCardProps["scene"] }) {
         <div className="gc-rocket">
           <img src="/rocket.png" alt="" draggable={false} />
         </div>
-        <div className="gc-mult">×2.4</div>
+        <div className="gc-mult">x2.4</div>
         <div className="gc-trail" />
       </div>
     );
@@ -153,20 +175,19 @@ function Scene({ kind }: { kind: GameCardProps["scene"] }) {
     );
   }
 
+  /* Upgrade: cheap → expensive NFT gifts */
   if (kind === "upgrade") {
     return (
-      <div className="gc-sc" style={{ flexDirection: "row", gap: 8, padding: "0 12px" }}>
-        <Sticker src="/nft/hypno_lollipop.jpg" size={48} delay={0} style={{ position: "relative" }} />
-        <span className="gc-arr">››</span>
-        <Sticker src="/nft/neko_helmet.jpg" size={52} delay={0.25} style={{ position: "relative" }} className="gc-bob2" />
-        <span className="gc-arr">››</span>
-        <Sticker
-          src="/nft/moon_pendant.jpg"
-          size={60}
-          delay={0.5}
-          style={{ position: "relative" }}
-          className="gc-win"
-        />
+      <div className="gc-sc gc-upgrade-row">
+        <Gift src="/nft/bday_candle.jpg" size={44} delay={0} />
+        <span className="gc-arr" />
+        <Gift src="/nft/hypno_lollipop.jpg" size={48} delay={0.15} className="gc-bob2" />
+        <span className="gc-arr" />
+        <Gift src="/nft/neko_helmet.jpg" size={52} delay={0.3} className="gc-bob3" />
+        <span className="gc-arr" />
+        <Gift src="/nft/moon_pendant.jpg" size={56} delay={0.45} className="gc-bob2" />
+        <span className="gc-arr" />
+        <Gift src="/nft/telegram_premium.jpg" size={62} delay={0.6} className="gc-win" />
       </div>
     );
   }
@@ -310,6 +331,10 @@ const CSS = `
   0%, 100% { transform: translateY(0) scale(1); filter: brightness(1); }
   50% { transform: translateY(-10px) scale(1.08); filter: brightness(1.2); }
 }
+@keyframes gcArrPulse {
+  0%, 100% { opacity: 0.45; transform: translateX(0); }
+  50% { opacity: 1; transform: translateX(3px); }
+}
 
 .gc-card {
   position: relative;
@@ -391,6 +416,51 @@ const CSS = `
   background: transparent;
   box-shadow: 0 12px 28px rgba(0,0,0,0.4);
   border-radius: 18px;
+}
+
+/* Upgrade gift tiles (square, sequential) */
+.gc-upgrade-row {
+  flex-direction: row;
+  gap: 4px;
+  padding: 0 10px;
+  align-items: center;
+  justify-content: center;
+}
+.gc-gift {
+  position: relative;
+  border-radius: 14px;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: rgba(255,255,255,0.08);
+  box-shadow:
+    0 8px 18px rgba(0,0,0,0.4),
+    inset 0 0 0 1.5px rgba(255,255,255,0.22);
+  animation: gcFloat 2.7s ease-in-out infinite;
+  z-index: 3;
+}
+.gc-gift img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.gc-gift.gc-bob2 { animation-name: gcFloat2; animation-duration: 3.1s; }
+.gc-gift.gc-bob3 { animation-name: gcFloat3; animation-duration: 2.4s; }
+.gc-gift.gc-win {
+  animation-name: gcWin;
+  animation-duration: 1.8s;
+  box-shadow:
+    0 0 24px rgba(251,191,36,0.7),
+    0 8px 18px rgba(0,0,0,0.4),
+    inset 0 0 0 2px rgba(255,220,120,0.55);
+}
+.gc-arr {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  background: linear-gradient(90deg, rgba(255,255,255,0.25), rgba(255,255,255,0.7));
+  clip-path: polygon(0 30%, 55% 30%, 55% 0, 100% 50%, 55% 100%, 55% 70%, 0 70%);
+  animation: gcArrPulse 1.4s ease-in-out infinite;
 }
 
 .gc-arena-bg {
@@ -541,13 +611,6 @@ const CSS = `
   box-shadow: 0 0 12px rgba(56,189,248,0.95);
   animation: gcBall 2.8s cubic-bezier(0.4,0,0.2,1) infinite;
   z-index: 3;
-}
-
-.gc-arr {
-  color: rgba(255,255,255,0.7);
-  font-weight: 900;
-  font-size: 15px;
-  text-shadow: 0 2px 8px rgba(0,0,0,0.4);
 }
 
 .gc-top {

@@ -56,28 +56,34 @@ export default function PvpPage() {
     <div style={page}>
       <div style={header}>
         <div style={title}>PvP</div>
-        <div style={sub}>Арена · Spin</div>
+        <div style={sub}>Арена · Spin · NFT + TON</div>
       </div>
 
-      <div style={{ padding: "8px 16px 120px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+      <div style={{ padding: "8px 16px 120px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
         <GameCard
           name="АРЕНА"
+          scene="arena"
           badge="PvP"
           badgeColor="#a855f7"
           online={42}
+          maxBet="50 TON"
           emoji="⚔️"
           gradient="linear-gradient(160deg, #1a0a2e 0%, #2e1065 45%, #0f172a 100%)"
           accent="rgba(168,85,247,0.55)"
+          enterDelay={0}
           onClick={() => setTab("arena")}
         />
         <GameCard
           name="SPIN"
+          scene="spin"
           badge="LIVE"
           badgeColor="#22d3ee"
           online={21}
+          maxBet="25 TON"
           emoji="🎡"
           gradient="linear-gradient(160deg, #042f2e 0%, #0e7490 45%, #0f172a 100%)"
           accent="rgba(34,211,238,0.5)"
+          enterDelay={80}
           onClick={() => setTab("spin")}
         />
       </div>

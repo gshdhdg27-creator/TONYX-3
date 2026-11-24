@@ -1,25 +1,29 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#6b21a8"/><stop offset="50%" stop-color="#db2777"/><stop offset="100%" stop-color="#7c3aed"/>
+      <stop offset="0%" stop-color="#6b21a8"/>
+      <stop offset="50%" stop-color="#db2777"/>
+      <stop offset="100%" stop-color="#7c3aed"/>
     </linearGradient>
+    <filter id="s"><feDropShadow dx="0" dy="8" stdDeviation="10" flood-opacity=".4"/></filter>
+    <filter id="glow"><feDropShadow dx="0" dy="0" stdDeviation="10" flood-color="#fbbf24" flood-opacity=".7"/></filter>
   </defs>
   <rect width="512" height="512" fill="url(#bg)"/>
-  <g>
-    <rect x="40" y="230" width="64" height="64" rx="14" fill="#93c5fd" stroke="#fff" stroke-width="3"/>
-    <rect x="68" y="230" width="8" height="64" fill="rgba(255,255,255,.5)"/>
-    <rect x="40" y="258" width="64" height="8" fill="rgba(255,255,255,.5)"/>
-    <polygon points="118,262 134,252 118,270" fill="#fff" opacity=".8"/>
-    <rect x="140" y="220" width="80" height="80" rx="16" fill="#6ee7b7" stroke="#fff" stroke-width="3"/>
-    <rect x="176" y="220" width="8" height="80" fill="rgba(255,255,255,.5)"/>
-    <rect x="140" y="256" width="80" height="8" fill="rgba(255,255,255,.5)"/>
-    <polygon points="234,260 250,252 234,268" fill="#fff" opacity=".8"/>
-    <rect x="256" y="210" width="96" height="96" rx="18" fill="#fde047" stroke="#fff" stroke-width="3"/>
-    <rect x="300" y="210" width="8" height="96" fill="rgba(255,255,255,.5)"/>
-    <rect x="256" y="254" width="96" height="8" fill="rgba(255,255,255,.5)"/>
-    <polygon points="366,258 382,250 366,266" fill="#fff" opacity=".8"/>
-    <rect x="388" y="195" width="110" height="110" rx="22" fill="#fbbf24" stroke="#fff" stroke-width="4"/>
-    <rect x="439" y="195" width="10" height="110" fill="rgba(255,255,255,.55)"/>
-    <rect x="388" y="246" width="110" height="10" fill="rgba(255,255,255,.55)"/>
+  <g filter="url(#s)">
+    <rect x="36" y="232" width="68" height="68" rx="16" fill="#93c5fd" stroke="#fff" stroke-width="3"/>
+    <rect x="66" y="232" width="8" height="68" fill="rgba(255,255,255,.55)"/>
+    <rect x="36" y="258" width="68" height="8" fill="rgba(255,255,255,.55)"/>
+    <polygon points="118,266 136,256 118,276" fill="#fff" opacity=".85"/>
+    <rect x="142" y="220" width="84" height="84" rx="18" fill="#6ee7b7" stroke="#fff" stroke-width="3"/>
+    <rect x="180" y="220" width="8" height="84" fill="rgba(255,255,255,.55)"/>
+    <rect x="142" y="258" width="84" height="8" fill="rgba(255,255,255,.55)"/>
+    <polygon points="240,262 258,252 240,272" fill="#fff" opacity=".85"/>
+    <rect x="264" y="208" width="100" height="100" rx="20" fill="#fde047" stroke="#fff" stroke-width="3"/>
+    <rect x="310" y="208" width="10" height="100" fill="rgba(255,255,255,.55)"/>
+    <rect x="264" y="254" width="100" height="10" fill="rgba(255,255,255,.55)"/>
+    <polygon points="378,258 396,248 378,268" fill="#fff" opacity=".85"/>
+    <rect x="402" y="188" width="120" height="120" rx="24" fill="#fbbf24" stroke="#fff" stroke-width="5" filter="url(#glow)"/>
+    <rect x="458" y="188" width="12" height="120" fill="rgba(255,255,255,.6)"/>
+    <rect x="402" y="242" width="120" height="12" fill="rgba(255,255,255,.6)"/>
   </g>
 </svg>

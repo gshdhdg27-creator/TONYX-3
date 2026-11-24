@@ -1,26 +1,27 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0%" stop-color="#0c4a6e"/><stop offset="100%" stop-color="#082f49"/>
     </linearGradient>
+    <filter id="s"><feDropShadow dx="0" dy="4" stdDeviation="4" flood-opacity=".4"/></filter>
   </defs>
   <rect width="512" height="512" fill="url(#bg)"/>
-  <g fill="#fff">
-    <circle cx="256" cy="90" r="7"/>
-    <circle cx="226" cy="140" r="7"/><circle cx="286" cy="140" r="7"/>
-    <circle cx="196" cy="190" r="7"/><circle cx="256" cy="190" r="7"/><circle cx="316" cy="190" r="7"/>
-    <circle cx="166" cy="240" r="7"/><circle cx="226" cy="240" r="7"/><circle cx="286" cy="240" r="7"/><circle cx="346" cy="240" r="7"/>
-    <circle cx="136" cy="290" r="7"/><circle cx="196" cy="290" r="7"/><circle cx="256" cy="290" r="7"/><circle cx="316" cy="290" r="7"/><circle cx="376" cy="290" r="7"/>
-    <circle cx="106" cy="340" r="7"/><circle cx="166" cy="340" r="7"/><circle cx="226" cy="340" r="7"/><circle cx="286" cy="340" r="7"/><circle cx="346" cy="340" r="7"/><circle cx="406" cy="340" r="7"/>
+  <g fill="#e2e8f0" filter="url(#s)">
+    <circle cx="256" cy="80" r="8"/>
+    <circle cx="220" cy="130" r="8"/><circle cx="292" cy="130" r="8"/>
+    <circle cx="184" cy="180" r="8"/><circle cx="256" cy="180" r="8"/><circle cx="328" cy="180" r="8"/>
+    <circle cx="148" cy="230" r="8"/><circle cx="220" cy="230" r="8"/><circle cx="292" cy="230" r="8"/><circle cx="364" cy="230" r="8"/>
+    <circle cx="112" cy="280" r="8"/><circle cx="184" cy="280" r="8"/><circle cx="256" cy="280" r="8"/><circle cx="328" cy="280" r="8"/><circle cx="400" cy="280" r="8"/>
+    <circle cx="76" cy="330" r="8"/><circle cx="148" cy="330" r="8"/><circle cx="220" cy="330" r="8"/><circle cx="292" cy="330" r="8"/><circle cx="364" cy="330" r="8"/><circle cx="436" cy="330" r="8"/>
   </g>
-  <circle cx="270" cy="175" r="12" fill="#7dd3fc" stroke="#fff" stroke-width="2"/>
-  <g>
-    <rect x="70" y="420" width="50" height="50" rx="10" fill="#22c55e" opacity=".85"/>
-    <rect x="130" y="420" width="50" height="50" rx="10" fill="#eab308" opacity=".85"/>
-    <rect x="190" y="420" width="50" height="50" rx="10" fill="#f97316" opacity=".85"/>
-    <rect x="250" y="420" width="50" height="50" rx="10" fill="#ef4444" opacity=".9"/>
-    <rect x="310" y="420" width="50" height="50" rx="10" fill="#f97316" opacity=".85"/>
-    <rect x="370" y="420" width="50" height="50" rx="10" fill="#eab308" opacity=".85"/>
-    <rect x="430" y="420" width="50" height="50" rx="10" fill="#22c55e" opacity=".85"/>
+  <circle cx="275" cy="155" r="14" fill="#7dd3fc" stroke="#fff" stroke-width="3" filter="url(#s)"/>
+  <g filter="url(#s)">
+    <rect x="60" y="410" width="52" height="54" rx="12" fill="#22c55e"/>
+    <rect x="122" y="410" width="52" height="54" rx="12" fill="#eab308"/>
+    <rect x="184" y="410" width="52" height="54" rx="12" fill="#f97316"/>
+    <rect x="246" y="410" width="52" height="54" rx="12" fill="#ef4444"/>
+    <rect x="308" y="410" width="52" height="54" rx="12" fill="#f97316"/>
+    <rect x="370" y="410" width="52" height="54" rx="12" fill="#eab308"/>
+    <rect x="432" y="410" width="52" height="54" rx="12" fill="#22c55e"/>
   </g>
 </svg>

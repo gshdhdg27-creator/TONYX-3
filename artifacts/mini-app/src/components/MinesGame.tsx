@@ -630,7 +630,7 @@ export default function MinesGame({
           </button>
         </div>
       ) : (
-        <div style={panel}>
+        <div className="mn-game-controls" style={panel}>
           <div style={liveStats}>
             <div style={statBox}>
               <div style={statLab}>{t.stake}</div>

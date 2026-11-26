@@ -706,13 +706,13 @@ function drawExplosion(ctx: CanvasRenderingContext2D, x: number, y: number, t: n
 
 
 const CRASH_LAYOUT_CSS = `
-.crash-game{width:100%;max-width:1120px;margin:0 auto;padding:10px 0 32px;display:grid;grid-template-columns:minmax(0,1fr) 340px;grid-template-rows:auto auto;gap:14px 18px;align-items:start;color:#eef3f8}
-.crash-stage{grid-column:1;grid-row:1;min-height:450px;margin:0!important;padding:18px!important;background:radial-gradient(ellipse at 50% 80%,#102c2b,#080e14 68%)!important;border:1px solid #283944!important;border-radius:14px!important;box-shadow:0 18px 48px #0008!important}
+.crash-game{width:100%;max-width:1120px;margin:0 auto;padding:10px 0 32px;display:grid;grid-template-columns:340px minmax(0,1fr);grid-template-rows:auto auto;gap:14px 18px;align-items:start;color:#eef3f8}
+.crash-stage{grid-column:2;grid-row:1;min-height:450px;margin:0!important;padding:18px!important;background:radial-gradient(ellipse at 50% 80%,#102c2b,#080e14 68%)!important;border:1px solid #283944!important;border-radius:14px!important;box-shadow:0 18px 48px #0008!important}
 .crash-stage>div:first-child{color:#8295a6!important}
 .crash-stage>div:nth-child(2){font-size:clamp(48px,7vw,76px)!important;letter-spacing:-.055em}
 .crash-chart{height:320px!important;border-radius:8px!important;background:linear-gradient(180deg,#081017,#0b1b1c)!important;border:1px solid #1d333a}
-.crash-history{grid-column:1;grid-row:2;align-content:start;background:#121a23;border:1px solid #283743;border-radius:10px;padding:12px}
-.crash-controls{grid-column:2;grid-row:1/span 2;margin:0!important;padding:18px!important;background:linear-gradient(180deg,#151f2a,#101720)!important;border:1px solid #293947!important;border-radius:13px!important;box-shadow:0 14px 34px #0006!important}
+.crash-history{grid-column:2;grid-row:2;align-content:start;background:#121a23;border:1px solid #283743;border-radius:10px;padding:12px}
+.crash-controls{grid-column:1;grid-row:1/span 2;margin:0!important;padding:18px!important;background:linear-gradient(180deg,#151f2a,#101720)!important;border:1px solid #293947!important;border-radius:13px!important;box-shadow:0 14px 34px #0006!important}
 .crash-controls input{background:#090f16!important;border:1px solid #344655!important;border-radius:8px!important;color:#eef3f8!important}
 .crash-controls button{border-radius:8px!important}
 .crash-controls button[style*="linear-gradient"]{background:linear-gradient(180deg,#168fba,#08769d)!important;box-shadow:0 4px 0 #064c68!important}

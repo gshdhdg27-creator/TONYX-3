@@ -357,14 +357,14 @@ export default function PickaxeGame({
   const mineW = COLS * CELL;
 
   return (
-    <div className="tx-pickaxe" style={S.root}>
+    <div className="pickaxe-drop" style={S.root}>
       <div style={S.bg}>
         <div style={S.sky} />
         <div style={S.mountains} />
         <div style={S.island} />
       </div>
 
-      <div style={S.hudTop}>
+      <div className="pickaxe-hud" style={S.hudTop}>
         {onBack && <button type="button" style={S.back} onClick={onBack}>←</button>}
         <div style={S.logo}>
           <span style={{ filter: "drop-shadow(0 0 4px #5eead4)" }}>⛏️</span>
@@ -374,7 +374,7 @@ export default function PickaxeGame({
       </div>
 
       {(phase === "idle" || phase === "spinning" || phase === "result") && (
-        <div style={S.circleWrap}>
+        <div className="pickaxe-reel" style={S.circleWrap}>
           <div style={S.circleOuter}>
             <div style={{
               ...S.circleInner,
@@ -400,7 +400,7 @@ export default function PickaxeGame({
         </div>
       )}
 
-      <div style={S.mineOuter}>
+      <div className="pickaxe-shaft" style={S.mineOuter}>
         <div style={{ ...S.mineInner, width: mineW }}>
           <div style={{
             position: "absolute", inset: 0, zIndex: 0,
@@ -458,7 +458,7 @@ export default function PickaxeGame({
         </div>
       </div>
 
-      <div style={S.bottomBar}>
+      <div className="pickaxe-stats" style={S.bottomBar}>
         <button type="button" style={S.bonusBtn} disabled>BONUS BUY</button>
         <div style={S.statBox}><div style={S.statLabel}>DEMO</div><div style={S.statVal}>{balance.toFixed(2)}</div></div>
         <div style={S.statBox}><div style={S.statLabel}>WIN</div><div style={{ ...S.statVal, color: "#fde047" }}>{(payout ?? win).toFixed(2)}</div></div>
@@ -467,7 +467,7 @@ export default function PickaxeGame({
 
       {err && <div style={{ color: "#f87171", fontSize: 12, marginTop: 4 }}>{err}</div>}
 
-      <div style={S.controls}>
+      <div className="pickaxe-controls" style={S.controls}>
         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
           <button type="button" style={S.pm} onClick={() => setBet(Math.max(0.1, +(bet / 2).toFixed(2)))} disabled={busy}>−</button>
           <button type="button" style={S.spinCircle}
@@ -485,7 +485,7 @@ export default function PickaxeGame({
         </div>
       </div>
 
-      <style>{`@keyframes floatUp { from { opacity: 1; transform: translateY(0); } to { opacity: 0; transform: translateY(-28px); } }`}</style>
+      <style>{PICKAXE_LAYOUT_CSS + `@keyframes floatUp { from { opacity: 1; transform: translateY(0); } to { opacity: 0; transform: translateY(-28px); } }`}</style>
     </div>
   );
 }
@@ -518,3 +518,21 @@ const S: Record<string, CSSProperties> = {
   preset: { background: "rgba(30,41,59,.8)", border: "1px solid #334155", color: "#cbd5e1", borderRadius: 6, padding: "3px 7px", fontSize: 10, cursor: "pointer" },
   presetOn: { borderColor: "#22c77a", color: "#6ee7a8" },
 };
+
+
+const PICKAXE_LAYOUT_CSS = `
+.pickaxe-drop{width:100%;max-width:1120px;margin:0 auto;padding:12px!important;display:grid!important;grid-template-columns:minmax(0,1fr) 300px;grid-template-rows:auto auto auto auto;gap:12px 18px;align-items:start;background:radial-gradient(ellipse at 50% 0%,#172a38,#080f17 72%);border:1px solid #293b48;border-radius:16px;box-shadow:0 18px 48px #0008;overflow:hidden}
+.pickaxe-drop>div:first-child{grid-column:1/-1}
+.pickaxe-hud{grid-column:1/-1;max-width:none!important;margin:0 0 4px!important;padding:0 0 12px;border-bottom:1px solid #2b3d49}
+.pickaxe-hud>div:nth-child(2){background:#142330!important;border:1px solid #2b4554;color:#d9f3ff}
+.pickaxe-reel{grid-column:2;grid-row:2;justify-self:center;margin:4px auto 8px!important}
+.pickaxe-reel>div{border-color:#2c7187!important;background:radial-gradient(circle,#183c4c,#0b1721)!important;box-shadow:0 0 0 2px #274b5b,inset 0 0 30px #0009!important}
+.pickaxe-shaft{grid-column:1;grid-row:2/span 3;margin:0!important;min-width:0}
+.pickaxe-shaft>div{max-width:100%!important;border-radius:12px!important;border:2px solid #315063!important;box-shadow:inset 0 0 50px #0008,0 10px 26px #0007!important}
+.pickaxe-stats{grid-column:2;grid-row:3;max-width:none!important;margin:0!important;padding:14px!important;background:#14202b;border:1px solid #2b3d49;border-radius:12px;flex-wrap:wrap}
+.pickaxe-stats>div{flex:1;min-width:65px}
+.pickaxe-controls{grid-column:2;grid-row:4;width:100%;box-sizing:border-box;padding:16px!important;background:#14202b;border:1px solid #2b3d49;border-radius:12px}
+.pickaxe-controls button{border-radius:8px!important}
+.pickaxe-controls button[style*="linear-gradient"]{background:linear-gradient(180deg,#168fba,#08769d)!important;border-color:#1a8db0!important;color:#fff!important;box-shadow:0 4px 0 #064c68!important}
+@media(max-width:760px){.pickaxe-drop{display:flex!important;flex-direction:column!important;gap:10px!important;padding:8px!important}.pickaxe-hud,.pickaxe-reel,.pickaxe-shaft,.pickaxe-stats,.pickaxe-controls{width:100%;box-sizing:border-box}.pickaxe-reel{order:1}.pickaxe-shaft{order:2}.pickaxe-stats{order:3}.pickaxe-controls{order:4}.pickaxe-shaft>div{max-width:100%!important}}
+`;

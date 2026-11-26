@@ -1,5 +1,5 @@
 /**
- * PickaxeGame — Craft & Drop / Falling Pickaxe
+ * PickaxeGame — 1:1 Falling Pickaxe / pickaxedrop layout
  */
 import { useCallback, useRef, useState, type CSSProperties } from "react";
 import {
@@ -12,19 +12,24 @@ interface Cell { kind: BlockKind; maxHp: number; hp: number; }
 interface FloatNum { id: number; x: number; y: number; text: string; color: string; }
 
 const API = "/api/mini/games/pickaxe";
-const COLS = 9, CELL = 28, VIEW_H = 400, EMPTY_G = 7, ARROW_MS = 3000;
+const COLS = 11;
+const CELL = 32;
+const VIEW_H = 420;
+const EMPTY_G = 7;
+const ARROW_MS = 3000;
 const ARROW_SIZES = [1, 1.5, 2, 2.5] as const;
-const REEL_H = 64, REEL_LEN = 40;
+const REEL_H = 56;
+const REEL_LEN = 36;
 const PRESETS = [0.1, 0.5, 1, 5, 10, 25, 50, 100];
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 function weightedKind(depth: number): BlockKind {
   const b = Math.min(1, depth / 40);
   const t: [BlockKind, number][] = [
-    ["dirt", 12 - b * 4], ["stone", 24], ["copper", 9 + b * 2], ["redstone", 6 + b * 3],
-    ["gold", 3 + b * 4], ["diamond", 1 + b * 2], ["emerald", 0.3 + b],
-    ["bench", Math.max(0.35, 2.4 - depth * 0.035)], ["arrow", Math.max(0.5, 2.2 - depth * 0.02)],
-    ["tnt", 1.6], ["slime", 1.3], ["air", 5],
+    ["dirt", 10 - b * 3], ["stone", 28], ["copper", 8 + b * 2], ["redstone", 5 + b * 3],
+    ["gold", 2.8 + b * 4], ["diamond", 0.8 + b * 2], ["emerald", 0.2 + b * 1.2],
+    ["bench", Math.max(0.3, 2.2 - depth * 0.04)], ["arrow", Math.max(0.4, 2 - depth * 0.025)],
+    ["tnt", 1.5 + b * 0.5], ["slime", 1.2], ["air", 4],
   ];
   let r = Math.random() * t.reduce((s, [, w]) => s + w, 0);
   for (const [k, w] of t) { r -= w; if (r <= 0) return k; }
@@ -34,25 +39,24 @@ function weightedKind(depth: number): BlockKind {
 function makeRow(depth: number): Cell[] {
   return Array.from({ length: COLS }, (_, c) => {
     if (c === 0 || c === COLS - 1) {
-      const k: BlockKind = Math.random() < 0.85 ? "stone" : "dirt";
-      return { kind: k, maxHp: BLOCK_DEF[k].maxHp, hp: BLOCK_DEF[k].maxHp };
+      return { kind: "stone" as const, maxHp: 1, hp: 1 };
     }
-    if (depth < 2 && Math.random() < 0.5) return { kind: "air" as const, maxHp: 0, hp: 0 };
+    if (depth < 1 && Math.random() < 0.4) return { kind: "air" as const, maxHp: 0, hp: 0 };
     const k = weightedKind(depth);
     return { kind: k, maxHp: BLOCK_DEF[k].maxHp, hp: BLOCK_DEF[k].maxHp };
   });
 }
 
-function makeMine(n = 40): Cell[][] {
+function makeMine(n = 48): Cell[][] {
   return Array.from({ length: n }, (_, i) => makeRow(i));
 }
 
 function ensure(g: Cell[][], row: number) {
-  while (g.length <= row + 12) g.push(makeRow(g.length));
+  while (g.length <= row + 14) g.push(makeRow(g.length));
 }
 
 function buildStrip(final: PickTier): PickTier[] {
-  const pool: PickTier[] = [null, null, null, "wood", "wood", "iron", "gold", "diamond"];
+  const pool: PickTier[] = [null, null, null, "wood", "wood", "stone", "iron", "diamond"];
   const items: PickTier[] = Array.from({ length: REEL_LEN - 1 }, () => pool[Math.floor(Math.random() * pool.length)]);
   items.push(final);
   return items;
@@ -76,7 +80,7 @@ export default function PickaxeGame({
   const [hp, setHp] = useState(0);
   const [maxHp, setMaxHp] = useState(0);
   const [grid, setGrid] = useState<Cell[][]>(() => makeMine());
-  const [col, setCol] = useState(4);
+  const [col, setCol] = useState(5);
   const [pickY, setPickY] = useState(0);
   const [camY, setCamY] = useState(0);
   const [sizeMul, setSizeMul] = useState(1);
@@ -90,8 +94,8 @@ export default function PickaxeGame({
 
   const addF = useCallback((x: number, y: number, text: string, color: string) => {
     const id = ++fid.current;
-    setFloats((f) => [...f.slice(-12), { id, x, y, text, color }]);
-    setTimeout(() => setFloats((f) => f.filter((z) => z.id !== id)), 900);
+    setFloats((f) => [...f.slice(-14), { id, x, y, text, color }]);
+    setTimeout(() => setFloats((f) => f.filter((z) => z.id !== id)), 1000);
   }, []);
 
   const play = async () => {
@@ -100,7 +104,7 @@ export default function PickaxeGame({
     if (bet <= 0 || bet > balance + 1e-9) { setErr("Недостаточно TON"); return; }
     setBusy(true); setErr(""); setPayout(null);
     setPhase("spinning"); setSpinning(true);
-    setGrid(makeMine()); setCol(4); setPickY(0); setCamY(0); setSizeMul(1); setWin(0);
+    setGrid(makeMine()); setCol(5); setPickY(0); setCamY(0); setSizeMul(1); setWin(0);
 
     let apiTier: PickTier = null;
     let apiPay = 0;
@@ -111,7 +115,10 @@ export default function PickaxeGame({
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || data?.message || "Ошибка");
-      apiTier = data.tier ?? null;
+      const raw = data.tier as string | null;
+      if (raw === "gold") apiTier = "iron";
+      else if (raw === "wood" || raw === "stone" || raw === "iron" || raw === "diamond") apiTier = raw;
+      else apiTier = raw as PickTier;
       apiPay = Number(data.payout || 0);
       if (typeof data.balance === "number") onBalanceChange?.(data.balance);
     } catch (e: any) {
@@ -126,7 +133,7 @@ export default function PickaxeGame({
     const t0 = performance.now();
     await new Promise<void>((resolve) => {
       const tick = (now: number) => {
-        const t = Math.min(1, (now - t0) / 2800);
+        const t = Math.min(1, (now - t0) / 2600);
         const ease = 1 - Math.pow(1 - t, 3);
         setOff(ease * target);
         if (t < 1) requestAnimationFrame(tick); else { setOff(target); resolve(); }
@@ -140,15 +147,15 @@ export default function PickaxeGame({
     setEmpty(0);
     const H = TIER_HP[forced];
     setHp(H); setMaxHp(H);
-    await sleep(400);
+    await sleep(350);
     setPhase("falling");
     runId.current++;
     const my = runId.current;
-    let curHp = H, curTier: Exclude<PickTier, null> = forced, c = 4, y = 0, sizeIdx = 0, arrowEnd = 0, total = 0;
-    const g = makeMine(50);
+    let curHp = H, curTier: Exclude<PickTier, null> = forced, c = 5, y = 0, sizeIdx = 0, arrowEnd = 0, total = 0;
+    const g = makeMine(60);
 
     while (curHp > 0 && my === runId.current) {
-      ensure(g, Math.floor(y / CELL) + 8);
+      ensure(g, Math.floor(y / CELL) + 10);
       const row = Math.floor(y / CELL);
       const rad = performance.now() > arrowEnd ? 0 : (ARROW_SIZES[sizeIdx] >= 2.5 ? 2 : ARROW_SIZES[sizeIdx] >= 1.5 ? 1 : 0);
       let hit = false;
@@ -160,7 +167,7 @@ export default function PickaxeGame({
         hit = true;
         if (cell.kind === "slime") {
           c = Math.max(1, Math.min(COLS - 2, c + (Math.random() < 0.5 ? -1 : 1)));
-          setCol(c); addF(cc * CELL + 14, row * CELL, "↗", "#4ade80"); y += CELL * 0.4; break;
+          setCol(c); addF(cc * CELL + 16, row * CELL, "↗", "#4ade80"); y += CELL * 0.35; break;
         }
         if (cell.kind === "tnt") {
           cell.hp = 0; cell.kind = "air";
@@ -172,11 +179,11 @@ export default function PickaxeGame({
             if (!n || n.kind === "air") continue;
             if (BLOCK_DEF[n.kind].mult > 0) {
               total += bet * BLOCK_DEF[n.kind].mult;
-              addF(c2 * CELL + 14, rr * CELL, `+${(bet * BLOCK_DEF[n.kind].mult).toFixed(3)}`, "#fbbf24");
+              addF(c2 * CELL + 16, rr * CELL, `+${(bet * BLOCK_DEF[n.kind].mult).toFixed(2)}`, "#fbbf24");
             }
             n.hp = 0; n.kind = "air";
           }
-          addF(cc * CELL + 14, row * CELL, "💥", "#f87171");
+          addF(cc * CELL + 16, row * CELL, "💥", "#f87171");
           setGrid(g.map((r) => r.map((x) => ({ ...x }))));
           continue;
         }
@@ -186,10 +193,10 @@ export default function PickaxeGame({
           if (idx < 3) {
             curTier = TIER_ORDER[idx + 1]; setTier(curTier);
             curHp = TIER_HP[curTier]; setMaxHp(curHp); setHp(curHp);
-            addF(cc * CELL + 14, row * CELL, "⬆ LVL", "#4ade80");
+            addF(cc * CELL + 16, row * CELL, "⬆ LVL", "#4ade80");
           } else {
             curHp = TIER_HP[curTier]; setHp(curHp);
-            addF(cc * CELL + 14, row * CELL, "❤ FULL", "#f472b6");
+            addF(cc * CELL + 16, row * CELL, "❤ FULL", "#f472b6");
           }
           setGrid(g.map((r) => r.map((x) => ({ ...x }))));
           continue;
@@ -199,53 +206,67 @@ export default function PickaxeGame({
           sizeIdx = Math.min(3, sizeIdx + 1);
           arrowEnd = performance.now() + ARROW_MS;
           setSizeMul(ARROW_SIZES[sizeIdx]);
-          addF(cc * CELL + 14, row * CELL, `×${ARROW_SIZES[sizeIdx]}`, "#86efac");
+          addF(cc * CELL + 16, row * CELL, `×${ARROW_SIZES[sizeIdx]}`, "#86efac");
           setGrid(g.map((r) => r.map((x) => ({ ...x }))));
           continue;
         }
-        cell.hp -= 1; curHp -= 1; setHp(curHp);
+        cell.hp -= 1; curHp -= 1; setHp(Math.max(0, curHp));
         if (cell.hp <= 0) {
           const m = BLOCK_DEF[cell.kind].mult;
-          if (m > 0) { total += bet * m; setWin(total); addF(cc * CELL + 14, row * CELL, `+${(bet * m).toFixed(3)}`, "#fde047"); }
+          if (m > 0) { total += bet * m; setWin(total); addF(cc * CELL + 16, row * CELL, `+${(bet * m).toFixed(2)}`, "#fde047"); }
           cell.kind = "air";
         }
         setGrid(g.map((r) => r.map((x) => ({ ...x }))));
       }
-      y += hit ? CELL * 0.35 : CELL * 0.55;
-      setPickY(y); setCamY(Math.max(0, y - VIEW_H * 0.35)); setCol(c);
-      await sleep(hit ? 70 : 45);
+      y += hit ? CELL * 0.28 : CELL * 0.48;
+      setPickY(y); setCamY(Math.max(0, y - VIEW_H * 0.32)); setCol(c);
+      await sleep(hit ? 85 : 55);
     }
     setPayout(apiPay > 0 ? apiPay : total);
     setWin(apiPay > 0 ? apiPay : total);
     setPhase("result"); setBusy(false);
   };
 
-  const pad = REEL_H * 2.5;
+  const pad = REEL_H * 2;
+  const showReel = phase === "idle" || phase === "spinning" || phase === "result";
 
   return (
     <div style={S.root}>
-      <div style={S.top}>
+      <div style={S.bg}>
+        <div style={S.sky} />
+        <div style={S.hills} />
+      </div>
+
+      <div style={S.hudTop}>
         {onBack && <button type="button" style={S.back} onClick={onBack}>←</button>}
-        <div style={S.logo}>CRAFT & DROP</div>
-        <div style={S.streak}>Пустых: {empty}/{EMPTY_G}</div>
-      </div>
-      <div style={S.reelWrap}>
-        <div style={S.reelWin}>
-          <div style={{ transform: `translateY(${pad - off}px)`, transition: spinning ? "none" : "transform .15s" }}>
-            {reel.map((it, i) => (
-              <div key={i} style={S.reelItem}>
-                {it ? <PickSprite tier={it} size={40} /> : <span style={{ fontSize: 28, opacity: 0.5 }}>🚫</span>}
-                <span style={{ fontSize: 11, color: it ? TIER_COLOR[it] : "#666" }}>{it ? TIER_LABEL[it] : "пусто"}</span>
-              </div>
-            ))}
-          </div>
-          <div style={S.reelCenter} />
+        <div style={S.logo}>
+          <span style={{ filter: "drop-shadow(0 0 4px #5eead4)" }}>⛏️</span>
+          <span>FALLING PICKAXE</span>
         </div>
+        <div style={S.streak}>{empty}/{EMPTY_G}</div>
       </div>
-      <div style={{ display: "flex", justifyContent: "center", marginBottom: 8 }}>
-        <div style={{ position: "relative", width: COLS * CELL, height: VIEW_H, overflow: "hidden",
-          background: "linear-gradient(#87CEEB,#5ba3c9 30%,#2d4a3e 60%,#1a1a1a)", borderRadius: 8, border: "2px solid #333" }}>
-          <div style={{ position: "absolute", top: -camY, width: COLS * CELL }}>
+
+      {showReel && (
+        <div style={S.reelWrap}>
+          <div style={S.reelWin}>
+            <div style={{ transform: `translateY(${pad - off}px)`, transition: spinning ? "none" : "transform .12s" }}>
+              {reel.map((it, i) => (
+                <div key={i} style={S.reelItem}>
+                  {it ? <PickSprite tier={it} size={36} /> : <span style={{ fontSize: 26, opacity: 0.45 }}>✕</span>}
+                  <span style={{ fontSize: 10, color: it ? TIER_COLOR[it] : "#64748b", fontWeight: 700 }}>
+                    {it ? TIER_LABEL[it] : "EMPTY"}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <div style={S.reelCenter} />
+          </div>
+        </div>
+      )}
+
+      <div style={S.mineOuter}>
+        <div style={S.mineInner}>
+          <div style={{ position: "absolute", top: -camY, left: 0, width: COLS * CELL }}>
             {grid.map((row, ri) => (
               <div key={ri} style={{ display: "flex", height: CELL }}>
                 {row.map((cell, ci) => (
@@ -258,68 +279,178 @@ export default function PickaxeGame({
               </div>
             ))}
           </div>
+
           {tier && phase === "falling" && (
-            <div style={{ position: "absolute", left: col * CELL + 14, top: pickY - camY,
-              transform: `translate(-50%,-50%) scale(${sizeMul})`, zIndex: 5 }}>
-              <PickSprite tier={tier} size={32} />
-            </div>
+            <>
+              <div style={{
+                position: "absolute",
+                left: col * CELL + CELL / 2,
+                top: pickY - camY,
+                transform: `translate(-50%, -50%) scale(${sizeMul})`,
+                zIndex: 6,
+              }}>
+                <PickSprite tier={tier} size={36} />
+              </div>
+              <div style={{
+                position: "absolute",
+                left: "50%",
+                top: Math.max(12, pickY - camY - 48),
+                transform: "translateX(-50%)",
+                zIndex: 7,
+                display: "flex",
+                alignItems: "center",
+                gap: 4,
+                background: "rgba(0,0,0,.55)",
+                padding: "2px 8px",
+                borderRadius: 8,
+                fontSize: 13,
+                fontWeight: 800,
+                color: "#fff",
+                textShadow: "0 1px 2px #000",
+              }}>
+                <span style={{ color: "#f43f5e" }}>❤</span>
+                {hp}/{maxHp}
+              </div>
+            </>
           )}
+
           {floats.map((f) => (
-            <div key={f.id} style={{ position: "absolute", left: f.x, top: f.y - camY, color: f.color,
-              fontWeight: 800, fontSize: 12, animation: "floatUp .9s ease-out forwards", zIndex: 10, textShadow: "0 1px 2px #000" }}>{f.text}</div>
+            <div key={f.id} style={{
+              position: "absolute", left: f.x, top: f.y - camY, color: f.color,
+              fontWeight: 900, fontSize: 13, animation: "floatUp 1s ease-out forwards",
+              zIndex: 10, textShadow: "0 1px 3px #000", pointerEvents: "none",
+            }}>{f.text}</div>
           ))}
         </div>
       </div>
-      {(phase === "falling" || phase === "result") && tier && (
-        <div style={S.hpBar}>
-          <div style={{ height: "100%", width: `${maxHp ? (hp / maxHp) * 100 : 0}%`,
-            background: hp < maxHp * 0.3 ? "#ef4444" : hp < maxHp * 0.6 ? "#eab308" : "#22c55e", transition: "width .15s" }} />
-          <span style={S.hpTxt}>{hp}/{maxHp} · {TIER_LABEL[tier]}</span>
+
+      <div style={S.bottomBar}>
+        <button type="button" style={S.bonusBtn} disabled>BONUS BUY</button>
+        <div style={S.statBox}>
+          <div style={S.statLabel}>CASH</div>
+          <div style={S.statVal}>{balance.toFixed(2)}</div>
         </div>
-      )}
-      <div style={{ fontSize: 14, marginBottom: 6 }}>Добыча: <b style={{ color: "#fde047" }}>{(payout ?? win).toFixed(4)} TON</b></div>
-      {err && <div style={{ color: "#f87171", fontSize: 12 }}>{err}</div>}
+        <div style={S.statBox}>
+          <div style={S.statLabel}>WIN</div>
+          <div style={{ ...S.statVal, color: "#fde047" }}>{(payout ?? win).toFixed(2)}</div>
+        </div>
+        <div style={S.statBox}>
+          <div style={S.statLabel}>BET</div>
+          <div style={S.statVal}>{bet.toFixed(2)}</div>
+        </div>
+      </div>
+
+      {err && <div style={{ color: "#f87171", fontSize: 12, marginTop: 4 }}>{err}</div>}
+
       <div style={S.controls}>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 4, justifyContent: "center" }}>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <button type="button" style={S.pm} onClick={() => setBet(Math.max(0.1, +(bet / 2).toFixed(2)))} disabled={busy}>−</button>
+          <button
+            type="button"
+            style={S.spinCircle}
+            onClick={() => { if (phase === "result") { setPhase("idle"); setTier(null); } else play(); }}
+            disabled={busy && phase !== "result"}
+          >
+            {phase === "result" ? "↻" : busy ? "…" : "↻"}
+          </button>
+          <button type="button" style={S.pm} onClick={() => setBet(+(bet * 2).toFixed(2))} disabled={busy}>+</button>
+        </div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 4, justifyContent: "center", marginTop: 6 }}>
           {PRESETS.map((p) => (
             <button key={p} type="button" style={{ ...S.preset, ...(bet === p ? S.presetOn : {}) }}
               onClick={() => setBet(p)} disabled={busy}>{p}</button>
           ))}
         </div>
-        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-          <button type="button" style={S.pm} onClick={() => setBet(Math.max(0.1, +(bet / 2).toFixed(2)))} disabled={busy}>½</button>
-          <input style={S.input} type="number" value={bet} min={0.1} step={0.1}
-            onChange={(e) => setBet(Math.max(0.1, Number(e.target.value) || 0.1))} disabled={busy} />
-          <button type="button" style={S.pm} onClick={() => setBet(+(bet * 2).toFixed(2))} disabled={busy}>2×</button>
-        </div>
-        <button type="button" style={S.spin}
-          onClick={() => { if (phase === "result") { setPhase("idle"); setTier(null); } else play(); }}
-          disabled={busy && phase !== "result"}>
-          {phase === "result" ? "Ещё раз" : busy ? "..." : "↻ Играть"}
-        </button>
-        <div style={{ fontSize: 12, color: "#94a3b8" }}>Баланс: {balance.toFixed(2)} TON</div>
       </div>
-      <style>{`@keyframes floatUp{from{opacity:1;transform:translateY(0)}to{opacity:0;transform:translateY(-28px)}}`}</style>
+
+      <style>{`
+        @keyframes floatUp {
+          from { opacity: 1; transform: translateY(0); }
+          to { opacity: 0; transform: translateY(-32px); }
+        }
+      `}</style>
     </div>
   );
 }
 
 const S: Record<string, CSSProperties> = {
-  root: { minHeight: "100%", background: "#0b1220", color: "#e2e8f0", display: "flex", flexDirection: "column", alignItems: "center", padding: "8px 10px 24px", fontFamily: "system-ui,sans-serif" },
-  top: { width: "100%", maxWidth: 420, display: "flex", alignItems: "center", gap: 8, marginBottom: 6 },
-  back: { background: "transparent", border: "1px solid #334155", color: "#94a3b8", borderRadius: 8, padding: "4px 10px", cursor: "pointer" },
-  logo: { flex: 1, textAlign: "center", fontWeight: 900, letterSpacing: 1, fontSize: 16 },
-  streak: { fontSize: 11, color: "#94a3b8" },
-  reelWrap: { width: "100%", maxWidth: 280, marginBottom: 8 },
-  reelWin: { height: REEL_H * 5, overflow: "hidden", position: "relative", borderRadius: 12, border: "2px solid #334155", background: "#0f172a" },
-  reelItem: { height: REEL_H, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2 },
-  reelCenter: { position: "absolute", left: 0, right: 0, top: "50%", height: REEL_H, marginTop: -REEL_H / 2, borderTop: "2px solid #22c55e", borderBottom: "2px solid #22c55e", pointerEvents: "none" },
-  hpBar: { width: "100%", maxWidth: 280, height: 16, background: "#1e293b", borderRadius: 8, position: "relative", overflow: "hidden", marginBottom: 6 },
-  hpTxt: { position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700 },
-  controls: { width: "100%", maxWidth: 360, display: "flex", flexDirection: "column", gap: 8, alignItems: "center" },
-  preset: { background: "#1e293b", border: "1px solid #334155", color: "#cbd5e1", borderRadius: 6, padding: "4px 8px", fontSize: 11, cursor: "pointer" },
+  root: {
+    position: "relative", minHeight: "100%", overflow: "hidden",
+    display: "flex", flexDirection: "column", alignItems: "center",
+    padding: "6px 8px 20px", fontFamily: "system-ui, sans-serif", color: "#e2e8f0",
+  },
+  bg: { position: "absolute", inset: 0, zIndex: 0, pointerEvents: "none" },
+  sky: {
+    position: "absolute", inset: 0,
+    background: "linear-gradient(180deg, #7ec8e8 0%, #a8d4e8 35%, #c5e0c8 55%, #6a8a6a 75%, #3a4a3a 100%)",
+  },
+  hills: {
+    position: "absolute", left: 0, right: 0, bottom: "35%", height: "40%",
+    background: `radial-gradient(ellipse 80% 60% at 20% 100%, #4a7a4a 0%, transparent 70%),
+      radial-gradient(ellipse 70% 50% at 80% 100%, #3d6a3d 0%, transparent 70%)`,
+    opacity: 0.55,
+  },
+  hudTop: {
+    position: "relative", zIndex: 2, width: "100%", maxWidth: 420,
+    display: "flex", alignItems: "center", gap: 8, marginBottom: 4,
+  },
+  back: {
+    background: "rgba(0,0,0,.35)", border: "1px solid #475569", color: "#cbd5e1",
+    borderRadius: 8, padding: "4px 10px", cursor: "pointer",
+  },
+  logo: {
+    flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+    fontWeight: 900, fontSize: 13, letterSpacing: 0.5,
+    background: "rgba(0,0,0,.5)", padding: "4px 10px", borderRadius: 6,
+  },
+  streak: { fontSize: 11, color: "#94a3b8", background: "rgba(0,0,0,.35)", padding: "2px 8px", borderRadius: 6 },
+  reelWrap: { position: "relative", zIndex: 2, width: "100%", maxWidth: 240, marginBottom: 6 },
+  reelWin: {
+    height: REEL_H * 4, overflow: "hidden", position: "relative", borderRadius: 10,
+    border: "2px solid #334155", background: "rgba(15,23,42,.85)",
+  },
+  reelItem: {
+    height: REEL_H, display: "flex", flexDirection: "column",
+    alignItems: "center", justifyContent: "center", gap: 2,
+  },
+  reelCenter: {
+    position: "absolute", left: 0, right: 0, top: "50%", height: REEL_H,
+    marginTop: -REEL_H / 2, borderTop: "2px solid #22c55e", borderBottom: "2px solid #22c55e",
+    pointerEvents: "none", boxShadow: "inset 0 0 16px rgba(34,197,94,.2)",
+  },
+  mineOuter: { position: "relative", zIndex: 2, display: "flex", justifyContent: "center", marginBottom: 6 },
+  mineInner: {
+    position: "relative", width: COLS * CELL, height: VIEW_H, overflow: "hidden",
+    borderRadius: 6, border: "3px solid #1e293b",
+    boxShadow: "0 0 0 1px #475569, inset 0 0 40px rgba(0,0,0,.3)",
+  },
+  bottomBar: {
+    position: "relative", zIndex: 2, width: "100%", maxWidth: 400,
+    display: "flex", alignItems: "center", justifyContent: "space-between",
+    gap: 6, padding: "6px 4px", marginTop: 4,
+  },
+  bonusBtn: {
+    background: "linear-gradient(180deg, #fbbf24, #d97706)", border: "2px solid #92400e",
+    color: "#1c1917", fontWeight: 900, fontSize: 10, borderRadius: 8, padding: "8px 10px",
+    opacity: 0.7, cursor: "not-allowed",
+  },
+  statBox: { textAlign: "center", minWidth: 64 },
+  statLabel: { fontSize: 9, color: "#94a3b8", letterSpacing: 1, fontWeight: 700 },
+  statVal: { fontSize: 14, fontWeight: 800, color: "#f8fafc" },
+  controls: { position: "relative", zIndex: 2, marginTop: 4, display: "flex", flexDirection: "column", alignItems: "center" },
+  pm: {
+    width: 36, height: 36, borderRadius: "50%", background: "rgba(30,41,59,.9)",
+    border: "2px solid #475569", color: "#e2e8f0", fontSize: 18, fontWeight: 700, cursor: "pointer",
+  },
+  spinCircle: {
+    width: 64, height: 64, borderRadius: "50%",
+    background: "linear-gradient(180deg, #22c55e, #15803d)",
+    border: "3px solid #14532d", color: "#fff", fontSize: 28, fontWeight: 900,
+    cursor: "pointer", boxShadow: "0 4px 0 #052e16, 0 0 20px rgba(34,197,94,.4)",
+  },
+  preset: {
+    background: "rgba(30,41,59,.8)", border: "1px solid #334155", color: "#cbd5e1",
+    borderRadius: 6, padding: "3px 7px", fontSize: 10, cursor: "pointer",
+  },
   presetOn: { borderColor: "#22c55e", color: "#4ade80" },
-  pm: { background: "#1e293b", border: "1px solid #334155", color: "#e2e8f0", borderRadius: 6, padding: "6px 10px", cursor: "pointer" },
-  input: { width: 80, background: "#0f172a", border: "1px solid #334155", color: "#f8fafc", borderRadius: 6, padding: "6px 8px", textAlign: "center" },
-  spin: { width: "100%", maxWidth: 220, background: "linear-gradient(180deg,#22c55e,#16a34a)", border: "none", color: "#052e16", fontWeight: 900, fontSize: 18, borderRadius: 14, padding: "12px 16px", cursor: "pointer", boxShadow: "0 4px 0 #14532d" },
 };

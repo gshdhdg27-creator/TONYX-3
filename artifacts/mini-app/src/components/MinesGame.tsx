@@ -566,9 +566,9 @@ export default function MinesGame({
                 style={{
                   ...pill,
                   flex: 1,
-                  background: bet === v ? "rgba(124,92,255,0.28)" : "rgba(30,41,59,0.9)",
-                  borderColor: bet === v ? "rgba(167,139,250,0.55)" : "rgba(148,163,184,0.1)",
-                  color: bet === v ? "#e9d5ff" : "#94a3b8",
+                  background: bet === v ? "rgba(32,184,121,0.28)" : "rgba(30,41,59,0.9)",
+                  borderColor: bet === v ? "rgba(52,211,153,0.55)" : "rgba(148,163,184,0.1)",
+                  color: bet === v ? "#bbf7d0" : "#94a3b8",
                 }}
               >
                 {v}
@@ -584,11 +584,11 @@ export default function MinesGame({
               style={{
                 ...pill,
                 flex: 1.15,
-                background: "linear-gradient(135deg,#7c5cff,#a855f7)",
+                background: "linear-gradient(135deg,#20b879,#34d399)",
                 borderColor: "transparent",
                 color: "#fff",
                 fontWeight: 900,
-                boxShadow: "0 0 16px rgba(124,92,255,0.35)",
+                boxShadow: "0 0 16px rgba(32,184,121,0.35)",
               }}
             >
               Max
@@ -765,8 +765,8 @@ const heroSub: CSSProperties = {
 const gridWrap: CSSProperties = {
   padding: 10,
   borderRadius: 20,
-  background: "linear-gradient(160deg, rgba(30,16,51,0.95), rgba(8,6,18,0.98))",
-  border: "1px solid rgba(124,92,255,0.18)",
+  background: "linear-gradient(160deg, rgba(21,36,29,0.95), rgba(8,15,12,0.98))",
+  border: "1px solid rgba(32,184,121,0.18)",
   boxShadow: "0 20px 50px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.04)",
   marginBottom: 12,
 };
@@ -798,7 +798,7 @@ const ladderItem: CSSProperties = {
 };
 
 const panel: CSSProperties = {
-  background: "rgba(15,10,25,0.75)",
+  background: "rgba(12,22,17,0.75)",
   border: "1px solid rgba(148,163,184,0.1)",
   borderRadius: 18,
   padding: 14,
@@ -860,8 +860,8 @@ const betInput: CSSProperties = {
   flex: 1,
   padding: "12px 14px",
   borderRadius: 12,
-  border: "1px solid rgba(124,92,255,0.3)",
-  background: "rgba(8,6,18,0.95)",
+  border: "1px solid rgba(32,184,121,0.3)",
+  background: "rgba(8,15,12,0.95)",
   color: "#f8fafc",
   fontSize: 16,
   fontWeight: 800,
@@ -876,13 +876,13 @@ const startBtn: CSSProperties = {
   padding: "15px 0",
   borderRadius: 14,
   border: "none",
-  background: "linear-gradient(135deg,#7c5cff 0%,#a855f7 50%,#ec4899 100%)",
+  background: "linear-gradient(135deg,#20b879 0%,#34d399 50%,#9be7bd 100%)",
   color: "#fff",
   fontSize: 15,
   fontWeight: 900,
   cursor: "pointer",
   fontFamily: "inherit",
-  boxShadow: "0 8px 28px rgba(124,92,255,0.35)",
+  boxShadow: "0 8px 28px rgba(32,184,121,0.35)",
 };
 
 const liveStats: CSSProperties = {
@@ -928,7 +928,7 @@ const resultCard: CSSProperties = {
   marginTop: 14,
   padding: 16,
   borderRadius: 16,
-  background: "rgba(15,10,25,0.9)",
+  background: "rgba(12,22,17,0.9)",
   border: "1px solid",
   textAlign: "center",
 };
@@ -948,7 +948,7 @@ const CSS = `
     aspect-ratio: 1; border-radius: 12px; border: none; cursor: pointer;
     font-family: inherit; display: flex; align-items: center; justify-content: center;
     position: relative; transition: transform 0.15s ease, box-shadow 0.2s ease;
-    background: linear-gradient(160deg, #2a1f45 0%, #16102a 100%);
+    background: linear-gradient(160deg, #1b3028 0%, #101b17 100%);
     box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 4px 12px rgba(0,0,0,0.35);
   }
   .mn-hidden:active { transform: scale(0.94); }

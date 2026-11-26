@@ -357,10 +357,10 @@ export default function PlinkoGame({
   };
 
   return (
-    <div className="tx-plinko" style={root}>
+    <div className="plinko-game" style={root}><style>{PLINKO_LAYOUT_CSS}</style>
       {toast && <div style={toastStyle}>{toast}</div>}
 
-      <div style={board}>
+      <div className="plinko-board" style={board}>
         <canvas ref={canvasRef} style={{ width: "100%", height: "100%", display: "block" }} />
       </div>
 
@@ -375,7 +375,7 @@ export default function PlinkoGame({
         </div>
       )}
 
-      <div style={riskRow}>
+      <div className="plinko-risk" style={riskRow}>
         {([["low", "Лёгкий"], ["med", "Средний"], ["high", "Сложный"]] as [Risk, string][]).map(([r, label]) => (
           <button
             key={r}
@@ -394,7 +394,7 @@ export default function PlinkoGame({
         ))}
       </div>
 
-      <div style={{ marginBottom: 10 }}>
+      <div className="plinko-rows" style={{ marginBottom: 10 }}>
         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 2 }}>
           <span style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8" }}>Ряды</span>
           <span style={{ fontSize: 13, fontWeight: 900, color: "#c8f7df" }}>{rows}</span>
@@ -406,7 +406,7 @@ export default function PlinkoGame({
         />
       </div>
 
-      <div style={{ marginBottom: 10 }}>
+      <div className="plinko-balls" style={{ marginBottom: 10 }}>
         <div style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8", marginBottom: 6 }}>Шары</div>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
           {BALL_PRESETS.map((n) => (
@@ -447,7 +447,7 @@ export default function PlinkoGame({
         </div>
       </div>
 
-      <div style={panel}>
+      <div className="plinko-controls" style={panel}>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           <input
             type="number" min={MIN_BET} step="0.1" value={stake} disabled={busy}
@@ -565,3 +565,21 @@ const toastStyle: CSSProperties = {
   border: "1px solid rgba(255,255,255,0.15)",
   color: "#fff",
 };
+
+
+const PLINKO_LAYOUT_CSS = `
+.plinko-game{width:100%;max-width:1120px;margin:0 auto;padding:10px 0 32px;display:grid;grid-template-columns:minmax(0,1fr) 340px;grid-template-rows:auto auto auto auto auto;gap:12px 18px;align-items:start;color:#edf2f7}
+.plinko-board{grid-column:1;grid-row:1/span 4;min-height:560px!important;height:560px!important;margin:0!important;border-radius:16px!important;border:1px solid #2a3d4a!important;background:radial-gradient(ellipse at 50% 0%,#16313e,#09121b 72%)!important;box-shadow:0 18px 48px #0008!important;overflow:hidden}
+.plinko-board canvas{width:100%!important;height:100%!important}
+.plinko-game>div:nth-of-type(3){grid-column:1;grid-row:5;text-align:center;background:#131d27;border:1px solid #293947;border-radius:10px;padding:10px}
+.plinko-risk,.plinko-rows,.plinko-balls,.plinko-controls{grid-column:2;margin:0 0 2px!important;padding:14px!important;background:linear-gradient(180deg,#151f2a,#101720)!important;border:1px solid #293947!important;border-radius:12px!important}
+.plinko-risk{grid-row:1}
+.plinko-rows{grid-row:2}
+.plinko-balls{grid-row:3}
+.plinko-controls{grid-row:4;align-self:start}
+.plinko-game button{border-radius:8px!important}
+.plinko-game input{background:#090f16!important;border:1px solid #344655!important;border-radius:8px!important;color:#eef3f8!important}
+.plinko-game .plinko-risk button[style*="linear-gradient"]{background:#126d8a!important;border-color:#2698b7!important;box-shadow:none!important;color:#fff!important}
+.plinko-game .plinko-controls button[style*="linear-gradient"]{background:linear-gradient(180deg,#168fba,#08769d)!important;box-shadow:0 4px 0 #064c68!important;color:white!important}
+@media(max-width:760px){.plinko-game{display:flex!important;flex-direction:column!important;gap:10px!important;padding:6px 0 24px!important}.plinko-board{width:100%;height:430px!important;min-height:430px!important}.plinko-risk,.plinko-rows,.plinko-balls,.plinko-controls{width:100%;box-sizing:border-box;padding:12px!important}}
+`;

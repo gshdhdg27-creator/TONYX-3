@@ -173,7 +173,7 @@ const CSS = `
   position: absolute;
   inset: -8px;
   border-radius: 50%;
-  border: 1px dashed rgba(167,139,250,0.18);
+  border: 1px dashed rgba(52,211,153,0.18);
   animation: cfRingSpin 18s linear infinite;
 }
 .cf-stage {
@@ -477,7 +477,7 @@ export default function CoinFlipGame({
         className="cf-ambient"
         style={{
           background: `radial-gradient(ellipse 70% 55% at 50% 40%, ${th.ambient} 0%, transparent 70%),
-            radial-gradient(ellipse 50% 40% at 20% 60%, rgba(124,58,237,0.1) 0%, transparent 70%)`,
+            radial-gradient(ellipse 50% 40% at 20% 60%, rgba(22,132,84,0.1) 0%, transparent 70%)`,
         }}
       />
 
@@ -581,7 +581,7 @@ export default function CoinFlipGame({
             style={{ color: lastResult.won ? "#bbf7d0" : "#fecaca" }}
           >
             {lastResult.won
-              ? `+${lastResult.payout.toFixed(2)} TON`
+              ? `+${lastResult.payout.toFixed(2)} DEMO`
               : `Выпало: ${lastResult.result === "heads" ? "Орёл" : "Решка"}`}
           </div>
         </div>
@@ -746,7 +746,7 @@ export default function CoinFlipGame({
         <div style={metaRow}>
           <span>Баланс {balance.toFixed(2)} TON</span>
           <span style={{ color: choice === "heads" ? "#fde68a" : "#e2e8f0", fontWeight: 800 }}>
-            ≈ {potential.toFixed(2)} TON
+            ≈ {potential.toFixed(2)} DEMO
           </span>
         </div>
 
@@ -810,7 +810,7 @@ const heroTitle: CSSProperties = {
 };
 const heroSub: CSSProperties = {
   fontSize: 12,
-  color: "#a78bfa",
+  color: "#34d399",
   marginTop: 4,
   fontWeight: 600,
 };
@@ -820,8 +820,8 @@ const panel: CSSProperties = {
   marginTop: 4,
   padding: "16px 14px 18px",
   borderRadius: 20,
-  background: "linear-gradient(180deg,rgba(24,16,48,0.92),rgba(10,6,18,0.96))",
-  border: "1px solid rgba(167,139,250,0.18)",
+  background: "linear-gradient(180deg,rgba(20,39,29,0.96),rgba(9,17,13,0.98))",
+  border: "1px solid rgba(52,211,153,0.18)",
   boxShadow: "0 12px 40px rgba(0,0,0,0.35)",
 };
 const sectionLabel: CSSProperties = {
@@ -850,7 +850,7 @@ const betAdj: CSSProperties = {
   height: 48,
   borderRadius: 14,
   border: "1px solid",
-  background: "rgba(15,23,42,0.95)",
+  background: "rgba(12,23,17,0.96)",
   fontWeight: 900,
   fontSize: 16,
   cursor: "pointer",

@@ -364,15 +364,15 @@ export default function MinesGame({
   const gemsLeft = 25 - (game?.minesCount ?? mines) - (game?.safeCount ?? 0);
 
   return (
-    <div className="tx-mines" style={root}>
+    <div className="mn-game" style={root}>
       <style>{CSS}</style>
 
       {toast && <div className={`mn-toast mn-toast-${toast.type}`}>{toast.msg}</div>}
 
-      <div style={header}>
+      <div className="mn-game-header" style={header}>
         <div>
           <div style={title}>Mines</div>
-          <div style={subtitle}>Stake style · 5×5</div>
+          <div style={subtitle}>TONYX ORIGINAL · 5×5</div>
         </div>
         <div style={balPill}>
           <span style={{ opacity: 0.55, fontSize: 10, letterSpacing: "0.06em" }}>БАЛАНС</span>
@@ -382,7 +382,7 @@ export default function MinesGame({
         </div>
       </div>
 
-      <div style={hero}>
+      <div className="mn-game-hero" style={hero}>
         <div style={heroLabel}>
           {isPlaying
             ? "ТЕКУЩИЙ"
@@ -428,7 +428,7 @@ export default function MinesGame({
         )}
       </div>
 
-      <div style={gridWrap}>
+      <div className="mn-game-board" style={gridWrap}>
         <div style={grid}>
           {Array.from({ length: GRID }).map((_, row) =>
             Array.from({ length: GRID }).map((_, col) => {
@@ -464,7 +464,7 @@ export default function MinesGame({
         </div>
       </div>
 
-      <div style={ladder}>
+      <div className="mn-game-ladder" style={ladder}>
         {steps.map((m, i) => (
           <div
             key={i}
@@ -483,7 +483,7 @@ export default function MinesGame({
       </div>
 
       {!isPlaying ? (
-        <div style={panel}>
+        <div className="mn-game-controls" style={panel}>
           <div style={sectionLabel}>{t.minesCount}</div>
           <div style={pills}>
             {MINE_OPTIONS.map((m) => (
@@ -658,7 +658,7 @@ export default function MinesGame({
 
       {isOver && (
         <div
-          className="mn-result"
+          className="mn-result mn-game-result"
           style={{
             ...resultCard,
             borderColor: game!.status === "won" ? "rgba(34,197,94,0.5)" : "rgba(248,113,113,0.45)",
@@ -998,4 +998,39 @@ const CSS = `
     0% { transform: scale(0.85); opacity: 0; }
     100% { transform: scale(1); opacity: 1; }
   }
+
+  /* TONYX Mines — rebuilt game composition, inspired by the 1win Originals layout */
+  .mn-game{width:100%;max-width:1120px!important;margin:0 auto!important;padding:12px 0 36px!important;display:grid;grid-template-columns:minmax(0,1fr) 340px;grid-template-rows:auto auto auto auto;gap:14px 18px;align-items:start}
+  .mn-game-header{grid-column:1/-1;margin:0!important;padding:0 2px 12px;border-bottom:1px solid #26313d}
+  .mn-game-hero{grid-column:1;grid-row:2;margin:0!important;padding:12px 0 4px!important;text-align:center}
+  .mn-game-hero>div:first-child{font-size:10px;letter-spacing:.18em;color:#788b9b}
+  .mn-game .mn-hero-mult{font-size:clamp(34px,5vw,54px);font-weight:850;letter-spacing:-.045em}
+  .mn-game-board{grid-column:1;grid-row:3;margin:0!important;padding:clamp(12px,2vw,22px)!important;border-radius:18px!important;background:radial-gradient(ellipse at 50% 38%,#132a39 0%,#0b1520 72%)!important;border:1px solid #263b4b!important;box-shadow:0 18px 50px #0008,inset 0 1px #ffffff0b!important}
+  .mn-game-board>div{max-width:520px;margin:0 auto}
+  .mn-game .mn-cell{border-radius:9px!important;background:linear-gradient(155deg,#1b536b 0%,#087b9c 48%,#07516d 100%)!important;border:1px solid #2b91ae!important;box-shadow:inset 0 2px 2px #ffffff20,0 4px 0 #062e43,0 8px 14px #0005!important;transition:transform .16s,filter .16s,box-shadow .16s}
+  .mn-game .mn-cell.mn-hidden{background:linear-gradient(155deg,#2494b2 0%,#087e9f 55%,#07526e 100%)!important;border-color:#32a5c0!important}
+  .mn-game .mn-cell.mn-hidden:not(:disabled):hover{filter:brightness(1.18);transform:translateY(-2px);box-shadow:inset 0 2px 2px #ffffff30,0 6px 0 #062e43,0 12px 18px #0007!important}
+  .mn-game .mn-cell.mn-safe{background:linear-gradient(145deg,#1aa77a,#086b55)!important;border-color:#42d6a0!important}
+  .mn-game .mn-cell.mn-mine{background:linear-gradient(145deg,#d34d5a,#792536)!important;border-color:#f07b85!important}
+  .mn-game .mn-dot{width:7px;height:7px;background:#a5eaff;box-shadow:0 0 10px #a5eaff}
+  .mn-game-ladder{grid-column:1;grid-row:4;margin:0!important;padding:0 2px 4px}
+  .mn-game-ladder>div{border-radius:7px!important;min-width:64px!important;background:#151f2b!important;border:1px solid #293947!important;color:#91a4b5!important}
+  .mn-game-ladder>div:first-child{background:#123b4a!important;border-color:#1687a5!important;color:#8be4f5!important;box-shadow:0 0 16px #087e9f33!important}
+  .mn-game-controls{grid-column:2;grid-row:2/span 3;width:100%;box-sizing:border-box;margin:0!important;padding:18px!important;border-radius:16px!important;background:linear-gradient(180deg,#151f2a,#101720)!important;border:1px solid #293947!important;box-shadow:0 16px 42px #0006!important}
+  .mn-game-controls [style*="rgba(30,41,59"]{background:#1c2a38!important;border-color:#34495a!important}
+  .mn-game-controls input{background:#0a1119!important;border:1px solid #34495a!important;border-radius:9px!important;min-width:0}
+  .mn-game-controls button{border-radius:8px!important}
+  .mn-game-controls button[style*="linear-gradient(135deg,#dc2626"]{background:#17475a!important;border-color:#2486a1!important;color:#b8f0fa!important;box-shadow:none!important}
+  .mn-game-controls button[style*="linear-gradient(135deg,#20b879"]{background:#087fa2!important;border-color:#16a0c3!important;color:white!important;box-shadow:0 4px 0 #07516c!important}
+  .mn-game-controls button[style*="linear-gradient(135deg,#158454"]{background:linear-gradient(180deg,#168fba,#08769d)!important;color:#fff!important;box-shadow:0 4px 0 #064c68!important}
+  .mn-game-controls .mn-cashout{background:linear-gradient(180deg,#168fba,#08769d)!important;color:#fff!important;box-shadow:0 4px 0 #064c68!important;border-radius:9px!important}
+  .mn-game-result{grid-column:1/-1;grid-row:5}
+  @media(max-width:760px){
+    .mn-game{display:flex!important;flex-direction:column!important;gap:10px!important;padding:6px 0 28px!important}
+    .mn-game-header,.mn-game-hero,.mn-game-board,.mn-game-ladder,.mn-game-controls,.mn-game-result{width:100%;box-sizing:border-box}
+    .mn-game-board{padding:10px!important}
+    .mn-game-board>div{gap:6px!important}
+    .mn-game-controls{padding:14px!important}
+  }
+
 `;

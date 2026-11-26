@@ -40,22 +40,22 @@ function SoloCard({ card, onClick, index }: { card: SoloCardData; onClick: () =>
       position: "relative", minHeight: card.wide ? 150 : 164, overflow: "hidden",
       display: "flex", flexDirection: card.wide ? "row" : "column", justifyContent: "space-between",
       alignItems: card.wide ? "center" : "stretch", textAlign: "left", padding: card.wide ? "18px 22px" : "15px",
-      borderRadius: 20, border: `1px solid ${card.tone}55`,
-      background: `radial-gradient(ellipse at 85% 15%,${card.tone}30 0%,transparent 55%),linear-gradient(145deg,#211b13 0%,#111319 65%,#0c0e13 100%)`,
-      color: "#fff5e3", cursor: "pointer", fontFamily: "inherit",
-      boxShadow: `0 8px 24px #0007,inset 0 1px 0 #ffffff10,0 0 20px ${card.tone}10`,
+      borderRadius: 12, border: "1px solid #293746",
+      background: "linear-gradient(180deg,#1b2733 0%,#141e28 100%)",
+      color: "#f2f6f9", cursor: "pointer", fontFamily: "inherit",
+      boxShadow: "0 5px 16px #0005,inset 0 1px 0 #ffffff08",
       animation: `soloCardIn .42s ease ${index * 45}ms both`,
       gridColumn: card.wide ? "1 / -1" : undefined,
     }}>
       <div style={{ position: "absolute", right: -18, bottom: -34, fontSize: card.wide ? 116 : 90, opacity: .13, transform: "rotate(-13deg)", filter: "drop-shadow(0 0 18px currentColor)", pointerEvents: "none" }}>{card.icon}</div>
       <div style={{ position: "relative", zIndex: 1, display: "flex", flexDirection: "column", height: "100%", flex: 1 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
-          <span style={{ width: 6, height: 6, borderRadius: 10, background: card.tone, boxShadow: `0 0 10px ${card.tone}` }} />
-          <span style={{ color: card.tone, fontSize: 9, fontWeight: 900, letterSpacing: ".18em" }}>{card.tag}</span>
-          <span style={{ color: "#817866", fontSize: 8, fontWeight: 900, marginLeft: "auto" }}>SOLO</span>
+          <span style={{ width: 6, height: 6, borderRadius: 10, background: "#35b8d2" }} />
+          <span style={{ color: "#7f9aaa", fontSize: 9, fontWeight: 900, letterSpacing: ".14em" }}>{card.tag}</span>
+          <span style={{ color: "#617382", fontSize: 8, fontWeight: 900, marginLeft: "auto" }}>TONYX</span>
         </div>
         <div style={{ marginTop: card.wide ? 15 : 13, fontSize: card.wide ? 23 : 19, fontWeight: 950, letterSpacing: "-.035em" }}>{card.title}</div>
-        <div style={{ color: "#a89d8b", fontSize: 10, lineHeight: 1.45, marginTop: 5, maxWidth: card.wide ? 240 : 155 }}>{card.subtitle}</div>
+        <div style={{ color: "#8fa0ad", fontSize: 10, lineHeight: 1.45, marginTop: 5, maxWidth: card.wide ? 240 : 155 }}>{card.subtitle}</div>
         <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: "auto", paddingTop: 13, color: card.tone, fontSize: 9, fontWeight: 900, letterSpacing: ".12em" }}>
           ИГРАТЬ <span style={{ fontSize: 14 }}>↗</span>
         </div>
@@ -63,9 +63,9 @@ function SoloCard({ card, onClick, index }: { card: SoloCardData; onClick: () =>
       <div style={{
         position: "relative", zIndex: 1, flexShrink: 0, width: card.wide ? 100 : 66, height: card.wide ? 100 : 66,
         marginLeft: card.wide ? 18 : 0, marginTop: card.wide ? 0 : 14, alignSelf: card.wide ? "center" : "flex-end",
-        borderRadius: card.wide ? 28 : 20, display: "grid", placeItems: "center",
-        fontSize: card.wide ? 57 : 39, background: `linear-gradient(145deg,${card.tone}28,#111319 78%)`,
-        border: `1px solid ${card.tone}66`, boxShadow: `inset 0 1px 12px ${card.tone}20,0 0 25px ${card.tone}18`,
+        borderRadius: 12, display: "grid", placeItems: "center",
+        fontSize: card.wide ? 57 : 39, background: "linear-gradient(145deg,#263d4b,#172530)",
+        border: "1px solid #355263", boxShadow: "inset 0 1px 12px #5ccbe51a",
       }}>{card.icon}</div>
     </button>
   );
@@ -73,8 +73,21 @@ function SoloCard({ card, onClick, index }: { card: SoloCardData; onClick: () =>
 
 function SoloShell({ children, onBack }: { children: ReactNode; onBack: () => void }) {
   return (
-    <div style={{ minHeight: "100dvh", padding: "12px 12px 110px", color: "#fff4df", background: "radial-gradient(ellipse at 50% -10%,#3b2a14 0%,#17130e 32%,#090b10 75%)" }}>
-      <button type="button" onClick={onBack} style={back}>← НАЗАД К SOLO</button>
+    <div className="tonyx-game-shell" style={{ minHeight: "100dvh", padding: "14px 14px 110px", color: "#edf4f8", background: "#0d151d", fontFamily: "Inter,system-ui,sans-serif" }}>
+      <style>{`
+        .tonyx-game-shell{background:radial-gradient(ellipse at 50% -25%,#1b3444 0%,#101b25 38%,#0b1219 78%)!important}
+        .tonyx-game-top{max-width:1180px;margin:0 auto 14px;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0 0 12px;border-bottom:1px solid #263746}
+        .tonyx-game-back{height:36px;padding:0 13px;border:1px solid #314858;border-radius:8px;background:#1a2a36;color:#b8d3df;font:800 10px Inter,system-ui;letter-spacing:.08em}
+        .tonyx-game-brand{color:#45bad2;font-size:10px;font-weight:900;letter-spacing:.16em}
+        .tonyx-game-note{color:#718696;font-size:9px;font-weight:700;letter-spacing:.08em}
+        .tonyx-game-shell .mn-game,.tonyx-game-shell .crash-game,.tonyx-game-shell .qg-game,.tonyx-game-shell .plinko-game,.tonyx-game-shell .cf-game,.tonyx-game-shell .pickaxe-drop{color:#edf4f8!important}
+        @media(max-width:700px){.tonyx-game-shell{padding:10px 9px 100px!important}.tonyx-game-top{margin-bottom:10px}}
+      `}</style>
+      <div className="tonyx-game-top">
+        <button type="button" onClick={onBack} className="tonyx-game-back">← ВСЕ ИГРЫ</button>
+        <div className="tonyx-game-brand">TONYX <span style={{color:"#718696"}}>· ORIGINALS</span></div>
+        <div className="tonyx-game-note">DEMO PLAY</div>
+      </div>
       {children}
     </div>
   );
@@ -115,17 +128,19 @@ export default function SoloPage() {
     <div style={page}>
       <style>{`
         @keyframes soloCardIn { from{opacity:0;transform:translateY(12px) scale(.985)} to{opacity:1;transform:translateY(0) scale(1)} }
-        .solo-card-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:11px; }
+        .solo-card-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; max-width:1180px; margin:0 auto; }
+        @media(max-width:760px){.solo-card-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}}
+        @media(max-width:420px){.solo-card-grid{grid-template-columns:1fr}.solo-card-grid>button{min-height:122px!important}}
       `}</style>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 16 }}>
         <div>
-          <div style={{ color: "#d9b66e", fontSize: 9, fontWeight: 900, letterSpacing: ".23em", marginBottom: 7 }}>✦ TONYX CASINO</div>
-          <div style={{ fontSize: 25, fontWeight: 950, letterSpacing: "-.045em", color: "#fff4df" }}>SOLO GAMES</div>
-          <div style={{ color: "#9e927f", fontSize: 11, marginTop: 5 }}>Выбирай игру и испытай удачу</div>
+          <div style={{ color: "#39b9d2", fontSize: 9, fontWeight: 900, letterSpacing: ".23em", marginBottom: 7 }}>TONYX · ORIGINALS</div>
+          <div style={{ fontSize: 25, fontWeight: 950, letterSpacing: "-.045em", color: "#f0f5f8" }}>SOLO GAMES</div>
+          <div style={{ color: "#8fa2b0", fontSize: 11, marginTop: 5 }}>Выбери игру и сделай ставку</div>
         </div>
-        <div style={{ textAlign: "right", padding: "9px 11px", borderRadius: 12, background: "linear-gradient(145deg,#2b2113,#15130f)", border: "1px solid #7c6034" }}>
-          <div style={{ color: "#a18d68", fontSize: 8, fontWeight: 900, letterSpacing: ".12em" }}>DEMO BALANCE</div>
-          <div style={{ color: "#f1ce86", fontSize: 15, fontWeight: 900 }}>{demoBalance.toFixed(2)}</div>
+        <div style={{ textAlign: "right", padding: "9px 11px", borderRadius: 12, background: "linear-gradient(145deg,#1d303d,#14222c)", border: "1px solid #355263" }}>
+          <div style={{ color: "#8fa7b5", fontSize: 8, fontWeight: 900, letterSpacing: ".12em" }}>DEMO BALANCE</div>
+          <div style={{ color: "#d9f5fb", fontSize: 15, fontWeight: 900 }}>{demoBalance.toFixed(2)}</div>
         </div>
       </div>
       <div className="solo-card-grid">
@@ -140,12 +155,12 @@ export default function SoloPage() {
 
 const page: CSSProperties = {
   minHeight: "100dvh", padding: "18px 14px 120px",
-  color: "#fff", background: "radial-gradient(ellipse at 50% -10%,#3b2a14 0%,#17130e 32%,#090b10 75%)",
+  color: "#edf4f8", background: "radial-gradient(ellipse at 50% -15%,#1a3444 0%,#101b25 38%,#0b1219 78%)",
   fontFamily: "Inter, system-ui, sans-serif",
 };
 const back: CSSProperties = {
   marginBottom: 13, height: 38, padding: "0 14px", borderRadius: 11,
-  border: "1px solid rgba(205,164,91,.4)",
-  background: "linear-gradient(145deg,#2b2113,#15130f)", color: "#e8c982",
+  border: "1px solid #314858",
+  background: "linear-gradient(145deg,#1d303d,#14222c)", color: "#b8d3df",
   fontSize: 10, fontWeight: 900, letterSpacing: ".1em", cursor: "pointer", fontFamily: "inherit",
 };

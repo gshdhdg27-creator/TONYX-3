@@ -276,6 +276,28 @@ const CSS = `
 .cf-result { animation: cfPop 0.35s ease-out; text-align: center; margin: 0 0 12px; }
 .cf-result-title { font-size: 18px; font-weight: 900; }
 .cf-result-sub { font-size: 13px; margin-top: 2px; font-weight: 700; opacity: 0.9; }
+
+  /* TONYX Coinflip — focused stage with compact control rail */
+  .cf-game{width:100%;max-width:1120px;margin:0 auto;padding:10px 0 32px;display:grid;grid-template-columns:minmax(0,1fr) 350px;grid-template-rows:auto auto auto;gap:14px 18px;align-items:start;color:#eef3f8}
+  .cf-game>.cf-ambient{position:absolute;inset:0;pointer-events:none;z-index:0}
+  .cf-game>.cf-header{grid-column:1/-1;z-index:1;text-align:left!important;border-bottom:1px solid #293743;padding:0 2px 12px;margin:0!important}
+  .cf-game .cf-header [style*="border-radius: 999px"]{background:#153d4c!important;color:#a9eafa!important;box-shadow:none!important;border:1px solid #23687e}
+  .cf-game .cf-header>div:nth-child(2){font-size:24px!important;color:#f1f6fa!important}
+  .cf-game .cf-header>div:nth-child(3){color:#91a5b5!important}
+  .cf-game-stage{grid-column:1;grid-row:2;min-height:470px;border:1px solid #293d4a;border-radius:16px;background:radial-gradient(ellipse at 50% 48%,#163342,#0b151e 72%);box-shadow:0 18px 48px #0008}
+  .cf-game .cf-ring{border-color:#2b6d82!important;box-shadow:inset 0 0 42px #0e668333!important}
+  .cf-game .cf-floor{background:radial-gradient(ellipse,#15536a55,transparent 68%)!important}
+  .cf-game .cf-coin{filter:drop-shadow(0 18px 22px #0009)}
+  .cf-game .cf-face{border-color:#b8d6e4!important}
+  .cf-game .cf-face.cf-heads{background:linear-gradient(145deg,#c5e8f2,#3d819a)!important;color:#102b38!important}
+  .cf-game .cf-face.cf-tails{background:linear-gradient(145deg,#eaf4f8,#7999a8)!important;color:#1a2e38!important}
+  .cf-game .cf-controls{grid-column:2;grid-row:2/span 2;margin:0!important;padding:18px!important;background:linear-gradient(180deg,#151f2a,#101720)!important;border:1px solid #293947!important;border-radius:13px!important;box-shadow:0 14px 34px #0006!important}
+  .cf-game .cf-controls button{border-radius:8px!important}
+  .cf-game .cf-controls button[style*="linear-gradient"]{background:linear-gradient(180deg,#168fba,#08769d)!important;color:white!important;box-shadow:0 4px 0 #064c68!important}
+  .cf-game .cf-controls input{background:#090f16!important;border:1px solid #344655!important;color:#eef3f8!important;border-radius:8px!important}
+  .cf-game .cf-result{grid-column:1;grid-row:3;margin:0!important;padding:14px;border:1px solid #2b4654;border-radius:12px;background:#121e28}
+  @media(max-width:760px){.cf-game{display:flex!important;flex-direction:column!important;gap:10px!important;padding:6px 0 24px!important}.cf-game>.cf-header,.cf-game-stage,.cf-game .cf-controls,.cf-game .cf-result{width:100%;box-sizing:border-box}.cf-game-stage{min-height:310px}.cf-game .cf-controls{padding:14px!important}}
+
 `;
 
 export default function CoinFlipGame({
@@ -471,7 +493,7 @@ export default function CoinFlipGame({
   const canPlay = !busy && !spinning && Number(bet) >= MIN_BET;
 
   return (
-    <div className="cf-root tx-coinflip" style={root}>
+    <div className="cf-root cf-game" style={root}>
       <style>{CSS}</style>
       <div
         className="cf-ambient"
@@ -494,7 +516,7 @@ export default function CoinFlipGame({
         </div>
       )}
 
-      <div style={hero}>
+      <div className="cf-header" style={hero}>
         <div
           style={{
             ...multBadge,
@@ -512,7 +534,7 @@ export default function CoinFlipGame({
         </div>
       </div>
 
-      <div className="cf-arena">
+      <div className="cf-arena cf-game-stage">
         <div
           className="cf-ring"
           style={{ border: `1px solid ${th.ring}`, boxShadow: `inset 0 0 36px ${th.accentDim}` }}
@@ -569,7 +591,7 @@ export default function CoinFlipGame({
       </div>
 
       {lastResult && !spinning && (
-        <div className="cf-result">
+        <div className="cf-result cf-game-result">
           <div
             className="cf-result-title"
             style={{ color: lastResult.won ? "#86efac" : "#fca5a5" }}
@@ -587,7 +609,7 @@ export default function CoinFlipGame({
         </div>
       )}
 
-      <div style={panel}>
+      <div className="cf-controls" style={panel}>
         <div style={sectionLabel}>Выбери сторону</div>
         <div style={sideRow}>
           <button

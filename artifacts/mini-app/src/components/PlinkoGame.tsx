@@ -568,11 +568,11 @@ const toastStyle: CSSProperties = {
 
 
 const PLINKO_LAYOUT_CSS = `
-.plinko-game{width:100%;max-width:1120px;margin:0 auto;padding:10px 0 32px;display:grid;grid-template-columns:minmax(0,1fr) 340px;grid-template-rows:auto auto auto auto auto;gap:12px 18px;align-items:start;color:#edf2f7}
-.plinko-board{grid-column:1;grid-row:1/span 4;min-height:560px!important;height:560px!important;margin:0!important;border-radius:16px!important;border:1px solid #2a3d4a!important;background:radial-gradient(ellipse at 50% 0%,#16313e,#09121b 72%)!important;box-shadow:0 18px 48px #0008!important;overflow:hidden}
+.plinko-game{width:100%;max-width:1120px;margin:0 auto;padding:10px 0 32px;display:grid;grid-template-columns:340px minmax(0,1fr);grid-template-rows:auto auto auto auto auto auto;gap:12px 18px;align-items:start;color:#edf2f7}
+.plinko-board{grid-column:2;grid-row:1/span 5;min-height:560px!important;height:560px!important;margin:0!important;border-radius:16px!important;border:1px solid #2a3d4a!important;background:radial-gradient(ellipse at 50% 0%,#16313e,#09121b 72%)!important;box-shadow:0 18px 48px #0008!important;overflow:hidden}
 .plinko-board canvas{width:100%!important;height:100%!important}
-.plinko-game>div:nth-of-type(3){grid-column:1;grid-row:5;text-align:center;background:#131d27;border:1px solid #293947;border-radius:10px;padding:10px}
-.plinko-risk,.plinko-rows,.plinko-balls,.plinko-controls{grid-column:2;margin:0 0 2px!important;padding:14px!important;background:linear-gradient(180deg,#151f2a,#101720)!important;border:1px solid #293947!important;border-radius:12px!important}
+.plinko-game>div:nth-of-type(3){grid-column:2;grid-row:6;text-align:center;background:#131d27;border:1px solid #293947;border-radius:10px;padding:10px}
+.plinko-risk,.plinko-rows,.plinko-balls,.plinko-controls{grid-column:1;margin:0 0 2px!important;padding:14px!important;background:linear-gradient(180deg,#151f2a,#101720)!important;border:1px solid #293947!important;border-radius:12px!important}
 .plinko-risk{grid-row:1}
 .plinko-rows{grid-row:2}
 .plinko-balls{grid-row:3}

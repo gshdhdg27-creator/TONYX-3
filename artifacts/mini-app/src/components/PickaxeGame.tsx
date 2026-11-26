@@ -357,7 +357,7 @@ export default function PickaxeGame({
   const mineW = COLS * CELL;
 
   return (
-    <div style={S.root}>
+    <div className="tx-pickaxe" style={S.root}>
       <div style={S.bg}>
         <div style={S.sky} />
         <div style={S.mountains} />

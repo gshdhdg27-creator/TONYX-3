@@ -294,7 +294,7 @@ export default function PlinkoGame({
     if (busy || !telegramId) return;
     const n = Math.max(1, Math.min(MAX_BALLS, Math.round(balls) || 1));
     if (stake * n > balance + 1e-9) {
-      flash(`Нужно ${totalCost} TON на ${n} шар(ов)`);
+      flash(`Нужно ${totalCost} демо-кредитов на ${n} шар(ов)`);
       return;
     }
     setBusy(true);
@@ -341,8 +341,8 @@ export default function PlinkoGame({
         else hapticNotify("error");
         flash(
           okCount === 1
-            ? `${profit >= 0 ? "+" : ""}${profit.toFixed(3)} TON · ×${lastMult}`
-            : `${okCount} шаров · ${profit >= 0 ? "+" : ""}${profit.toFixed(3)} TON`,
+            ? `${profit >= 0 ? "+" : ""}${profit.toFixed(3)} демо-кредитов · ×${lastMult}`
+            : `${okCount} шаров · ${profit >= 0 ? "+" : ""}${profit.toFixed(3)} демо-кредитов`,
         );
         onBalanceChange();
       }
@@ -371,7 +371,7 @@ export default function PlinkoGame({
         }}>
           {last.count > 1 ? `${last.count} шаров · ` : ""}
           {last.count === 1 ? `×${last.mult} → ` : ""}
-          {last.profit >= 0 ? "+" : ""}{last.profit.toFixed(3)} TON
+          {last.profit >= 0 ? "+" : ""}{last.profit.toFixed(3)} демо-кредитов
         </div>
       )}
 
@@ -469,11 +469,11 @@ export default function PlinkoGame({
             <button key={p} type="button" disabled={busy} onClick={() => setStake(p)} style={chip}>{p}</button>
           ))}
           <span style={{ marginLeft: "auto", fontSize: 11, color: "#64748b", textAlign: "right" }}>
-            {balance.toFixed(2)} TON
+            {balance.toFixed(2)} демо-кредитов
             {balls > 1 && (
               <>
                 <br />
-                <b style={{ color: "#9ee9c1" }}>{totalCost.toFixed(2)} TON</b> всего
+                <b style={{ color: "#9ee9c1" }}>{totalCost.toFixed(2)} демо-кредитов</b> всего
               </>
             )}
           </span>

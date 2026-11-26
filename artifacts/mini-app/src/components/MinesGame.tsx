@@ -364,7 +364,7 @@ export default function MinesGame({
   const gemsLeft = 25 - (game?.minesCount ?? mines) - (game?.safeCount ?? 0);
 
   return (
-    <div style={root}>
+    <div className="tx-mines" style={root}>
       <style>{CSS}</style>
 
       {toast && <div className={`mn-toast mn-toast-${toast.type}`}>{toast.msg}</div>}

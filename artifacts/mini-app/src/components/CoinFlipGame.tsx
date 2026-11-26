@@ -284,14 +284,14 @@ const CSS = `
   .cf-game .cf-header [style*="border-radius: 999px"]{background:#153d4c!important;color:#a9eafa!important;box-shadow:none!important;border:1px solid #23687e}
   .cf-game .cf-header>div:nth-child(2){font-size:24px!important;color:#f1f6fa!important}
   .cf-game .cf-header>div:nth-child(3){color:#91a5b5!important}
-  .cf-game-stage{grid-column:1;grid-row:2;min-height:470px;border:1px solid #293d4a;border-radius:16px;background:radial-gradient(ellipse at 50% 48%,#163342,#0b151e 72%);box-shadow:0 18px 48px #0008}
+  .cf-game-stage{grid-column:2;grid-row:2;min-height:470px;border:1px solid #293d4a;border-radius:16px;background:radial-gradient(ellipse at 50% 48%,#163342,#0b151e 72%);box-shadow:0 18px 48px #0008}
   .cf-game .cf-ring{border-color:#2b6d82!important;box-shadow:inset 0 0 42px #0e668333!important}
   .cf-game .cf-floor{background:radial-gradient(ellipse,#15536a55,transparent 68%)!important}
   .cf-game .cf-coin{filter:drop-shadow(0 18px 22px #0009)}
   .cf-game .cf-face{border-color:#b8d6e4!important}
   .cf-game .cf-face.cf-heads{background:linear-gradient(145deg,#c5e8f2,#3d819a)!important;color:#102b38!important}
   .cf-game .cf-face.cf-tails{background:linear-gradient(145deg,#eaf4f8,#7999a8)!important;color:#1a2e38!important}
-  .cf-game .cf-controls{grid-column:2;grid-row:2/span 2;margin:0!important;padding:18px!important;background:linear-gradient(180deg,#151f2a,#101720)!important;border:1px solid #293947!important;border-radius:13px!important;box-shadow:0 14px 34px #0006!important}
+  .cf-game .cf-controls{grid-column:1;grid-row:2/span 2;margin:0!important;padding:18px!important;background:linear-gradient(180deg,#151f2a,#101720)!important;border:1px solid #293947!important;border-radius:13px!important;box-shadow:0 14px 34px #0006!important}
   .cf-game .cf-controls button{border-radius:8px!important}
   .cf-game .cf-controls button[style*="linear-gradient"]{background:linear-gradient(180deg,#168fba,#08769d)!important;color:white!important;box-shadow:0 4px 0 #064c68!important}
   .cf-game .cf-controls input{background:#090f16!important;border:1px solid #344655!important;color:#eef3f8!important;border-radius:8px!important}

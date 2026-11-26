@@ -11,20 +11,16 @@ export function GeneralTab({ adminId, isSuperAdmin }: { adminId: string; isSuper
   const [withdrawals, setWithdrawals] = useState<AdminWithdrawal[]>([]);
   const [topups, setTopups] = useState<AdminTopup[]>([]);
   const [loading, setLoading] = useState(false);
-  const [forceWin, setForceWin] = useState(false);
-  const [godBusy, setGodBusy] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [w, t, c] = await Promise.all([
+      const [w, t] = await Promise.all([
         apiCall("withdrawals?limit=30", { adminId }),
         apiCall("topups?limit=30", { adminId }),
-        fetch(`/api/mini/admin/check?telegramId=${encodeURIComponent(adminId)}`).then((r) => r.json()).catch(() => null),
       ]);
       if (w.ok) { const d = await w.json(); setWithdrawals(d.withdrawals ?? d ?? []); }
       if (t.ok) { const d = await t.json(); setTopups(d.topups ?? d ?? []); }
-      if (c && typeof c.forceWin === "boolean") setForceWin(c.forceWin);
     } catch { flash("Ошибка загрузки", "error"); }
     finally { setLoading(false); }
   }, [adminId, flash]);
@@ -40,61 +36,11 @@ export function GeneralTab({ adminId, isSuperAdmin }: { adminId: string; isSuper
     } catch { flash("Ошибка сети", "error"); }
   };
 
-  const toggleGod = async () => {
-    setGodBusy(true);
-    try {
-      const r = await apiCall(`users/${adminId}/force-win`, {
-        adminId,
-        method: "POST",
-        body: JSON.stringify({ enable: !forceWin }),
-      });
-      const d = await r.json();
-      if (!r.ok) flash(d.error || "Ошибка", "error");
-      else {
-        setForceWin(Boolean(d.forceWin));
-        flash(d.message || "Готово", "success");
-      }
-    } catch { flash("Ошибка сети", "error"); }
-    finally { setGodBusy(false); }
-  };
+
 
   return (
     <div>
       {toast && <Toast msg={toast.msg} type={toast.type} />}
-      <SectionCard color="#a16207">
-        <SectionTitle icon="⚡" label="Режим Бога" color="#facc15" />
-        <div style={{
-          display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12,
-          background: forceWin ? "rgba(250,204,21,0.12)" : "rgba(30,45,69,0.5)",
-          border: `1px solid ${forceWin ? "rgba(250,204,21,0.45)" : "rgba(30,58,143,0.25)"}`,
-          borderRadius: 12, padding: "12px 14px",
-        }}>
-          <div>
-            <div style={{ fontSize: 13, fontWeight: 800, color: forceWin ? "#facc15" : "#94a3b8" }}>
-              100% победа в любой игре
-            </div>
-            <div style={{ fontSize: 11, color: "#64748b", marginTop: 3 }}>
-              Только для тебя. Арена, барабан, мины, crash и др.
-            </div>
-            <div style={{ fontSize: 11, fontWeight: 700, marginTop: 6, color: forceWin ? "#4ade80" : "#64748b" }}>
-              {forceWin ? "АКТИВЕН" : "ВЫКЛЮЧЕН"}
-            </div>
-          </div>
-          <button
-            type="button"
-            disabled={godBusy}
-            onClick={toggleGod}
-            style={{
-              padding: "10px 18px", borderRadius: 10, border: "none", fontFamily: "inherit",
-              background: forceWin ? "rgba(250,204,21,0.25)" : "rgba(30,58,143,0.45)",
-              color: forceWin ? "#facc15" : "#60a5fa",
-              fontSize: 13, fontWeight: 900, cursor: godBusy ? "wait" : "pointer", flexShrink: 0,
-            }}
-          >
-            {godBusy ? "…" : forceWin ? "ВЫКЛ" : "ВКЛ"}
-          </button>
-        </div>
-      </SectionCard>
       <SectionCard color="#b45309">
         <SectionTitle icon="💸" label="Выводы" color="#fbbf24" />
         <button type="button" onClick={load} style={{ marginBottom: 10, padding: "6px 12px", borderRadius: 8, border: "none", background: "rgba(30,45,69,0.6)", color: "#60a5fa", fontWeight: 700, cursor: "pointer", fontFamily: "inherit", fontSize: 12 }}>

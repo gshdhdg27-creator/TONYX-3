@@ -1,7 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db } from "@workspace/db";
-import { usersTable } from "@workspace/db/schema";
-import { eq } from "drizzle-orm";
+import { settleSingleRoundGame } from "../../lib/game-balance.js";
 import { isGameEnabled, GAME_DISABLED_MESSAGE } from "../../lib/game-config.js";
 import { randomBytes } from "crypto";
 
@@ -94,67 +92,21 @@ router.post("/play", async (req, res) => {
       return;
     }
     if (!Number.isFinite(stakeRaw) || stakeRaw < MIN_STAKE) {
-      res.status(400).json({ error: `Minimum stake is ${MIN_STAKE} TON` });
+      res.status(400).json({ error: `Minimum stake is ${MIN_STAKE} DEMO credits` });
       return;
     }
 
     const table = buildTable(rows, risk);
     const stake = Math.round(stakeRaw * 1000) / 1000;
 
-    const user = await db
-      .select()
-      .from(usersTable)
-      .where(eq(usersTable.telegramId, telegramId))
-      .then((r) => r[0] ?? null);
-
-    if (!user) {
-      res.status(404).json({ error: "User not found" });
-      return;
-    }
-
-    const bal = Number(user.ton ?? 0);
-    if (bal < stake) {
-      res.status(400).json({ error: `Insufficient TON. You have ${bal}` });
-      return;
-    }
-
-    let newBalance = Math.round((bal - stake) * 1000) / 1000;
-    await db
-      .update(usersTable)
-      .set({ ton: String(newBalance), updatedAt: new Date() })
-      .where(eq(usersTable.telegramId, telegramId));
-
-    let { path, slot } = dropBall(table.length);
-    if (user.forceWin) {
-      const best = table.reduce((bi, v, i, a) => (v > a[bi]! ? i : bi), 0);
-      slot = best;
-      path = Array.from({ length: rows }, (_, i) => (i < best ? 1 : 0));
-    }
-
+    const { path, slot } = dropBall(table.length);
     const mult = table[slot] ?? 0;
     const payout = Math.round(stake * mult * 1000) / 1000;
-
-    if (payout > 0) {
-      newBalance = Math.round((newBalance + payout) * 1000) / 1000;
-      await db
-        .update(usersTable)
-        .set({
-          ton: String(newBalance),
-          wins: (user.wins ?? 0) + (payout >= stake ? 1 : 0),
-          losses: (user.losses ?? 0) + (payout < stake ? 1 : 0),
-          totalGamesPlayed: (user.totalGamesPlayed ?? 0) + 1,
-          updatedAt: new Date(),
-        })
-        .where(eq(usersTable.telegramId, telegramId));
-    } else {
-      await db
-        .update(usersTable)
-        .set({
-          losses: (user.losses ?? 0) + 1,
-          totalGamesPlayed: (user.totalGamesPlayed ?? 0) + 1,
-          updatedAt: new Date(),
-        })
-        .where(eq(usersTable.telegramId, telegramId));
+    const won = payout >= stake;
+    const newBalance = await settleSingleRoundGame({ telegramId, stake, payout, won });
+    if (newBalance === null) {
+      res.status(400).json({ error: "User not found or insufficient balance" });
+      return;
     }
 
     res.json({

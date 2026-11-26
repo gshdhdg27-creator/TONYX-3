@@ -11,7 +11,9 @@ export type GameKey =
   | "crash"
   | "plinko"
   | "upgrade"
-  | "pickaxe";
+  | "pickaxe"
+  | "dice"
+  | "roulette";
 
 /**
  * Server-side authority for the admin "game enabled" toggles.

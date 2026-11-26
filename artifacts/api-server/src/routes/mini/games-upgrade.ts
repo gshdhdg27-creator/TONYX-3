@@ -286,7 +286,6 @@ router.post("/play", async (req, res) => {
 
     const roll = randomBytes(2).readUInt16BE(0) / 65536; // 0..1
     let won = roll * 100 < chance;
-    if (user.forceWin) won = true;
 
     let newItem: ReturnType<typeof mapItem> | null = null;
 

@@ -1,0 +1,2 @@
+ALTER TABLE "users"
+  ADD COLUMN IF NOT EXISTS "demo_credits" numeric(18, 3) NOT NULL DEFAULT 1000;

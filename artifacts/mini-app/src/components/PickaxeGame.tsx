@@ -145,7 +145,7 @@ export default function PickaxeGame({
   const play = async () => {
     if (busy || phase === "falling" || phase === "spinning") return;
     if (!telegramId) { setErr("Нет telegramId"); return; }
-    if (bet <= 0 || bet > balance + 1e-9) { setErr("Недостаточно TON"); return; }
+    if (bet <= 0 || bet > balance + 1e-9) { setErr("Недостаточно DEMO"); return; }
     setBusy(true); setErr(""); setPayout(null);
     setPhase("spinning"); setSpinning(true);
     setGrid(makeMine()); setPickX(COLS * CELL / 2); setPickY(0); setCamY(0);
@@ -170,8 +170,7 @@ export default function PickaxeGame({
       setErr(e?.message || "Сеть"); setBusy(false); setPhase("idle"); setSpinning(false); return;
     }
 
-    const forced = empty >= EMPTY_G - 1 && !apiTier
-      ? TIER_ORDER[Math.floor(Math.random() * TIER_ORDER.length)] : apiTier;
+    const forced = apiTier;
 
     const nItems = REEL_ITEMS.length;
     let targetIdx = 0;
@@ -461,7 +460,7 @@ export default function PickaxeGame({
 
       <div style={S.bottomBar}>
         <button type="button" style={S.bonusBtn} disabled>BONUS BUY</button>
-        <div style={S.statBox}><div style={S.statLabel}>CASH</div><div style={S.statVal}>{balance.toFixed(2)}</div></div>
+        <div style={S.statBox}><div style={S.statLabel}>DEMO</div><div style={S.statVal}>{balance.toFixed(2)}</div></div>
         <div style={S.statBox}><div style={S.statLabel}>WIN</div><div style={{ ...S.statVal, color: "#fde047" }}>{(payout ?? win).toFixed(2)}</div></div>
         <div style={S.statBox}><div style={S.statLabel}>BET</div><div style={S.statVal}>{bet.toFixed(2)}</div></div>
       </div>

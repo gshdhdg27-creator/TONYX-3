@@ -1,9 +1,10 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
-import { usersTable, systemSettingsTable } from "@workspace/db/schema";
+import { systemSettingsTable } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
+import { settleSingleRoundGame } from "../../lib/game-balance.js";
 import { isGameEnabled, GAME_DISABLED_MESSAGE } from "../../lib/game-config.js";
-import { createHash } from "crypto";
+import { createHash, createHmac } from "crypto";
 
 const router: IRouter = Router();
 
@@ -17,7 +18,6 @@ export const FLY_MS = 7_500;
 const RESULT_MS = ROUND_MS - BETTING_MS - FLY_MS;
 
 const KEY_EPOCH = "crash_epoch_ms";
-const KEY_OVERRIDES = "crash_overrides"; // JSON { "1": 2.5, "2": 1.01 }
 
 async function getSetting(key: string): Promise<string | null> {
   const row = await db
@@ -53,52 +53,26 @@ export async function getCrashEpoch(): Promise<number> {
   return now;
 }
 
-export async function resetCrashRounds(): Promise<{ epoch: number }> {
-  const now = Date.now();
-  await setSetting(KEY_EPOCH, String(now));
-  await setSetting(KEY_OVERRIDES, "{}");
-  return { epoch: now };
+function getCrashMasterSeed(): string {
+  const seed = process.env.CRASH_SERVER_SEED ?? process.env.TELEGRAM_BOT_TOKEN;
+  if (!seed || seed.length < 32) throw new Error("CRASH_SERVER_SEED must be configured (minimum 32 characters)");
+  return seed;
 }
-
-async function getOverrides(): Promise<Record<string, number>> {
-  try {
-    const raw = await getSetting(KEY_OVERRIDES);
-    if (!raw) return {};
-    const o = JSON.parse(raw);
-    return o && typeof o === "object" ? o : {};
-  } catch {
-    return {};
-  }
+function serverSeedForRound(roundId: number): string {
+  return createHmac("sha256", getCrashMasterSeed()).update(`tonyx-crash-round:${roundId}`).digest("hex");
 }
-
-export async function setCrashOverride(roundId: number, mult: number): Promise<void> {
-  const o = await getOverrides();
-  o[String(roundId)] = Math.round(mult * 100) / 100;
-  await setSetting(KEY_OVERRIDES, JSON.stringify(o));
-}
-
-/** Hash fallback — same for all players */
 function hashCrash(roundId: number): number {
-  const h = createHash("sha256").update(`tonyx-crash-seq-${roundId}`).digest();
-  const r = h[0]! / 255;
-  if (r < 0.03) return 1;
-  const r2 = ((h[1]! << 8) | h[2]!) / 65535;
-  const point = Math.floor((1 / (1 - r2 * 0.96)) * 100) / 100;
+  const digest = createHash("sha256").update(serverSeedForRound(roundId)).digest();
+  if (digest[0]! / 256 < 0.03) return 1;
+  const r = ((digest[1]! << 8) | digest[2]!) / 65536;
+  const point = Math.floor((1 / (1 - r * 0.96)) * 100) / 100;
   return Math.min(MAX_CASHOUT, Math.max(1.01, point));
 }
-
-export async function resolveCrash(roundId: number): Promise<number> {
-  if (roundId < 1) return 1;
-  const o = await getOverrides();
-  const forced = o[String(roundId)];
-  if (typeof forced === "number" && forced >= 1) {
-    return Math.min(MAX_CASHOUT, Math.max(1, Math.round(forced * 100) / 100));
-  }
-  return hashCrash(roundId);
+export function resolveCrash(roundId: number): number {
+  return roundId < 1 ? 1 : hashCrash(roundId);
 }
-
 function roundHash(roundId: number): string {
-  return createHash("sha256").update(`tonyx-crash-seq-${roundId}`).digest("hex").slice(0, 12);
+  return createHash("sha256").update(serverSeedForRound(roundId)).digest("hex");
 }
 
 export async function getRoundState(now = Date.now()) {
@@ -126,9 +100,9 @@ export async function getRoundState(now = Date.now()) {
     phaseRemaining = ROUND_MS - elapsed;
   }
 
-  const crashPoint = phase === "betting" ? null : await resolveCrash(roundId);
+  const crashPoint = phase === "betting" ? null : resolveCrash(roundId);
   const prevRoundId = roundId > 1 ? roundId - 1 : null;
-  const prevCrashPoint = prevRoundId ? await resolveCrash(prevRoundId) : null;
+  const prevCrashPoint = prevRoundId ? resolveCrash(prevRoundId) : null;
 
   return {
     roundId,
@@ -143,9 +117,12 @@ export async function getRoundState(now = Date.now()) {
     epochMs: epoch,
     crashPoint,
     hash: roundHash(roundId),
+    serverSeed: phase === "result" ? serverSeedForRound(roundId) : null,
+    fairness: { commitment: "SHA-256(serverSeed)", outcome: "SHA-256(serverSeed)", reveal: "after round result" },
     prevRoundId,
     prevCrashPoint,
     prevHash: prevRoundId ? roundHash(prevRoundId) : null,
+    prevServerSeed: prevRoundId ? serverSeedForRound(prevRoundId) : null,
     serverNow: now,
   };
 }
@@ -156,6 +133,7 @@ router.get("/info", (_req, res) => {
     maxCashout: MAX_CASHOUT,
     bettingMs: BETTING_MS,
     roundMs: ROUND_MS,
+    fairness: { commitment: "SHA-256(serverSeed)", outcome: "SHA-256(serverSeed)", reveal: "serverSeed is revealed after the round" },
   });
 });
 
@@ -194,7 +172,7 @@ router.post("/play", async (req, res) => {
       return;
     }
     if (!Number.isFinite(stakeRaw) || stakeRaw < MIN_STAKE) {
-      res.status(400).json({ error: `Minimum stake is ${MIN_STAKE} TON` });
+      res.status(400).json({ error: `Minimum stake is ${MIN_STAKE} DEMO credits` });
       return;
     }
     if (!Number.isFinite(cashoutAt) || cashoutAt < 1.01 || cashoutAt > MAX_CASHOUT) {
@@ -206,54 +184,13 @@ router.post("/play", async (req, res) => {
     const cashout = Math.round(cashoutAt * 100) / 100;
     const publicCrashPoint = await resolveCrash(st.roundId);
 
-    const user = await db
-      .select()
-      .from(usersTable)
-      .where(eq(usersTable.telegramId, telegramId))
-      .then((r) => r[0] ?? null);
-
-    if (!user) {
-      res.status(404).json({ error: "User not found" });
-      return;
-    }
-
-    const bal = Number(user.ton ?? 0);
-    if (bal < stake) {
-      res.status(400).json({ error: `Insufficient TON. You have ${bal}` });
-      return;
-    }
-
-    let effectiveCrash = publicCrashPoint;
-    if (user.forceWin) {
-      effectiveCrash = Math.max(publicCrashPoint, Math.round((cashout + 0.15) * 100) / 100);
-    }
-
+    const effectiveCrash = publicCrashPoint;
     const won = cashout <= effectiveCrash;
-    let newBalance = Math.round((bal - stake) * 1000) / 1000;
-    let payout = 0;
-
-    if (won) {
-      payout = Math.round(stake * cashout * 1000) / 1000;
-      newBalance = Math.round((newBalance + payout) * 1000) / 1000;
-      await db
-        .update(usersTable)
-        .set({
-          ton: String(newBalance),
-          wins: (user.wins ?? 0) + 1,
-          totalGamesPlayed: (user.totalGamesPlayed ?? 0) + 1,
-          updatedAt: new Date(),
-        })
-        .where(eq(usersTable.telegramId, telegramId));
-    } else {
-      await db
-        .update(usersTable)
-        .set({
-          ton: String(newBalance),
-          losses: (user.losses ?? 0) + 1,
-          totalGamesPlayed: (user.totalGamesPlayed ?? 0) + 1,
-          updatedAt: new Date(),
-        })
-        .where(eq(usersTable.telegramId, telegramId));
+    const payout = won ? Math.round(stake * cashout * 1000) / 1000 : 0;
+    const newBalance = await settleSingleRoundGame({ telegramId, stake, payout, won });
+    if (newBalance === null) {
+      res.status(400).json({ error: "User not found or insufficient balance" });
+      return;
     }
 
     res.json({

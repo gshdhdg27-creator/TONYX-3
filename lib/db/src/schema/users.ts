@@ -15,6 +15,9 @@ export const usersTable = pgTable("users", {
   /* Wallet 2: TON balance */
   ton: numeric("ton", { precision: 18, scale: 8 }).notNull().default("0"),
 
+  /* Non-withdrawable demo credits for game testing */
+  demoCredits: numeric("demo_credits", { precision: 18, scale: 3 }).notNull().default("1000"),
+
   /* Wallet 3: TONYX trading tokens */
   tonyxCoins: integer("tonyx_coins").notNull().default(0),
 

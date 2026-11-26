@@ -142,18 +142,7 @@ async function resolveRound(roundId: number) {
   const clientSeed = round.clientSeed ?? "default";
   const nonce = round.nonce ?? 1;
   const fairHash = computeFairnessHash(serverSeed, clientSeed, nonce);
-  // God mode (forceWin): if any player has it, they win 100%. Otherwise fair hash.
-  const playerIds = players.map((p) => p.telegramId);
-  const forceRows = playerIds.length
-    ? await db
-        .select({ telegramId: usersTable.telegramId, forceWin: usersTable.forceWin })
-        .from(usersTable)
-        .where(inArray(usersTable.telegramId, playerIds))
-    : [];
-  const godId = forceRows.find((r) => r.forceWin)?.telegramId ?? null;
-  const winner =
-    (godId ? players.find((p) => p.telegramId === godId) : null) ??
-    pickWinnerByHash(fairHash, players, totalPool);
+  const winner = pickWinnerByHash(fairHash, players, totalPool);
 
   const winnerStake = winner.stake;
   const othersPool = totalPool - winnerStake;

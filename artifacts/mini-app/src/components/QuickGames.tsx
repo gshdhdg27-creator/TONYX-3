@@ -179,9 +179,13 @@ const CSS = `
 .qg-header>div:first-child>div:first-child{color:#7d91a3!important;letter-spacing:.18em!important}
 .qg-header>div:first-child>div:last-child{font-size:24px!important;letter-spacing:-.04em!important;color:#f5f8fb!important}
 .qg-header>div:last-child{background:#141d27!important;border:1px solid #2c3a47!important;border-radius:10px!important}
-.qg-stage{grid-column:1;grid-row:2/span 2;min-height:470px!important;border-radius:16px!important;border:1px solid #293a48!important;background:radial-gradient(ellipse at 50% 44%,#142c3a 0%,#0c151e 68%)!important;box-shadow:0 18px 48px #0008!important;overflow:hidden}
+.qg-stage{grid-column:2;grid-row:2/span 2;min-height:470px!important;border-radius:16px!important;border:1px solid #293a48!important;background:radial-gradient(ellipse at 50% 44%,#142c3a 0%,#0c151e 68%)!important;box-shadow:0 18px 48px #0008!important;overflow:hidden}
 .qg-stage>div:last-child{color:#9bb0c0!important;letter-spacing:.16em!important}
-.qg-panel{grid-column:2;width:100%;box-sizing:border-box;background:linear-gradient(180deg,#151f2a,#101720)!important;border:1px solid #293947!important;border-radius:13px!important;padding:16px!important;box-shadow:0 12px 32px #0005!important}
+.qg-panel{grid-column:1;width:100%;box-sizing:border-box;background:linear-gradient(180deg,#151f2a,#101720)!important;border:1px solid #293947!important;border-radius:13px!important;padding:16px!important;box-shadow:0 12px 32px #0005!important}
+.qg-game>.qg-panel:nth-of-type(3){grid-row:2}
+.qg-game>.qg-panel:nth-of-type(4){grid-row:3}
+.qg-game>.qg-result{grid-column:2;grid-row:4}
+.qg-game>.qg-history{grid-column:1/-1;grid-row:5}
 .qg-panel button{border-radius:8px!important}
 .qg-panel input:not([type=range]){background:#0a1119!important;border:1px solid #34495a!important;border-radius:8px!important;color:#f3f7fb!important}
 .qg-panel button[style*="linear-gradient"]{box-shadow:none!important}

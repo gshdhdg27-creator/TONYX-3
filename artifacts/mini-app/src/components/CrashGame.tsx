@@ -389,7 +389,7 @@ export default function CrashGame({
   const placeBet = async () => {
     if (busy || phase !== "betting" || !telegramId || betActive) return;
     if (stake > balance) {
-      setMsg("Недостаточно TON");
+      setMsg("Недостаточно демо-кредитов");
       return;
     }
     setBusy(true);
@@ -496,7 +496,7 @@ export default function CrashGame({
           </div>
 
           <div style={card}>
-            <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 8 }}>Ставка (TON)</div>
+            <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 8 }}>Ставка (ДЕМО-КРЕДИТЫ)</div>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
               {PRESETS.map((p) => (
                 <button
@@ -561,7 +561,7 @@ export default function CrashGame({
                   ? "Ждите раунд"
                   : busy
                     ? "…"
-                    : `Ставка ${stake} TON`}
+                    : `Ставка ${stake} демо-кредитов`}
             </button>
             {msg && (
               <div style={{ marginTop: 10, fontSize: 13, color: "#cbd5e1", textAlign: "center" }}>

@@ -471,7 +471,7 @@ export default function CoinFlipGame({
   const canPlay = !busy && !spinning && Number(bet) >= MIN_BET;
 
   return (
-    <div className="cf-root" style={root}>
+    <div className="cf-root tx-coinflip" style={root}>
       <style>{CSS}</style>
       <div
         className="cf-ambient"

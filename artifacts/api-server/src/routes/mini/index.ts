@@ -9,6 +9,7 @@ import igroRouter from "./games-igro.js";
 import crashRouter from "./games-crash.js";
 import plinkoRouter from "./games-plinko.js";
 import upgradeRouter from "./games-upgrade.js";
+import pickaxeRouter from "./games-pickaxe.js";
 import tasksRouter from "./tasks.js";
 import financeRouter from "./finance.js";
 import leaderboardRouter from "./leaderboard.js";
@@ -95,6 +96,7 @@ router.use("/games/igro", limitPlay, igroRouter);
 router.use("/games/crash", limitPlay, crashRouter);
 router.use("/games/plinko", limitPlay, plinkoRouter);
 router.use("/games/upgrade", limitPlay, upgradeRouter);
+router.use("/games/pickaxe", limitPlay, pickaxeRouter);
 
 router.use("/tasks", tasksRouter);
 router.use("/investments", investmentsRouter);

@@ -19,6 +19,7 @@ export default function QuickGames({ game, telegramId, balance, onBalanceChange 
   const [result, setResult] = useState<Result | null>(null);
   const [error, setError] = useState("");
   const [history, setHistory] = useState<Result[]>([]);
+  const [wheelRotation, setWheelRotation] = useState(0);
 
   const potential = useMemo(() => {
     if (game === "dice") {
@@ -40,9 +41,19 @@ export default function QuickGames({ game, telegramId, balance, onBalanceChange 
       });
       const data = await response.json();
       if (!response.ok) { setError(data.error ?? "Не удалось сыграть"); return; }
-      // Keep the result hidden until the roll animation completes.
-      await new Promise(resolve => window.setTimeout(resolve, game === "dice" ? 950 : 1450));
+      // Animate to the server-selected European roulette pocket; never choose the result client-side.
       const next = data as Result;
+      if (game === "roulette" && Number.isFinite(Number(next.number))) {
+        const pocket = ROULETTE_ORDER.indexOf(Number(next.number));
+        if (pocket >= 0) {
+          const pocketCenter = pocket * (360 / 37) + (180 / 37);
+          const current = wheelRotation % 360;
+          const target = ((270 - pocketCenter - current) % 360 + 360) % 360;
+          setWheelRotation(value => value + 1440 + target);
+        }
+      }
+      // Keep the server result hidden until the physical-style animation completes.
+      await new Promise(resolve => window.setTimeout(resolve, game === "dice" ? 950 : 1650));
       setResult(next);
       setHistory(prev => [next, ...prev].slice(0, 8));
       onBalanceChange();
@@ -75,7 +86,7 @@ export default function QuickGames({ game, telegramId, balance, onBalanceChange 
           </div>
         ) : (
           <div className={`roulette-wrap ${rolling ? "is-spinning" : ""}`}>
-            <div className="roulette-wheel" style={{background:`conic-gradient(${ROULETTE_ORDER.map((n,i)=>{const a=i*360/37;const color=n===0?"#16875d":ROULETTE_RED.has(n)?"#b52d42":"#1b2632";return `${color} ${a}deg ${a+360/37}deg`;}).join(",")})`}}><div className="wheel-center">T</div>{ROULETTE_ORDER.map((n,i)=>{const a=i*360/37;return <span key={n} style={{position:"absolute",left:"50%",top:"50%",transform:`translate(-50%,-50%) rotate(${a+180/37}deg) translateY(-66px) rotate(-${a+180/37}deg)`,fontSize:7,fontWeight:900,color:"#fff",textShadow:"0 1px 2px #000"}}>{n}</span>;})}{Array.from({length:37},(_,i)=><i key={i} style={{transform:`rotate(${i*360/37}deg) translateY(-1px)`}} />)}</div>
+            <div className="roulette-wheel" style={{transform:`rotate(${wheelRotation}deg)`,background:`conic-gradient(${ROULETTE_ORDER.map((n,i)=>{const a=i*360/37;const color=n===0?"#16875d":ROULETTE_RED.has(n)?"#b52d42":"#1b2632";return `${color} ${a}deg ${a+360/37}deg`;}).join(",")})`}}><div className="wheel-center">T</div>{ROULETTE_ORDER.map((n,i)=>{const a=i*360/37;return <span key={n} style={{position:"absolute",left:"50%",top:"50%",transform:`translate(-50%,-50%) rotate(${a+180/37}deg) translateY(-66px) rotate(-${a+180/37}deg)`,fontSize:7,fontWeight:900,color:"#fff",textShadow:"0 1px 2px #000"}}>{n}</span>;})}{Array.from({length:37},(_,i)=><i key={i} style={{transform:`rotate(${i*360/37}deg) translateY(-1px)`}} />)}</div>
             <div className="roulette-pointer">▼</div>
             <div className="roulette-result">{result && !rolling ? result.number : "TONYX"}</div>
           </div>
@@ -170,8 +181,9 @@ const CSS = `
 .wheel-center{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:58px;height:58px;border-radius:50%;display:grid;place-items:center;background:radial-gradient(circle,#f8df9e,#956b32);border:4px solid #6c4b20;color:#35230d;font-weight:1000;font-size:23px;z-index:3}
 .roulette-pointer{position:absolute;top:-3px;z-index:4;color:#f8d88a;text-shadow:0 2px 5px #000;font-size:22px}
 .roulette-result{position:absolute;bottom:-2px;z-index:4;background:#111a20;border:1px solid #e2bd73;border-radius:20px;padding:4px 13px;color:#f7d58d;font-weight:900;font-size:13px}
-.roulette-wrap.is-spinning .roulette-wheel{animation:wheelSpin 1.45s cubic-bezier(.15,.75,.2,1) infinite}
-@keyframes wheelSpin{to{transform:rotate(1440deg)}}
+.roulette-wrap .roulette-wheel{transition:transform 1.6s cubic-bezier(.12,.72,.12,1)}
+.roulette-wrap.is-spinning .roulette-wheel{filter:brightness(1.08)}
+@media(prefers-reduced-motion:reduce){.roulette-wrap .roulette-wheel{transition:none}}
 
 /* TONYX Originals — Dice & European Roulette */
 .qg-game{width:100%;max-width:1120px!important;margin:0 auto!important;padding:10px 0 32px!important;display:grid;grid-template-columns:minmax(0,1fr) 350px;grid-template-rows:auto auto auto auto;gap:14px 18px;align-items:start;color:#edf2f7!important}

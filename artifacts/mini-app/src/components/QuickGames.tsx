@@ -109,8 +109,8 @@ export default function QuickGames({ game, telegramId, balance, onBalanceChange 
         </div>
         <div style={S.presets}>{PRESETS.map(p=><button key={p} type="button" disabled={busy} onClick={()=>setStake(Math.min(balance,p))} style={{...S.preset,...(stake===p?S.presetOn:{})}}>{p}</button>)}<button type="button" disabled={busy} onClick={setMax} style={S.max}>MAX</button></div>
         <div style={S.meta}><span>Баланс: {balance.toFixed(2)}</span><span>Потенциальная выплата: <b>{potential.toFixed(2)}</b></span></div>
-        <button type="button" disabled={busy||stake<0.1||stake>balance} onClick={play} style={{...S.play,opacity:busy||stake<0.1||stake>balance?.5:1}}>{busy?"ИДЁТ ИГРА…":game==="dice"?"БРОСИТЬ КУБИК":"КРУТИТЬ РУЛЕТКУ"}</button>
-        {error&&<div style={S.error}>{error}</div>}
+        <button type="button" disabled={busy||stake<0.1||stake>balance} onClick={play} style={{...S.play,opacity:busy||stake<0.1||stake>balance?0.5:1}}>{busy?"ИДЁТ ИГРА…":game==="dice"?"БРОСИТЬ КУБИК":"КРУТИТЬ РУЛЕТКУ"}</button>
+        {error&&<div style={{color:"#ff737d",fontSize:12,marginTop:10,textAlign:"center"}}>{error}</div>}
       </div>
 
       {result&&!rolling&&<div style={{...S.result,borderColor:result.won?"#28b77a":"#e34c58"}}><div style={{fontSize:10,letterSpacing:".15em",color:"#9ca6b5"}}>РЕЗУЛЬТАТ РАУНДА</div><strong style={{color:result.won?"#4ee0a0":"#ff737d"}}>{result.won?"ПОБЕДА":"НЕ УГАДАЛ"}</strong><div style={{fontSize:13,color:"#d5dbe4"}}>Выплата: {Number(result.payout).toFixed(3)} демо-кредитов</div></div>}

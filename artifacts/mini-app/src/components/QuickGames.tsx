@@ -6,6 +6,9 @@ type Result = { won: boolean; roll?: number; number?: number; resultColor?: "red
 
 const PRESETS = [1, 5, 10, 25, 50];
 
+const ROULETTE_ORDER = [0,32,15,19,4,21,2,25,17,34,6,27,13,36,11,30,8,23,10,5,24,16,33,1,20,14,31,9,22,18,29,7,28,12,35,3,26];
+const ROULETTE_RED = new Set([1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36]);
+
 export default function QuickGames({ game, telegramId, balance, onBalanceChange }: Props) {
   const [stake, setStake] = useState(10);
   const [threshold, setThreshold] = useState(50);
@@ -72,7 +75,7 @@ export default function QuickGames({ game, telegramId, balance, onBalanceChange 
           </div>
         ) : (
           <div className={`roulette-wrap ${rolling ? "is-spinning" : ""}`}>
-            <div className="roulette-wheel"><div className="wheel-center">T</div>{Array.from({length: 12},(_,i)=><i key={i} style={{transform:`rotate(${i*30}deg) translateY(-1px)`}} />)}</div>
+            <div className="roulette-wheel" style={{background:`conic-gradient(${ROULETTE_ORDER.map((n,i)=>{const a=i*360/37;const color=n===0?"#16875d":ROULETTE_RED.has(n)?"#b52d42":"#1b2632";return `${color} ${a}deg ${a+360/37}deg`;}).join(",")})`}}><div className="wheel-center">T</div>{ROULETTE_ORDER.map((n,i)=>{const a=i*360/37;return <span key={n} style={{position:"absolute",left:"50%",top:"50%",transform:`translate(-50%,-50%) rotate(${a+180/37}deg) translateY(-66px) rotate(-${a+180/37}deg)`,fontSize:7,fontWeight:900,color:"#fff",textShadow:"0 1px 2px #000"}}>{n}</span>;})}{Array.from({length:37},(_,i)=><i key={i} style={{transform:`rotate(${i*360/37}deg) translateY(-1px)`}} />)}</div>
             <div className="roulette-pointer">▼</div>
             <div className="roulette-result">{result && !rolling ? result.number : "TONYX"}</div>
           </div>
@@ -162,7 +165,7 @@ const CSS = `
 .dice-face{position:absolute;inset:0;display:grid;place-items:center;border-radius:18px;border:2px solid #f8d88a;background:linear-gradient(145deg,#fff1c4,#d9a84c 75%,#93652a);color:#34220b;font-size:46px;font-weight:1000;box-shadow:inset 0 2px 10px #fff8,0 10px 30px #0008}
 .dice-face.front{transform:translateZ(56px)}.dice-face.back{transform:rotateY(180deg) translateZ(56px)}.dice-face.right{transform:rotateY(90deg) translateZ(56px)}.dice-face.left{transform:rotateY(-90deg) translateZ(56px)}.dice-face.top{transform:rotateX(90deg) translateZ(56px)}.dice-face.bottom{transform:rotateX(-90deg) translateZ(56px)}
 .roulette-wrap{width:190px;height:190px;position:relative;display:grid;place-items:center;z-index:2}
-.roulette-wheel{width:174px;height:174px;border-radius:50%;position:relative;border:7px solid #d5ad64;background:repeating-conic-gradient(#b52c38 0deg 10deg,#1d252e 10deg 20deg,#20855d 20deg 30deg);box-shadow:0 0 0 5px #574324,0 12px 28px #0009,inset 0 0 0 3px #f6d78f}
+.roulette-wheel{width:240px;height:240px;border-radius:50%;position:relative;border:8px solid #9db2c2;background:repeating-conic-gradient(#b52c38 0deg 10deg,#1d252e 10deg 20deg,#20855d 20deg 30deg);box-shadow:0 0 0 5px #263a48,0 12px 28px #0009,inset 0 0 0 3px #d5e3eb}.roulette-wheel i{height:108px!important}.roulette-wheel span{z-index:2}
 .roulette-wheel i{position:absolute;left:calc(50% - 1px);top:50%;width:2px;height:76px;background:#f4d58b;transform-origin:top center;opacity:.8}
 .wheel-center{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:58px;height:58px;border-radius:50%;display:grid;place-items:center;background:radial-gradient(circle,#f8df9e,#956b32);border:4px solid #6c4b20;color:#35230d;font-weight:1000;font-size:23px;z-index:3}
 .roulette-pointer{position:absolute;top:-3px;z-index:4;color:#f8d88a;text-shadow:0 2px 5px #000;font-size:22px}

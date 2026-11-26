@@ -1,8 +1,10 @@
-import { useState } from "react";
-import type { CSSProperties } from "react";
+import { useMemo, useState, type CSSProperties } from "react";
 
 type QuickGameKind = "dice" | "roulette";
 type Props = { game: QuickGameKind; telegramId: string; balance: number; onBalanceChange: () => void };
+type Result = { won: boolean; roll?: number; number?: number; resultColor?: "red" | "black" | "green"; payout: number; newBalance: number; serverSeedHash?: string };
+
+const PRESETS = [1, 5, 10, 25, 50];
 
 export default function QuickGames({ game, telegramId, balance, onBalanceChange }: Props) {
   const [stake, setStake] = useState(10);
@@ -10,90 +12,161 @@ export default function QuickGames({ game, telegramId, balance, onBalanceChange 
   const [direction, setDirection] = useState<"over" | "under">("over");
   const [color, setColor] = useState<"red" | "black" | "green">("red");
   const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState<any>(null);
+  const [rolling, setRolling] = useState(false);
+  const [result, setResult] = useState<Result | null>(null);
   const [error, setError] = useState("");
+  const [history, setHistory] = useState<Result[]>([]);
+
+  const potential = useMemo(() => {
+    if (game === "dice") {
+      const chance = direction === "over" ? 99 - threshold : threshold - 1;
+      return chance > 0 ? stake * (98 / chance) * 0.97 : 0;
+    }
+    return stake * (color === "green" ? 14 : 1.94);
+  }, [game, stake, threshold, direction, color]);
 
   const play = async () => {
-    if (busy || stake < 0.1 || stake > balance) return;
-    setBusy(true); setError(""); setResult(null);
+    if (busy || stake < 0.1 || stake > balance || !telegramId) return;
+    setBusy(true); setRolling(true); setError(""); setResult(null);
     try {
       const payload = game === "dice"
         ? { telegramId, stake, threshold, direction }
         : { telegramId, stake, color };
       const response = await fetch(`/api/mini/games/${game}/play`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
       });
       const data = await response.json();
       if (!response.ok) { setError(data.error ?? "Не удалось сыграть"); return; }
-      setResult(data);
+      // Keep the result hidden until the roll animation completes.
+      await new Promise(resolve => window.setTimeout(resolve, game === "dice" ? 950 : 1450));
+      const next = data as Result;
+      setResult(next);
+      setHistory(prev => [next, ...prev].slice(0, 8));
       onBalanceChange();
     } catch {
       setError("Ошибка соединения");
     } finally {
-      setBusy(false);
+      setRolling(false); setBusy(false);
     }
   };
 
-  const field: CSSProperties = {
-    width: "100%", boxSizing: "border-box", padding: "12px 14px", borderRadius: 10,
-    border: "1px solid #263449", background: "#111b2a", color: "#f8fafc", fontSize: 15,
-  };
-  const button: React.CSSProperties = {
-    border: "1px solid #2b3b52", borderRadius: 10, padding: "10px 12px",
-    background: "#172438", color: "#dbeafe", fontWeight: 700, cursor: "pointer",
-  };
+  const setHalf = () => setStake(v => Math.max(0.1, Math.round(v / 2 * 1000) / 1000));
+  const setDouble = () => setStake(v => Math.min(balance, Math.round(v * 2 * 1000) / 1000));
+  const setMax = () => setStake(Math.max(0.1, Math.floor(balance * 1000) / 1000));
 
   return (
-    <div style={{ padding: 16, color: "#e5e7eb" }}>
-      <div style={{ background: "rgba(15,23,42,.92)", border: "1px solid #243247", borderRadius: 16, padding: 16, marginBottom: 12 }}>
-        <div style={{ fontSize: 11, color: "#94a3b8", fontWeight: 800, letterSpacing: ".12em", marginBottom: 7 }}>DEMO CREDITS</div>
-        <div style={{ fontSize: 24, fontWeight: 900, color: "#fbbf24" }}>{balance.toFixed(3)}</div>
-        <div style={{ fontSize: 11, color: "#64748b", marginTop: 3 }}>Тестовые кредиты · не TON · нельзя вывести</div>
+    <div style={S.root}>
+      <style>{CSS}</style>
+      <div style={S.topline}>
+        <div><div style={S.eyebrow}>TONYX ORIGINALS · SOLO</div><div style={S.heading}>{game === "dice" ? "DICE" : "ROULETTE"}</div></div>
+        <div style={S.balance}><span>DEMO BALANCE</span><b>{balance.toFixed(2)}</b></div>
       </div>
 
-      <div style={{ background: "rgba(15,23,42,.92)", border: "1px solid #243247", borderRadius: 16, padding: 16 }}>
-        <label style={{ display: "block", fontSize: 12, color: "#94a3b8", marginBottom: 7 }}>Размер игры (демо-кредиты)</label>
-        <input type="number" min="0.1" max="100" step="0.1" value={stake} onChange={e => setStake(Math.max(0, Number(e.target.value)))} style={field} />
-
+      <div style={S.stage}>
+        <div style={S.stageGlow} />
         {game === "dice" ? (
-          <>
-            <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
-              <button type="button" onClick={() => setDirection("under")} style={{ ...button, flex: 1, background: direction === "under" ? "#164e63" : button.background }}>Меньше</button>
-              <button type="button" onClick={() => setDirection("over")} style={{ ...button, flex: 1, background: direction === "over" ? "#164e63" : button.background }}>Больше</button>
-            </div>
-            <label style={{ display: "block", fontSize: 12, color: "#94a3b8", margin: "14px 0 7px" }}>Порог: {threshold}</label>
-            <input type="range" min="1" max="98" value={threshold} onChange={e => setThreshold(Number(e.target.value))} style={{ width: "100%" }} />
-          </>
+          <div className={`dice-cube ${rolling ? "is-rolling" : ""} ${result ? "has-result" : ""}`}>
+            <div className="dice-face front">{result && !rolling ? result.roll : "⚄"}</div>
+            <div className="dice-face back">⚅</div><div className="dice-face right">⚂</div>
+            <div className="dice-face left">⚃</div><div className="dice-face top">⚀</div><div className="dice-face bottom">⚁</div>
+          </div>
         ) : (
-          <>
-            <div style={{ fontSize: 12, color: "#94a3b8", margin: "14px 0 8px" }}>Выбери цвет</div>
-            <div style={{ display: "flex", gap: 8 }}>
-              {(["red", "black", "green"] as const).map(c => (
-                <button key={c} type="button" onClick={() => setColor(c)} style={{ ...button, flex: 1, borderColor: color === c ? "#f8fafc" : "#2b3b52", background: c === "red" ? "#991b1b" : c === "black" ? "#111827" : "#166534" }}>{c === "red" ? "Красный" : c === "black" ? "Чёрный" : "Зеро"}</button>
-              ))}
-            </div>
-          </>
+          <div className={`roulette-wrap ${rolling ? "is-spinning" : ""}`}>
+            <div className="roulette-wheel"><div className="wheel-center">T</div>{Array.from({length: 12},(_,i)=><i key={i} style={{transform:`rotate(${i*30}deg) translateY(-1px)`}} />)}</div>
+            <div className="roulette-pointer">▼</div>
+            <div className="roulette-result">{result && !rolling ? result.number : "TONYX"}</div>
+          </div>
         )}
-
-        <button type="button" disabled={busy || stake < 0.1 || stake > balance} onClick={play} style={{ width: "100%", marginTop: 18, border: 0, borderRadius: 12, padding: 15, background: busy || stake > balance ? "#334155" : "linear-gradient(135deg,#0e7490,#2563eb)", color: "white", fontSize: 15, fontWeight: 900, cursor: busy ? "wait" : "pointer" }}>
-          {busy ? "Играем…" : game === "dice" ? "Бросить кубик" : "Крутить рулетку"}
-        </button>
-        {error && <div style={{ color: "#f87171", fontSize: 13, marginTop: 12 }}>{error}</div>}
+        <div style={S.stageCaption}>{rolling ? (game === "dice" ? "КУБИК БРОСАЕТСЯ…" : "РУЛЕТКА ВРАЩАЕТСЯ…") : result ? (result.won ? "ПОБЕДА" : "РАУНД ЗАВЕРШЁН") : game === "dice" ? "ROLL THE DICE" : "EUROPEAN ROULETTE"}</div>
       </div>
 
-      {result && (
-        <div style={{ marginTop: 12, padding: 18, borderRadius: 16, textAlign: "center", border: `1px solid ${result.won ? "#166534" : "#7f1d1d"}`, background: result.won ? "rgba(22,101,52,.18)" : "rgba(127,29,29,.18)" }}>
-          <div style={{ fontSize: 12, color: "#94a3b8" }}>{game === "dice" ? "Выпало" : "Выпал номер"}</div>
-          <div style={{ fontSize: 42, fontWeight: 900, margin: "5px 0", color: result.won ? "#4ade80" : "#f87171" }}>{game === "dice" ? result.roll : result.number}</div>
-          {game === "roulette" && <div style={{ marginTop: 2, color: result.resultColor === "red" ? "#f87171" : result.resultColor === "black" ? "#cbd5e1" : "#4ade80", fontWeight: 800 }}>{result.resultColor === "red" ? "КРАСНОЕ" : result.resultColor === "black" ? "ЧЁРНОЕ" : "ЗЕРО"}</div>}
-          <div style={{ fontWeight: 800, marginTop: 4 }}>{result.won ? "ПОБЕДА" : "НЕ УГАДАЛ"}</div>
-          <div style={{ marginTop: 6, color: "#cbd5e1", fontSize: 13 }}>Выплата: {Number(result.payout).toFixed(3)} демо-кредитов</div>
-          <div style={{ marginTop: 4, color: "#fbbf24", fontSize: 12 }}>Баланс: {Number(result.newBalance).toFixed(3)}</div>
-          {result.serverSeedHash && <div style={{ marginTop: 8, color: "#64748b", fontSize: 10, wordBreak: "break-all" }}>Hash: {result.serverSeedHash}</div>}
+      {game === "dice" ? (
+        <div style={S.panel}>
+          <div style={S.label}>ВЫБЕРИ НАПРАВЛЕНИЕ</div>
+          <div style={S.twoCol}>
+            <button type="button" disabled={busy} onClick={()=>setDirection("under")} style={{...S.choice,...(direction==="under"?S.choiceOn:{})}}>ROLL UNDER <small>Меньше</small></button>
+            <button type="button" disabled={busy} onClick={()=>setDirection("over")} style={{...S.choice,...(direction==="over"?S.choiceOn:{})}}>ROLL OVER <small>Больше</small></button>
+          </div>
+          <div style={{...S.betHead,marginTop:17}}><span>ЦЕЛЕВОЕ ЧИСЛО</span><b>{threshold}</b></div>
+          <input aria-label="Целевое число" type="range" min="1" max="98" value={threshold} disabled={busy} onChange={e=>setThreshold(Number(e.target.value))} style={S.range}/>
+          <div style={S.rangeEnds}><span>1</span><span>98</span></div>
+        </div>
+      ) : (
+        <div style={S.panel}>
+          <div style={S.label}>ВЫБЕРИ СЕКТОР</div>
+          <div style={S.rouletteChoices}>
+            {(["red","black","green"] as const).map(c=><button key={c} type="button" disabled={busy} onClick={()=>setColor(c)} style={{...S.colorChoice,...(color===c?S.colorOn:{})}}><i style={{background:c==="red"?"#e4474e":c==="black"?"#252a34":"#20b879"}}/>{c==="red"?"КРАСНОЕ":c==="black"?"ЧЁРНОЕ":"ZERO"}</button>)}
+          </div>
         </div>
       )}
+
+      <div style={S.panel}>
+        <div style={S.label}>РАЗМЕР СТАВКИ <span style={{color:"#f4c66a"}}>· ДЕМО-КРЕДИТЫ</span></div>
+        <div style={S.betRow}>
+          <button type="button" style={S.adjust} disabled={busy} onClick={setHalf}>½</button>
+          <input type="number" min="0.1" step="0.1" value={stake} disabled={busy} onChange={e=>setStake(Math.max(0,Number(e.target.value)))} style={S.betInput}/>
+          <button type="button" style={S.adjust} disabled={busy} onClick={setDouble}>2×</button>
+        </div>
+        <div style={S.presets}>{PRESETS.map(p=><button key={p} type="button" disabled={busy} onClick={()=>setStake(Math.min(balance,p))} style={{...S.preset,...(stake===p?S.presetOn:{})}}>{p}</button>)}<button type="button" disabled={busy} onClick={setMax} style={S.max}>MAX</button></div>
+        <div style={S.meta}><span>Баланс: {balance.toFixed(2)}</span><span>Потенциальная выплата: <b>{potential.toFixed(2)}</b></span></div>
+        <button type="button" disabled={busy||stake<0.1||stake>balance} onClick={play} style={{...S.play,opacity:busy||stake<0.1||stake>balance?.5:1}}>{busy?"ИДЁТ ИГРА…":game==="dice"?"БРОСИТЬ КУБИК":"КРУТИТЬ РУЛЕТКУ"}</button>
+        {error&&<div style={S.error}>{error}</div>}
+      </div>
+
+      {result&&!rolling&&<div style={{...S.result,borderColor:result.won?"#28b77a":"#e34c58"}}><div style={{fontSize:10,letterSpacing:".15em",color:"#9ca6b5"}}>РЕЗУЛЬТАТ РАУНДА</div><strong style={{color:result.won?"#4ee0a0":"#ff737d"}}>{result.won?"ПОБЕДА":"НЕ УГАДАЛ"}</strong><div style={{fontSize:13,color:"#d5dbe4"}}>Выплата: {Number(result.payout).toFixed(3)} демо-кредитов</div></div>}
+      <div style={S.history}><div style={S.label}>ПОСЛЕДНИЕ РАУНДЫ</div><div style={S.historyRow}>{history.length?history.map((h,i)=><span key={i} style={{...S.historyItem,color:h.won?"#4ee0a0":"#ff737d"}}>{game==="dice"?h.roll:h.number}</span>):<span style={{color:"#647184",fontSize:11}}>История появится после первого раунда</span>}</div></div>
+      <div style={S.note}>ДЕМО-РЕЖИМ · КРЕДИТЫ НЕ ЯВЛЯЮТСЯ TON И НЕ ВЫВОДЯТСЯ</div>
     </div>
   );
 }
+
+const S: Record<string,CSSProperties> = {
+ root:{color:"#edf1f7",fontFamily:"Inter,system-ui,sans-serif",padding:"4px 0 30px"},
+ topline:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12},
+ eyebrow:{fontSize:9,fontWeight:900,letterSpacing:".18em",color:"#9aa5b5"},
+ heading:{fontSize:27,fontWeight:1000,letterSpacing:"-.04em",color:"#fff",marginTop:3},
+ balance:{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:3,padding:"9px 12px",background:"#171d26",border:"1px solid #303b49",borderRadius:12},
+ stage:{height:260,position:"relative",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",borderRadius:18,overflow:"hidden",background:"radial-gradient(ellipse at 50% 48%,#243b34 0%,#151d22 48%,#10151b 100%)",border:"1px solid #35483f",marginBottom:12},
+ stageGlow:{position:"absolute",width:230,height:230,borderRadius:"50%",background:"radial-gradient(circle,#26b87825,transparent 68%)"},
+ stageCaption:{position:"absolute",bottom:17,fontSize:10,fontWeight:900,letterSpacing:".2em",color:"#a9b9ad"},
+ panel:{background:"linear-gradient(180deg,#1b222b,#151b23)",border:"1px solid #303b48",borderRadius:15,padding:14,marginBottom:10},
+ label:{fontSize:10,fontWeight:900,letterSpacing:".13em",color:"#929eae",marginBottom:10},
+ twoCol:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8},
+ choice:{padding:"12px 8px",borderRadius:10,border:"1px solid #394452",background:"#202833",color:"#aab5c2",fontWeight:900,fontSize:11},
+ choiceOn:{borderColor:"#22bd7b",background:"#173b2e",color:"#70e4ad",boxShadow:"0 0 18px #20b87920"},
+ betHead:{display:"flex",justifyContent:"space-between",fontSize:10,fontWeight:900,color:"#9aa5b5"},
+ range:{width:"100%",accentColor:"#24c17d",marginTop:12},
+ rangeEnds:{display:"flex",justifyContent:"space-between",fontSize:9,color:"#667282"},
+ rouletteChoices:{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:7},
+ colorChoice:{padding:"13px 4px",borderRadius:10,border:"1px solid #394452",background:"#202833",color:"#c8d0da",fontSize:10,fontWeight:900,display:"flex",alignItems:"center",justifyContent:"center",gap:5},
+ colorOn:{borderColor:"#f4c66a",boxShadow:"0 0 0 1px #f4c66a44,0 0 16px #f4c66a20"},
+ betRow:{display:"grid",gridTemplateColumns:"48px 1fr 48px",gap:8},
+ adjust:{border:"1px solid #3a4654",borderRadius:10,background:"#242d38",color:"#edf1f7",fontWeight:900,fontSize:16},
+ betInput:{minWidth:0,width:"100%",boxSizing:"border-box",padding:"12px",borderRadius:10,border:"1px solid #3b4856",background:"#10161d",color:"#fff",fontSize:16,fontWeight:900,textAlign:"center"},
+ presets:{display:"grid",gridTemplateColumns:"repeat(6,1fr)",gap:5,marginTop:8},
+ preset:{padding:"9px 2px",border:"1px solid #35414e",borderRadius:8,background:"#242d37",color:"#aeb8c4",fontSize:10,fontWeight:800},
+ presetOn:{borderColor:"#26c17e",color:"#73e4ad",background:"#183b2e"},
+ max:{border:"1px solid #bd9652",borderRadius:8,background:"#4a3820",color:"#f4ce87",fontSize:10,fontWeight:900},
+ meta:{display:"flex",justifyContent:"space-between",gap:8,flexWrap:"wrap",fontSize:10,color:"#8591a0",marginTop:12},
+ play:{width:"100%",marginTop:13,padding:15,border:0,borderRadius:11,background:"linear-gradient(180deg,#38d995,#169d66)",color:"#06180f",fontSize:13,fontWeight:1000,letterSpacing:".1em",boxShadow:"0 5px 0 #0c6945,0 10px 22px #20b87925"},
+ result:{padding:15,border:"1px solid",borderRadius:13,background:"#171e26",textAlign:"center",display:"grid",gap:6,marginBottom:12},
+ history:{padding:"13px 2px"},
+ historyRow:{display:"flex",gap:6,flexWrap:"wrap"},
+ historyItem:{minWidth:32,padding:"7px 8px",textAlign:"center",borderRadius:7,background:"#1b232c",fontSize:11,fontWeight:900},
+ note:{textAlign:"center",fontSize:8,fontWeight:800,letterSpacing:".1em",color:"#697584",paddingTop:8}
+};
+const CSS = `
+@keyframes diceTumble {0%{transform:rotateX(0) rotateY(0) scale(.85)}25%{transform:rotateX(230deg) rotateY(150deg) scale(1.08)}55%{transform:rotateX(470deg) rotateY(340deg) scale(.95)}100%{transform:rotateX(720deg) rotateY(720deg) scale(1)}}
+.dice-cube{width:112px;height:112px;position:relative;transform-style:preserve-3d;transform:rotateX(-22deg) rotateY(-35deg);z-index:2}
+.dice-cube.is-rolling{animation:diceTumble .95s cubic-bezier(.18,.7,.3,1) infinite}
+.dice-face{position:absolute;inset:0;display:grid;place-items:center;border-radius:18px;border:2px solid #f8d88a;background:linear-gradient(145deg,#fff1c4,#d9a84c 75%,#93652a);color:#34220b;font-size:46px;font-weight:1000;box-shadow:inset 0 2px 10px #fff8,0 10px 30px #0008}
+.dice-face.front{transform:translateZ(56px)}.dice-face.back{transform:rotateY(180deg) translateZ(56px)}.dice-face.right{transform:rotateY(90deg) translateZ(56px)}.dice-face.left{transform:rotateY(-90deg) translateZ(56px)}.dice-face.top{transform:rotateX(90deg) translateZ(56px)}.dice-face.bottom{transform:rotateX(-90deg) translateZ(56px)}
+.roulette-wrap{width:190px;height:190px;position:relative;display:grid;place-items:center;z-index:2}
+.roulette-wheel{width:174px;height:174px;border-radius:50%;position:relative;border:7px solid #d5ad64;background:repeating-conic-gradient(#b52c38 0deg 10deg,#1d252e 10deg 20deg,#20855d 20deg 30deg);box-shadow:0 0 0 5px #574324,0 12px 28px #0009,inset 0 0 0 3px #f6d78f}
+.roulette-wheel i{position:absolute;left:calc(50% - 1px);top:50%;width:2px;height:76px;background:#f4d58b;transform-origin:top center;opacity:.8}
+.wheel-center{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:58px;height:58px;border-radius:50%;display:grid;place-items:center;background:radial-gradient(circle,#f8df9e,#956b32);border:4px solid #6c4b20;color:#35230d;font-weight:1000;font-size:23px;z-index:3}
+.roulette-pointer{position:absolute;top:-3px;z-index:4;color:#f8d88a;text-shadow:0 2px 5px #000;font-size:22px}
+.roulette-result{position:absolute;bottom:-2px;z-index:4;background:#111a20;border:1px solid #e2bd73;border-radius:20px;padding:4px 13px;color:#f7d58d;font-weight:900;font-size:13px}
+.roulette-wrap.is-spinning .roulette-wheel{animation:wheelSpin 1.45s cubic-bezier(.15,.75,.2,1) infinite}
+@keyframes wheelSpin{to{transform:rotate(1440deg)}}
+`;

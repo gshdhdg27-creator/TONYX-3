@@ -346,11 +346,11 @@ export default function CoinFlipGame({
       return;
     }
     if (!Number.isFinite(stake) || stake < MIN_BET) {
-      flash(`Мин. ставка ${MIN_BET} TON`, false);
+      flash(`Мин. ставка ${MIN_BET} демо-кредитов`, false);
       return;
     }
     if (stake > balance) {
-      flash("Недостаточно TON", false);
+      flash("Недостаточно демо-кредитов", false);
       return;
     }
 
@@ -453,10 +453,10 @@ export default function CoinFlipGame({
 
       if (d.won) {
         hapticNotify("success");
-        flash(`+${Number(d.payout).toFixed(2)} TON  ·  ×${MULTIPLIER}`, true);
+        flash(`+${Number(d.payout).toFixed(2)} демо-кредитов  ·  ×${MULTIPLIER}`, true);
       } else {
         hapticNotify("error");
-        flash(`−${stake.toFixed(2)} TON`, false);
+        flash(`−${stake.toFixed(2)} демо-кредитов`, false);
       }
       onBalanceChange();
     } catch {
@@ -744,7 +744,7 @@ export default function CoinFlipGame({
         </div>
 
         <div style={metaRow}>
-          <span>Баланс {balance.toFixed(2)} TON</span>
+          <span>Баланс {balance.toFixed(2)} демо-кредитов</span>
           <span style={{ color: choice === "heads" ? "#fde68a" : "#e2e8f0", fontWeight: 800 }}>
             ≈ {potential.toFixed(2)} DEMO
           </span>

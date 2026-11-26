@@ -31,7 +31,7 @@ function extractAdminId(req: import("express").Request, res: import("express").R
   return fallback;
 }
 
-async function checkAdmin(id: string): Promise<boolean> {
+export async function checkAdmin(id: string): Promise<boolean> {
   if (!id) return false;
   if (SUPERADMIN_IDS.has(id)) return true;
   const user = await db

@@ -357,21 +357,44 @@ export default function CrashGame({
         ctx.font = "12px system-ui";
         ctx.fillText("Ожидание…", w / 2 - 30, 24);
       } else {
-        ctx.beginPath();
-        ctx.strokeStyle = ph === "result" ? "rgba(248,113,113,0.5)" : "rgba(74,222,128,0.55)";
-        ctx.lineWidth = 2.5;
-        ctx.moveTo(x0, y0);
         const steps = Math.max(2, Math.floor(40 * Math.min(1, p)));
-        for (let i = 1; i <= steps; i++) {
-          const t = i / 40;
-          const x = x0 + (x1 - x0) * t;
-          const y = y0 + (y1 - y0) * (t * t);
-          ctx.lineTo(x, y);
-        }
-        ctx.stroke();
         const t = Math.min(1, p);
         const rx = x0 + (x1 - x0) * t;
         const ry = y0 + (y1 - y0) * (t * t);
+
+        // Filled graph area and a crisp neon trajectory, like a live crash chart.
+        ctx.beginPath();
+        ctx.moveTo(x0, y0);
+        for (let i = 1; i <= steps; i++) {
+          const u = (t * i) / steps;
+          ctx.lineTo(x0 + (x1 - x0) * u, y0 + (y1 - y0) * (u * u));
+        }
+        ctx.lineTo(rx, h - 18);
+        ctx.lineTo(x0, h - 18);
+        ctx.closePath();
+        const area = ctx.createLinearGradient(0, y1, 0, h - 18);
+        area.addColorStop(0, ph === "result" ? "rgba(248,113,113,0.24)" : "rgba(52,211,153,0.24)");
+        area.addColorStop(1, "rgba(10,20,28,0.02)");
+        ctx.fillStyle = area;
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.moveTo(x0, y0);
+        for (let i = 1; i <= steps; i++) {
+          const u = (t * i) / steps;
+          ctx.lineTo(x0 + (x1 - x0) * u, y0 + (y1 - y0) * (u * u));
+        }
+        const line = ctx.createLinearGradient(x0, y0, rx, ry);
+        line.addColorStop(0, ph === "result" ? "#f87171" : "#34d399");
+        line.addColorStop(1, ph === "result" ? "#fb7185" : "#b7ffe1");
+        ctx.strokeStyle = line;
+        ctx.lineWidth = 3;
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+        ctx.shadowColor = ph === "result" ? "#fb7185" : "#34d399";
+        ctx.shadowBlur = 13;
+        ctx.stroke();
+        ctx.shadowBlur = 0;
         const ang = Math.atan2((y1 - y0) * 2 * t, x1 - x0);
         if (ph === "result" || exp > 0) {
           drawRocket(ctx, rx, ry, ang, false, imgRef.current, Math.max(0, 1 - exp * 1.3));

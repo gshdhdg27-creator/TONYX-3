@@ -93,6 +93,7 @@ export default function PlinkoGame({
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const ballRef = useRef<{ x: number; y: number; visible: boolean }>({ x: 0, y: 0, visible: false });
+  const trailRef = useRef<{ x: number; y: number }[]>([]);
   const animRef = useRef(0);
   const pegsRef = useRef<{ x: number; y: number }[][]>([]);
 
@@ -195,6 +196,22 @@ export default function PlinkoGame({
       ctx.fillText(fmtMult(m), x + bw / 2, y + (bucketH - 6) / 2);
     });
 
+    // Keep a short luminous trail behind the moving ball so every server path is readable.
+    const trail = trailRef.current;
+    for (let i = 0; i < trail.length; i++) {
+      const point = trail[i]!;
+      const strength = (i + 1) / trail.length;
+      ctx.globalAlpha = strength * 0.34;
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, 2 + strength * 2.2, 0, Math.PI * 2);
+      ctx.fillStyle = "#a7f3d0";
+      ctx.shadowColor = "#34d399";
+      ctx.shadowBlur = 9;
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    ctx.shadowBlur = 0;
+
     const b = ballRef.current;
     if (b.visible) {
       const br = Math.max(5, pegR * 1.3);
@@ -236,6 +253,7 @@ export default function PlinkoGame({
       const first = pegs[0]!;
       const startX = (first[0]!.x + first[first.length - 1]!.x) / 2;
       ballRef.current = { x: startX, y: first[0]!.y - 20, visible: true };
+      trailRef.current = [];
 
       let step = 0;
       let pegIndex = Math.floor(first.length / 2);
@@ -281,6 +299,8 @@ export default function PlinkoGame({
           const arc = Math.sin(p * Math.PI) * 11;
           ballRef.current.x = fromX + (toX - fromX) * p;
           ballRef.current.y = fromY + (toY - fromY) * p - arc;
+          trailRef.current.push({ x: ballRef.current.x, y: ballRef.current.y });
+          if (trailRef.current.length > 22) trailRef.current.shift();
           draw(null);
           if (p < 1) animRef.current = requestAnimationFrame(tick);
           else { if (balls <= 5) haptic("light"); step += 1; go(); }
@@ -300,6 +320,7 @@ export default function PlinkoGame({
     setBusy(true);
     setHit(null);
     setLast(null);
+    trailRef.current = [];
     setProgress("");
     haptic("medium");
 

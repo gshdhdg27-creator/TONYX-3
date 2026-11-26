@@ -1,6 +1,6 @@
 /**
- * Pickaxe API — play / history / info
- * Full shaft sim can be expanded; this version is production-safe for balance.
+ * Pickaxe API — Craft & Drop mechanics
+ * tiers: wood 100 / iron 150 / gold 200 / diamond 400
  */
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
@@ -13,8 +13,11 @@ const router: IRouter = Router();
 const MIN_BET = 0.1;
 const MAX_BET = 500;
 const HOUSE = 0.08;
-const TIER_HP = { wood: 12, stone: 18, iron: 26, diamond: 40 } as const;
+
+const TIER_HP = { wood: 100, iron: 150, gold: 200, diamond: 400 } as const;
 type PickTier = keyof typeof TIER_HP;
+
+const BASE_MULT = { wood: 0.35, iron: 0.55, gold: 0.85, diamond: 1.35 } as const;
 
 const historyByUser = new Map<
   string,
@@ -73,8 +76,8 @@ router.post("/play", async (req, res) => {
     let tier: PickTier | null = null;
     if (roll < 0.12) tier = null;
     else if (roll < 0.42) tier = "wood";
-    else if (roll < 0.68) tier = "stone";
-    else if (roll < 0.86) tier = "iron";
+    else if (roll < 0.68) tier = "iron";
+    else if (roll < 0.86) tier = "gold";
     else tier = "diamond";
 
     const playId = seed.toString("hex").slice(0, 16);
@@ -104,9 +107,9 @@ router.post("/play", async (req, res) => {
       return;
     }
 
-    const baseMult = { wood: 0.35, stone: 0.55, iron: 0.85, diamond: 1.35 }[tier];
-    const payout =
-      Math.round(bet * baseMult * (0.5 + seed.readUInt32BE(4) / 0x100000000) * 1000) / 1000;
+    const baseMult = BASE_MULT[tier];
+    const variance = 0.5 + seed.readUInt32BE(4) / 0x100000000;
+    const payout = Math.round(bet * baseMult * variance * 1000) / 1000;
     const balance = Math.round((afterBet + payout) * 1000) / 1000;
     await db
       .update(usersTable)
@@ -118,28 +121,19 @@ router.post("/play", async (req, res) => {
     list.unshift(row);
     historyByUser.set(telegramId, list.slice(0, 30));
 
-    const blocks = Array.from({ length: 40 }, (_, i) => ({
-      kind: i % 7 === 0 ? "gold" : i % 11 === 0 ? "bench" : i % 13 === 0 ? "tnt" : "dirt",
-      maxHp: 1,
-      hp: 1,
-      broken: false,
-    }));
-    const events = [
-      { type: "swing", row: 0, col: 2, hpLeft: TIER_HP[tier] - 1 },
-      { type: "ore", row: 0, col: 2, kind: "gold", gain: payout },
-    ];
     res.json({
       ok: true,
       playId,
       bet,
       tier,
       finalTier: tier,
+      hp: TIER_HP[tier],
       payout,
       net,
       balance,
       col: 2,
-      events,
-      blocks,
+      events: [{ type: "start", tier, hp: TIER_HP[tier] }],
+      blocks: [],
       serverSeed,
       serverSeedHash,
     });

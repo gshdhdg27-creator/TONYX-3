@@ -329,11 +329,11 @@ export default function CrashGame({
       const h = canvas.height;
       ctx.clearRect(0, 0, w, h);
       const g = ctx.createLinearGradient(0, 0, 0, h);
-      g.addColorStop(0, "#0c1222");
+      g.addColorStop(0, "#0b1712");
       g.addColorStop(1, "#1a0a2e");
       ctx.fillStyle = g;
       ctx.fillRect(0, 0, w, h);
-      ctx.strokeStyle = "rgba(56,189,248,0.08)";
+      ctx.strokeStyle = "rgba(34,197,94,0.08)";
       ctx.lineWidth = 1;
       for (let i = 0; i < 6; i++) {
         const y = (h / 6) * i;
@@ -419,10 +419,10 @@ export default function CrashGame({
     }
   };
 
-  const phaseColor = phase === "betting" ? "#38bdf8" : phase === "fly" ? "#4ade80" : "#f87171";
+  const phaseColor = phase === "betting" ? "#4ade80" : phase === "fly" ? "#4ade80" : "#f87171";
   const card: CSSProperties = {
     background: "rgba(15,23,42,0.95)",
-    border: "1px solid rgba(56,189,248,0.2)",
+    border: "1px solid rgba(34,197,94,0.22)",
     borderRadius: 16,
     padding: 14,
   };
@@ -463,7 +463,7 @@ export default function CrashGame({
                 width: "100%",
                 height: 180,
                 borderRadius: 12,
-                background: "#0c1222",
+                background: "#0b1712",
                 display: "block",
               }}
             />
@@ -506,8 +506,8 @@ export default function CrashGame({
                   style={{
                     padding: "8px 12px",
                     borderRadius: 10,
-                    border: stake === p ? "1px solid #38bdf8" : "1px solid rgba(255,255,255,0.1)",
-                    background: stake === p ? "rgba(56,189,248,0.2)" : "rgba(255,255,255,0.05)",
+                    border: stake === p ? "1px solid #4ade80" : "1px solid rgba(255,255,255,0.1)",
+                    background: stake === p ? "rgba(34,197,94,0.22)" : "rgba(255,255,255,0.05)",
                     color: "#e2e8f0",
                     fontWeight: 700,
                     cursor: "pointer",
@@ -546,7 +546,7 @@ export default function CrashGame({
                 border: "none",
                 background:
                   phase === "betting" && !betActive
-                    ? "linear-gradient(135deg,#0369a1,#0ea5e9)"
+                    ? "linear-gradient(135deg,#15803d,#22c55e)"
                     : "rgba(100,116,139,0.3)",
                 color: "#fff",
                 fontWeight: 900,

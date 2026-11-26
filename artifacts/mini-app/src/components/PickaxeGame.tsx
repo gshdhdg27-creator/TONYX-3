@@ -1,6 +1,6 @@
 /**
- * PickaxeGame — Falling Pickaxe 1:1
- * Circle spin + bounce physics + multi-hit blocks + depth-scaled bench
+ * PickaxeGame — Falling Pickaxe 1:1 physics + shaft
+ * Bounce, multi-hit, multi-column when enlarged, depth-scaled bench
  */
 import { useCallback, useRef, useState, type CSSProperties } from "react";
 import {
@@ -15,12 +15,17 @@ interface FloatNum { id: number; x: number; y: number; text: string; color: stri
 const API = "/api/mini/games/pickaxe";
 const COLS = 11;
 const CELL = 32;
-const VIEW_H = 420;
+const VIEW_H = 440;
 const EMPTY_G = 7;
 const ARROW_MS = 3500;
 const ARROW_SIZES = [1, 1.5, 2, 2.5] as const;
 const PRESETS = [0.1, 0.5, 1, 5, 10, 25, 50, 100];
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+const G = 0.42;
+const V_MAX = 7.2;
+const BOUNCE = 3.4;
+const HIT_CD = 55;
 
 const REEL_ITEMS: PickTier[] = [
   null, "wood", "stone", null, "iron", "wood", null, "diamond", "stone", null, "iron", "wood",
@@ -31,18 +36,11 @@ function weightedKind(depth: number): BlockKind {
   const benchW = Math.max(0.02, 3.2 * Math.exp(-depth * 0.08));
   const arrowW = Math.max(0.25, 2.0 * Math.exp(-depth * 0.03));
   const t: [BlockKind, number][] = [
-    ["dirt", Math.max(2, 11 - b * 4)],
-    ["stone", 26 + b * 2],
-    ["copper", 7 + b * 2],
-    ["redstone", 5 + b * 2.5],
-    ["gold", 2.5 + b * 3.5],
-    ["diamond", 0.7 + b * 2],
-    ["emerald", 0.15 + b * 1.1],
-    ["bench", benchW],
-    ["arrow", arrowW],
-    ["tnt", 1.4 + b * 0.6],
-    ["slime", 1.1],
-    ["air", 3.5],
+    ["dirt", Math.max(2, 11 - b * 4)], ["stone", 26 + b * 2],
+    ["copper", 7 + b * 2], ["redstone", depth < 10 ? 2 : 5 + b * 2.5],
+    ["gold", depth < 20 ? 1 : 2.5 + b * 3.5], ["diamond", depth < 30 ? 0.3 : 0.7 + b * 2],
+    ["emerald", depth < 40 ? 0.05 : 0.15 + b * 1.1],
+    ["bench", benchW], ["arrow", arrowW], ["tnt", 1.4 + b * 0.6], ["slime", 1.1], ["air", 3.5],
   ];
   let r = Math.random() * t.reduce((s, [, w]) => s + w, 0);
   for (const [k, w] of t) { r -= w; if (r <= 0) return k; }
@@ -58,17 +56,15 @@ function makeRow(depth: number): Cell[] {
     return { kind: k, maxHp: d.maxHp, hp: d.maxHp };
   });
 }
-
-function makeMine(n = 50): Cell[][] {
+function makeMine(n = 55): Cell[][] {
   return Array.from({ length: n }, (_, i) => makeRow(i));
 }
-
 function ensure(g: Cell[][], row: number) {
-  while (g.length <= row + 14) g.push(makeRow(g.length));
+  while (g.length <= row + 16) g.push(makeRow(g.length));
 }
-
 function hitRadius(sizeMul: number): number {
   if (sizeMul >= 2.5) return 2;
+  if (sizeMul >= 2) return 1;
   if (sizeMul >= 1.5) return 1;
   return 0;
 }
@@ -90,12 +86,11 @@ export default function PickaxeGame({
   const [hp, setHp] = useState(0);
   const [maxHp, setMaxHp] = useState(0);
   const [grid, setGrid] = useState<Cell[][]>(() => makeMine());
-  const [col, setCol] = useState(5);
+  const [pickX, setPickX] = useState(COLS * CELL / 2);
   const [pickY, setPickY] = useState(0);
   const [camY, setCamY] = useState(0);
   const [sizeMul, setSizeMul] = useState(1);
-  const [bounceX, setBounceX] = useState(0);
-  const [bounceY, setBounceY] = useState(0);
+  const [tilt, setTilt] = useState(0);
   const [win, setWin] = useState(0);
   const [payout, setPayout] = useState<number | null>(null);
   const [floats, setFloats] = useState<FloatNum[]>([]);
@@ -106,8 +101,8 @@ export default function PickaxeGame({
 
   const addF = useCallback((x: number, y: number, text: string, color: string) => {
     const id = ++fid.current;
-    setFloats((f) => [...f.slice(-14), { id, x, y, text, color }]);
-    setTimeout(() => setFloats((f) => f.filter((z) => z.id !== id)), 1000);
+    setFloats((f) => [...f.slice(-16), { id, x, y, text, color }]);
+    setTimeout(() => setFloats((f) => f.filter((z) => z.id !== id)), 900);
   }, []);
 
   const play = async () => {
@@ -116,8 +111,8 @@ export default function PickaxeGame({
     if (bet <= 0 || bet > balance + 1e-9) { setErr("Недостаточно TON"); return; }
     setBusy(true); setErr(""); setPayout(null);
     setPhase("spinning"); setSpinning(true);
-    setGrid(makeMine()); setCol(5); setPickY(0); setCamY(0); setSizeMul(1);
-    setBounceX(0); setBounceY(0); setWin(0);
+    setGrid(makeMine()); setPickX(COLS * CELL / 2); setPickY(0); setCamY(0);
+    setSizeMul(1); setTilt(0); setWin(0);
 
     let apiTier: PickTier = null;
     let apiPay = 0;
@@ -141,168 +136,188 @@ export default function PickaxeGame({
     const forced = empty >= EMPTY_G - 1 && !apiTier
       ? TIER_ORDER[Math.floor(Math.random() * TIER_ORDER.length)] : apiTier;
 
-    const n = REEL_ITEMS.length;
+    const nItems = REEL_ITEMS.length;
     let targetIdx = 0;
     if (forced) {
-      const matches = REEL_ITEMS.map((v, i) => (v === forced ? i : -1)).filter((i) => i >= 0);
-      targetIdx = matches[Math.floor(Math.random() * matches.length)] ?? 0;
+      const m = REEL_ITEMS.map((v, i) => (v === forced ? i : -1)).filter((i) => i >= 0);
+      targetIdx = m[Math.floor(Math.random() * m.length)] ?? 0;
     } else {
-      const matches = REEL_ITEMS.map((v, i) => (v === null ? i : -1)).filter((i) => i >= 0);
-      targetIdx = matches[Math.floor(Math.random() * matches.length)] ?? 0;
+      const m = REEL_ITEMS.map((v, i) => (v === null ? i : -1)).filter((i) => i >= 0);
+      targetIdx = m[Math.floor(Math.random() * m.length)] ?? 0;
     }
-    const segment = 360 / n;
-    const finalAngle = 360 * 5 + (360 - targetIdx * segment);
+    const seg = 360 / nItems;
+    const finalAngle = 360 * 5 + (360 - targetIdx * seg);
     const t0 = performance.now();
-    const duration = 2800;
     await new Promise<void>((resolve) => {
       const tick = (now: number) => {
-        const t = Math.min(1, (now - t0) / duration);
-        const ease = 1 - Math.pow(1 - t, 3);
-        setSpinAngle(ease * finalAngle);
-        if (t < 1) requestAnimationFrame(tick);
-        else { setSpinAngle(finalAngle); resolve(); }
+        const t = Math.min(1, (now - t0) / 2800);
+        setSpinAngle((1 - Math.pow(1 - t, 3)) * finalAngle);
+        if (t < 1) requestAnimationFrame(tick); else { setSpinAngle(finalAngle); resolve(); }
       };
       requestAnimationFrame(tick);
     });
-
-    setSpinning(false);
-    setTier(forced);
+    setSpinning(false); setTier(forced);
     if (!forced) {
-      setEmpty((s) => s + 1);
-      setPhase("result"); setPayout(0); setBusy(false);
-      return;
+      setEmpty((s) => s + 1); setPhase("result"); setPayout(0); setBusy(false); return;
     }
     setEmpty(0);
     const H = TIER_HP[forced];
     setHp(H); setMaxHp(H);
-    await sleep(400);
+    await sleep(350);
     setPhase("falling");
     runId.current++;
     const my = runId.current;
+
     let curHp = H;
     let curTier: Exclude<PickTier, null> = forced;
-    let c = 5;
-    let y = 0;
+    let x = (COLS * CELL) / 2;
+    let y = 8;
+    let vx = 0;
+    let vy = 0;
     let sizeIdx = 0;
     let curSize = 1;
     let arrowEnd = 0;
     let total = 0;
-    const g = makeMine(60);
+    const g = makeMine(70);
+    const lastHit = new Map<string, number>();
+
+    const syncGrid = () => setGrid(g.map((r) => r.map((c) => ({ ...c }))));
 
     while (curHp > 0 && my === runId.current) {
-      ensure(g, Math.floor(y / CELL) + 12);
-      const row = Math.floor(y / CELL);
-      if (performance.now() > arrowEnd) {
-        sizeIdx = 0; curSize = 1; setSizeMul(1);
-      }
+      const now = performance.now();
+      if (now > arrowEnd) { sizeIdx = 0; curSize = 1; setSizeMul(1); }
+
+      vy = Math.min(V_MAX, vy + G);
+      y += vy;
+      x += vx;
+      vx *= 0.88;
+      if (Math.abs(vx) < 0.05) vx = 0;
+
+      const minX = CELL + 4;
+      const maxX = (COLS - 1) * CELL - 4;
+      if (x < minX) { x = minX; vx = Math.abs(vx) * 0.6; }
+      if (x > maxX) { x = maxX; vx = -Math.abs(vx) * 0.6; }
+
+      const tipRow = Math.floor((y + 10) / CELL);
+      const tipCol = Math.floor(x / CELL);
+      ensure(g, tipRow + 12);
       const rad = hitRadius(curSize);
 
-      let anySolid = false;
-      const targets: { cc: number; cell: Cell }[] = [];
+      let anyHit = false;
+      let solidUnder = false;
+
       for (let dc = -rad; dc <= rad; dc++) {
-        const cc = c + dc;
-        if (cc < 0 || cc >= COLS) continue;
-        const cell = g[row]?.[cc];
+        const cc = tipCol + dc;
+        if (cc < 1 || cc >= COLS - 1) continue;
+        const rr = tipRow;
+        if (rr < 0) continue;
+        const cell = g[rr]?.[cc];
         if (!cell || cell.kind === "air" || cell.hp <= 0) continue;
-        anySolid = true;
-        targets.push({ cc, cell });
-      }
+        solidUnder = true;
+        const key = `${rr},${cc}`;
+        const last = lastHit.get(key) || 0;
+        if (now - last < HIT_CD) continue;
 
-      if (!anySolid) {
-        y += CELL * 0.5;
-        setPickY(y);
-        setCamY(Math.max(0, y - VIEW_H * 0.32));
-        setBounceX(0); setBounceY(0);
-        await sleep(48);
-        continue;
-      }
-
-      let stayed = false;
-      for (const { cc, cell } of targets) {
         if (cell.kind === "slime") {
-          const dir = Math.random() < 0.5 ? -1 : 1;
-          c = Math.max(1, Math.min(COLS - 2, c + dir));
-          setCol(c); setBounceX(dir * 6);
-          addF(cc * CELL + 16, row * CELL, "↗", "#4ade80");
-          y += CELL * 0.25; setPickY(y); stayed = true; break;
+          const dir = x < (cc + 0.5) * CELL ? -1 : 1;
+          vx = dir * (4.5 + Math.random() * 2);
+          vy = -BOUNCE * 0.9;
+          setTilt(dir * 18);
+          addF(cc * CELL + 16, rr * CELL, "↗", "#4ade80");
+          lastHit.set(key, now);
+          anyHit = true;
+          continue;
         }
+
         if (cell.kind === "tnt") {
           cell.hp = 0; cell.kind = "air";
+          lastHit.set(key, now);
           for (let dr = -1; dr <= 1; dr++) for (let d2 = -1; d2 <= 1; d2++) {
-            const rr = row + dr, c2 = cc + d2;
-            if (rr < 0 || c2 < 0 || c2 >= COLS) continue;
-            ensure(g, rr);
-            const n = g[rr][c2];
+            const r2 = rr + dr, c2 = cc + d2;
+            if (r2 < 0 || c2 < 0 || c2 >= COLS) continue;
+            ensure(g, r2);
+            const n = g[r2][c2];
             if (!n || n.kind === "air") continue;
             if (BLOCK_DEF[n.kind].mult > 0) {
               total += bet * BLOCK_DEF[n.kind].mult;
-              addF(c2 * CELL + 16, rr * CELL, `+${(bet * BLOCK_DEF[n.kind].mult).toFixed(2)}`, "#fbbf24");
+              addF(c2 * CELL + 16, r2 * CELL, `+${(bet * BLOCK_DEF[n.kind].mult).toFixed(2)}`, "#fbbf24");
             }
             n.hp = 0; n.kind = "air";
           }
-          addF(cc * CELL + 16, row * CELL, "💥", "#f87171");
-          setBounceY(-8);
-          setGrid(g.map((r) => r.map((x) => ({ ...x }))));
+          addF(cc * CELL + 16, rr * CELL, "💥", "#f87171");
+          vy = -BOUNCE * 1.2;
+          vx += (Math.random() - 0.5) * 3;
+          curHp -= 1; setHp(Math.max(0, curHp));
+          anyHit = true;
+          syncGrid();
           continue;
         }
+
         if (cell.kind === "bench") {
           cell.hp = 0; cell.kind = "air";
+          lastHit.set(key, now);
           const idx = TIER_ORDER.indexOf(curTier);
           if (idx < 3) {
             curTier = TIER_ORDER[idx + 1]; setTier(curTier);
             curHp = TIER_HP[curTier]; setMaxHp(curHp); setHp(curHp);
-            addF(cc * CELL + 16, row * CELL, "⬆ LVL", "#4ade80");
+            addF(cc * CELL + 16, rr * CELL, "⬆ LVL", "#4ade80");
           } else {
             curHp = TIER_HP[curTier]; setHp(curHp);
-            addF(cc * CELL + 16, row * CELL, "❤ FULL", "#f472b6");
+            addF(cc * CELL + 16, rr * CELL, "❤ FULL", "#f472b6");
           }
-          setGrid(g.map((r) => r.map((x) => ({ ...x }))));
-          continue;
-        }
-        if (cell.kind === "arrow") {
-          cell.hp = 0; cell.kind = "air";
-          sizeIdx = Math.min(3, sizeIdx + 1);
-          curSize = ARROW_SIZES[sizeIdx];
-          arrowEnd = performance.now() + ARROW_MS;
-          setSizeMul(curSize);
-          addF(cc * CELL + 16, row * CELL, `×${curSize}`, "#86efac");
-          setGrid(g.map((r) => r.map((x) => ({ ...x }))));
+          vy = -BOUNCE * 0.7;
+          anyHit = true;
+          syncGrid();
           continue;
         }
 
-        // Multi-hit: chip 1 HP, stay on block until broken
+        if (cell.kind === "arrow") {
+          cell.hp = 0; cell.kind = "air";
+          lastHit.set(key, now);
+          sizeIdx = Math.min(3, sizeIdx + 1);
+          curSize = ARROW_SIZES[sizeIdx];
+          arrowEnd = now + ARROW_MS;
+          setSizeMul(curSize);
+          addF(cc * CELL + 16, rr * CELL, `×${curSize}`, "#86efac");
+          vy = -BOUNCE * 0.6;
+          anyHit = true;
+          syncGrid();
+          continue;
+        }
+
+        lastHit.set(key, now);
         cell.hp -= 1;
         curHp -= 1;
         setHp(Math.max(0, curHp));
+        anyHit = true;
+
+        vy = -BOUNCE * (0.75 + Math.random() * 0.35);
+        vx += (Math.random() - 0.5) * 2.2;
+        setTilt((Math.random() - 0.5) * 22);
+
         if (cell.hp <= 0) {
           const m = BLOCK_DEF[cell.kind].mult;
           if (m > 0) {
             const gain = bet * m;
             total += gain; setWin(total);
-            addF(cc * CELL + 16, row * CELL, `+${gain.toFixed(2)}`, "#fde047");
+            addF(cc * CELL + 16, rr * CELL, `+${gain.toFixed(2)}`, "#fde047");
           }
           cell.kind = "air";
-        } else {
-          stayed = true;
-          setBounceY(-5);
         }
       }
 
-      setGrid(g.map((r) => r.map((x) => ({ ...x }))));
+      if (anyHit) syncGrid();
 
-      if (stayed) {
-        setPickY(row * CELL + CELL * 0.35);
-        setCamY(Math.max(0, row * CELL - VIEW_H * 0.32));
-        await sleep(70);
-        setBounceY(0); setBounceX(0);
-        await sleep(50);
-      } else {
-        y = (row + 1) * CELL;
-        setPickY(y);
-        setCamY(Math.max(0, y - VIEW_H * 0.32));
-        setBounceY(0); setBounceX(0);
-        await sleep(55);
+      if (solidUnder && vy > 0) {
+        const surface = tipRow * CELL;
+        if (y + 12 > surface) y = surface - 12;
       }
+
+      setPickX(x); setPickY(y);
+      setCamY(Math.max(0, y - VIEW_H * 0.35));
+      setTilt((t) => t * 0.85);
+
+      await sleep(22);
     }
 
     setPayout(apiPay > 0 ? apiPay : total);
@@ -311,8 +326,8 @@ export default function PickaxeGame({
     setBusy(false);
   };
 
-  const n = REEL_ITEMS.length;
-  const segment = 360 / n;
+  const nItems = REEL_ITEMS.length;
+  const seg = 360 / nItems;
 
   return (
     <div style={S.root}>
@@ -336,13 +351,13 @@ export default function PickaxeGame({
               transition: spinning ? "none" : "transform 0.2s ease-out",
             }}>
               {REEL_ITEMS.map((it, i) => {
-                const ang = i * segment;
+                const ang = i * seg;
                 return (
                   <div key={i} style={{
                     position: "absolute", left: "50%", top: "50%", width: 44, height: 44,
                     marginLeft: -22, marginTop: -22,
                     transform: `rotate(${ang}deg) translateY(-70px) rotate(${-ang}deg)`,
-                    display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+                    display: "flex", alignItems: "center", justifyContent: "center",
                   }}>
                     {it ? <PickSprite tier={it} size={28} /> : <span style={{ fontSize: 18, opacity: 0.5 }}>✕</span>}
                   </div>
@@ -374,16 +389,16 @@ export default function PickaxeGame({
             <>
               <div style={{
                 position: "absolute",
-                left: col * CELL + CELL / 2 + bounceX,
-                top: pickY - camY + bounceY,
-                transform: `translate(-50%, -50%) scale(${sizeMul})`,
+                left: pickX,
+                top: pickY - camY,
+                transform: `translate(-50%, -50%) scale(${sizeMul}) rotate(${tilt}deg)`,
                 zIndex: 6,
-                transition: "left 0.08s linear, top 0.06s ease-out",
+                willChange: "transform, left, top",
               }}>
-                <PickSprite tier={tier} size={38} />
+                <PickSprite tier={tier} size={40} />
               </div>
               <div style={{
-                position: "absolute", left: "50%", top: Math.max(10, pickY - camY - 52),
+                position: "absolute", left: "50%", top: Math.max(8, pickY - camY - 54),
                 transform: "translateX(-50%)", zIndex: 7,
                 display: "flex", alignItems: "center", gap: 4,
                 background: "rgba(0,0,0,.6)", padding: "2px 10px", borderRadius: 8,
@@ -399,7 +414,7 @@ export default function PickaxeGame({
           {floats.map((f) => (
             <div key={f.id} style={{
               position: "absolute", left: f.x, top: f.y - camY, color: f.color,
-              fontWeight: 900, fontSize: 13, animation: "floatUp 1s ease-out forwards",
+              fontWeight: 900, fontSize: 13, animation: "floatUp .9s ease-out forwards",
               zIndex: 10, textShadow: "0 1px 3px #000", pointerEvents: "none",
             }}>{f.text}</div>
           ))}
@@ -433,7 +448,7 @@ export default function PickaxeGame({
         </div>
       </div>
 
-      <style>{`@keyframes floatUp { from { opacity: 1; transform: translateY(0); } to { opacity: 0; transform: translateY(-32px); } }`}</style>
+      <style>{`@keyframes floatUp { from { opacity: 1; transform: translateY(0); } to { opacity: 0; transform: translateY(-28px); } }`}</style>
     </div>
   );
 }
@@ -442,7 +457,7 @@ const S: Record<string, CSSProperties> = {
   root: { position: "relative", minHeight: "100%", overflow: "hidden", display: "flex", flexDirection: "column", alignItems: "center", padding: "6px 8px 20px", fontFamily: "system-ui, sans-serif", color: "#e2e8f0" },
   bg: { position: "absolute", inset: 0, zIndex: 0, pointerEvents: "none" },
   sky: { position: "absolute", inset: 0, background: "linear-gradient(180deg, #7ec8e8 0%, #a8d4e8 35%, #c5e0c8 55%, #6a8a6a 75%, #3a4a3a 100%)" },
-  hills: { position: "absolute", left: 0, right: 0, bottom: "30%", height: "40%", background: `radial-gradient(ellipse 80% 60% at 20% 100%, #4a7a4a 0%, transparent 70%), radial-gradient(ellipse 70% 50% at 80% 100%, #3d6a3d 0%, transparent 70%)`, opacity: 0.5 },
+  hills: { position: "absolute", left: 0, right: 0, bottom: "28%", height: "42%", background: `radial-gradient(ellipse 80% 60% at 20% 100%, #4a7a4a 0%, transparent 70%), radial-gradient(ellipse 70% 50% at 80% 100%, #3d6a3d 0%, transparent 70%)`, opacity: 0.5 },
   hudTop: { position: "relative", zIndex: 2, width: "100%", maxWidth: 420, display: "flex", alignItems: "center", gap: 8, marginBottom: 4 },
   back: { background: "rgba(0,0,0,.35)", border: "1px solid #475569", color: "#cbd5e1", borderRadius: 8, padding: "4px 10px", cursor: "pointer" },
   logo: { flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontWeight: 900, fontSize: 13, letterSpacing: 0.5, background: "rgba(0,0,0,.5)", padding: "4px 10px", borderRadius: 6 },

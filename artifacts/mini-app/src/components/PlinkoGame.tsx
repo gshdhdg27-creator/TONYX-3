@@ -161,7 +161,7 @@ export default function PlinkoGame({
         const g = ctx.createRadialGradient(p.x - pegR * 0.3, p.y - pegR * 0.3, 0, p.x, p.y, pegR);
         g.addColorStop(0, "#fff");
         g.addColorStop(0.4, "#ddd6fe");
-        g.addColorStop(1, "#7c3aed");
+        g.addColorStop(1, "#158454");
         ctx.beginPath();
         ctx.arc(p.x, p.y, pegR, 0, Math.PI * 2);
         ctx.fillStyle = g;
@@ -202,10 +202,10 @@ export default function PlinkoGame({
       ctx.arc(b.x, b.y, br, 0, Math.PI * 2);
       const bg = ctx.createRadialGradient(b.x - 2, b.y - 2, 0, b.x, b.y, br);
       bg.addColorStop(0, "#fff");
-      bg.addColorStop(0.45, "#e9d5ff");
-      bg.addColorStop(1, "#a855f7");
+      bg.addColorStop(0.45, "#c8f7df");
+      bg.addColorStop(1, "#34d399");
       ctx.fillStyle = bg;
-      ctx.shadowColor = "#c084fc";
+      ctx.shadowColor = "#7de5b2";
       ctx.shadowBlur = 14;
       ctx.fill();
       ctx.shadowBlur = 0;
@@ -384,9 +384,9 @@ export default function PlinkoGame({
             onClick={() => { setRisk(r); setHit(null); }}
             style={{
               ...riskBtn,
-              background: risk === r ? "linear-gradient(135deg,#6d28d9,#a855f7)" : "rgba(255,255,255,0.04)",
+              background: risk === r ? "linear-gradient(135deg,#116b47,#34d399)" : "rgba(255,255,255,0.04)",
               color: risk === r ? "#fff" : "#94a3b8",
-              boxShadow: risk === r ? "0 4px 14px rgba(168,85,247,0.35)" : "none",
+              boxShadow: risk === r ? "0 4px 14px rgba(52,211,153,0.35)" : "none",
             }}
           >
             {label}
@@ -397,12 +397,12 @@ export default function PlinkoGame({
       <div style={{ marginBottom: 10 }}>
         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 2 }}>
           <span style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8" }}>Ряды</span>
-          <span style={{ fontSize: 13, fontWeight: 900, color: "#e9d5ff" }}>{rows}</span>
+          <span style={{ fontSize: 13, fontWeight: 900, color: "#c8f7df" }}>{rows}</span>
         </div>
         <input
           type="range" min={8} max={16} step={1} value={rows} disabled={busy}
           onChange={(e) => { setRows(Number(e.target.value)); setHit(null); }}
-          style={{ width: "100%", accentColor: "#a855f7" }}
+          style={{ width: "100%", accentColor: "#34d399" }}
         />
       </div>
 
@@ -417,9 +417,9 @@ export default function PlinkoGame({
               onClick={() => setBalls(n)}
               style={{
                 ...chip,
-                borderColor: balls === n ? "rgba(168,85,247,0.7)" : "rgba(255,255,255,0.1)",
-                background: balls === n ? "rgba(124,58,237,0.35)" : "rgba(255,255,255,0.05)",
-                color: balls === n ? "#e9d5ff" : "#cbd5e1",
+                borderColor: balls === n ? "rgba(52,211,153,0.7)" : "rgba(255,255,255,0.1)",
+                background: balls === n ? "rgba(21,132,84,0.35)" : "rgba(255,255,255,0.05)",
+                color: balls === n ? "#c8f7df" : "#cbd5e1",
               }}
             >
               {n}
@@ -473,7 +473,7 @@ export default function PlinkoGame({
             {balls > 1 && (
               <>
                 <br />
-                <b style={{ color: "#c4b5fd" }}>{totalCost.toFixed(2)} TON</b> всего
+                <b style={{ color: "#9ee9c1" }}>{totalCost.toFixed(2)} TON</b> всего
               </>
             )}
           </span>
@@ -505,9 +505,9 @@ const board: CSSProperties = {
   borderRadius: 22,
   overflow: "hidden",
   marginBottom: 8,
-  background: "radial-gradient(ellipse 90% 70% at 50% 0%, #5b21b6 0%, #2e1065 45%, #0c0618 100%)",
-  border: "1px solid rgba(167,139,250,0.4)",
-  boxShadow: "0 0 40px rgba(124,58,237,0.2)",
+  background: "radial-gradient(ellipse 90% 70% at 50% 0%, #1b6345 0%, #123b2c 45%, #08120e 100%)",
+  border: "1px solid rgba(52,211,153,0.4)",
+  boxShadow: "0 0 40px rgba(21,132,84,0.2)",
 };
 const panel: CSSProperties = {
   background: "rgba(15,23,42,0.9)",
@@ -541,14 +541,14 @@ const btnPlay: CSSProperties = {
   padding: "12px 18px",
   borderRadius: 12,
   border: "none",
-  background: "linear-gradient(135deg,#7c3aed,#c084fc)",
+  background: "linear-gradient(135deg,#158454,#7de5b2)",
   color: "#fff",
   fontSize: 14,
   fontWeight: 900,
   cursor: "pointer",
   fontFamily: "inherit",
   whiteSpace: "nowrap",
-  boxShadow: "0 6px 20px rgba(168,85,247,0.4)",
+  boxShadow: "0 6px 20px rgba(52,211,153,0.4)",
   minWidth: 72,
 };
 const toastStyle: CSSProperties = {

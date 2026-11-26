@@ -527,11 +527,11 @@ const PICKAXE_LAYOUT_CSS = `
 .pickaxe-hud>div:nth-child(2){background:#142330!important;border:1px solid #2b4554;color:#d9f3ff}
 .pickaxe-reel{grid-column:2;grid-row:2;justify-self:center;margin:4px auto 8px!important}
 .pickaxe-reel>div{border-color:#2c7187!important;background:radial-gradient(circle,#183c4c,#0b1721)!important;box-shadow:0 0 0 2px #274b5b,inset 0 0 30px #0009!important}
-.pickaxe-shaft{grid-column:1;grid-row:2/span 3;margin:0!important;min-width:0}
+.pickaxe-shaft{grid-column:2;grid-row:2/span 3;margin:0!important;min-width:0}
 .pickaxe-shaft>div{max-width:100%!important;border-radius:12px!important;border:2px solid #315063!important;box-shadow:inset 0 0 50px #0008,0 10px 26px #0007!important}
-.pickaxe-stats{grid-column:2;grid-row:3;max-width:none!important;margin:0!important;padding:14px!important;background:#14202b;border:1px solid #2b3d49;border-radius:12px;flex-wrap:wrap}
+.pickaxe-stats{grid-column:1;grid-row:2;max-width:none!important;margin:0!important;padding:14px!important;background:#14202b;border:1px solid #2b3d49;border-radius:12px;flex-wrap:wrap}
 .pickaxe-stats>div{flex:1;min-width:65px}
-.pickaxe-controls{grid-column:2;grid-row:4;width:100%;box-sizing:border-box;padding:16px!important;background:#14202b;border:1px solid #2b3d49;border-radius:12px}
+.pickaxe-controls{grid-column:1;grid-row:3/span 2;width:100%;box-sizing:border-box;padding:16px!important;background:#14202b;border:1px solid #2b3d49;border-radius:12px}
 .pickaxe-controls button{border-radius:8px!important}
 .pickaxe-controls button[style*="linear-gradient"]{background:linear-gradient(180deg,#168fba,#08769d)!important;border-color:#1a8db0!important;color:#fff!important;box-shadow:0 4px 0 #064c68!important}
 @media(max-width:760px){.pickaxe-drop{display:flex!important;flex-direction:column!important;gap:10px!important;padding:8px!important}.pickaxe-hud,.pickaxe-reel,.pickaxe-shaft,.pickaxe-stats,.pickaxe-controls{width:100%;box-sizing:border-box}.pickaxe-reel{order:1}.pickaxe-shaft{order:2}.pickaxe-stats{order:3}.pickaxe-controls{order:4}.pickaxe-shaft>div{max-width:100%!important}}

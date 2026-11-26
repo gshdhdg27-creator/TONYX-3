@@ -2,7 +2,16 @@ import { db } from "@workspace/db";
 import { systemSettingsTable } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
 
-export type GameKey = "spin" | "mines" | "arena" | "igro" | "coin" | "crash" | "plinko" | "upgrade";
+export type GameKey =
+  | "spin"
+  | "mines"
+  | "arena"
+  | "igro"
+  | "coin"
+  | "crash"
+  | "plinko"
+  | "upgrade"
+  | "pickaxe";
 
 /**
  * Server-side authority for the admin "game enabled" toggles.

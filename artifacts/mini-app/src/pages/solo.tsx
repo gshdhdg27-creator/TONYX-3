@@ -23,7 +23,7 @@ type SoloCardData = {
 };
 
 const cards: SoloCardData[] = [
-  { id: "pickaxe", title: "Кирка", subtitle: "Спускайся за редкими рудами", icon: "⛏️", tag: "MINING", tone: "#d6a84b", wide: true },
+  { id: "pickaxe", title: "Pickaxe Drop", subtitle: "Пробивайся вниз и собирай редкие ресурсы", icon: "⛏️", tag: "MINING", tone: "#d6a84b", wide: true },
   { id: "mines", title: "Mines", subtitle: "Открывай клетки и ищи кристаллы", icon: "💎", tag: "HIGH RISK", tone: "#38d6a5" },
   { id: "crash", title: "Crash", subtitle: "Забери выигрыш до падения", icon: "🚀", tag: "MULTIPLIER", tone: "#ff9258" },
   { id: "plinko", title: "Plinko", subtitle: "Отпусти шар и лови множитель", icon: "🔮", tag: "ARCADE", tone: "#55b9ff" },
@@ -32,6 +32,54 @@ const cards: SoloCardData[] = [
   { id: "dice", title: "Dice", subtitle: "Выбери порог и брось кубик", icon: "🎲", tag: "CLASSIC", tone: "#e8c16f" },
   { id: "roulette", title: "Roulette", subtitle: "Красное, чёрное или зеро", icon: "🎯", tag: "EUROPEAN", tone: "#ef7777" },
 ];
+
+
+const GAME_SKIN_CSS = `
+.tx-game-shell{width:100%;max-width:1120px;margin:0 auto;color:#e8edf3;font-family:Inter,system-ui,sans-serif}
+.tx-game-shell button{transition:filter .16s ease,transform .16s ease,border-color .16s ease,box-shadow .16s ease}
+.tx-game-shell button:not(:disabled):active{transform:translateY(1px) scale(.985)}
+.tx-game-shell button:disabled{filter:saturate(.55);cursor:not-allowed}
+.tx-game-shell input{accent-color:#18c987}
+.tx-mines,.tx-crash,.tx-plinko,.tx-coinflip,.tx-quickgames{max-width:100%!important;margin:0 auto!important;color:#e8edf3!important}
+.tx-mines{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:12px}
+.tx-mines>style{display:none}
+.tx-mines>div:nth-of-type(1){grid-column:1/-1}
+.tx-mines>div:nth-of-type(2){grid-column:1/-1;background:linear-gradient(135deg,#1b2935,#101820)!important;border:1px solid #2c3b49!important;border-radius:12px!important;padding:14px!important}
+.tx-mines>div:nth-of-type(3){grid-column:1;grid-row:3/span 2;align-self:start}
+.tx-mines>div:nth-of-type(4){grid-column:1;grid-row:5;display:flex;flex-wrap:wrap;gap:6px}
+.tx-mines>div:nth-of-type(5){grid-column:2;grid-row:3/span 3;align-self:start;background:#151e28!important;border:1px solid #2a3948!important;border-radius:12px!important}
+.tx-mines .mn-cell{background:linear-gradient(145deg,#293746,#1b2631)!important;border:0!important;border-bottom:4px solid #101820!important;border-radius:8px!important;box-shadow:0 3px 0 #0a1118,inset 0 1px 0 #ffffff12!important}
+.tx-mines .mn-cell.mn-hidden{background:linear-gradient(145deg,#344556,#202c38)!important}
+.tx-mines .mn-cell.mn-safe{background:linear-gradient(145deg,#155d49,#0f3e34)!important}
+.tx-mines .mn-cell.mn-mine{background:linear-gradient(145deg,#71323a,#3e2028)!important}
+.tx-mines .mn-cashout{background:linear-gradient(180deg,#23d58e,#12a96c)!important;border-radius:8px!important;box-shadow:0 3px 0 #08734b!important}
+.tx-crash{display:grid!important;grid-template-columns:minmax(0,1fr) 340px;gap:12px}
+.tx-crash>div:nth-child(1){grid-column:1;grid-row:1/span 2;background:linear-gradient(180deg,#151e27,#10171f)!important;border:1px solid #2b3947!important;border-radius:12px!important}
+.tx-crash>div:nth-child(1) canvas{background:radial-gradient(ellipse at 50% 100%,#173e39,#0b1118 70%)!important;border:1px solid #263744}
+.tx-crash>div:nth-child(2){grid-column:1;grid-row:3}
+.tx-crash>div:nth-child(3){grid-column:2;grid-row:1/span 3;background:#151e28!important;border:1px solid #2b3947!important;border-radius:12px!important}
+.tx-plinko{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:12px}
+.tx-plinko>div:first-child{grid-column:1;grid-row:1/span 5;height:500px!important;border-radius:12px!important;background:radial-gradient(ellipse at 50% 0%,#1d3b3b,#101820 70%)!important;border:1px solid #2c414b!important}
+.tx-plinko>div:nth-child(2){grid-column:1;grid-row:6}
+.tx-plinko>div:nth-child(3),.tx-plinko>div:nth-child(4),.tx-plinko>div:nth-child(5),.tx-plinko>div:nth-child(6){grid-column:2;background:#151e28!important;border:1px solid #2b3947!important;border-radius:12px!important;padding:13px!important}
+.tx-coinflip{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:12px}
+.tx-coinflip>.cf-ambient{position:absolute;inset:0;pointer-events:none}
+.tx-coinflip .cf-arena{grid-column:1;grid-row:2/span 3;min-height:390px;border-radius:14px;background:radial-gradient(ellipse at 50% 55%,#253747,#111922 70%);border:1px solid #2b3b4a}
+.tx-coinflip .cf-result{grid-column:1/-1}
+.tx-quickgames{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:12px}
+.tx-quickgames>div:first-child{grid-column:1/-1}
+.tx-quickgames>div:nth-child(2){grid-column:1;grid-row:2/span 3;min-height:360px;border-radius:12px!important;background:radial-gradient(ellipse at 50% 40%,#263d45,#111920 72%)!important;border:1px solid #30404b!important}
+.tx-quickgames>div:nth-child(3),.tx-quickgames>div:nth-child(4){grid-column:2;background:#151e28!important;border:1px solid #2b3947!important;border-radius:12px!important}
+.tx-quickgames>div:nth-child(5),.tx-quickgames>div:nth-child(6),.tx-quickgames>div:nth-child(7){grid-column:1/-1}
+.tx-pickaxe{max-width:620px!important;margin:0 auto!important;border-radius:14px;padding:10px!important;background:linear-gradient(180deg,#17242d,#0c1218)!important;border:1px solid #2b3b48;box-shadow:0 14px 40px #0006}
+@media(max-width:720px){
+ .tx-mines,.tx-crash,.tx-plinko,.tx-coinflip,.tx-quickgames{display:flex!important;flex-direction:column!important;gap:10px!important}
+ .tx-mines>div,.tx-crash>div,.tx-plinko>div,.tx-coinflip>div,.tx-quickgames>div{width:100%;box-sizing:border-box}
+ .tx-plinko>div:first-child{height:420px!important}
+ .tx-coinflip .cf-arena{min-height:300px}
+ .tx-pickaxe{padding:5px!important}
+}
+`;
 
 function SoloCard({ card, onClick, index }: { card: SoloCardData; onClick: () => void; index: number }) {
   return (
@@ -72,9 +120,10 @@ function SoloCard({ card, onClick, index }: { card: SoloCardData; onClick: () =>
 
 function SoloShell({ children, onBack }: { children: ReactNode; onBack: () => void }) {
   return (
-    <div style={{ minHeight: "100dvh", padding: "12px 12px 110px", color: "#fff4df", background: "radial-gradient(ellipse at 50% -10%,#3b2a14 0%,#17130e 32%,#090b10 75%)" }}>
+    <div style={{ minHeight: "100dvh", padding: "12px 12px 110px", color: "#e8edf3", background: "radial-gradient(ellipse at 50% -10%,#1d2934 0%,#111820 34%,#080c11 78%)" }}>
+      <style>{GAME_SKIN_CSS}</style>
       <button type="button" onClick={onBack} style={back}>← НАЗАД К SOLO</button>
-      {children}
+      <div className="tx-game-shell">{children}</div>
     </div>
   );
 }

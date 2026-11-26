@@ -256,7 +256,7 @@ export default function PickaxeGame({
           vx = dir * (5.2 + Math.random() * 2.5);
           vy = -BOUNCE * 1.1;
           setTilt(dir * 22);
-          addF(cc * CELL + 14, rr * CELL, "↗", "#4ade80");
+          addF(cc * CELL + 14, rr * CELL, "↗", "#6ee7a8");
           lastHit.set(key, now);
           anyHit = true;
           continue;
@@ -290,7 +290,7 @@ export default function PickaxeGame({
           if (idx < 3) {
             curTier = TIER_ORDER[idx + 1]; setTier(curTier);
             curHp = TIER_HP[curTier]; setMaxHp(curHp); setHp(curHp);
-            addF(cc * CELL + 14, rr * CELL, "⬆ LVL", "#4ade80");
+            addF(cc * CELL + 14, rr * CELL, "⬆ LVL", "#6ee7a8");
           } else {
             curHp = TIER_HP[curTier]; setHp(curHp);
             addF(cc * CELL + 14, rr * CELL, "❤ FULL", "#f472b6");
@@ -404,7 +404,7 @@ export default function PickaxeGame({
         <div style={{ ...S.mineInner, width: mineW }}>
           <div style={{
             position: "absolute", inset: 0, zIndex: 0,
-            background: "linear-gradient(180deg, #87c8e8 0%, #a8d4e0 40%, #7a9a70 100%)",
+            background: "linear-gradient(180deg,#1a3024 0%,#233e2e 40%,#101c15 100%)",
             opacity: 0.9,
           }} />
           <div style={{ position: "absolute", top: -camY, left: 0, width: mineW, zIndex: 1 }}>
@@ -493,7 +493,7 @@ export default function PickaxeGame({
 const S: Record<string, CSSProperties> = {
   root: { position: "relative", minHeight: "100%", overflow: "hidden", display: "flex", flexDirection: "column", alignItems: "center", padding: "6px 8px 20px", fontFamily: "system-ui, sans-serif", color: "#e2e8f0" },
   bg: { position: "absolute", inset: 0, zIndex: 0, pointerEvents: "none", overflow: "hidden" },
-  sky: { position: "absolute", inset: 0, background: "linear-gradient(180deg, #6eb8e0 0%, #9ecfe8 30%, #b8d8c0 55%, #5a7a50 80%, #3a4a38 100%)" },
+  sky: { position: "absolute", inset: 0, background: "linear-gradient(180deg,#17231d 0%,#20372a 42%,#15241c 72%,#0b120e 100%)" },
   mountains: { position: "absolute", left: 0, right: 0, bottom: "22%", height: "50%", background: "radial-gradient(ellipse 90% 70% at 15% 100%, #4a6a4a 0%, transparent 65%), radial-gradient(ellipse 80% 60% at 85% 100%, #3d5a3d 0%, transparent 60%), radial-gradient(ellipse 50% 40% at 50% 90%, #5a7a5a 0%, transparent 50%)", opacity: 0.55 },
   island: { position: "absolute", left: "8%", top: "12%", width: 70, height: 40, borderRadius: "50% 50% 40% 40%", background: "linear-gradient(180deg, #5a8a4a 30%, #6b4423 70%)", opacity: 0.35, boxShadow: "0 8px 0 -4px #4a7a3a" },
   hudTop: { position: "relative", zIndex: 2, width: "100%", maxWidth: 420, display: "flex", alignItems: "center", gap: 8, marginBottom: 4 },
@@ -504,7 +504,7 @@ const S: Record<string, CSSProperties> = {
   circleOuter: { width: 184, height: 184, borderRadius: "50%", border: "5px solid #1e293b", background: "rgba(15,23,42,.92)", position: "relative", boxShadow: "0 0 0 2px #334155, inset 0 0 28px rgba(0,0,0,.55)" },
   circleInner: { position: "absolute", inset: 10, borderRadius: "50%" },
   circleCenter: { position: "absolute", left: "50%", top: "50%", width: 38, height: 38, marginLeft: -19, marginTop: -19, borderRadius: "50%", background: "#0f172a", border: "2px solid #475569", zIndex: 3 },
-  pointer: { position: "absolute", left: "50%", top: -7, marginLeft: -7, width: 0, height: 0, borderLeft: "7px solid transparent", borderRight: "7px solid transparent", borderBottom: "11px solid #22c55e" },
+  pointer: { position: "absolute", left: "50%", top: -7, marginLeft: -7, width: 0, height: 0, borderLeft: "7px solid transparent", borderRight: "7px solid transparent", borderBottom: "11px solid #22c77a" },
   mineOuter: { position: "relative", zIndex: 2, display: "flex", justifyContent: "center", marginBottom: 6 },
   mineInner: { position: "relative", height: VIEW_H, overflow: "hidden", borderRadius: 4, border: "3px solid #1e293b", boxShadow: "0 0 0 1px #475569, inset 0 0 50px rgba(0,0,0,.25)" },
   bottomBar: { position: "relative", zIndex: 2, width: "100%", maxWidth: 400, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6, padding: "6px 4px", marginTop: 4 },
@@ -513,8 +513,8 @@ const S: Record<string, CSSProperties> = {
   statLabel: { fontSize: 9, color: "#94a3b8", letterSpacing: 1, fontWeight: 700 },
   statVal: { fontSize: 14, fontWeight: 800, color: "#f8fafc" },
   controls: { position: "relative", zIndex: 2, marginTop: 4, display: "flex", flexDirection: "column", alignItems: "center" },
-  pm: { width: 36, height: 36, borderRadius: "50%", background: "rgba(30,41,59,.9)", border: "2px solid #475569", color: "#e2e8f0", fontSize: 18, fontWeight: 700, cursor: "pointer" },
-  spinCircle: { width: 64, height: 64, borderRadius: "50%", background: "linear-gradient(180deg, #22c55e, #15803d)", border: "3px solid #14532d", color: "#fff", fontSize: 28, fontWeight: 900, cursor: "pointer", boxShadow: "0 4px 0 #052e16, 0 0 20px rgba(34,197,94,.4)" },
+  pm: { width: 36, height: 36, borderRadius: "50%", background: "rgba(19,35,27,.96)", border: "2px solid #475569", color: "#e2e8f0", fontSize: 18, fontWeight: 700, cursor: "pointer" },
+  spinCircle: { width: 64, height: 64, borderRadius: "50%", background: "linear-gradient(180deg, #22c77a, #15803d)", border: "3px solid #0b5a3a", color: "#fff", fontSize: 28, fontWeight: 900, cursor: "pointer", boxShadow: "0 4px 0 #052e16, 0 0 20px rgba(34,197,122,.4)" },
   preset: { background: "rgba(30,41,59,.8)", border: "1px solid #334155", color: "#cbd5e1", borderRadius: 6, padding: "3px 7px", fontSize: 10, cursor: "pointer" },
-  presetOn: { borderColor: "#22c55e", color: "#4ade80" },
+  presetOn: { borderColor: "#22c77a", color: "#6ee7a8" },
 };

@@ -1576,9 +1576,10 @@ function SpinIllustration({ glow }: { glow: string }) {
 }
 
 function GameCard({
-  card, lang, onSelect, index, disabled,
+  card, online, lang, onSelect, index, disabled,
 }: {
   card: typeof GAME_CARDS[number];
+  online: number;
   lang: Lang;
   onSelect: () => void;
   index: number;
@@ -1587,20 +1588,10 @@ function GameCard({
   const [hovered, setHovered] = useState(false);
   const [pressed, setPressed] = useState(false);
   const title = lang === "en" ? card.titleEn : card.titleRu;
-  const desc = lang === "en" ? card.descEn : card.descRu;
-  const art: Record<string, { icon: string; eyebrow: string; detail: string }> = {
-    arena: { icon: "⚔️", eyebrow: "LIVE PVP", detail: "BATTLE ROOM" },
-    spin: { icon: "🎡", eyebrow: "JACKPOT", detail: "SPIN TO WIN" },
-    mines: { icon: "💎", eyebrow: "RISK & REWARD", detail: "FIND THE GEMS" },
-    dice: { icon: "🎲", eyebrow: "CLASSIC", detail: "ROLL THE DICE" },
-    roulette: { icon: "🎯", eyebrow: "EUROPEAN", detail: "00 • 36" },
-    cases: { icon: "🎁", eyebrow: "MYSTERY", detail: "OPEN A CASE" },
-  };
-  const visual = art[card.id] ?? { icon: "🎮", eyebrow: "CASINO", detail: "PLAY NOW" };
+  const desc  = lang === "en" ? card.descEn  : card.descRu;
 
   return (
-    <button
-      type="button"
+    <div
       onClick={onSelect}
       onMouseEnter={() => !disabled && setHovered(true)}
       onMouseLeave={() => { setHovered(false); setPressed(false); }}
@@ -1608,53 +1599,67 @@ function GameCard({
       onMouseUp={() => setPressed(false)}
       onTouchStart={() => !disabled && setPressed(true)}
       onTouchEnd={() => setPressed(false)}
-      disabled={disabled}
-      aria-label={title}
       style={{
-        position: "relative", width: "100%", minHeight: 142, display: "flex",
-        alignItems: "stretch", overflow: "hidden", textAlign: "left",
-        borderRadius: 20, padding: 0, cursor: disabled ? "not-allowed" : "pointer",
-        color: "#fff", fontFamily: "inherit",
-        border: `1px solid ${hovered ? card.primary + "bb" : "#493b25"}`,
-        background: "linear-gradient(112deg,#17130e 0%,#111318 56%,#19140e 100%)",
-        boxShadow: hovered ? `0 10px 30px ${card.cardGlow}, inset 0 1px 0 #ffffff12` : "0 7px 22px #0008, inset 0 1px 0 #ffffff0b",
-        transform: pressed ? "scale(.985)" : hovered ? "translateY(-2px)" : "none",
-        transition: "transform .18s ease, box-shadow .18s ease, border-color .18s ease",
-        animation: `fadeSlide .42s ease ${index * .06}s both`,
-        opacity: disabled ? .48 : 1,
+        position: "relative",
+        borderRadius: 20,
+        background: pressed
+          ? "rgba(14,18,26,0.99)"
+          : hovered
+          ? "rgba(18,24,36,0.98)"
+          : "rgba(13,17,25,0.96)",
+        cursor: disabled ? "not-allowed" : "pointer",
+        border: `1px solid ${pressed ? card.border : hovered ? card.border + "88" : "#1e2a3a"}`,
+        boxShadow: pressed
+          ? `0 2px 8px rgba(0,0,0,0.7)`
+          : hovered
+          ? `0 0 32px ${card.cardGlow}, 0 6px 24px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.04)`
+          : `0 0 20px ${card.cardGlow}, 0 4px 16px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.03)`,
+        transform: pressed ? "scale(0.965)" : "translateY(0)",
+        animation: `fadeSlide 0.45s ease ${index * 0.09}s both`,
+        transition: pressed
+          ? "transform 0.08s ease, box-shadow 0.08s ease"
+          : "transform 0.18s ease, box-shadow 0.28s ease, border-color 0.22s ease",
+        minHeight: 100,
+        display: "flex",
+        alignItems: "stretch",
+        overflow: "hidden",
+        opacity: disabled ? 0.55 : 1,
+        filter: disabled ? "grayscale(0.6)" : "none",
       }}
     >
-      <div style={{ position: "absolute", inset: 0, background: `radial-gradient(ellipse at 82% 45%, ${card.primary}2b 0%, transparent 53%)`, pointerEvents: "none" }} />
-      <div style={{ position: "absolute", left: 0, top: 15, bottom: 15, width: 3, borderRadius: "0 4px 4px 0", background: card.gradient, boxShadow: `0 0 16px ${card.glow}` }} />
-      <div style={{ flex: 1, minWidth: 0, padding: "17px 4px 16px 19px", display: "flex", flexDirection: "column", justifyContent: "space-between", zIndex: 1 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
-          <span style={{ color: card.accentA, fontSize: 9, fontWeight: 900, letterSpacing: ".17em" }}>{visual.eyebrow}</span>
-          <span style={{ width: 4, height: 4, borderRadius: 9, background: "#d6a94e", boxShadow: "0 0 8px #d6a94e" }} />
-          <span style={{ color: "#9b8a6b", fontSize: 9, fontWeight: 800, letterSpacing: ".12em" }}>DEMO</span>
+      {/* Left accent bar */}
+      <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, background: card.gradient, borderRadius: "20px 0 0 20px" }} />
+      {/* Top shimmer */}
+      <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(255,255,255,0.04) 0%, transparent 45%)", pointerEvents: "none" }} />
+      {/* Bottom accent line */}
+      <div style={{ position: "absolute", bottom: 0, left: "15%", right: "30%", height: 1, background: `linear-gradient(90deg, transparent, ${card.primary}55, transparent)` }} />
+
+      {/* Text section */}
+      <div style={{ flex: 1, padding: "16px 10px 16px 22px", display: "flex", flexDirection: "column", justifyContent: "space-between", zIndex: 1 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
+          {disabled ? (
+            <span style={{ fontSize: 11, fontWeight: 700, color: "#f87171", background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 6, padding: "2px 8px" }}>
+              {lang === "en" ? "Temporarily unavailable" : "Временно недоступна"}
+            </span>
+          ) : (
+            <>
+              <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#22C55E", boxShadow: "0 0 7px rgba(34,197,94,0.8)", animation: "pulse-dot 2s ease-in-out infinite", flexShrink: 0 }} />
+              <span style={{ fontSize: 11, fontWeight: 500, color: "#6B7280" }}>{online} {translations[lang].games.onlineText}</span>
+            </>
+          )}
         </div>
-        <div>
-          <div style={{ fontSize: 21, fontWeight: 900, letterSpacing: "-.035em", lineHeight: 1.15, color: "#fff7e8", marginBottom: 6 }}>{title}</div>
-          <div style={{ fontSize: 12, lineHeight: 1.4, color: "#a59a88", maxWidth: 210 }}>{desc}</div>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 7, color: card.accentA, fontSize: 9, fontWeight: 900, letterSpacing: ".14em", marginTop: 11 }}>
-          {disabled ? (lang === "en" ? "UNAVAILABLE" : "НЕДОСТУПНА") : (lang === "en" ? "PLAY NOW" : "ИГРАТЬ")}
-          <span style={{ fontSize: 15, lineHeight: 1 }}>↗</span>
-        </div>
+        <div style={{ fontSize: 20, fontWeight: 800, color: "#F1F5F9", letterSpacing: "-0.02em", lineHeight: 1.15, marginBottom: 5 }}>{title}</div>
+        <div style={{ fontSize: 13, fontWeight: 400, color: "#6B7280", lineHeight: 1.45 }}>{desc}</div>
       </div>
-      <div style={{ width: 118, flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", position: "relative", zIndex: 1, marginRight: 5 }}>
-        <div style={{
-          width: 88, height: 88, borderRadius: 24, display: "flex", alignItems: "center",
-          justifyContent: "center", fontSize: 49,
-          background: `linear-gradient(145deg,${card.primary}30,#0b0d12 75%)`,
-          border: `1px solid ${card.primary}55`,
-          boxShadow: `inset 0 1px 12px ${card.primary}22, 0 0 28px ${card.cardGlow}`,
-          filter: disabled ? "grayscale(1)" : "none",
-          animation: hovered ? "casinoFloat 1.8s ease-in-out infinite" : "none",
-        }}>{visual.icon}</div>
-        <div style={{ color: "#8f8068", fontSize: 8, fontWeight: 900, letterSpacing: ".16em", marginTop: 8 }}>{visual.detail}</div>
+
+      {/* Illustration section */}
+      <div style={{ width: 96, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1, paddingRight: 4 }}>
+        {card.id === "mines" && <MinesIllustration glow={card.glow} />}
+        {card.id === "arena" && <ArenaIllustration glow={card.glow} />}
+        {card.id === "spin"  && <SpinIllustration glow={card.glow} />}
+        {card.id === "cases" && <SpinIllustration glow={card.glow} />}
       </div>
-      {disabled && <div style={{ position: "absolute", top: 10, right: 10, padding: "4px 7px", borderRadius: 6, background: "#481b1b", color: "#ffb4a8", fontSize: 8, fontWeight: 900, letterSpacing: ".08em" }}>{lang === "en" ? "OFFLINE" : "ОФФЛАЙН"}</div>}
-    </button>
+    </div>
   );
 }
 
@@ -1663,6 +1668,7 @@ export default function GamesPage() {
   const qc = useQueryClient();
   const [active, setActive] = useState<ActiveGame>(null);
   const [toast, setToast] = useState<{ msg: string; type: "success"|"error"|"info" } | null>(null);
+  const online = useOnlineCounts();
   const gamesEnabled = useGamesEnabled();
 
   /* History state */
@@ -1732,7 +1738,7 @@ export default function GamesPage() {
         <style>{`
           @keyframes pulse-dot { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.6;transform:scale(0.85)} }
           @keyframes fadeSlide { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
-          @keyframes casinoFloat { 0%,100%{transform:translateY(0) rotate(-2deg)} 50%{transform:translateY(-5px) rotate(2deg)} }
+          @keyframes float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-5px)} }
         `}</style>
         {toast && <Toast msg={toast.msg} type={toast.type} />}
         {historyModal}
@@ -1775,22 +1781,21 @@ export default function GamesPage() {
   }
 
   return (
-    <div style={{ padding: "72px 16px 32px", background: "radial-gradient(ellipse at 50% -15%,#392813 0%,#17130e 34%,#090b10 75%)", minHeight: "100vh" }}>
+    <div style={{ padding: "72px 16px 32px", background: "#0B0F14", minHeight: "100vh" }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
         * { font-family: 'Inter', system-ui, -apple-system, sans-serif; }
         @keyframes pulse-dot { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.6;transform:scale(0.85)} }
         @keyframes fadeSlide { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
-        @keyframes casinoFloat { 0%,100%{transform:translateY(0) rotate(-2deg)} 50%{transform:translateY(-5px) rotate(2deg)} }
+        @keyframes float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-5px)} }
       `}</style>
       {toast && <Toast msg={toast.msg} type={toast.type} />}
       {historyModal}
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 22 }}>
         <div>
-          <div style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "#d8b56a", fontSize: 9, fontWeight: 900, letterSpacing: ".22em", marginBottom: 7 }}>✦ TONYX CASINO</div>
-          <div style={{ fontSize: 25, fontWeight: 900, color: "#fff4df", letterSpacing: "-0.04em" }}>{translations[lang].games.title}</div>
-          <div style={{ fontSize: 12, color: "#a39783", marginTop: 5 }}>{lang === "en" ? "Choose your game • Play with demo credits" : "Выбери игру • Играй на демо-кредиты"}</div>
+          <div style={{ fontSize: 22, fontWeight: 800, color: "#F1F5F9", letterSpacing: "-0.03em" }}>{translations[lang].games.title}</div>
+          <div style={{ fontSize: 13, color: "#6B7280", marginTop: 3 }}>{translations[lang].games.subtitle}</div>
         </div>
       </div>
 
@@ -1799,6 +1804,7 @@ export default function GamesPage() {
           <GameCard
             key={card.id}
             card={card}
+            online={online[card.id] ?? card.baseOnline}
             lang={lang}
             onSelect={() => handleSelect(card)}
             index={i}

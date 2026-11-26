@@ -428,7 +428,7 @@ export default function CrashGame({
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+    <div className="tx-crash" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       {!ready && (
         <div style={{ textAlign: "center", color: "#64748b", padding: 24 }}>Синхронизация…</div>
       )}

@@ -155,7 +155,7 @@ export default function MinesGame({
       clearActiveLs();
       setGame(null);
       onBalanceChange();
-      if (r.ok) flash(d.refunded ? `Ставка ${d.refunded} TON возвращена` : "Игра сброшена", "success");
+      if (r.ok) flash(d.refunded ? `Ставка ${d.refunded} демо-кредитов возвращена` : "Игра сброшена", "success");
       else flash(d.error ?? "Не удалось сбросить", "error");
     } catch {
       flash(t.errNetwork, "error");
@@ -377,7 +377,7 @@ export default function MinesGame({
         <div style={balPill}>
           <span style={{ opacity: 0.55, fontSize: 10, letterSpacing: "0.06em" }}>БАЛАНС</span>
           <span style={{ fontWeight: 800, color: "#f8fafc", fontVariantNumeric: "tabular-nums" }}>
-            {formatTon(balance)} <span style={{ color: "#94a3b8", fontWeight: 600 }}>TON</span>
+            {formatTon(balance)} <span style={{ color: "#94a3b8", fontWeight: 600 }}>ДЕМО-КРЕДИТЫ</span>
           </span>
         </div>
       </div>

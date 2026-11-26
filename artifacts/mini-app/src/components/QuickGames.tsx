@@ -55,14 +55,14 @@ export default function QuickGames({ game, telegramId, balance, onBalanceChange 
   const setMax = () => setStake(Math.max(0.1, Math.floor(balance * 1000) / 1000));
 
   return (
-    <div className="tx-quickgames" style={S.root}>
+    <div className="qg-game" style={S.root}>
       <style>{CSS}</style>
-      <div style={S.topline}>
+      <div className="qg-header" style={S.topline}>
         <div><div style={S.eyebrow}>TONYX ORIGINALS · SOLO</div><div style={S.heading}>{game === "dice" ? "DICE" : "ROULETTE"}</div></div>
         <div style={S.balance}><span>DEMO BALANCE</span><b>{balance.toFixed(2)}</b></div>
       </div>
 
-      <div style={S.stage}>
+      <div className="qg-stage" style={S.stage}>
         <div style={S.stageGlow} />
         {game === "dice" ? (
           <div className={`dice-cube ${rolling ? "is-rolling" : ""} ${result ? "has-result" : ""}`}>
@@ -81,7 +81,7 @@ export default function QuickGames({ game, telegramId, balance, onBalanceChange 
       </div>
 
       {game === "dice" ? (
-        <div style={S.panel}>
+        <div className="qg-panel" style={S.panel}>
           <div style={S.label}>ВЫБЕРИ НАПРАВЛЕНИЕ</div>
           <div style={S.twoCol}>
             <button type="button" disabled={busy} onClick={()=>setDirection("under")} style={{...S.choice,...(direction==="under"?S.choiceOn:{})}}>ROLL UNDER <small>Меньше</small></button>
@@ -114,7 +114,7 @@ export default function QuickGames({ game, telegramId, balance, onBalanceChange 
       </div>
 
       {result&&!rolling&&<div style={{...S.result,borderColor:result.won?"#28b77a":"#e34c58"}}><div style={{fontSize:10,letterSpacing:".15em",color:"#9ca6b5"}}>РЕЗУЛЬТАТ РАУНДА</div><strong style={{color:result.won?"#4ee0a0":"#ff737d"}}>{result.won?"ПОБЕДА":"НЕ УГАДАЛ"}</strong><div style={{fontSize:13,color:"#d5dbe4"}}>Выплата: {Number(result.payout).toFixed(3)} демо-кредитов</div></div>}
-      <div style={S.history}><div style={S.label}>ПОСЛЕДНИЕ РАУНДЫ</div><div style={S.historyRow}>{history.length?history.map((h,i)=><span key={i} style={{...S.historyItem,color:h.won?"#4ee0a0":"#ff737d"}}>{game==="dice"?h.roll:h.number}</span>):<span style={{color:"#647184",fontSize:11}}>История появится после первого раунда</span>}</div></div>
+      <div className="qg-history" style={S.history}><div style={S.label}>ПОСЛЕДНИЕ РАУНДЫ</div><div style={S.historyRow}>{history.length?history.map((h,i)=><span key={i} style={{...S.historyItem,color:h.won?"#4ee0a0":"#ff737d"}}>{game==="dice"?h.roll:h.number}</span>):<span style={{color:"#647184",fontSize:11}}>История появится после первого раунда</span>}</div></div>
       <div style={S.note}>ДЕМО-РЕЖИМ · КРЕДИТЫ НЕ ЯВЛЯЮТСЯ TON И НЕ ВЫВОДЯТСЯ</div>
     </div>
   );
@@ -169,4 +169,29 @@ const CSS = `
 .roulette-result{position:absolute;bottom:-2px;z-index:4;background:#111a20;border:1px solid #e2bd73;border-radius:20px;padding:4px 13px;color:#f7d58d;font-weight:900;font-size:13px}
 .roulette-wrap.is-spinning .roulette-wheel{animation:wheelSpin 1.45s cubic-bezier(.15,.75,.2,1) infinite}
 @keyframes wheelSpin{to{transform:rotate(1440deg)}}
+
+/* TONYX Originals — Dice & European Roulette */
+.qg-game{width:100%;max-width:1120px!important;margin:0 auto!important;padding:10px 0 32px!important;display:grid;grid-template-columns:minmax(0,1fr) 350px;grid-template-rows:auto auto auto auto;gap:14px 18px;align-items:start;color:#edf2f7!important}
+.qg-header{grid-column:1/-1;border-bottom:1px solid #29333e;padding:0 2px 12px!important;margin:0!important}
+.qg-header>div:first-child>div:first-child{color:#7d91a3!important;letter-spacing:.18em!important}
+.qg-header>div:first-child>div:last-child{font-size:24px!important;letter-spacing:-.04em!important;color:#f5f8fb!important}
+.qg-header>div:last-child{background:#141d27!important;border:1px solid #2c3a47!important;border-radius:10px!important}
+.qg-stage{grid-column:1;grid-row:2/span 2;min-height:470px!important;border-radius:16px!important;border:1px solid #293a48!important;background:radial-gradient(ellipse at 50% 44%,#142c3a 0%,#0c151e 68%)!important;box-shadow:0 18px 48px #0008!important;overflow:hidden}
+.qg-stage>div:last-child{color:#9bb0c0!important;letter-spacing:.16em!important}
+.qg-panel{grid-column:2;width:100%;box-sizing:border-box;background:linear-gradient(180deg,#151f2a,#101720)!important;border:1px solid #293947!important;border-radius:13px!important;padding:16px!important;box-shadow:0 12px 32px #0005!important}
+.qg-panel button{border-radius:8px!important}
+.qg-panel input:not([type=range]){background:#0a1119!important;border:1px solid #34495a!important;border-radius:8px!important;color:#f3f7fb!important}
+.qg-panel button[style*="linear-gradient"]{box-shadow:none!important}
+.qg-panel button[style*="background: rgb"]{filter:saturate(.85)}
+.qg-panel button[style*="background: linear-gradient"]{background:linear-gradient(180deg,#168fba,#08769d)!important;color:white!important}
+.qg-panel button[style*="border-color: rgb"]{border-radius:8px!important}
+.qg-game .dice-cube{filter:drop-shadow(0 18px 28px #0008)}
+.qg-game .dice-face{background:linear-gradient(145deg,#e9f7ff,#8bbdd3)!important;color:#102a39!important;border:2px solid #c7f0ff!important;box-shadow:inset 0 2px 5px #fff8,0 4px 12px #0007!important}
+.qg-game .roulette-wheel{border:7px solid #9db2c2!important;background:repeating-conic-gradient(#b52f43 0deg 10deg,#172330 10deg 20deg,#148c75 20deg 30deg)!important;box-shadow:0 0 0 5px #263a48,0 16px 32px #0009,inset 0 0 0 3px #d5e3eb!important}
+.qg-game .wheel-center{background:radial-gradient(circle,#e6f4fb,#63879c)!important;border-color:#314d5d!important;color:#102a39!important}
+.qg-history{grid-column:1/-1;background:#121a23!important;border:1px solid #293743!important;border-radius:12px!important;padding:14px!important}
+.qg-history>div:first-child{color:#8ea2b4!important}
+.qg-game .qg-panel button[disabled]{opacity:.45}
+@media(max-width:760px){.qg-game{display:flex!important;flex-direction:column!important;gap:10px!important;padding:6px 0 24px!important}.qg-header,.qg-stage,.qg-panel,.qg-history{width:100%;box-sizing:border-box}.qg-stage{min-height:320px!important}.qg-panel{padding:13px!important}}
+
 `;

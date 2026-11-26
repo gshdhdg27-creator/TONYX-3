@@ -92,7 +92,7 @@ export default function QuickGames({ game, telegramId, balance, onBalanceChange 
           <div style={S.rangeEnds}><span>1</span><span>98</span></div>
         </div>
       ) : (
-        <div style={S.panel}>
+        <div className="qg-panel" style={S.panel}>
           <div style={S.label}>ВЫБЕРИ СЕКТОР</div>
           <div style={S.rouletteChoices}>
             {(["red","black","green"] as const).map(c=><button key={c} type="button" disabled={busy} onClick={()=>setColor(c)} style={{...S.colorChoice,...(color===c?S.colorOn:{})}}><i style={{background:c==="red"?"#e4474e":c==="black"?"#252a34":"#20b879"}}/>{c==="red"?"КРАСНОЕ":c==="black"?"ЧЁРНОЕ":"ZERO"}</button>)}
@@ -100,7 +100,7 @@ export default function QuickGames({ game, telegramId, balance, onBalanceChange 
         </div>
       )}
 
-      <div style={S.panel}>
+      <div className="qg-panel" style={S.panel}>
         <div style={S.label}>РАЗМЕР СТАВКИ <span style={{color:"#f4c66a"}}>· ДЕМО-КРЕДИТЫ</span></div>
         <div style={S.betRow}>
           <button type="button" style={S.adjust} disabled={busy} onClick={setHalf}>½</button>

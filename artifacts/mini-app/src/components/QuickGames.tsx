@@ -55,7 +55,7 @@ export default function QuickGames({ game, telegramId, balance, onBalanceChange 
   const setMax = () => setStake(Math.max(0.1, Math.floor(balance * 1000) / 1000));
 
   return (
-    <div style={S.root}>
+    <div className="tx-quickgames" style={S.root}>
       <style>{CSS}</style>
       <div style={S.topline}>
         <div><div style={S.eyebrow}>TONYX ORIGINALS · SOLO</div><div style={S.heading}>{game === "dice" ? "DICE" : "ROULETTE"}</div></div>

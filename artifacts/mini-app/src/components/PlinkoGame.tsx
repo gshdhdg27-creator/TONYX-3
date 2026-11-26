@@ -357,7 +357,7 @@ export default function PlinkoGame({
   };
 
   return (
-    <div style={root}>
+    <div className="tx-plinko" style={root}>
       {toast && <div style={toastStyle}>{toast}</div>}
 
       <div style={board}>

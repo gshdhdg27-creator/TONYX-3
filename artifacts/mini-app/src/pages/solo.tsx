@@ -6,11 +6,12 @@ import CoinFlipGame from "@/components/CoinFlipGame";
 import CrashGame from "@/components/CrashGame";
 import PlinkoGame from "@/components/PlinkoGame";
 import UpgradeGame from "@/components/UpgradeGame";
+import PickaxeGame from "@/components/PickaxeGame";
 import { GameCard } from "@/components/GameCard";
 import { useGetUserProfile, getGetUserProfileQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 
-type Tab = "pick" | "mines" | "coin" | "crash" | "plinko" | "upgrade";
+type Tab = "pick" | "mines" | "coin" | "crash" | "plinko" | "upgrade" | "pickaxe";
 
 export default function SoloPage() {
   const { telegramId } = useTelegram();
@@ -77,10 +78,34 @@ export default function SoloPage() {
       </div>
     );
   }
+  if (tab === "pickaxe") {
+    return (
+      <div style={{ minHeight: "100dvh", padding: "12px 12px 110px", background: "#0a0612" }}>
+        <button type="button" onClick={() => setTab("pick")} style={back}>← Назад</button>
+        <PickaxeGame telegramId={telegramId ?? ""} balance={tonBalance} onBalanceChange={refreshBalance} />
+      </div>
+    );
+  }
 
   return (
     <div style={page}>
       <div style={secTitle}>Соло игры</div>
+
+      <GameCard
+        wide
+        scene="pickaxe"
+        name="Кирка"
+        badge="NEW"
+        badgeColor="#22c55e"
+        online={31}
+        maxBet="500 TON"
+        gradient="linear-gradient(145deg, #052e16 0%, #166534 35%, #22c55e 65%, #0f172a 100%)"
+        accent="rgba(34,197,94,0.4)"
+        enterDelay={0}
+        onClick={() => setTab("pickaxe")}
+      />
+
+      <div style={{ height: 12 }} />
 
       <GameCard
         wide
@@ -92,7 +117,7 @@ export default function SoloPage() {
         maxBet="20 TON"
         gradient="linear-gradient(135deg, #4c1d95 0%, #7c3aed 40%, #db2777 100%)"
         accent="rgba(236,72,153,0.45)"
-        enterDelay={0}
+        enterDelay={20}
         onClick={() => setTab("upgrade")}
       />
 

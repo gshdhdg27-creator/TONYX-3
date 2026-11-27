@@ -1165,4 +1165,43 @@ const CSS = `
   }
 
 
+  /* SoloShell is capped to a phone-width canvas; keep Mines single-column at every viewport. */
+  .tonyx-game-shell .mn-game {
+    display:grid!important;
+    grid-template-columns:minmax(0,1fr)!important;
+    grid-template-rows:auto!important;
+    width:100%!important;
+    max-width:480px!important;
+    gap:12px!important;
+    align-items:stretch!important;
+    box-sizing:border-box!important;
+  }
+  .tonyx-game-shell .mn-game-header,
+  .tonyx-game-shell .mn-game-hero,
+  .tonyx-game-shell .mn-game-board,
+  .tonyx-game-shell .mn-game-ladder,
+  .tonyx-game-shell .mn-game-controls,
+  .tonyx-game-shell .mn-game-result {
+    grid-column:1/-1!important;
+    grid-row:auto!important;
+    width:100%!important;
+    min-width:0!important;
+    box-sizing:border-box!important;
+  }
+  .tonyx-game-shell .mn-game-header{order:0!important}
+  .tonyx-game-shell .mn-setup .mn-game-controls{order:1!important}
+  .tonyx-game-shell .mn-setup .mn-game-hero{order:2!important}
+  .tonyx-game-shell .mn-setup .mn-game-board{order:3!important}
+  .tonyx-game-shell .mn-setup .mn-game-ladder{order:4!important}
+  .tonyx-game-shell .mn-active .mn-game-hero{order:1!important}
+  .tonyx-game-shell .mn-active .mn-game-board{order:2!important}
+  .tonyx-game-shell .mn-active .mn-game-ladder{order:3!important}
+  .tonyx-game-shell .mn-active .mn-game-controls{order:4!important}
+  .tonyx-game-shell .mn-game-result{order:5!important}
+  .tonyx-game-shell .mn-game-board>div{width:100%!important;max-width:460px!important;margin:0 auto!important;gap:clamp(5px,2vw,9px)!important}
+  .tonyx-game-shell .mn-game .mn-cell{width:100%!important;min-width:0!important;aspect-ratio:1!important}
+  .tonyx-game-shell .mn-game-ladder{display:grid!important;grid-template-columns:repeat(7,minmax(0,1fr))!important;gap:5px!important;overflow:visible!important}
+  .tonyx-game-shell .mn-game-ladder>div{min-width:0!important;padding:8px 1px!important;font-size:clamp(9px,2.5vw,11px)!important}
+
+
 `;

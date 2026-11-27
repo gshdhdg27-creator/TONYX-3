@@ -613,4 +613,16 @@ const PLINKO_LAYOUT_CSS = `
 .plinko-game .plinko-risk button[style*="linear-gradient"]{background:#126d8a!important;border-color:#2698b7!important;box-shadow:none!important;color:#fff!important}
 .plinko-game .plinko-controls button[style*="linear-gradient"]{background:linear-gradient(180deg,#168fba,#08769d)!important;box-shadow:0 4px 0 #064c68!important;color:white!important}
 @media(max-width:760px){.plinko-game{display:flex!important;flex-direction:column!important;gap:10px!important;padding:6px 0 24px!important}.plinko-board{width:100%;height:430px!important;min-height:430px!important}.plinko-last-result{width:100%;box-sizing:border-box;order:2}.plinko-risk,.plinko-rows,.plinko-balls,.plinko-controls{width:100%;box-sizing:border-box;padding:12px!important}}
+
+/* Gameplay pass: dedicated Plinko cabinet and stronger live-ball feedback */
+.plinko-board{isolation:isolate;position:relative;background:radial-gradient(ellipse at 50% 8%,#285238 0%,#102b1c 55%,#07130c 100%)!important;border:1px solid #a4874b!important;box-shadow:inset 0 1px #fff2,0 18px 48px #0009,0 0 35px #c99d3b12!important}
+.plinko-board:before{content:"";position:absolute;inset:8px;border:1px solid #e4c77b2b;border-radius:11px;pointer-events:none;z-index:2}
+.plinko-board:after{content:"";position:absolute;inset:0;pointer-events:none;z-index:2;background:linear-gradient(115deg,transparent 30%,#f5dfa00a 48%,transparent 65%);background-size:220% 100%;animation:plinkoCabinetSweep 6s linear infinite}
+.plinko-board canvas{position:relative;z-index:1;filter:drop-shadow(0 0 2px #c9a85a22)}
+.plinko-risk button,.plinko-rows input,.plinko-balls button,.plinko-controls button{transition:filter .15s ease,transform .15s ease,box-shadow .15s ease}
+.plinko-risk button:not(:disabled):active,.plinko-balls button:not(:disabled):active{transform:translateY(2px) scale(.98)}
+.plinko-last-result{font-variant-numeric:tabular-nums;box-shadow:inset 0 1px #fff2,0 0 24px #cba34a18,0 12px 28px #0007!important}
+@keyframes plinkoCabinetSweep{0%{background-position:150% 0}100%{background-position:-150% 0}}
+@media(max-width:760px){.plinko-board{height:440px!important;min-height:440px!important;border-radius:13px!important}}
+
 `;

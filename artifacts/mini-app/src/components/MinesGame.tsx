@@ -1205,4 +1205,113 @@ const CSS = `
   .tonyx-game-shell .mn-game-ladder>div{min-width:0!important;padding:8px 1px!important;font-size:clamp(9px,2.5vw,11px)!important}
 
 
+  /* Ported Mines presentation language from Open Stake: raised slate tiles,
+     crisp revealed states and a compact phone-first betting column.
+     All outcomes remain driven by the existing TONYX server endpoints. */
+  .mn-game .mn-game-board {
+    background:linear-gradient(180deg,#172b38 0%,#0d1b25 100%)!important;
+    border:1px solid #304858!important;
+    box-shadow:0 18px 44px rgba(0,0,0,.42),inset 0 1px rgba(255,255,255,.045)!important;
+  }
+  .mn-game .mn-cell {
+    background:#2f4553!important;
+    border:0!important;
+    border-radius:11px!important;
+    box-shadow:0 5px 0 #1b2b36,0 8px 14px rgba(0,0,0,.32),inset 0 1px rgba(255,255,255,.08)!important;
+    transform:translateY(-3px);
+  }
+  .mn-game .mn-cell.mn-hidden:not(:disabled) {
+    background:linear-gradient(160deg,#3b5969 0%,#2b4352 100%)!important;
+  }
+  .mn-game .mn-cell.mn-hidden:not(:disabled):hover {
+    background:linear-gradient(160deg,#486a7b 0%,#344f60 100%)!important;
+    transform:translateY(-5px);
+    box-shadow:0 7px 0 #1b2b36,0 12px 18px rgba(0,0,0,.38)!important;
+  }
+  .mn-game .mn-cell.mn-hidden:not(:disabled):active {
+    transform:translateY(1px) scale(.98)!important;
+    box-shadow:0 1px 0 #1b2b36,0 3px 6px rgba(0,0,0,.3)!important;
+  }
+  .mn-game .mn-cell.mn-safe {
+    background:linear-gradient(160deg,#174d43,#0d332d)!important;
+    box-shadow:inset 0 1px rgba(255,255,255,.12),0 0 18px rgba(16,185,129,.2)!important;
+  }
+  .mn-game .mn-cell.mn-mine {
+    background:linear-gradient(160deg,#6b3038,#351c25)!important;
+    box-shadow:inset 0 1px rgba(255,255,255,.12),0 0 18px rgba(239,68,68,.22)!important;
+  }
+  .mn-game .mn-cell .mn-dot {
+    width:5px!important;height:5px!important;
+    background:rgba(226,238,245,.26)!important;
+    box-shadow:0 0 5px rgba(226,238,245,.18)!important;
+  }
+  .mn-game .mn-game-controls {
+    background:linear-gradient(180deg,#172631,#101c25)!important;
+    border:1px solid #304858!important;
+    border-radius:14px!important;
+  }
+  .mn-game .mn-game-controls button {min-height:42px}
+  .mn-game .mn-game-controls input {
+    background:#0b151d!important;
+    border:1px solid #354c5a!important;
+  }
+  @media(max-width:760px) {
+    .mn-game {
+      display:flex!important;
+      flex-direction:column!important;
+      width:100%!important;
+      max-width:520px!important;
+      padding:8px 10px 28px!important;
+      gap:11px!important;
+      align-items:stretch!important;
+    }
+    .mn-game-header,.mn-game-hero,.mn-game-board,.mn-game-ladder,
+    .mn-game-controls,.mn-game-result {
+      order:initial!important;
+      width:100%!important;
+      min-width:0!important;
+      margin:0!important;
+      box-sizing:border-box!important;
+    }
+    .mn-game-header {order:0!important}
+    .mn-game-hero {order:1!important;padding:4px 0!important}
+    .mn-game-board {order:2!important;padding:10px!important}
+    .mn-game-ladder {order:3!important}
+    .mn-game-controls {order:4!important;padding:14px!important}
+    .mn-game-result {order:5!important}
+    .mn-game-board>div {
+      display:grid!important;
+      grid-template-columns:repeat(5,minmax(0,1fr))!important;
+      width:100%!important;
+      max-width:480px!important;
+      margin:0 auto!important;
+      gap:clamp(6px,1.8vw,9px)!important;
+    }
+    .mn-game .mn-cell {
+      width:100%!important;
+      min-width:0!important;
+      aspect-ratio:1!important;
+      border-radius:clamp(8px,2.5vw,12px)!important;
+    }
+    .mn-game-ladder {
+      display:grid!important;
+      grid-template-columns:repeat(7,minmax(0,1fr))!important;
+      gap:4px!important;
+      overflow:visible!important;
+    }
+    .mn-game-ladder>div {
+      min-width:0!important;
+      padding:8px 1px!important;
+      font-size:clamp(9px,2.4vw,11px)!important;
+    }
+    .mn-game-controls .mn-game-controls button {min-width:0}
+  }
+  @media(max-width:380px) {
+    .mn-game {padding-left:7px!important;padding-right:7px!important}
+    .mn-game-board>div {gap:5px!important}
+    .mn-game .mn-cell {border-radius:7px!important}
+    .mn-game-controls {padding:11px!important}
+  }
+
+
 `;

@@ -464,6 +464,103 @@ const CSS = `
 }
 
 
+/* Premium minted-metal coin finish: layered milled rim, engraved rings and relief. */
+.cf-game .cf-stage {
+  filter:drop-shadow(0 22px 28px rgba(0,0,0,.62)) drop-shadow(0 0 18px rgba(225,184,91,.16));
+}
+.cf-game .cf-coin {
+  transform-style:preserve-3d;
+}
+.cf-game .cf-face {
+  isolation:isolate;
+  border:1px solid rgba(255,255,255,.62);
+  box-shadow:
+    inset 0 0 0 3px rgba(255,255,255,.34),
+    inset 0 0 0 7px rgba(20,25,28,.28),
+    inset 0 3px 9px rgba(255,255,255,.65),
+    inset 0 -12px 22px rgba(0,0,0,.32),
+    0 2px 2px rgba(255,255,255,.25);
+}
+.cf-game .cf-heads {
+  background:
+    radial-gradient(circle at 50% 43%, rgba(255,249,210,.98) 0 18%, transparent 19%),
+    repeating-conic-gradient(from 2deg at 50% 50%,rgba(255,255,255,.10) 0deg 2deg,rgba(105,61,9,.08) 2deg 4deg),
+    radial-gradient(circle at 30% 24%,#fff9d9 0%,#f9df91 16%,#eebc50 37%,#c98722 66%,#70400e 100%)!important;
+  box-shadow:
+    inset 0 0 0 2px #fff0b7,
+    inset 0 0 0 5px #9a641e,
+    inset 0 0 0 8px #f7d77e,
+    inset 0 8px 14px rgba(255,255,255,.55),
+    inset 0 -15px 24px rgba(91,48,5,.55),
+    0 0 0 3px #8d5b1a,
+    0 0 0 5px #e8bd62,
+    0 14px 24px rgba(0,0,0,.5)!important;
+}
+.cf-game .cf-tails {
+  background:
+    repeating-conic-gradient(from 2deg at 50% 50%,rgba(255,255,255,.16) 0deg 2deg,rgba(51,65,85,.08) 2deg 4deg),
+    radial-gradient(circle at 30% 24%,#fff 0%,#e8edf2 17%,#b7c4d1 42%,#718397 72%,#354456 100%)!important;
+  box-shadow:
+    inset 0 0 0 2px #fff,
+    inset 0 0 0 5px #64748b,
+    inset 0 0 0 8px #e2e8f0,
+    inset 0 8px 14px rgba(255,255,255,.7),
+    inset 0 -15px 24px rgba(15,23,42,.5),
+    0 0 0 3px #526274,
+    0 0 0 5px #dce5ec,
+    0 14px 24px rgba(0,0,0,.5)!important;
+}
+.cf-game .cf-face::before {
+  content:"";
+  position:absolute;
+  inset:11px;
+  z-index:0;
+  border-radius:50%;
+  border:2px solid rgba(255,248,220,.62);
+  box-shadow:0 0 0 2px rgba(74,48,13,.22),inset 0 0 0 1px rgba(255,255,255,.38);
+  pointer-events:none;
+}
+.cf-game .cf-face::after {
+  content:"";
+  position:absolute;
+  inset:19px;
+  z-index:0;
+  border-radius:50%;
+  border:1px dashed rgba(255,255,255,.42);
+  opacity:.9;
+  pointer-events:none;
+}
+.cf-game .cf-rim {
+  inset:6px!important;
+  border:2px solid rgba(255,255,255,.55)!important;
+  box-shadow:inset 0 0 8px rgba(255,255,255,.18),0 0 6px rgba(0,0,0,.18);
+  z-index:2;
+}
+.cf-game .cf-rim-inner {
+  inset:15px!important;
+  border:1px dotted rgba(255,255,255,.52)!important;
+  z-index:2;
+}
+.cf-game .cf-face svg {
+  width:48%!important;
+  height:48%!important;
+  filter:drop-shadow(0 2px 1px rgba(0,0,0,.24));
+  z-index:3;
+}
+.cf-game .cf-label {
+  z-index:3;
+  margin-top:3px;
+  font-size:clamp(9px,2.3vw,12px)!important;
+  letter-spacing:.2em!important;
+  text-shadow:0 1px 2px rgba(0,0,0,.3);
+}
+.cf-game .cf-shine {
+  z-index:4;
+  opacity:.75;
+  mix-blend-mode:screen;
+}
+
+
 `;
 
 export default function CoinFlipGame({

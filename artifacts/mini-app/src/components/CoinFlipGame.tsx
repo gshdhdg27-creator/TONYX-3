@@ -289,6 +289,14 @@ const CSS = `
   .cf-game .cf-floor{background:radial-gradient(ellipse,#15536a55,transparent 68%)!important}
   .cf-game .cf-coin{filter:drop-shadow(0 18px 22px #0009)}
   .cf-game .cf-face{border-color:#b8d6e4!important}
+.cf-game-stage{position:relative;overflow:hidden}
+.cf-game-stage:before{content:"";position:absolute;width:280px;height:280px;border-radius:50%;border:1px solid #3b8498;box-shadow:0 0 0 18px #24748a14,0 0 80px #0b829b24,inset 0 0 55px #0b829b18;pointer-events:none}
+.cf-game .cf-coin{filter:drop-shadow(0 22px 30px #000b)}
+.cf-game .cf-controls{box-shadow:0 14px 34px #0006,inset 0 1px #ffffff0a!important}
+.cf-game .cf-controls button{transition:transform .16s ease,filter .16s ease}
+.cf-game .cf-controls button:not(:disabled):active{transform:translateY(1px) scale(.99);filter:brightness(1.08)}
+.cf-game .cf-controls input{min-height:44px}
+.cf-game .cf-result{box-shadow:0 10px 26px #0005,inset 0 1px #ffffff0a}
   .cf-game .cf-face.cf-heads{background:linear-gradient(145deg,#c5e8f2,#3d819a)!important;color:#102b38!important}
   .cf-game .cf-face.cf-tails{background:linear-gradient(145deg,#eaf4f8,#7999a8)!important;color:#1a2e38!important}
   .cf-game .cf-controls{grid-column:1;grid-row:2/span 2;margin:0!important;padding:18px!important;background:linear-gradient(180deg,#151f2a,#101720)!important;border:1px solid #293947!important;border-radius:13px!important;box-shadow:0 14px 34px #0006!important}
@@ -296,7 +304,7 @@ const CSS = `
   .cf-game .cf-controls button[style*="linear-gradient"]{background:linear-gradient(180deg,#168fba,#08769d)!important;color:white!important;box-shadow:0 4px 0 #064c68!important}
   .cf-game .cf-controls input{background:#090f16!important;border:1px solid #344655!important;color:#eef3f8!important;border-radius:8px!important}
   .cf-game .cf-result{grid-column:1;grid-row:3;margin:0!important;padding:14px;border:1px solid #2b4654;border-radius:12px;background:#121e28}
-  @media(max-width:760px){.cf-game{display:flex!important;flex-direction:column!important;gap:10px!important;padding:6px 0 24px!important}.cf-game>.cf-header,.cf-game-stage,.cf-game .cf-controls,.cf-game .cf-result{width:100%;box-sizing:border-box}.cf-game-stage{min-height:310px}.cf-game .cf-controls{padding:14px!important}}
+  @media(max-width:760px){.cf-game{display:flex!important;flex-direction:column!important;gap:10px!important;padding:6px 0 24px!important}.cf-game>.cf-header,.cf-game-stage,.cf-game .cf-controls,.cf-game .cf-result{width:100%;box-sizing:border-box}.cf-game-stage{min-height:310px}.cf-game-stage:before{width:220px;height:220px}.cf-game .cf-controls{padding:14px!important}}
 
 `;
 

@@ -306,6 +306,21 @@ const CSS = `
   .cf-game .cf-result{grid-column:1;grid-row:3;margin:0!important;padding:14px;border:1px solid #2b4654;border-radius:12px;background:#121e28}
   @media(max-width:760px){.cf-game{display:flex!important;flex-direction:column!important;gap:10px!important;padding:6px 0 24px!important}.cf-game>.cf-header,.cf-game-stage,.cf-game .cf-controls,.cf-game .cf-result{width:100%;box-sizing:border-box}.cf-game-stage{min-height:310px}.cf-game-stage:before{width:220px;height:220px}.cf-game .cf-controls{padding:14px!important}}
 
+
+/* Gameplay pass: coin toss reads as a physical casino coin, not a flat icon */
+.cf-game-stage{isolation:isolate;background:radial-gradient(ellipse at 50% 52%,#315438 0%,#14291b 48%,#08130c 100%)!important;border-color:#9a7940!important}
+.cf-game-stage:after{content:"";position:absolute;inset:0;pointer-events:none;background:repeating-radial-gradient(circle at 50% 50%,transparent 0 34px,#e2c47a0b 35px 36px);mask-image:radial-gradient(circle,black,transparent 75%)}
+.cf-stage{filter:drop-shadow(0 24px 30px #000b)}
+.cf-coin{transform-style:preserve-3d;backface-visibility:visible}
+.cf-heads,.cf-tails{border:5px solid #d8b75f;outline:1px solid #fff5;outline-offset:-10px}
+.cf-rim{border:3px solid #f3d889!important;box-shadow:inset 0 0 0 3px #7b551e,inset 0 0 18px #fff5}
+.cf-rim-inner{border-color:#8b642c!important}
+.cf-stage.win{animation:cfWinPulse 1.1s ease-in-out 2}
+.cf-stage.lose{animation:cfLosePulse .9s ease-in-out 2}
+.cf-controls button:not(:disabled){transition:transform .15s ease,filter .15s ease}
+.cf-controls button:not(:disabled):active{transform:translateY(2px) scale(.985)}
+@media(max-width:760px){.cf-game-stage{min-height:360px!important}.cf-arena{height:250px!important}}
+
 `;
 
 export default function CoinFlipGame({

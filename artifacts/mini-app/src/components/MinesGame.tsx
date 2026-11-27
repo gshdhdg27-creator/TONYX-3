@@ -19,7 +19,7 @@ interface MineGameState {
   safeCount: number;
 }
 
-const MINE_OPTIONS = [1, 3, 5, 10, 15, 24];
+const MINE_OPTIONS = [1, 3, 5, 7];
 const BET_PRESETS = [0.1, 0.5, 1, 2, 5, 10];
 const MIN_BET = 0.1;
 const GRID = 5;
@@ -282,6 +282,7 @@ export default function MinesGame({
   const reveal = async (row: number, col: number) => {
     if (!game || game.status !== "active" || game.revealed[row]?.[col] !== "hidden") return;
     haptic("light");
+    setBusy(true);
     try {
       const r = await fetch("/api/mini/games/mines/reveal", {
         method: "POST",
@@ -320,6 +321,8 @@ export default function MinesGame({
       }
     } catch {
       flash(t.errNetwork, "error");
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -364,7 +367,7 @@ export default function MinesGame({
   const gemsLeft = 25 - (game?.minesCount ?? mines) - (game?.safeCount ?? 0);
 
   return (
-    <div className="mn-game" style={root}>
+    <div className={`mn-game ${isPlaying ? "mn-active" : "mn-setup"}`} style={root}>
       <style>{CSS}</style>
 
       {toast && <div className={`mn-toast mn-toast-${toast.type}`}>{toast.msg}</div>}
@@ -1037,12 +1040,35 @@ const CSS = `
   .mn-game-controls button[style*="linear-gradient(135deg,#158454"]{background:linear-gradient(180deg,#168fba,#08769d)!important;color:#fff!important;box-shadow:0 4px 0 #064c68!important}
   .mn-game-controls .mn-cashout{background:linear-gradient(180deg,#168fba,#08769d)!important;color:#fff!important;box-shadow:0 4px 0 #064c68!important;border-radius:9px!important}
   .mn-game-result{grid-column:1/-1;grid-row:5}
+  /* Mobile-first Mines layout: configure before playing; live game keeps the board dominant. */
   @media(max-width:760px){
-    .mn-game{display:flex!important;flex-direction:column!important;gap:10px!important;padding:6px 0 28px!important}
-    .mn-game-header,.mn-game-hero,.mn-game-board,.mn-game-ladder,.mn-game-controls,.mn-game-result{width:100%;box-sizing:border-box}
-    .mn-game-board{padding:10px!important}.mn-game-ladder{max-width:100%}
-    .mn-game-board>div{gap:6px!important}
-    .mn-game-controls{padding:14px!important}
+    .mn-game{width:100%;max-width:480px!important;padding:4px 10px 24px!important;gap:11px!important}
+    .mn-game-header{order:0;align-items:center;padding:0 2px 10px!important}
+    .mn-game-header>div:first-child{min-width:0}
+    .mn-game-header [style*="БАЛАНС"]{font-size:10px!important}
+    .mn-game-hero{padding:5px 0 0!important;margin:0!important}
+    .mn-game .mn-hero-mult{font-size:clamp(34px,10vw,46px)!important}
+    .mn-game-board{width:100%;padding:9px!important;border-radius:16px!important}
+    .mn-game-board>div{width:100%;max-width:460px!important;gap:7px!important}
+    .mn-game .mn-cell{border-radius:10px!important;min-width:0}
+    .mn-game-ladder{width:100%;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px!important;margin:0!important}
+    .mn-game-ladder>div{min-width:0!important;padding:8px 2px!important;font-size:10px!important}
+    .mn-game-controls{width:100%;padding:13px!important;border-radius:16px!important}
+    .mn-setup .mn-game-controls{order:1}
+    .mn-setup .mn-game-hero{order:2}
+    .mn-setup .mn-game-board{order:3}
+    .mn-setup .mn-game-ladder{order:4}
+    .mn-active .mn-game-hero{order:1}
+    .mn-active .mn-game-board{order:2}
+    .mn-active .mn-game-ladder{order:3}
+    .mn-active .mn-game-controls{order:4}
+    .mn-game-result{order:5}
+  }
+  @media(max-width:380px){
+    .mn-game{padding-left:7px!important;padding-right:7px!important}
+    .mn-game-board>div{gap:5px!important}
+    .mn-game .mn-cell{border-radius:8px!important}
+    .mn-game-controls{padding:11px!important}
   }
 
 

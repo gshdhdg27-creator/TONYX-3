@@ -1189,10 +1189,11 @@ const CSS = `
     box-sizing:border-box!important;
   }
   .tonyx-game-shell .mn-game-header{order:0!important}
-  .tonyx-game-shell .mn-setup .mn-game-controls{order:1!important}
-  .tonyx-game-shell .mn-setup .mn-game-hero{order:2!important}
-  .tonyx-game-shell .mn-setup .mn-game-board{order:3!important}
-  .tonyx-game-shell .mn-setup .mn-game-ladder{order:4!important}
+  /* Setup state: show the 5x5 board before any betting controls. */
+  .tonyx-game-shell .mn-setup .mn-game-hero{order:1!important}
+  .tonyx-game-shell .mn-setup .mn-game-board{order:2!important}
+  .tonyx-game-shell .mn-setup .mn-game-ladder{order:3!important}
+  .tonyx-game-shell .mn-setup .mn-game-controls{order:4!important}
   .tonyx-game-shell .mn-active .mn-game-hero{order:1!important}
   .tonyx-game-shell .mn-active .mn-game-board{order:2!important}
   .tonyx-game-shell .mn-active .mn-game-ladder{order:3!important}

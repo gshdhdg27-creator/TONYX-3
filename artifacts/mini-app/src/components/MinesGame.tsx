@@ -1090,4 +1090,79 @@ const CSS = `
 @keyframes mnCasinoBoom{0%{transform:scale(.8);filter:brightness(2.5)}45%{transform:scale(1.13);filter:brightness(1.4)}100%{transform:scale(1);filter:brightness(1)}}
 @media(max-width:520px){.mn-game-board{padding:8px!important}.mn-game-ladder{gap:3px!important}.mn-game-ladder>div{font-size:9px!important;padding:7px 2px!important}}
 
+  /* True phone layout: cancel desktop two-column composition completely. */
+  @media (max-width: 760px) {
+    .mn-game {
+      display: grid !important;
+      grid-template-columns: minmax(0, 1fr) !important;
+      grid-template-rows: auto !important;
+      width: 100% !important;
+      max-width: 480px !important;
+      margin: 0 auto !important;
+      padding: 8px 12px 28px !important;
+      gap: 12px !important;
+      align-items: stretch !important;
+      box-sizing: border-box !important;
+    }
+    .mn-game-header,
+    .mn-game-hero,
+    .mn-game-board,
+    .mn-game-ladder,
+    .mn-game-controls,
+    .mn-game-result {
+      grid-column: 1 / -1 !important;
+      grid-row: auto !important;
+      width: 100% !important;
+      min-width: 0 !important;
+      box-sizing: border-box !important;
+    }
+    .mn-game-header { order: 0 !important; margin: 0 !important; }
+    .mn-game-hero { order: 1 !important; padding: 4px 0 !important; }
+    .mn-game .mn-hero-mult { font-size: clamp(40px, 12vw, 58px) !important; }
+    .mn-game-board {
+      order: 2 !important;
+      padding: clamp(10px, 3vw, 16px) !important;
+      margin: 0 !important;
+      border-radius: 18px !important;
+    }
+    .mn-game-board > div {
+      width: 100% !important;
+      max-width: 460px !important;
+      margin: 0 auto !important;
+      gap: clamp(5px, 1.8vw, 9px) !important;
+    }
+    .mn-game .mn-cell {
+      width: 100% !important;
+      min-width: 0 !important;
+      aspect-ratio: 1 / 1 !important;
+      border-radius: clamp(8px, 2.5vw, 13px) !important;
+    }
+    .mn-game-ladder {
+      order: 3 !important;
+      display: grid !important;
+      grid-template-columns: repeat(7, minmax(0, 1fr)) !important;
+      gap: 5px !important;
+      margin: 0 !important;
+      padding: 0 0 2px !important;
+      overflow: visible !important;
+    }
+    .mn-game-ladder > div {
+      min-width: 0 !important;
+      padding: 8px 1px !important;
+      font-size: clamp(9px, 2.5vw, 11px) !important;
+    }
+    .mn-game-controls {
+      order: 4 !important;
+      padding: clamp(13px, 3.5vw, 18px) !important;
+      margin: 0 !important;
+    }
+    .mn-game-result { order: 5 !important; }
+  }
+  @media (max-width: 380px) {
+    .mn-game { padding-left: 8px !important; padding-right: 8px !important; }
+    .mn-game-board > div { gap: 5px !important; }
+    .mn-game-controls { padding: 12px !important; }
+  }
+
+
 `;

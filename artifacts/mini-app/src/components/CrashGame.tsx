@@ -732,12 +732,23 @@ const CRASH_LAYOUT_CSS = `
 .crash-game{width:100%;max-width:1120px;margin:0 auto;padding:10px 0 32px;display:grid;grid-template-columns:340px minmax(0,1fr);grid-template-rows:auto auto;gap:14px 18px;align-items:start;color:#eef3f8}
 .crash-stage{grid-column:2;grid-row:1;min-height:450px;margin:0!important;padding:18px!important;background:radial-gradient(ellipse at 50% 80%,#102c2b,#080e14 68%)!important;border:1px solid #283944!important;border-radius:14px!important;box-shadow:0 18px 48px #0008!important}
 .crash-stage>div:first-child{color:#8295a6!important}
-.crash-stage>div:nth-child(2){font-size:clamp(48px,7vw,76px)!important;letter-spacing:-.055em}
+.crash-stage>div:nth-child(2){font-size:clamp(52px,7.5vw,82px)!important;letter-spacing:-.065em;text-shadow:0 0 34px currentColor}
+.crash-stage{position:relative;overflow:hidden}
+.crash-stage:before{content:"";position:absolute;inset:48% 0 0;pointer-events:none;background:linear-gradient(180deg,transparent,#0e39401c)}
+.crash-stage>*{position:relative;z-index:1}
+.crash-chart{box-shadow:inset 0 1px #ffffff08,0 12px 30px #0005}
+.crash-history{box-shadow:0 10px 24px #0005,inset 0 1px #ffffff08;gap:7px!important}
+.crash-history button{min-width:66px;transition:transform .15s ease,filter .15s ease}
+.crash-history button:hover{transform:translateY(-2px);filter:brightness(1.12)}
+.crash-controls{box-shadow:0 14px 34px #0006,inset 0 1px #ffffff0a!important}
+.crash-controls input{min-height:43px}
+.crash-controls button{transition:transform .15s ease,filter .15s ease}
+.crash-controls button:not(:disabled):active{transform:translateY(1px);filter:brightness(1.08)}
 .crash-chart{height:320px!important;border-radius:8px!important;background:linear-gradient(180deg,#081017,#0b1b1c)!important;border:1px solid #1d333a}
 .crash-history{grid-column:2;grid-row:2;align-content:start;background:#121a23;border:1px solid #283743;border-radius:10px;padding:12px}
 .crash-controls{grid-column:1;grid-row:1/span 2;margin:0!important;padding:18px!important;background:linear-gradient(180deg,#151f2a,#101720)!important;border:1px solid #293947!important;border-radius:13px!important;box-shadow:0 14px 34px #0006!important}
 .crash-controls input{background:#090f16!important;border:1px solid #344655!important;border-radius:8px!important;color:#eef3f8!important}
 .crash-controls button{border-radius:8px!important}
 .crash-controls button[style*="linear-gradient"]{background:linear-gradient(180deg,#168fba,#08769d)!important;box-shadow:0 4px 0 #064c68!important}
-@media(max-width:760px){.crash-game{display:flex;flex-direction:column;gap:10px;padding:6px 0 24px}.crash-stage,.crash-history,.crash-controls{width:100%;box-sizing:border-box}.crash-stage{min-height:300px;padding:12px!important}.crash-chart{height:230px!important}.crash-controls{padding:14px!important}}
+@media(max-width:760px){.crash-game{display:flex;flex-direction:column;gap:10px;padding:6px 0 24px}.crash-stage,.crash-history,.crash-controls{width:100%;box-sizing:border-box}.crash-stage{min-height:300px;padding:12px!important}.crash-stage>div:nth-child(2){font-size:54px!important}.crash-chart{height:230px!important}.crash-controls{padding:14px!important}}
 `;

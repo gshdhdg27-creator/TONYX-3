@@ -86,7 +86,7 @@ export default function QuickGames({ game, telegramId, balance, onBalanceChange 
           </div>
         ) : (
           <div className={`roulette-wrap ${rolling ? "is-spinning" : ""}`}>
-            <div className="roulette-wheel" style={{transform:`rotate(${wheelRotation}deg)`,background:`conic-gradient(${ROULETTE_ORDER.map((n,i)=>{const a=i*360/37;const color=n===0?"#16875d":ROULETTE_RED.has(n)?"#b52d42":"#1b2632";return `${color} ${a}deg ${a+360/37}deg`;}).join(",")})`}}><div className="wheel-center">T</div>{ROULETTE_ORDER.map((n,i)=>{const a=i*360/37;return <span key={n} style={{position:"absolute",left:"50%",top:"50%",transform:`translate(-50%,-50%) rotate(${a+180/37}deg) translateY(-66px) rotate(-${a+180/37}deg)`,fontSize:7,fontWeight:900,color:"#fff",textShadow:"0 1px 2px #000"}}>{n}</span>;})}{Array.from({length:37},(_,i)=><i key={i} style={{transform:`rotate(${i*360/37}deg) translateY(-1px)`}} />)}</div>
+            <div className="roulette-wheel" style={{transform:`rotate(${wheelRotation}deg)`,background:`conic-gradient(${ROULETTE_ORDER.map((n,i)=>{const a=i*360/37;const color=n===0?"#16875d":ROULETTE_RED.has(n)?"#b52d42":"#1b2632";return `${color} ${a}deg ${a+360/37}deg`;}).join(",")})`}}><div className="wheel-center">T</div>{ROULETTE_ORDER.map((n,i)=>{const a=i*360/37;return <span key={n} style={{position:"absolute",left:"50%",top:"50%",transform:`translate(-50%,-50%) rotate(${a+180/37}deg) translateY(-108px) rotate(-${a+180/37}deg)`,fontSize:7,fontWeight:900,color:"#fff",textShadow:"0 1px 2px #000"}}>{n}</span>;})}{Array.from({length:37},(_,i)=><i key={i} style={{transform:`rotate(${i*360/37}deg) translateY(-1px)`}} />)}</div>
             <div className="roulette-pointer">▼</div>
             <div className="roulette-result">{result && !rolling ? result.number : "TONYX"}</div>
           </div>
@@ -127,9 +127,9 @@ export default function QuickGames({ game, telegramId, balance, onBalanceChange 
         {error&&<div style={{color:"#ff737d",fontSize:12,marginTop:10,textAlign:"center"}}>{error}</div>}
       </div>
 
-      {result&&!rolling&&<div style={{...S.result,borderColor:result.won?"#28b77a":"#e34c58"}}><div style={{fontSize:10,letterSpacing:".15em",color:"#9ca6b5"}}>РЕЗУЛЬТАТ РАУНДА</div><strong style={{color:result.won?"#4ee0a0":"#ff737d"}}>{result.won?"ПОБЕДА":"НЕ УГАДАЛ"}</strong><div style={{fontSize:13,color:"#d5dbe4"}}>Выплата: {Number(result.payout).toFixed(3)} демо-кредитов</div></div>}
+      {result&&!rolling&&<div className="qg-result" style={{...S.result,borderColor:result.won?"#28b77a":"#e34c58"}}><div style={{fontSize:10,letterSpacing:".15em",color:"#9ca6b5"}}>РЕЗУЛЬТАТ РАУНДА</div><strong style={{color:result.won?"#4ee0a0":"#ff737d"}}>{result.won?"ПОБЕДА":"НЕ УГАДАЛ"}</strong><div style={{fontSize:13,color:"#d5dbe4"}}>Выплата: {Number(result.payout).toFixed(3)} демо-кредитов</div></div>}
       <div className="qg-history" style={S.history}><div style={S.label}>ПОСЛЕДНИЕ РАУНДЫ</div><div style={S.historyRow}>{history.length?history.map((h,i)=><span key={i} style={{...S.historyItem,color:h.won?"#4ee0a0":"#ff737d"}}>{game==="dice"?h.roll:h.number}</span>):<span style={{color:"#647184",fontSize:11}}>История появится после первого раунда</span>}</div></div>
-      <div style={S.note}>ДЕМО-РЕЖИМ · КРЕДИТЫ НЕ ЯВЛЯЮТСЯ TON И НЕ ВЫВОДЯТСЯ</div>
+      <div className="qg-note" style={S.note}>ДЕМО-РЕЖИМ · КРЕДИТЫ НЕ ЯВЛЯЮТСЯ TON И НЕ ВЫВОДЯТСЯ</div>
     </div>
   );
 }
@@ -175,10 +175,10 @@ const CSS = `
 .dice-cube.is-rolling{animation:diceTumble .95s cubic-bezier(.18,.7,.3,1) infinite}
 .dice-face{position:absolute;inset:0;display:grid;place-items:center;border-radius:18px;border:2px solid #f8d88a;background:linear-gradient(145deg,#fff1c4,#d9a84c 75%,#93652a);color:#34220b;font-size:46px;font-weight:1000;box-shadow:inset 0 2px 10px #fff8,0 10px 30px #0008}
 .dice-face.front{transform:translateZ(56px)}.dice-face.back{transform:rotateY(180deg) translateZ(56px)}.dice-face.right{transform:rotateY(90deg) translateZ(56px)}.dice-face.left{transform:rotateY(-90deg) translateZ(56px)}.dice-face.top{transform:rotateX(90deg) translateZ(56px)}.dice-face.bottom{transform:rotateX(-90deg) translateZ(56px)}
-.roulette-wrap{width:190px;height:190px;position:relative;display:grid;place-items:center;z-index:2}
-.roulette-wheel{width:240px;height:240px;border-radius:50%;position:relative;border:8px solid #9db2c2;background:repeating-conic-gradient(#b52c38 0deg 10deg,#1d252e 10deg 20deg,#20855d 20deg 30deg);box-shadow:0 0 0 5px #263a48,0 12px 28px #0009,inset 0 0 0 3px #d5e3eb}.roulette-wheel i{height:108px!important}.roulette-wheel span{z-index:2}
-.roulette-wheel i{position:absolute;left:calc(50% - 1px);top:50%;width:2px;height:76px;background:#f4d58b;transform-origin:top center;opacity:.8}
-.wheel-center{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:58px;height:58px;border-radius:50%;display:grid;place-items:center;background:radial-gradient(circle,#f8df9e,#956b32);border:4px solid #6c4b20;color:#35230d;font-weight:1000;font-size:23px;z-index:3}
+.roulette-wrap{width:260px;height:260px;position:relative;display:grid;place-items:center;z-index:2}
+.roulette-wheel{width:250px;height:250px;border-radius:50%;position:relative;border:8px solid #9db2c2;background:repeating-conic-gradient(#b52c38 0deg 10deg,#1d252e 10deg 20deg,#20855d 20deg 30deg);box-shadow:0 0 0 5px #263a48,0 12px 28px #0009,inset 0 0 0 3px #d5e3eb}.roulette-wheel i{height:116px!important}.roulette-wheel span{z-index:2}
+.roulette-wheel i{position:absolute;left:calc(50% - 1px);top:50%;width:2px;height:116px;background:#f4d58b;transform-origin:top center;opacity:.8}
+.wheel-center{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:64px;height:64px;border-radius:50%;display:grid;place-items:center;background:radial-gradient(circle,#f8df9e,#956b32);border:4px solid #6c4b20;color:#35230d;font-weight:1000;font-size:23px;z-index:3}
 .roulette-pointer{position:absolute;top:-3px;z-index:4;color:#f8d88a;text-shadow:0 2px 5px #000;font-size:22px}
 .roulette-result{position:absolute;bottom:-2px;z-index:4;background:#111a20;border:1px solid #e2bd73;border-radius:20px;padding:4px 13px;color:#f7d58d;font-weight:900;font-size:13px}
 .roulette-wrap .roulette-wheel{transition:transform 1.6s cubic-bezier(.12,.72,.12,1)}
@@ -196,21 +196,28 @@ const CSS = `
 .qg-panel{grid-column:1;width:100%;box-sizing:border-box;background:linear-gradient(180deg,#151f2a,#101720)!important;border:1px solid #293947!important;border-radius:13px!important;padding:16px!important;box-shadow:0 12px 32px #0005!important}
 .qg-game>.qg-panel:nth-of-type(3){grid-row:2}
 .qg-game>.qg-panel:nth-of-type(4){grid-row:3}
-.qg-game>.qg-result{grid-column:2;grid-row:4}
-.qg-game>.qg-history{grid-column:1/-1;grid-row:5}
+.qg-game>.qg-result{grid-column:2;grid-row:4;align-self:start}
+.qg-game>.qg-history{grid-column:1/-1;grid-row:5}.qg-game>.qg-note{grid-column:1/-1;grid-row:6}
 .qg-panel button{border-radius:8px!important}
 .qg-panel input:not([type=range]){background:#0a1119!important;border:1px solid #34495a!important;border-radius:8px!important;color:#f3f7fb!important}
 .qg-panel button[style*="linear-gradient"]{box-shadow:none!important}
 .qg-panel button[style*="background: rgb"]{filter:saturate(.85)}
 .qg-panel button[style*="background: linear-gradient"]{background:linear-gradient(180deg,#168fba,#08769d)!important;color:white!important}
 .qg-panel button[style*="border-color: rgb"]{border-radius:8px!important}
-.qg-game .dice-cube{filter:drop-shadow(0 18px 28px #0008)}
+.qg-game .dice-cube{filter:drop-shadow(0 18px 28px #0008);transform:rotateX(-22deg) rotateY(-35deg) scale(1.08)}
+.qg-game .qg-stage{display:flex;align-items:center;justify-content:center;position:relative}
+.qg-game .qg-stage:before{content:"";position:absolute;width:min(72%,340px);aspect-ratio:1;border-radius:50%;border:1px solid #2b6275;box-shadow:0 0 0 16px #1b526018,0 0 70px #1385a322,inset 0 0 50px #1385a318;pointer-events:none}
+.qg-game .qg-stage>div:last-child{z-index:3}
+.qg-game .qg-panel{box-shadow:0 12px 28px #0006,inset 0 1px #ffffff0a!important}
+.qg-game .qg-result{box-shadow:0 12px 28px #0006,inset 0 1px #ffffff0a}
+.qg-game .qg-history{box-shadow:0 10px 24px #0005,inset 0 1px #ffffff08}
+.qg-game .qg-note{grid-column:1/-1;text-align:center}
 .qg-game .dice-face{background:linear-gradient(145deg,#e9f7ff,#8bbdd3)!important;color:#102a39!important;border:2px solid #c7f0ff!important;box-shadow:inset 0 2px 5px #fff8,0 4px 12px #0007!important}
 .qg-game .roulette-wheel{border:7px solid #9db2c2!important;background:repeating-conic-gradient(#b52f43 0deg 10deg,#172330 10deg 20deg,#148c75 20deg 30deg)!important;box-shadow:0 0 0 5px #263a48,0 16px 32px #0009,inset 0 0 0 3px #d5e3eb!important}
 .qg-game .wheel-center{background:radial-gradient(circle,#e6f4fb,#63879c)!important;border-color:#314d5d!important;color:#102a39!important}
 .qg-history{grid-column:1/-1;background:#121a23!important;border:1px solid #293743!important;border-radius:12px!important;padding:14px!important}
 .qg-history>div:first-child{color:#8ea2b4!important}
 .qg-game .qg-panel button[disabled]{opacity:.45}
-@media(max-width:760px){.qg-game{display:flex!important;flex-direction:column!important;gap:10px!important;padding:6px 0 24px!important}.qg-header,.qg-stage,.qg-panel,.qg-history{width:100%;box-sizing:border-box}.qg-stage{min-height:320px!important}.qg-panel{padding:13px!important}}
+@media(max-width:760px){.qg-game{display:flex!important;flex-direction:column!important;gap:10px!important;padding:6px 0 24px!important}.qg-header,.qg-stage,.qg-panel,.qg-history{width:100%;box-sizing:border-box}.qg-stage{min-height:320px!important}.roulette-wrap{transform:scale(.82)}.qg-panel{padding:13px!important}}
 
 `;

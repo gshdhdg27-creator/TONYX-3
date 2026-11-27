@@ -1007,6 +1007,18 @@ const CSS = `
   .mn-game .mn-hero-mult{font-size:clamp(34px,5vw,54px);font-weight:850;letter-spacing:-.045em}
   .mn-game-board{grid-column:2;grid-row:3;margin:0!important;padding:clamp(12px,2vw,22px)!important;border-radius:18px!important;background:radial-gradient(ellipse at 50% 38%,#132a39 0%,#0b1520 72%)!important;border:1px solid #263b4b!important;box-shadow:0 18px 50px #0008,inset 0 1px #ffffff0b!important}
   .mn-game-board>div{max-width:520px;margin:0 auto}
+.mn-game-board{position:relative;overflow:hidden}
+.mn-game-board:before{content:"";position:absolute;inset:0;pointer-events:none;background:radial-gradient(circle at 50% 0%,#38b9d51a,transparent 60%)}
+.mn-game-board>div{position:relative;z-index:1}
+.mn-game .mn-cell{position:relative;overflow:hidden}
+.mn-game .mn-cell:before{content:"";position:absolute;inset:1px;border-radius:inherit;border:1px solid #ffffff12;pointer-events:none}
+.mn-game .mn-cell:disabled{cursor:default}
+.mn-game .mn-cell.mn-safe,.mn-game .mn-cell.mn-mine{animation:mnFlip .38s cubic-bezier(.2,.8,.2,1) both}
+.mn-game .mn-game-controls{box-shadow:0 14px 34px #0006,inset 0 1px #ffffff0a!important}
+.mn-game .mn-game-controls button{transition:transform .15s ease,filter .15s ease}
+.mn-game .mn-game-controls button:not(:disabled):active{transform:translateY(1px);filter:brightness(1.08)}
+.mn-game-ladder{display:flex;gap:7px;overflow-x:auto;scrollbar-width:thin}
+.mn-game-ladder>div{flex:0 0 auto;text-align:center;font-variant-numeric:tabular-nums;font-weight:850}
   .mn-game .mn-cell{border-radius:9px!important;background:linear-gradient(155deg,#1b536b 0%,#087b9c 48%,#07516d 100%)!important;border:1px solid #2b91ae!important;box-shadow:inset 0 2px 2px #ffffff20,0 4px 0 #062e43,0 8px 14px #0005!important;transition:transform .16s,filter .16s,box-shadow .16s}
   .mn-game .mn-cell.mn-hidden{background:linear-gradient(155deg,#2494b2 0%,#087e9f 55%,#07526e 100%)!important;border-color:#32a5c0!important}
   .mn-game .mn-cell.mn-hidden:not(:disabled):hover{filter:brightness(1.18);transform:translateY(-2px);box-shadow:inset 0 2px 2px #ffffff30,0 6px 0 #062e43,0 12px 18px #0007!important}
@@ -1028,7 +1040,7 @@ const CSS = `
   @media(max-width:760px){
     .mn-game{display:flex!important;flex-direction:column!important;gap:10px!important;padding:6px 0 28px!important}
     .mn-game-header,.mn-game-hero,.mn-game-board,.mn-game-ladder,.mn-game-controls,.mn-game-result{width:100%;box-sizing:border-box}
-    .mn-game-board{padding:10px!important}
+    .mn-game-board{padding:10px!important}.mn-game-ladder{max-width:100%}
     .mn-game-board>div{gap:6px!important}
     .mn-game-controls{padding:14px!important}
   }

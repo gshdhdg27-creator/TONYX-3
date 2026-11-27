@@ -937,381 +937,62 @@ const resultCard: CSSProperties = {
 };
 
 const CSS = `
-  .mn-toast {
-    position: fixed; top: 16px; left: 50%; transform: translateX(-50%);
-    z-index: 9999; padding: 12px 18px; border-radius: 12px;
-    font-size: 13px; font-weight: 700; color: #fff;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.45);
-    max-width: calc(100% - 32px);
-  }
-  .mn-toast-success { background: rgba(5,150,105,0.96); }
-  .mn-toast-error { background: rgba(220,38,38,0.96); }
-  .mn-toast-info { background: rgba(30,64,175,0.96); }
-  .mn-cell {
-    aspect-ratio: 1; border-radius: 12px; border: none; cursor: pointer;
-    font-family: inherit; display: flex; align-items: center; justify-content: center;
-    position: relative; transition: transform 0.15s ease, box-shadow 0.2s ease;
-    background: linear-gradient(160deg, #1b3028 0%, #101b17 100%);
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 4px 12px rgba(0,0,0,0.35);
-  }
-  .mn-hidden:active { transform: scale(0.94); }
-  .mn-safe {
-    background: linear-gradient(160deg, #065f46 0%, #022c22 100%);
-    box-shadow: inset 0 1px 0 rgba(74,222,128,0.25), 0 0 18px rgba(16,185,129,0.25);
-  }
-  .mn-mine {
-    background: linear-gradient(160deg, #7f1d1d 0%, #450a0a 100%);
-    box-shadow: inset 0 1px 0 rgba(248,113,113,0.25), 0 0 18px rgba(239,68,68,0.3);
-  }
-  .mn-idle { opacity: 0.55; cursor: default; }
-  .mn-dot { width: 8px; height: 8px; border-radius: 50%; background: rgba(148,163,184,0.25); }
-  .mn-flip { animation: mnFlip 0.45s cubic-bezier(0.34,1.4,0.64,1) both; }
-  .mn-boom { animation: mnBoom 0.55s ease both; }
-  @keyframes mnFlip {
-    0% { transform: scale(0.6) rotateY(90deg); opacity: 0.3; }
-    100% { transform: scale(1) rotateY(0); opacity: 1; }
-  }
-  @keyframes mnBoom {
-    0% { transform: scale(1); }
-    30% { transform: scale(1.18); filter: brightness(2); }
-    100% { transform: scale(1); }
-  }
-  .mn-ladder-active { animation: mnLadderPulse 1.6s ease infinite; }
-  @keyframes mnLadderPulse {
-    0%,100% { box-shadow: 0 0 10px rgba(251,191,36,0.15); }
-    50% { box-shadow: 0 0 18px rgba(251,191,36,0.35); }
-  }
-  .mn-cashout {
-    width: 100%; padding: 15px 0; border-radius: 14px; border: none;
-    font-family: inherit; font-size: 15px; font-weight: 900; cursor: pointer;
-    color: #1a0a00; background: linear-gradient(135deg, #f59e0b, #fbbf24, #f59e0b);
-    background-size: 200% 100%; box-shadow: 0 0 28px rgba(245,158,11,0.45), 0 4px 0 #b45309;
-    animation: mnCash 2.2s ease infinite;
-  }
-  @keyframes mnCash {
-    0%,100% { background-position: 0% 50%; }
-    50% { background-position: 100% 50%; }
-  }
-  .mn-hero-mult {
-    font-size: 42px; font-weight: 900; letter-spacing: -0.04em;
-    line-height: 1.1; margin-top: 4px; font-variant-numeric: tabular-nums;
-  }
-  .mn-result { animation: mnResultIn 0.4s cubic-bezier(0.34,1.4,0.64,1) both; }
-  @keyframes mnResultIn {
-    0% { transform: scale(0.85); opacity: 0; }
-    100% { transform: scale(1); opacity: 1; }
-  }
-
-  /* TONYX Mines — rebuilt game composition, inspired by the 1win Originals layout */
-  .mn-game{width:100%;max-width:1120px!important;margin:0 auto!important;padding:12px 0 36px!important;display:grid;grid-template-columns:340px minmax(0,1fr);grid-template-rows:auto auto auto auto;gap:14px 18px;align-items:start}
-  .mn-game-header{grid-column:1/-1;margin:0!important;padding:0 2px 12px;border-bottom:1px solid #26313d}
+  .mn-game{width:100%!important;max-width:1040px!important;margin:0 auto!important;padding:12px 0 32px!important;box-sizing:border-box;display:grid;grid-template-columns:minmax(260px,340px) minmax(0,1fr);grid-template-rows:auto auto auto auto;gap:14px 18px;align-items:start;color:#edf4f8}
+  .mn-game-header{grid-column:1/-1;grid-row:1;display:flex;justify-content:space-between;align-items:center;gap:12px;margin:0!important;padding:0 2px 12px;border-bottom:1px solid #2a3c46;min-width:0}
   .mn-game-hero{grid-column:2;grid-row:2;margin:0!important;padding:12px 0 4px!important;text-align:center}
-  .mn-game-hero>div:first-child{font-size:10px;letter-spacing:.18em;color:#788b9b}
-  .mn-game .mn-hero-mult{font-size:clamp(34px,5vw,54px);font-weight:850;letter-spacing:-.045em}
-  .mn-game-board{grid-column:2;grid-row:3;margin:0!important;padding:clamp(12px,2vw,22px)!important;border-radius:18px!important;background:radial-gradient(ellipse at 50% 38%,#132a39 0%,#0b1520 72%)!important;border:1px solid #263b4b!important;box-shadow:0 18px 50px #0008,inset 0 1px #ffffff0b!important}
-  .mn-game-board>div{max-width:520px;margin:0 auto}
-.mn-game-board{position:relative;overflow:hidden}
-.mn-game-board:before{content:"";position:absolute;inset:0;pointer-events:none;background:radial-gradient(circle at 50% 0%,#38b9d51a,transparent 60%)}
-.mn-game-board>div{position:relative;z-index:1}
-.mn-game .mn-cell{position:relative;overflow:hidden}
-.mn-game .mn-cell:before{content:"";position:absolute;inset:1px;border-radius:inherit;border:1px solid #ffffff12;pointer-events:none}
-.mn-game .mn-cell:disabled{cursor:default}
-.mn-game .mn-cell.mn-safe,.mn-game .mn-cell.mn-mine{animation:mnFlip .38s cubic-bezier(.2,.8,.2,1) both}
-.mn-game .mn-game-controls{box-shadow:0 14px 34px #0006,inset 0 1px #ffffff0a!important}
-.mn-game .mn-game-controls button{transition:transform .15s ease,filter .15s ease}
-.mn-game .mn-game-controls button:not(:disabled):active{transform:translateY(1px);filter:brightness(1.08)}
-.mn-game-ladder{display:flex;gap:7px;overflow-x:auto;scrollbar-width:thin}
-.mn-game-ladder>div{flex:0 0 auto;text-align:center;font-variant-numeric:tabular-nums;font-weight:850}
-  .mn-game .mn-cell{border-radius:9px!important;background:linear-gradient(155deg,#1b536b 0%,#087b9c 48%,#07516d 100%)!important;border:1px solid #2b91ae!important;box-shadow:inset 0 2px 2px #ffffff20,0 4px 0 #062e43,0 8px 14px #0005!important;transition:transform .16s,filter .16s,box-shadow .16s}
-  .mn-game .mn-cell.mn-hidden{background:linear-gradient(155deg,#2494b2 0%,#087e9f 55%,#07526e 100%)!important;border-color:#32a5c0!important}
-  .mn-game .mn-cell.mn-hidden:not(:disabled):hover{filter:brightness(1.18);transform:translateY(-2px);box-shadow:inset 0 2px 2px #ffffff30,0 6px 0 #062e43,0 12px 18px #0007!important}
-  .mn-game .mn-cell.mn-safe{background:linear-gradient(145deg,#1aa77a,#086b55)!important;border-color:#42d6a0!important}
-  .mn-game .mn-cell.mn-mine{background:linear-gradient(145deg,#d34d5a,#792536)!important;border-color:#f07b85!important}
-  .mn-game .mn-dot{width:7px;height:7px;background:#a5eaff;box-shadow:0 0 10px #a5eaff}
-  .mn-game-ladder{grid-column:2;grid-row:4;margin:0!important;padding:0 2px 4px}
-  .mn-game-ladder>div{border-radius:7px!important;min-width:64px!important;background:#151f2b!important;border:1px solid #293947!important;color:#91a4b5!important}
-  .mn-game-ladder>div:first-child{background:#123b4a!important;border-color:#1687a5!important;color:#8be4f5!important;box-shadow:0 0 16px #087e9f33!important}
-  .mn-game-controls{grid-column:1;grid-row:2/span 3;width:100%;box-sizing:border-box;margin:0!important;padding:18px!important;border-radius:16px!important;background:linear-gradient(180deg,#151f2a,#101720)!important;border:1px solid #293947!important;box-shadow:0 16px 42px #0006!important}
-  .mn-game-controls [style*="rgba(30,41,59"]{background:#1c2a38!important;border-color:#34495a!important}
-  .mn-game-controls input{background:#0a1119!important;border:1px solid #34495a!important;border-radius:9px!important;min-width:0}
-  .mn-game-controls button{border-radius:8px!important}
-  .mn-game-controls button[style*="linear-gradient(135deg,#dc2626"]{background:#17475a!important;border-color:#2486a1!important;color:#b8f0fa!important;box-shadow:none!important}
-  .mn-game-controls button[style*="linear-gradient(135deg,#20b879"]{background:#087fa2!important;border-color:#16a0c3!important;color:white!important;box-shadow:0 4px 0 #07516c!important}
-  .mn-game-controls button[style*="linear-gradient(135deg,#158454"]{background:linear-gradient(180deg,#168fba,#08769d)!important;color:#fff!important;box-shadow:0 4px 0 #064c68!important}
-  .mn-game-controls .mn-cashout{background:linear-gradient(180deg,#168fba,#08769d)!important;color:#fff!important;box-shadow:0 4px 0 #064c68!important;border-radius:9px!important}
-  .mn-game-result{grid-column:1/-1;grid-row:5}
-  /* Mobile-first Mines layout: configure before playing; live game keeps the board dominant. */
-  @media(max-width:760px){
-    .mn-game{width:100%;max-width:480px!important;padding:4px 10px 24px!important;gap:11px!important}
-    .mn-game-header{order:0;align-items:center;padding:0 2px 10px!important}
-    .mn-game-header>div:first-child{min-width:0}
-    .mn-game-header [style*="БАЛАНС"]{font-size:10px!important}
-    .mn-game-hero{padding:5px 0 0!important;margin:0!important}
-    .mn-game .mn-hero-mult{font-size:clamp(34px,10vw,46px)!important}
-    .mn-game-board{width:100%;padding:9px!important;border-radius:16px!important}
-    .mn-game-board>div{width:100%;max-width:460px!important;gap:7px!important}
-    .mn-game .mn-cell{border-radius:10px!important;min-width:0}
-    .mn-game-ladder{width:100%;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px!important;margin:0!important}
-    .mn-game-ladder>div{min-width:0!important;padding:8px 2px!important;font-size:10px!important}
-    .mn-game-controls{width:100%;padding:13px!important;border-radius:16px!important}
-    .mn-setup .mn-game-controls{order:1}
-    .mn-setup .mn-game-hero{order:2}
-    .mn-setup .mn-game-board{order:3}
-    .mn-setup .mn-game-ladder{order:4}
-    .mn-active .mn-game-hero{order:1}
-    .mn-active .mn-game-board{order:2}
-    .mn-active .mn-game-ladder{order:3}
-    .mn-active .mn-game-controls{order:4}
-    .mn-game-result{order:5}
+  .mn-game .mn-hero-mult{font-size:clamp(38px,5vw,58px);font-weight:900;letter-spacing:-.06em;line-height:1.05;font-variant-numeric:tabular-nums}
+  .mn-game-board{grid-column:2;grid-row:3;position:relative;isolation:isolate;width:100%;min-width:0;box-sizing:border-box;margin:0!important;padding:clamp(12px,2vw,20px)!important;border-radius:18px!important;background:radial-gradient(ellipse at 50% 30%,#1b4933 0%,#102c1e 58%,#09170f 100%)!important;border:1px solid #80683b!important;box-shadow:0 18px 44px #0008,inset 0 1px #ffffff12!important;overflow:hidden}
+  .mn-game-board:before{content:"";position:absolute;inset:8px;border:1px solid #d5b46a35;border-radius:12px;pointer-events:none}
+  .mn-game-board>div{position:relative;z-index:1;display:grid!important;grid-template-columns:repeat(5,minmax(0,1fr))!important;width:100%;max-width:520px;margin:0 auto;gap:clamp(6px,1.2vw,10px)!important}
+  .mn-game .mn-cell{width:100%;min-width:0;aspect-ratio:1;border:1px solid #66844b!important;border-radius:11px!important;background:linear-gradient(155deg,#326448,#1c432e 70%,#153524)!important;box-shadow:inset 0 2px #ffffff20,0 4px 0 #0a2115,0 8px 14px #0007!important;display:flex;align-items:center;justify-content:center;transition:transform .16s,filter .16s,box-shadow .16s;transform:translateY(-2px)}
+  .mn-game .mn-cell.mn-hidden:not(:disabled):hover{filter:brightness(1.16);transform:translateY(-4px);box-shadow:inset 0 2px #ffffff30,0 6px 0 #0a2115,0 12px 18px #0009!important}
+  .mn-game .mn-cell.mn-hidden:not(:disabled):active{transform:translateY(1px) scale(.97)!important}
+  .mn-game .mn-cell.mn-safe{background:linear-gradient(145deg,#26a66c,#087443)!important;border-color:#8bca83!important;box-shadow:inset 0 2px #ffffff35,0 0 20px #31d58b44!important}
+  .mn-game .mn-cell.mn-mine{background:linear-gradient(145deg,#c84c43,#72251e)!important;border-color:#e18b5c!important;box-shadow:inset 0 2px #ffffff30,0 0 22px #ff514d55!important}
+  .mn-game .mn-cell:disabled{cursor:default}
+  .mn-game .mn-dot{width:7px;height:7px;border-radius:50%;background:#b8d9c2;box-shadow:0 0 9px #b8d9c277}
+  .mn-game .mn-cell.mn-flip{animation:mnPortReveal .4s cubic-bezier(.2,.8,.2,1) both}
+  .mn-game .mn-cell.mn-boom{animation:mnPortBoom .6s ease both}
+  @keyframes mnPortReveal{0%{transform:rotateY(90deg) scale(.82);filter:brightness(1.8)}70%{transform:rotateY(-7deg) scale(1.04)}100%{transform:rotateY(0) scale(1);filter:brightness(1)}}
+  @keyframes mnPortBoom{0%{transform:scale(.8);filter:brightness(2.5)}45%{transform:scale(1.13);filter:brightness(1.4)}100%{transform:scale(1);filter:brightness(1)}}
+  .mn-game-ladder{grid-column:2;grid-row:4;display:grid!important;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px!important;margin:0!important;padding:0 2px 4px;min-width:0}
+  .mn-game-ladder>div{min-width:0!important;padding:9px 3px!important;border-radius:8px!important;text-align:center;font-size:11px;font-weight:850;font-variant-numeric:tabular-nums;background:#14231a!important;border:1px solid #57482b!important;color:#b8aa84!important}
+  .mn-game-ladder>div:first-child,.mn-game-ladder>.mn-ladder-active{background:linear-gradient(145deg,#4b3b20,#2b2718)!important;border-color:#d4ad5e!important;color:#f5d98f!important;box-shadow:0 0 16px #d5a84b25!important}
+  .mn-game-controls{grid-column:1;grid-row:2/span 3;width:100%;min-width:0;box-sizing:border-box;margin:0!important;padding:18px!important;border-radius:16px!important;background:linear-gradient(155deg,#1b2b20,#101b15)!important;border:1px solid #5e4c2d!important;box-shadow:0 14px 32px #0008,inset 0 1px #fff1!important}
+  .mn-game-controls input{min-width:0;background:#09150f!important;border:1px solid #78623a!important;border-radius:9px!important;color:#fff6df!important}
+  .mn-game-controls button{font-family:inherit;border-radius:9px!important;transition:filter .16s,transform .16s}
+  .mn-game-controls button:not(:disabled):hover{filter:brightness(1.12)}
+  .mn-game-controls button:not(:disabled):active{transform:translateY(1px)}
+  .mn-game-controls button[style*="linear-gradient(135deg,#20b879"]{background:linear-gradient(180deg,#e5c574,#ae8134)!important;color:#241908!important;border:1px solid #f0d68f!important;box-shadow:0 4px 0 #6e5123!important}
+  .mn-game-controls .mn-cashout{width:100%;min-height:48px;padding:13px!important;background:linear-gradient(180deg,#e6c879,#b78b3c)!important;color:#201707!important;border:1px solid #f1d995!important;border-radius:10px!important;box-shadow:0 4px 0 #745323,0 8px 18px #0006!important;font-size:14px;font-weight:900}
+  .mn-game-result{grid-column:1/-1;grid-row:5;margin-top:0!important}
+  .mn-toast{position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:9999;padding:12px 18px;border-radius:12px;font-size:13px;font-weight:700;color:#fff;box-shadow:0 10px 30px #0007;max-width:calc(100% - 32px)}
+  .mn-toast-success{background:rgba(5,150,105,.96)}.mn-toast-error{background:rgba(220,38,38,.96)}.mn-toast-info{background:rgba(30,64,175,.96)}
+  .mn-ladder-active{animation:mnLadderPulse 1.6s ease infinite}
+  @keyframes mnLadderPulse{0%,100%{box-shadow:0 0 10px #d5a84b25}50%{box-shadow:0 0 18px #d5a84b55}}
+  .mn-hero-mult{font-variant-numeric:tabular-nums}
+  .mn-cashout{animation:mnCash 2.2s ease infinite}
+  @keyframes mnCash{0%,100%{filter:brightness(1)}50%{filter:brightness(1.12)}}
+  .mn-result{animation:mnResultIn .4s cubic-bezier(.34,1.4,.64,1) both}
+  @keyframes mnResultIn{0%{transform:scale(.94);opacity:0}100%{transform:scale(1);opacity:1}}
+  @container solo-game (max-width:720px){
+    .mn-game{display:flex!important;flex-direction:column!important;width:100%!important;max-width:520px!important;margin:0 auto!important;padding:8px 8px 28px!important;gap:11px!important;align-items:stretch!important}
+    .mn-game-header,.mn-game-hero,.mn-game-board,.mn-game-ladder,.mn-game-controls,.mn-game-result{order:initial!important;width:100%!important;min-width:0!important;max-width:none!important;box-sizing:border-box!important;margin:0!important}
+    .mn-game-header{order:0!important;padding:0 2px 10px!important}
+    .mn-game-hero{order:1!important;padding:3px 0!important}
+    .mn-game .mn-hero-mult{font-size:clamp(38px,11vw,54px)!important}
+    .mn-game-board{order:2!important;padding:clamp(9px,2.5vw,14px)!important}
+    .mn-game-board>div{width:100%!important;max-width:480px!important;gap:clamp(5px,1.8vw,9px)!important}
+    .mn-game .mn-cell{border-radius:clamp(7px,2.3vw,12px)!important;transform:none}
+    .mn-game-ladder{order:3!important;gap:4px!important;overflow:hidden}
+    .mn-game-ladder>div{padding:8px 1px!important;font-size:clamp(8px,2.5vw,11px)!important}
+    .mn-game-controls{order:4!important;padding:clamp(12px,3vw,16px)!important}
+    .mn-game-result{order:5!important}
   }
-  @media(max-width:380px){
-    .mn-game{padding-left:7px!important;padding-right:7px!important}
+  @container solo-game (max-width:380px){
+    .mn-game{padding-left:6px!important;padding-right:6px!important}
     .mn-game-board>div{gap:5px!important}
-    .mn-game .mn-cell{border-radius:8px!important}
     .mn-game-controls{padding:11px!important}
+    .mn-game .mn-cell{border-radius:7px!important}
   }
-
-
-/* Gameplay pass: tactile tile states, reveal feedback and a readable multiplier rail */
-.mn-game-board{position:relative;isolation:isolate;padding:clamp(10px,2vw,18px)!important;background:radial-gradient(ellipse at 50% 35%,#1d5035 0%,#102b1d 58%,#09170f 100%)!important}
-.mn-game-board:before{content:"";position:absolute;inset:8px;border:1px solid #d5b46a35;border-radius:13px;pointer-events:none}
-.mn-game-board .mn-cell{position:relative;overflow:hidden;aspect-ratio:1;min-width:0;transform:translateZ(0);transition:filter .16s ease,transform .16s ease,box-shadow .16s ease!important}
-.mn-game-board .mn-cell.mn-hidden:not(:disabled){cursor:pointer}
-.mn-game-board .mn-cell.mn-hidden:not(:disabled):active{transform:translateY(3px) scale(.96)!important}
-.mn-game-board .mn-cell.mn-flip{animation:mnCasinoReveal .42s cubic-bezier(.2,.8,.2,1) both}
-.mn-game-board .mn-cell.mn-safe{box-shadow:inset 0 2px #ffffff45,0 0 22px #31d58b55,0 4px 0 #07502f!important}
-.mn-game-board .mn-cell.mn-mine{box-shadow:inset 0 2px #ffffff38,0 0 26px #ff514d66,0 4px 0 #541c19!important}
-.mn-game-board .mn-cell.mn-boom{animation:mnCasinoBoom .62s ease both}
-.mn-game-board .mn-dot{width:8px;height:8px;border-radius:50%;background:#d9c17d;box-shadow:0 0 12px #e4c77c;opacity:.8}
-.mn-game-ladder{display:grid!important;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px!important}
-.mn-game-ladder>div{font-variant-numeric:tabular-nums;text-align:center;min-width:0}
-.mn-hero-mult{font-variant-numeric:tabular-nums;letter-spacing:-.07em}
-@keyframes mnCasinoReveal{0%{transform:rotateY(90deg) scale(.82);filter:brightness(1.8)}65%{transform:rotateY(-8deg) scale(1.04)}100%{transform:rotateY(0) scale(1);filter:brightness(1)}}
-@keyframes mnCasinoBoom{0%{transform:scale(.8);filter:brightness(2.5)}45%{transform:scale(1.13);filter:brightness(1.4)}100%{transform:scale(1);filter:brightness(1)}}
-@media(max-width:520px){.mn-game-board{padding:8px!important}.mn-game-ladder{gap:3px!important}.mn-game-ladder>div{font-size:9px!important;padding:7px 2px!important}}
-
-  /* True phone layout: cancel desktop two-column composition completely. */
-  @media (max-width: 760px) {
-    .mn-game {
-      display: grid !important;
-      grid-template-columns: minmax(0, 1fr) !important;
-      grid-template-rows: auto !important;
-      width: 100% !important;
-      max-width: 480px !important;
-      margin: 0 auto !important;
-      padding: 8px 12px 28px !important;
-      gap: 12px !important;
-      align-items: stretch !important;
-      box-sizing: border-box !important;
-    }
-    .mn-game-header,
-    .mn-game-hero,
-    .mn-game-board,
-    .mn-game-ladder,
-    .mn-game-controls,
-    .mn-game-result {
-      grid-column: 1 / -1 !important;
-      grid-row: auto !important;
-      width: 100% !important;
-      min-width: 0 !important;
-      box-sizing: border-box !important;
-    }
-    .mn-game-header { order: 0 !important; margin: 0 !important; }
-    .mn-game-hero { order: 1 !important; padding: 4px 0 !important; }
-    .mn-game .mn-hero-mult { font-size: clamp(40px, 12vw, 58px) !important; }
-    .mn-game-board {
-      order: 2 !important;
-      padding: clamp(10px, 3vw, 16px) !important;
-      margin: 0 !important;
-      border-radius: 18px !important;
-    }
-    .mn-game-board > div {
-      width: 100% !important;
-      max-width: 460px !important;
-      margin: 0 auto !important;
-      gap: clamp(5px, 1.8vw, 9px) !important;
-    }
-    .mn-game .mn-cell {
-      width: 100% !important;
-      min-width: 0 !important;
-      aspect-ratio: 1 / 1 !important;
-      border-radius: clamp(8px, 2.5vw, 13px) !important;
-    }
-    .mn-game-ladder {
-      order: 3 !important;
-      display: grid !important;
-      grid-template-columns: repeat(7, minmax(0, 1fr)) !important;
-      gap: 5px !important;
-      margin: 0 !important;
-      padding: 0 0 2px !important;
-      overflow: visible !important;
-    }
-    .mn-game-ladder > div {
-      min-width: 0 !important;
-      padding: 8px 1px !important;
-      font-size: clamp(9px, 2.5vw, 11px) !important;
-    }
-    .mn-game-controls {
-      order: 4 !important;
-      padding: clamp(13px, 3.5vw, 18px) !important;
-      margin: 0 !important;
-    }
-    .mn-game-result { order: 5 !important; }
-  }
-  @media (max-width: 380px) {
-    .mn-game { padding-left: 8px !important; padding-right: 8px !important; }
-    .mn-game-board > div { gap: 5px !important; }
-    .mn-game-controls { padding: 12px !important; }
-  }
-
-
-  /* SoloShell is capped to a phone-width canvas; keep Mines single-column at every viewport. */
-  .tonyx-game-shell .mn-game {
-    display:grid!important;
-    grid-template-columns:minmax(0,1fr)!important;
-    grid-template-rows:auto!important;
-    width:100%!important;
-    max-width:480px!important;
-    gap:12px!important;
-    align-items:stretch!important;
-    box-sizing:border-box!important;
-  }
-  .tonyx-game-shell .mn-game-header,
-  .tonyx-game-shell .mn-game-hero,
-  .tonyx-game-shell .mn-game-board,
-  .tonyx-game-shell .mn-game-ladder,
-  .tonyx-game-shell .mn-game-controls,
-  .tonyx-game-shell .mn-game-result {
-    grid-column:1/-1!important;
-    grid-row:auto!important;
-    width:100%!important;
-    min-width:0!important;
-    box-sizing:border-box!important;
-  }
-  .tonyx-game-shell .mn-game-header{order:0!important}
-  /* Setup state: show the 5x5 board before any betting controls. */
-  .tonyx-game-shell .mn-setup .mn-game-hero{order:1!important}
-  .tonyx-game-shell .mn-setup .mn-game-board{order:2!important}
-  .tonyx-game-shell .mn-setup .mn-game-ladder{order:3!important}
-  .tonyx-game-shell .mn-setup .mn-game-controls{order:4!important}
-  .tonyx-game-shell .mn-active .mn-game-hero{order:1!important}
-  .tonyx-game-shell .mn-active .mn-game-board{order:2!important}
-  .tonyx-game-shell .mn-active .mn-game-ladder{order:3!important}
-  .tonyx-game-shell .mn-active .mn-game-controls{order:4!important}
-  .tonyx-game-shell .mn-game-result{order:5!important}
-  .tonyx-game-shell .mn-game-board>div{width:100%!important;max-width:460px!important;margin:0 auto!important;gap:clamp(5px,2vw,9px)!important}
-  .tonyx-game-shell .mn-game .mn-cell{width:100%!important;min-width:0!important;aspect-ratio:1!important}
-  .tonyx-game-shell .mn-game-ladder{display:grid!important;grid-template-columns:repeat(7,minmax(0,1fr))!important;gap:5px!important;overflow:visible!important}
-  .tonyx-game-shell .mn-game-ladder>div{min-width:0!important;padding:8px 1px!important;font-size:clamp(9px,2.5vw,11px)!important}
-
-
-  /* Ported Mines presentation language from Open Stake: raised slate tiles,
-     crisp revealed states and a compact phone-first betting column.
-     All outcomes remain driven by the existing TONYX server endpoints. */
-  .mn-game .mn-game-board {
-    background:linear-gradient(180deg,#172b38 0%,#0d1b25 100%)!important;
-    border:1px solid #304858!important;
-    box-shadow:0 18px 44px rgba(0,0,0,.42),inset 0 1px rgba(255,255,255,.045)!important;
-  }
-  .mn-game .mn-cell {
-    background:#2f4553!important;
-    border:0!important;
-    border-radius:11px!important;
-    box-shadow:0 5px 0 #1b2b36,0 8px 14px rgba(0,0,0,.32),inset 0 1px rgba(255,255,255,.08)!important;
-    transform:translateY(-3px);
-  }
-  .mn-game .mn-cell.mn-hidden:not(:disabled) {
-    background:linear-gradient(160deg,#3b5969 0%,#2b4352 100%)!important;
-  }
-  .mn-game .mn-cell.mn-hidden:not(:disabled):hover {
-    background:linear-gradient(160deg,#486a7b 0%,#344f60 100%)!important;
-    transform:translateY(-5px);
-    box-shadow:0 7px 0 #1b2b36,0 12px 18px rgba(0,0,0,.38)!important;
-  }
-  .mn-game .mn-cell.mn-hidden:not(:disabled):active {
-    transform:translateY(1px) scale(.98)!important;
-    box-shadow:0 1px 0 #1b2b36,0 3px 6px rgba(0,0,0,.3)!important;
-  }
-  .mn-game .mn-cell.mn-safe {
-    background:linear-gradient(160deg,#174d43,#0d332d)!important;
-    box-shadow:inset 0 1px rgba(255,255,255,.12),0 0 18px rgba(16,185,129,.2)!important;
-  }
-  .mn-game .mn-cell.mn-mine {
-    background:linear-gradient(160deg,#6b3038,#351c25)!important;
-    box-shadow:inset 0 1px rgba(255,255,255,.12),0 0 18px rgba(239,68,68,.22)!important;
-  }
-  .mn-game .mn-cell .mn-dot {
-    width:5px!important;height:5px!important;
-    background:rgba(226,238,245,.26)!important;
-    box-shadow:0 0 5px rgba(226,238,245,.18)!important;
-  }
-  .mn-game .mn-game-controls {
-    background:linear-gradient(180deg,#172631,#101c25)!important;
-    border:1px solid #304858!important;
-    border-radius:14px!important;
-  }
-  .mn-game .mn-game-controls button {min-height:42px}
-  .mn-game .mn-game-controls input {
-    background:#0b151d!important;
-    border:1px solid #354c5a!important;
-  }
-  @media(max-width:760px) {
-    .mn-game {
-      display:flex!important;
-      flex-direction:column!important;
-      width:100%!important;
-      max-width:520px!important;
-      padding:8px 10px 28px!important;
-      gap:11px!important;
-      align-items:stretch!important;
-    }
-    .mn-game-header,.mn-game-hero,.mn-game-board,.mn-game-ladder,
-    .mn-game-controls,.mn-game-result {
-      order:initial!important;
-      width:100%!important;
-      min-width:0!important;
-      margin:0!important;
-      box-sizing:border-box!important;
-    }
-    .mn-game-header {order:0!important}
-    .mn-game-hero {order:1!important;padding:4px 0!important}
-    .mn-game-board {order:2!important;padding:10px!important}
-    .mn-game-ladder {order:3!important}
-    .mn-game-controls {order:4!important;padding:14px!important}
-    .mn-game-result {order:5!important}
-    .mn-game-board>div {
-      display:grid!important;
-      grid-template-columns:repeat(5,minmax(0,1fr))!important;
-      width:100%!important;
-      max-width:480px!important;
-      margin:0 auto!important;
-      gap:clamp(6px,1.8vw,9px)!important;
-    }
-    .mn-game .mn-cell {
-      width:100%!important;
-      min-width:0!important;
-      aspect-ratio:1!important;
-      border-radius:clamp(8px,2.5vw,12px)!important;
-    }
-    .mn-game-ladder {
-      display:grid!important;
-      grid-template-columns:repeat(7,minmax(0,1fr))!important;
-      gap:4px!important;
-      overflow:visible!important;
-    }
-    .mn-game-ladder>div {
-      min-width:0!important;
-      padding:8px 1px!important;
-      font-size:clamp(9px,2.4vw,11px)!important;
-    }
-    .mn-game-controls .mn-game-controls button {min-width:0}
-  }
-  @media(max-width:380px) {
-    .mn-game {padding-left:7px!important;padding-right:7px!important}
-    .mn-game-board>div {gap:5px!important}
-    .mn-game .mn-cell {border-radius:7px!important}
-    .mn-game-controls {padding:11px!important}
-  }
-
-
 `;

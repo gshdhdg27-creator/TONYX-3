@@ -299,7 +299,7 @@ const CSS = `
 .cf-game .cf-result{box-shadow:0 10px 26px #0005,inset 0 1px #ffffff0a}
   .cf-game .cf-face.cf-heads{background:linear-gradient(145deg,#c5e8f2,#3d819a)!important;color:#102b38!important}
   .cf-game .cf-face.cf-tails{background:linear-gradient(145deg,#eaf4f8,#7999a8)!important;color:#1a2e38!important}
-  .cf-game .cf-controls{grid-column:1;grid-row:2/span 2;margin:0!important;padding:18px!important;background:linear-gradient(180deg,#151f2a,#101720)!important;border:1px solid #293947!important;border-radius:13px!important;box-shadow:0 14px 34px #0006!important}
+  .cf-game .cf-controls{grid-column:1;grid-row:2;margin:0!important;padding:18px!important;background:linear-gradient(180deg,#151f2a,#101720)!important;border:1px solid #293947!important;border-radius:13px!important;box-shadow:0 14px 34px #0006!important}
   .cf-game .cf-controls button{border-radius:8px!important}
   .cf-game .cf-controls button[style*="linear-gradient"]{background:linear-gradient(180deg,#168fba,#08769d)!important;color:white!important;box-shadow:0 4px 0 #064c68!important}
   .cf-game .cf-controls input{background:#090f16!important;border:1px solid #344655!important;color:#eef3f8!important;border-radius:8px!important}

@@ -321,6 +321,85 @@ const CSS = `
 .cf-controls button:not(:disabled):active{transform:translateY(2px) scale(.985)}
 @media(max-width:760px){.cf-game-stage{min-height:360px!important}.cf-arena{height:250px!important}}
 
+/* Mobile Coin Flip: coin is the hero, controls become a full-width panel below it. */
+@media (max-width: 900px) {
+  .cf-root.cf-game {
+    display:flex!important;
+    flex-direction:column!important;
+    align-items:stretch!important;
+    width:100%!important;
+    max-width:520px!important;
+    min-width:0!important;
+    margin:0 auto!important;
+    padding:8px 12px 26px!important;
+    gap:12px!important;
+    box-sizing:border-box!important;
+    overflow:hidden!important;
+  }
+  .cf-game>.cf-ambient { inset:0!important; height:100%!important; }
+  .cf-game>.cf-header {
+    order:0!important;
+    width:100%!important;
+    padding:8px 0 12px!important;
+    margin:0!important;
+    text-align:center!important;
+    border-bottom:1px solid #29443a!important;
+  }
+  .cf-game .cf-header>div:nth-child(2) {font-size:26px!important}
+  .cf-game-stage {
+    order:1!important;
+    display:flex!important;
+    width:100%!important;
+    min-width:0!important;
+    height:clamp(250px,68vw,330px)!important;
+    min-height:0!important;
+    margin:0!important;
+    border-radius:20px!important;
+    align-items:center!important;
+    justify-content:center!important;
+  }
+  .cf-game-stage:before {width:clamp(190px,56vw,250px)!important;height:clamp(190px,56vw,250px)!important}
+  .cf-game .cf-arena {height:100%!important;min-height:0!important;margin:0!important;width:100%!important}
+  .cf-game .cf-ring {width:clamp(170px,49vw,218px)!important;height:clamp(170px,49vw,218px)!important}
+  .cf-game .cf-stage {width:clamp(132px,39vw,164px)!important;height:clamp(132px,39vw,164px)!important}
+  .cf-game .cf-floor {bottom:clamp(26px,8vw,42px)!important}
+  .cf-game-result {
+    order:2!important;
+    width:100%!important;
+    box-sizing:border-box!important;
+    margin:0!important;
+  }
+  .cf-game .cf-controls {
+    order:3!important;
+    display:flex!important;
+    flex-direction:column!important;
+    width:100%!important;
+    min-width:0!important;
+    box-sizing:border-box!important;
+    margin:0!important;
+    padding:14px!important;
+    gap:0!important;
+    border-radius:18px!important;
+  }
+  .cf-game .cf-controls>div:first-child {margin-bottom:10px!important}
+  .cf-game .cf-controls>div:nth-of-type(2) {margin-top:14px!important}
+  .cf-game .cf-controls button {touch-action:manipulation}
+  .cf-game .cf-controls button[style*="flex-direction: column"] {min-height:104px!important}
+  .cf-game .cf-controls input {min-width:0!important;width:100%!important}
+  .cf-game .cf-controls>div[style*="display: flex"] {min-width:0!important}
+  .cf-game .cf-controls>div[style*="justify-content: space-between"] {gap:8px!important;flex-wrap:wrap!important}
+  .cf-game .cf-controls button[style*="height: 56px"] {height:54px!important;margin-top:14px!important}
+}
+@media (max-width: 390px) {
+  .cf-root.cf-game {padding-left:9px!important;padding-right:9px!important;gap:10px!important}
+  .cf-game-stage {height:250px!important}
+  .cf-game .cf-controls {padding:12px!important}
+  .cf-game .cf-controls button[style*="flex-direction: column"] {min-height:94px!important}
+  .cf-game .cf-controls button svg {width:32px!important;height:32px!important}
+  .cf-game .cf-controls button[style*="height: 56px"] {font-size:15px!important}
+}
+
+
 `;
 
 export default function CoinFlipGame({

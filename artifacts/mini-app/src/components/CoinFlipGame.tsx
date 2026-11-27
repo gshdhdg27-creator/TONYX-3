@@ -400,6 +400,70 @@ const CSS = `
 }
 
 
+/* Adapt to the actual Solo game panel width, not the desktop browser viewport. */
+@container solo-game (max-width: 620px) {
+  .cf-root.cf-game {
+    display:flex!important;
+    flex-direction:column!important;
+    align-items:stretch!important;
+    grid-template-columns:minmax(0,1fr)!important;
+    grid-template-rows:auto!important;
+    width:100%!important;
+    max-width:100%!important;
+    min-width:0!important;
+    margin:0!important;
+    padding:8px 0 24px!important;
+    gap:12px!important;
+    overflow:visible!important;
+    box-sizing:border-box!important;
+  }
+  .cf-game>.cf-header,
+  .cf-game-stage,
+  .cf-game .cf-controls,
+  .cf-game .cf-result {
+    position:relative!important;
+    inset:auto!important;
+    float:none!important;
+    grid-column:1!important;
+    grid-row:auto!important;
+    width:100%!important;
+    min-width:0!important;
+    max-width:100%!important;
+    box-sizing:border-box!important;
+    margin:0!important;
+  }
+  .cf-game>.cf-header {order:0!important;text-align:center!important;padding:6px 0 12px!important}
+  .cf-game-stage {
+    order:1!important;
+    display:flex!important;
+    flex:0 0 auto!important;
+    height:clamp(250px,62cqi,330px)!important;
+    min-height:250px!important;
+    align-items:center!important;
+    justify-content:center!important;
+    overflow:hidden!important;
+  }
+  .cf-game-stage:before {width:min(68cqi,260px)!important;height:min(68cqi,260px)!important}
+  .cf-game .cf-arena {width:100%!important;height:100%!important;min-height:0!important;margin:0!important}
+  .cf-game .cf-ring {width:min(58cqi,220px)!important;height:min(58cqi,220px)!important}
+  .cf-game .cf-stage {width:min(45cqi,170px)!important;height:min(45cqi,170px)!important;flex:0 0 auto!important}
+  .cf-game .cf-controls {
+    order:2!important;
+    display:flex!important;
+    flex:0 0 auto!important;
+    flex-direction:column!important;
+    gap:0!important;
+    padding:16px!important;
+    border-radius:16px!important;
+  }
+  .cf-game .cf-controls>div:first-child {margin-bottom:10px!important}
+  .cf-game .cf-controls>div:nth-of-type(2) {margin-top:14px!important}
+  .cf-game .cf-controls .cf-side-row,
+  .cf-game .cf-controls input {min-width:0!important}
+  .cf-game .cf-result {order:3!important}
+}
+
+
 `;
 
 export default function CoinFlipGame({

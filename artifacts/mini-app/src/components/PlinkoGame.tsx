@@ -386,7 +386,7 @@ export default function PlinkoGame({
       </div>
 
       {last && (
-        <div style={{
+        <div className="plinko-last-result" style={{
           textAlign: "center", fontWeight: 900, fontSize: 15, margin: "8px 0",
           color: last.profit >= 0 ? "#4ade80" : "#f87171",
         }}>
@@ -592,7 +592,17 @@ const PLINKO_LAYOUT_CSS = `
 .plinko-game{width:100%;max-width:1120px;margin:0 auto;padding:10px 0 32px;display:grid;grid-template-columns:340px minmax(0,1fr);grid-template-rows:auto auto auto auto auto auto;gap:12px 18px;align-items:start;color:#edf2f7}
 .plinko-board{grid-column:2;grid-row:1/span 5;min-height:560px!important;height:560px!important;margin:0!important;border-radius:16px!important;border:1px solid #2a3d4a!important;background:radial-gradient(ellipse at 50% 0%,#16313e,#09121b 72%)!important;box-shadow:0 18px 48px #0008!important;overflow:hidden}
 .plinko-board canvas{width:100%!important;height:100%!important}
-.plinko-game>div:nth-of-type(3){grid-column:2;grid-row:6;text-align:center;background:#131d27;border:1px solid #293947;border-radius:10px;padding:10px}
+.plinko-last-result{grid-column:2;grid-row:6;align-self:start;text-align:center!important;background:linear-gradient(180deg,#142532,#0d1822);border:1px solid #294858;border-radius:10px;padding:12px 14px!important;box-shadow:inset 0 1px #ffffff0a,0 10px 24px #0005;font-size:14px!important;letter-spacing:.01em}
+.plinko-board{position:relative}
+.plinko-board:after{content:"";position:absolute;inset:0;pointer-events:none;background:linear-gradient(180deg,#ffffff08,transparent 24%,transparent 78%,#0002)}
+.plinko-risk,.plinko-rows,.plinko-balls,.plinko-controls{box-shadow:0 10px 26px #0005,inset 0 1px #ffffff08!important}
+.plinko-risk{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px!important}
+.plinko-risk button{min-height:42px;font-weight:850!important;letter-spacing:.02em}
+.plinko-controls input{min-height:44px}
+.plinko-controls button{min-height:42px}
+.plinko-game button:not(:disabled){transition:transform .16s ease,filter .16s ease,box-shadow .16s ease}
+.plinko-game button:not(:disabled):active{transform:translateY(1px) scale(.985);filter:brightness(1.08)}
+.plinko-board canvas{position:relative;z-index:1}
 .plinko-risk,.plinko-rows,.plinko-balls,.plinko-controls{grid-column:1;margin:0 0 2px!important;padding:14px!important;background:linear-gradient(180deg,#151f2a,#101720)!important;border:1px solid #293947!important;border-radius:12px!important}
 .plinko-risk{grid-row:1}
 .plinko-rows{grid-row:2}
@@ -602,5 +612,5 @@ const PLINKO_LAYOUT_CSS = `
 .plinko-game input{background:#090f16!important;border:1px solid #344655!important;border-radius:8px!important;color:#eef3f8!important}
 .plinko-game .plinko-risk button[style*="linear-gradient"]{background:#126d8a!important;border-color:#2698b7!important;box-shadow:none!important;color:#fff!important}
 .plinko-game .plinko-controls button[style*="linear-gradient"]{background:linear-gradient(180deg,#168fba,#08769d)!important;box-shadow:0 4px 0 #064c68!important;color:white!important}
-@media(max-width:760px){.plinko-game{display:flex!important;flex-direction:column!important;gap:10px!important;padding:6px 0 24px!important}.plinko-board{width:100%;height:430px!important;min-height:430px!important}.plinko-risk,.plinko-rows,.plinko-balls,.plinko-controls{width:100%;box-sizing:border-box;padding:12px!important}}
+@media(max-width:760px){.plinko-game{display:flex!important;flex-direction:column!important;gap:10px!important;padding:6px 0 24px!important}.plinko-board{width:100%;height:430px!important;min-height:430px!important}.plinko-last-result{width:100%;box-sizing:border-box;order:2}.plinko-risk,.plinko-rows,.plinko-balls,.plinko-controls{width:100%;box-sizing:border-box;padding:12px!important}}
 `;

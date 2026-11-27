@@ -73,7 +73,7 @@ function SoloCard({ card, onClick, index }: { card: SoloCardData; onClick: () =>
 
 function SoloShell({ children, onBack }: { children: ReactNode; onBack: () => void }) {
   return (
-    <div className="tonyx-game-shell" style={{ minHeight: "100dvh", padding: "14px 14px 110px", color: "#edf4f8", background: "#08120e", fontFamily: "Inter,system-ui,sans-serif" }}>
+    <div className="tonyx-game-shell" style={{ minHeight: "100dvh", width: "100%", boxSizing: "border-box", containerType: "inline-size", containerName: "solo-game", padding: "14px 14px 110px", color: "#edf4f8", background: "#08120e", fontFamily: "Inter,system-ui,sans-serif" }}>
       <style>{`
         .tonyx-game-shell{background:radial-gradient(ellipse at 50% -25%,#1b3444 0%,#101b25 38%,#0b1219 78%)!important}
         .tonyx-game-top{max-width:1180px;margin:0 auto 14px;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0 0 12px;border-bottom:1px solid #263746}

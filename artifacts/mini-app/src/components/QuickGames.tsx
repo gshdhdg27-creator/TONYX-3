@@ -220,4 +220,21 @@ const CSS = `
 .qg-game .qg-panel button[disabled]{opacity:.45}
 @media(max-width:760px){.qg-game{display:flex!important;flex-direction:column!important;gap:10px!important;padding:6px 0 24px!important}.qg-header,.qg-stage,.qg-panel,.qg-history{width:100%;box-sizing:border-box}.qg-stage{min-height:320px!important}.roulette-wrap{transform:scale(.82)}.qg-panel{padding:13px!important}}
 
+
+/* Gameplay pass: real table presentation for Dice and European Roulette */
+.qg-stage{isolation:isolate;background:radial-gradient(ellipse at 50% 48%,#315338 0%,#14291b 52%,#08130d 100%)!important;border-color:#9a7940!important}
+.qg-stage:after{content:"";position:absolute;inset:0;pointer-events:none;background:repeating-radial-gradient(circle at 50% 50%,transparent 0 42px,#e2c47a0b 43px 44px);mask-image:radial-gradient(circle,black,transparent 76%)}
+.qg-game .dice-cube{filter:drop-shadow(0 24px 24px #000b)!important}
+.qg-game .dice-face{border:3px solid #f4dc9a!important;box-shadow:inset 0 3px 10px #fff9,0 8px 20px #0008!important}
+.qg-game .roulette-wrap{filter:drop-shadow(0 22px 24px #000b)}
+.qg-game .roulette-wheel{border:9px solid #d7b765!important;box-shadow:0 0 0 5px #604820,0 0 0 8px #e8d08b55,0 18px 36px #000b,inset 0 0 0 3px #fff0c4!important}
+.qg-game .roulette-wheel i{background:linear-gradient(180deg,#fff0b7,#9c702d)!important}
+.qg-game .roulette-pointer{filter:drop-shadow(0 3px 5px #000);font-size:26px!important}
+.qg-game .qg-panel{border-color:#756039!important;background:linear-gradient(155deg,#1d2e21,#101a13)!important}
+.qg-game .qg-result strong{letter-spacing:.08em;text-shadow:0 0 20px currentColor}
+.qg-game .qg-history{border-color:#715b32!important;background:linear-gradient(145deg,#1a2a1e,#0c1710)!important}
+.qg-game button:not(:disabled){transition:filter .15s ease,transform .15s ease}
+.qg-game button:not(:disabled):active{transform:translateY(2px) scale(.99)}
+@media(max-width:760px){.qg-stage{min-height:340px!important}.qg-game .roulette-wrap{transform:scale(.88)}}
+
 `;

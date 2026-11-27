@@ -1045,4 +1045,23 @@ const CSS = `
     .mn-game-controls{padding:14px!important}
   }
 
+
+/* Gameplay pass: tactile tile states, reveal feedback and a readable multiplier rail */
+.mn-game-board{position:relative;isolation:isolate;padding:clamp(10px,2vw,18px)!important;background:radial-gradient(ellipse at 50% 35%,#1d5035 0%,#102b1d 58%,#09170f 100%)!important}
+.mn-game-board:before{content:"";position:absolute;inset:8px;border:1px solid #d5b46a35;border-radius:13px;pointer-events:none}
+.mn-game-board .mn-cell{position:relative;overflow:hidden;aspect-ratio:1;min-width:0;transform:translateZ(0);transition:filter .16s ease,transform .16s ease,box-shadow .16s ease!important}
+.mn-game-board .mn-cell.mn-hidden:not(:disabled){cursor:pointer}
+.mn-game-board .mn-cell.mn-hidden:not(:disabled):active{transform:translateY(3px) scale(.96)!important}
+.mn-game-board .mn-cell.mn-flip{animation:mnCasinoReveal .42s cubic-bezier(.2,.8,.2,1) both}
+.mn-game-board .mn-cell.mn-safe{box-shadow:inset 0 2px #ffffff45,0 0 22px #31d58b55,0 4px 0 #07502f!important}
+.mn-game-board .mn-cell.mn-mine{box-shadow:inset 0 2px #ffffff38,0 0 26px #ff514d66,0 4px 0 #541c19!important}
+.mn-game-board .mn-cell.mn-boom{animation:mnCasinoBoom .62s ease both}
+.mn-game-board .mn-dot{width:8px;height:8px;border-radius:50%;background:#d9c17d;box-shadow:0 0 12px #e4c77c;opacity:.8}
+.mn-game-ladder{display:grid!important;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px!important}
+.mn-game-ladder>div{font-variant-numeric:tabular-nums;text-align:center;min-width:0}
+.mn-hero-mult{font-variant-numeric:tabular-nums;letter-spacing:-.07em}
+@keyframes mnCasinoReveal{0%{transform:rotateY(90deg) scale(.82);filter:brightness(1.8)}65%{transform:rotateY(-8deg) scale(1.04)}100%{transform:rotateY(0) scale(1);filter:brightness(1)}}
+@keyframes mnCasinoBoom{0%{transform:scale(.8);filter:brightness(2.5)}45%{transform:scale(1.13);filter:brightness(1.4)}100%{transform:scale(1);filter:brightness(1)}}
+@media(max-width:520px){.mn-game-board{padding:8px!important}.mn-game-ladder{gap:3px!important}.mn-game-ladder>div{font-size:9px!important;padding:7px 2px!important}}
+
 `;

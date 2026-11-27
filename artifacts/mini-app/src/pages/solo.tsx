@@ -40,10 +40,10 @@ function SoloCard({ card, onClick, index }: { card: SoloCardData; onClick: () =>
       position: "relative", minHeight: card.wide ? 150 : 164, overflow: "hidden",
       display: "flex", flexDirection: card.wide ? "row" : "column", justifyContent: "space-between",
       alignItems: card.wide ? "center" : "stretch", textAlign: "left", padding: card.wide ? "18px 22px" : "15px",
-      borderRadius: 12, border: "1px solid #293746",
-      background: "linear-gradient(180deg,#1b2733 0%,#141e28 100%)",
+      borderRadius: 16, border: "1px solid #5b4a2b",
+      background: "linear-gradient(145deg,#172b22 0%,#0d1b16 58%,#111a18 100%)",
       color: "#f2f6f9", cursor: "pointer", fontFamily: "inherit",
-      boxShadow: "0 5px 16px #0005,inset 0 1px 0 #ffffff08",
+      boxShadow: "0 12px 30px #0008,inset 0 1px 0 #f8e5ad12,0 0 0 1px #b18a3b12",
       animation: `soloCardIn .42s ease ${index * 45}ms both`,
       gridColumn: card.wide ? "1 / -1" : undefined,
     }}>
@@ -64,8 +64,8 @@ function SoloCard({ card, onClick, index }: { card: SoloCardData; onClick: () =>
         position: "relative", zIndex: 1, flexShrink: 0, width: card.wide ? 100 : 66, height: card.wide ? 100 : 66,
         marginLeft: card.wide ? 18 : 0, marginTop: card.wide ? 0 : 14, alignSelf: card.wide ? "center" : "flex-end",
         borderRadius: 12, display: "grid", placeItems: "center",
-        fontSize: card.wide ? 57 : 39, background: "linear-gradient(145deg,#263d4b,#172530)",
-        border: "1px solid #355263", boxShadow: "inset 0 1px 12px #5ccbe51a",
+        fontSize: card.wide ? 57 : 39, background: "linear-gradient(145deg,#3a3424,#1d291f)",
+        border: "1px solid #806333", boxShadow: "inset 0 1px 16px #e8c46a18,0 8px 18px #0006",
       }}>{card.icon}</div>
     </button>
   );
@@ -73,7 +73,7 @@ function SoloCard({ card, onClick, index }: { card: SoloCardData; onClick: () =>
 
 function SoloShell({ children, onBack }: { children: ReactNode; onBack: () => void }) {
   return (
-    <div className="tonyx-game-shell" style={{ minHeight: "100dvh", padding: "14px 14px 110px", color: "#edf4f8", background: "#0d151d", fontFamily: "Inter,system-ui,sans-serif" }}>
+    <div className="tonyx-game-shell" style={{ minHeight: "100dvh", padding: "14px 14px 110px", color: "#edf4f8", background: "#08120e", fontFamily: "Inter,system-ui,sans-serif" }}>
       <style>{`
         .tonyx-game-shell{background:radial-gradient(ellipse at 50% -25%,#1b3444 0%,#101b25 38%,#0b1219 78%)!important}
         .tonyx-game-top{max-width:1180px;margin:0 auto 14px;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0 0 12px;border-bottom:1px solid #263746}
@@ -96,6 +96,56 @@ function SoloShell({ children, onBack }: { children: ReactNode; onBack: () => vo
         .tonyx-game-shell .pickaxe-controls{padding:14px!important}
         .tonyx-game-shell .pickaxe-drop{background:#101b24!important;border:1px solid #293c49!important;border-radius:12px!important;overflow:hidden}
         .tonyx-game-shell .qg-history,.tonyx-game-shell .crash-history{background:#121e27!important;border-color:#2a3e4b!important}
+        @media(max-width:700px){
+          .tonyx-game-shell .mn-game,.tonyx-game-shell .crash-game,.tonyx-game-shell .qg-game,.tonyx-game-shell .plinko-game,.tonyx-game-shell .cf-game{grid-template-columns:minmax(0,1fr)!important}
+          .tonyx-game-shell .mn-game-controls,.tonyx-game-shell .crash-controls,.tonyx-game-shell .qg-panel,.tonyx-game-shell .plinko-controls,.tonyx-game-shell .cf-controls{grid-column:1!important;grid-row:auto!important}
+          .tonyx-game-shell .mn-game-board,.tonyx-game-shell .crash-stage,.tonyx-game-shell .qg-stage,.tonyx-game-shell .plinko-board,.tonyx-game-shell .cf-game-stage{grid-column:1!important;grid-row:auto!important}
+        }
+
+        /* TONYX Casino Originals — premium felt, dark lacquer and warm brass */
+        .tonyx-game-shell{background:radial-gradient(ellipse at 50% -18%,#284632 0%,#10251a 34%,#09140f 72%,#070d0a 100%)!important;color:#f7f1df!important}
+        .tonyx-game-top{border-bottom:1px solid #70572e!important}
+        .tonyx-game-back{background:linear-gradient(180deg,#26382b,#17251c)!important;border:1px solid #80683b!important;color:#f2dfae!important;border-radius:10px!important;box-shadow:inset 0 1px #fff2,0 4px 12px #0006}
+        .tonyx-game-brand{color:#e4bd69!important;text-shadow:0 0 18px #d5a84b35}
+        .tonyx-game-note{color:#b4a27b!important}
+        .tonyx-game-shell .mn-game,.tonyx-game-shell .crash-game,.tonyx-game-shell .qg-game,.tonyx-game-shell .plinko-game,.tonyx-game-shell .cf-game,.tonyx-game-shell .pickaxe-drop{color:#f4efdf!important}
+        .tonyx-game-shell .mn-game-header,.tonyx-game-shell .crash-game .crash-header,.tonyx-game-shell .qg-header,.tonyx-game-shell .cf-header{border-color:#5e4b2b!important}
+        .tonyx-game-shell .mn-game-controls,.tonyx-game-shell .crash-controls,.tonyx-game-shell .qg-panel,.tonyx-game-shell .plinko-controls,.tonyx-game-shell .plinko-risk,.tonyx-game-shell .plinko-rows,.tonyx-game-shell .plinko-balls,.tonyx-game-shell .cf-controls,.tonyx-game-shell .pickaxe-controls{background:linear-gradient(155deg,#1b2b20,#101b15)!important;border:1px solid #5e4c2d!important;border-radius:14px!important;box-shadow:0 14px 32px #0008,inset 0 1px #fff1!important}
+        .tonyx-game-shell .mn-game-board,.tonyx-game-shell .crash-stage,.tonyx-game-shell .crash-chart,.tonyx-game-shell .qg-stage,.tonyx-game-shell .plinko-board,.tonyx-game-shell .cf-game-stage{background:radial-gradient(ellipse at 50% 30%,#1b4933 0%,#0d281c 52%,#08170f 100%)!important;border:1px solid #856b38!important;border-radius:16px!important;box-shadow:inset 0 1px #fff2,0 18px 44px #0009,0 0 0 1px #d4a94b12!important}
+        .tonyx-game-shell .mn-cell{border-radius:10px!important;background:linear-gradient(155deg,#326448,#1c432e 70%,#153524)!important;border:1px solid #66844b!important;box-shadow:inset 0 2px #ffffff20,0 4px 0 #0a2115,0 8px 14px #0007!important}
+        .tonyx-game-shell .mn-cell.mn-hidden:not(:disabled):hover{filter:brightness(1.2)!important;box-shadow:inset 0 2px #ffffff30,0 6px 0 #0a2115,0 12px 20px #0009!important}
+        .tonyx-game-shell .mn-safe{background:linear-gradient(145deg,#26a66c,#087443)!important;border-color:#8bca83!important}
+        .tonyx-game-shell .mn-mine{background:linear-gradient(145deg,#c84c43,#72251e)!important;border-color:#e18b5c!important}
+        .tonyx-game-shell .mn-cashout,.tonyx-game-shell .crash-controls button[class*="bet"],.tonyx-game-shell .cf-controls button[class*="play"]{background:linear-gradient(180deg,#e6c879,#b78b3c)!important;color:#201707!important;border:1px solid #f1d995!important;border-radius:10px!important;box-shadow:0 4px 0 #745323,0 8px 18px #0006!important;text-shadow:0 1px #fff5}
+        .tonyx-game-shell input,.tonyx-game-shell select,.tonyx-game-shell input:not([type=range]){background:linear-gradient(180deg,#09150f,#0d1b13)!important;border:1px solid #78623a!important;border-radius:9px!important;color:#fff6df!important;accent-color:#d7ad5d}
+        .tonyx-game-shell input[type=range]{accent-color:#d9b45f!important}
+        .tonyx-game-shell button{font-family:inherit}
+        .tonyx-game-shell .mn-ladder-active{background:linear-gradient(145deg,#4b3b20,#2b2718)!important;border-color:#d4ad5e!important;color:#f5d98f!important;box-shadow:0 0 18px #d5a84b25!important}
+        .tonyx-game-shell .mn-game-ladder>div{background:#14231a!important;border:1px solid #57482b!important;color:#b8aa84!important}
+        .tonyx-game-shell .mn-game-ladder>div:first-child{background:#3b321d!important;border-color:#d0a64f!important;color:#f4d68c!important}
+        .tonyx-game-shell .cf-game-stage{min-height:390px!important}
+        .tonyx-game-shell .cf-ring{border-color:#c9a45b!important;box-shadow:0 0 38px #d0a74a20,inset 0 0 36px #d0a74a18!important}
+        .tonyx-game-shell .cf-floor{background:radial-gradient(ellipse,#d3a94b25,transparent 68%)!important}
+        .tonyx-game-shell .qg-header>div:last-child{background:#17271c!important;border:1px solid #7b6135!important;border-radius:11px!important}
+        .tonyx-game-shell .qg-game .dice-face{background:linear-gradient(145deg,#fff3c9,#d6b05c 70%,#8b642b)!important;color:#30220b!important;border:2px solid #f2d995!important}
+        .tonyx-game-shell .roulette-wheel{border-color:#d8bd7b!important;box-shadow:0 0 0 5px #594522,0 16px 34px #000a,inset 0 0 0 3px #f5e3b0!important}
+        .tonyx-game-shell .wheel-center{background:radial-gradient(circle,#fff0c1,#c89b48 65%,#6f4c1d)!important;border-color:#f0d18b!important;color:#35230d!important}
+        .tonyx-game-shell .roulette-result{background:#14251a!important;border:1px solid #d0ad61!important;color:#f5dc9a!important}
+        .tonyx-game-shell .qg-game .qg-result,.tonyx-game-shell .qg-history,.tonyx-game-shell .crash-history{background:linear-gradient(145deg,#17271d,#0e1913)!important;border:1px solid #65512f!important;border-radius:12px!important}
+        .tonyx-game-shell .crash-stage>div:nth-child(2){text-shadow:0 0 28px currentColor,0 2px 8px #000!important}
+        .tonyx-game-shell .crash-chart{border-color:#6c5834!important;background:linear-gradient(180deg,#07130d,#0b2116)!important}
+        .tonyx-game-shell .plinko-board{border-color:#8b713e!important;background:radial-gradient(ellipse at 50% 0%,#285438,#0b1c12 78%)!important}
+        .tonyx-game-shell .plinko-last-result{background:linear-gradient(145deg,#1b2d20,#101b14)!important;border:1px solid #80683b!important;color:#f0d58d!important;border-radius:12px!important}
+        .tonyx-game-shell .pickaxe-drop{background:radial-gradient(ellipse at 70% 10%,#2b4b34,#0b1710 72%)!important;border:1px solid #80673b!important;border-radius:16px!important}
+        .tonyx-game-shell .pickaxe-shaft>div{border-color:#82683a!important;box-shadow:inset 0 0 50px #000a,0 12px 28px #0008!important}
+        .tonyx-game-shell .pickaxe-stats{background:#14251a!important;border:1px solid #69552f!important;border-radius:12px!important}
+        .tonyx-game-shell .pickaxe-reel>div{border-color:#d2ae60!important;background:radial-gradient(circle,#3a3824,#101b13)!important}
+        .tonyx-game-shell .pickaxe-controls button[style*="linear-gradient"]{background:linear-gradient(180deg,#e5c574,#ae8134)!important;color:#241908!important;border-color:#f0d68f!important;box-shadow:0 4px 0 #6e5123!important}
+        .tonyx-game-shell .qg-panel button,.tonyx-game-shell .plinko-game button,.tonyx-game-shell .crash-controls button,.tonyx-game-shell .cf-controls button{transition:filter .16s ease,transform .16s ease,box-shadow .16s ease}
+        .tonyx-game-shell button:not(:disabled):hover{filter:brightness(1.12)}
+        .tonyx-game-shell button:not(:disabled):active{transform:translateY(1px)}
+        .tonyx-game-shell .qg-history span{border-radius:7px}
+        .tonyx-game-shell .mn-game-result{background:linear-gradient(145deg,#1a2b1f,#0e1a13)!important;border:1px solid #7a6338!important;border-radius:12px!important}
         @media(max-width:700px){
           .tonyx-game-shell .mn-game,.tonyx-game-shell .crash-game,.tonyx-game-shell .qg-game,.tonyx-game-shell .plinko-game,.tonyx-game-shell .cf-game{grid-template-columns:minmax(0,1fr)!important}
           .tonyx-game-shell .mn-game-controls,.tonyx-game-shell .crash-controls,.tonyx-game-shell .qg-panel,.tonyx-game-shell .plinko-controls,.tonyx-game-shell .cf-controls{grid-column:1!important;grid-row:auto!important}

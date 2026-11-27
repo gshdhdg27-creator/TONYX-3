@@ -751,4 +751,19 @@ const CRASH_LAYOUT_CSS = `
 .crash-controls button{border-radius:8px!important}
 .crash-controls button[style*="linear-gradient"]{background:linear-gradient(180deg,#168fba,#08769d)!important;box-shadow:0 4px 0 #064c68!important}
 @media(max-width:760px){.crash-game{display:flex;flex-direction:column;gap:10px;padding:6px 0 24px}.crash-stage,.crash-history,.crash-controls{width:100%;box-sizing:border-box}.crash-stage{min-height:300px;padding:12px!important}.crash-stage>div:nth-child(2){font-size:54px!important}.crash-chart{height:230px!important}.crash-controls{padding:14px!important}}
+
+/* Gameplay pass: live crash arena, animated chart trace and clear phase feedback */
+.crash-stage{isolation:isolate;background:radial-gradient(ellipse at 50% 78%,#244b32 0%,#10271b 45%,#08130d 100%)!important}
+.crash-stage:after{content:"";position:absolute;inset:0;pointer-events:none;opacity:.35;background:linear-gradient(115deg,transparent 35%,#e7c36a0b 48%,transparent 62%);background-size:220% 100%;animation:crashArenaSweep 5s linear infinite}
+.crash-chart{position:relative;overflow:hidden;border-color:#80683b!important;background:linear-gradient(180deg,#09170f,#102719)!important}
+.crash-chart:after{content:"";position:absolute;inset:0;pointer-events:none;background:repeating-linear-gradient(0deg,transparent 0 38px,#d9bd7520 39px),repeating-linear-gradient(90deg,transparent 0 54px,#d9bd7515 55px)}
+.crash-stage .crash-multiplier,.crash-stage [class*="mult"]{font-variant-numeric:tabular-nums;text-shadow:0 0 30px currentColor,0 3px 10px #000!important}
+.crash-history{display:flex;flex-wrap:wrap;gap:7px}
+.crash-history>*{font-variant-numeric:tabular-nums;transition:transform .16s ease,filter .16s ease}
+.crash-history>*:hover{transform:translateY(-2px);filter:brightness(1.2)}
+.crash-controls button:not(:disabled){transition:transform .14s ease,filter .14s ease,box-shadow .14s ease}
+.crash-controls button:not(:disabled):active{transform:translateY(2px) scale(.99)}
+@keyframes crashArenaSweep{0%{background-position:150% 0}100%{background-position:-150% 0}}
+@media(max-width:760px){.crash-stage{min-height:350px!important}.crash-chart{min-height:230px}}
+
 `;

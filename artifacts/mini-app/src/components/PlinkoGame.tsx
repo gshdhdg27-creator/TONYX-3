@@ -93,6 +93,7 @@ export default function PlinkoGame({
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const ballRef = useRef<{ x: number; y: number; visible: boolean }>({ x: 0, y: 0, visible: false });
+  const trailRef = useRef<{ x: number; y: number }[]>([]);
   const animRef = useRef(0);
   const pegsRef = useRef<{ x: number; y: number }[][]>([]);
 
@@ -161,7 +162,7 @@ export default function PlinkoGame({
         const g = ctx.createRadialGradient(p.x - pegR * 0.3, p.y - pegR * 0.3, 0, p.x, p.y, pegR);
         g.addColorStop(0, "#fff");
         g.addColorStop(0.4, "#ddd6fe");
-        g.addColorStop(1, "#7c3aed");
+        g.addColorStop(1, "#158454");
         ctx.beginPath();
         ctx.arc(p.x, p.y, pegR, 0, Math.PI * 2);
         ctx.fillStyle = g;
@@ -195,6 +196,22 @@ export default function PlinkoGame({
       ctx.fillText(fmtMult(m), x + bw / 2, y + (bucketH - 6) / 2);
     });
 
+    // Keep a short luminous trail behind the moving ball so every server path is readable.
+    const trail = trailRef.current;
+    for (let i = 0; i < trail.length; i++) {
+      const point = trail[i]!;
+      const strength = (i + 1) / trail.length;
+      ctx.globalAlpha = strength * 0.34;
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, 2 + strength * 2.2, 0, Math.PI * 2);
+      ctx.fillStyle = "#a7f3d0";
+      ctx.shadowColor = "#34d399";
+      ctx.shadowBlur = 9;
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    ctx.shadowBlur = 0;
+
     const b = ballRef.current;
     if (b.visible) {
       const br = Math.max(5, pegR * 1.3);
@@ -202,10 +219,10 @@ export default function PlinkoGame({
       ctx.arc(b.x, b.y, br, 0, Math.PI * 2);
       const bg = ctx.createRadialGradient(b.x - 2, b.y - 2, 0, b.x, b.y, br);
       bg.addColorStop(0, "#fff");
-      bg.addColorStop(0.45, "#e9d5ff");
-      bg.addColorStop(1, "#a855f7");
+      bg.addColorStop(0.45, "#c8f7df");
+      bg.addColorStop(1, "#34d399");
       ctx.fillStyle = bg;
-      ctx.shadowColor = "#c084fc";
+      ctx.shadowColor = "#7de5b2";
       ctx.shadowBlur = 14;
       ctx.fill();
       ctx.shadowBlur = 0;
@@ -236,6 +253,7 @@ export default function PlinkoGame({
       const first = pegs[0]!;
       const startX = (first[0]!.x + first[first.length - 1]!.x) / 2;
       ballRef.current = { x: startX, y: first[0]!.y - 20, visible: true };
+      trailRef.current = [];
 
       let step = 0;
       let pegIndex = Math.floor(first.length / 2);
@@ -281,6 +299,8 @@ export default function PlinkoGame({
           const arc = Math.sin(p * Math.PI) * 11;
           ballRef.current.x = fromX + (toX - fromX) * p;
           ballRef.current.y = fromY + (toY - fromY) * p - arc;
+          trailRef.current.push({ x: ballRef.current.x, y: ballRef.current.y });
+          if (trailRef.current.length > 22) trailRef.current.shift();
           draw(null);
           if (p < 1) animRef.current = requestAnimationFrame(tick);
           else { if (balls <= 5) haptic("light"); step += 1; go(); }
@@ -294,12 +314,13 @@ export default function PlinkoGame({
     if (busy || !telegramId) return;
     const n = Math.max(1, Math.min(MAX_BALLS, Math.round(balls) || 1));
     if (stake * n > balance + 1e-9) {
-      flash(`Нужно ${totalCost} TON на ${n} шар(ов)`);
+      flash(`Нужно ${totalCost} демо-кредитов на ${n} шар(ов)`);
       return;
     }
     setBusy(true);
     setHit(null);
     setLast(null);
+    trailRef.current = [];
     setProgress("");
     haptic("medium");
 
@@ -341,8 +362,8 @@ export default function PlinkoGame({
         else hapticNotify("error");
         flash(
           okCount === 1
-            ? `${profit >= 0 ? "+" : ""}${profit.toFixed(3)} TON · ×${lastMult}`
-            : `${okCount} шаров · ${profit >= 0 ? "+" : ""}${profit.toFixed(3)} TON`,
+            ? `${profit >= 0 ? "+" : ""}${profit.toFixed(3)} демо-кредитов · ×${lastMult}`
+            : `${okCount} шаров · ${profit >= 0 ? "+" : ""}${profit.toFixed(3)} демо-кредитов`,
         );
         onBalanceChange();
       }
@@ -357,25 +378,25 @@ export default function PlinkoGame({
   };
 
   return (
-    <div style={root}>
+    <div className="plinko-game" style={root}><style>{PLINKO_LAYOUT_CSS}</style>
       {toast && <div style={toastStyle}>{toast}</div>}
 
-      <div style={board}>
+      <div className="plinko-board" style={board}>
         <canvas ref={canvasRef} style={{ width: "100%", height: "100%", display: "block" }} />
       </div>
 
       {last && (
-        <div style={{
+        <div className="plinko-last-result" style={{
           textAlign: "center", fontWeight: 900, fontSize: 15, margin: "8px 0",
           color: last.profit >= 0 ? "#4ade80" : "#f87171",
         }}>
           {last.count > 1 ? `${last.count} шаров · ` : ""}
           {last.count === 1 ? `×${last.mult} → ` : ""}
-          {last.profit >= 0 ? "+" : ""}{last.profit.toFixed(3)} TON
+          {last.profit >= 0 ? "+" : ""}{last.profit.toFixed(3)} демо-кредитов
         </div>
       )}
 
-      <div style={riskRow}>
+      <div className="plinko-risk" style={riskRow}>
         {([["low", "Лёгкий"], ["med", "Средний"], ["high", "Сложный"]] as [Risk, string][]).map(([r, label]) => (
           <button
             key={r}
@@ -384,9 +405,9 @@ export default function PlinkoGame({
             onClick={() => { setRisk(r); setHit(null); }}
             style={{
               ...riskBtn,
-              background: risk === r ? "linear-gradient(135deg,#6d28d9,#a855f7)" : "rgba(255,255,255,0.04)",
+              background: risk === r ? "linear-gradient(135deg,#116b47,#34d399)" : "rgba(255,255,255,0.04)",
               color: risk === r ? "#fff" : "#94a3b8",
-              boxShadow: risk === r ? "0 4px 14px rgba(168,85,247,0.35)" : "none",
+              boxShadow: risk === r ? "0 4px 14px rgba(52,211,153,0.35)" : "none",
             }}
           >
             {label}
@@ -394,19 +415,19 @@ export default function PlinkoGame({
         ))}
       </div>
 
-      <div style={{ marginBottom: 10 }}>
+      <div className="plinko-rows" style={{ marginBottom: 10 }}>
         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 2 }}>
           <span style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8" }}>Ряды</span>
-          <span style={{ fontSize: 13, fontWeight: 900, color: "#e9d5ff" }}>{rows}</span>
+          <span style={{ fontSize: 13, fontWeight: 900, color: "#c8f7df" }}>{rows}</span>
         </div>
         <input
           type="range" min={8} max={16} step={1} value={rows} disabled={busy}
           onChange={(e) => { setRows(Number(e.target.value)); setHit(null); }}
-          style={{ width: "100%", accentColor: "#a855f7" }}
+          style={{ width: "100%", accentColor: "#34d399" }}
         />
       </div>
 
-      <div style={{ marginBottom: 10 }}>
+      <div className="plinko-balls" style={{ marginBottom: 10 }}>
         <div style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8", marginBottom: 6 }}>Шары</div>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
           {BALL_PRESETS.map((n) => (
@@ -417,9 +438,9 @@ export default function PlinkoGame({
               onClick={() => setBalls(n)}
               style={{
                 ...chip,
-                borderColor: balls === n ? "rgba(168,85,247,0.7)" : "rgba(255,255,255,0.1)",
-                background: balls === n ? "rgba(124,58,237,0.35)" : "rgba(255,255,255,0.05)",
-                color: balls === n ? "#e9d5ff" : "#cbd5e1",
+                borderColor: balls === n ? "rgba(52,211,153,0.7)" : "rgba(255,255,255,0.1)",
+                background: balls === n ? "rgba(21,132,84,0.35)" : "rgba(255,255,255,0.05)",
+                color: balls === n ? "#c8f7df" : "#cbd5e1",
               }}
             >
               {n}
@@ -447,7 +468,7 @@ export default function PlinkoGame({
         </div>
       </div>
 
-      <div style={panel}>
+      <div className="plinko-controls" style={panel}>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           <input
             type="number" min={MIN_BET} step="0.1" value={stake} disabled={busy}
@@ -469,11 +490,11 @@ export default function PlinkoGame({
             <button key={p} type="button" disabled={busy} onClick={() => setStake(p)} style={chip}>{p}</button>
           ))}
           <span style={{ marginLeft: "auto", fontSize: 11, color: "#64748b", textAlign: "right" }}>
-            {balance.toFixed(2)} TON
+            {balance.toFixed(2)} демо-кредитов
             {balls > 1 && (
               <>
                 <br />
-                <b style={{ color: "#c4b5fd" }}>{totalCost.toFixed(2)} TON</b> всего
+                <b style={{ color: "#9ee9c1" }}>{totalCost.toFixed(2)} демо-кредитов</b> всего
               </>
             )}
           </span>
@@ -505,9 +526,9 @@ const board: CSSProperties = {
   borderRadius: 22,
   overflow: "hidden",
   marginBottom: 8,
-  background: "radial-gradient(ellipse 90% 70% at 50% 0%, #5b21b6 0%, #2e1065 45%, #0c0618 100%)",
-  border: "1px solid rgba(167,139,250,0.4)",
-  boxShadow: "0 0 40px rgba(124,58,237,0.2)",
+  background: "radial-gradient(ellipse 90% 70% at 50% 0%, #1b6345 0%, #123b2c 45%, #08120e 100%)",
+  border: "1px solid rgba(52,211,153,0.4)",
+  boxShadow: "0 0 40px rgba(21,132,84,0.2)",
 };
 const panel: CSSProperties = {
   background: "rgba(15,23,42,0.9)",
@@ -541,14 +562,14 @@ const btnPlay: CSSProperties = {
   padding: "12px 18px",
   borderRadius: 12,
   border: "none",
-  background: "linear-gradient(135deg,#7c3aed,#c084fc)",
+  background: "linear-gradient(135deg,#158454,#7de5b2)",
   color: "#fff",
   fontSize: 14,
   fontWeight: 900,
   cursor: "pointer",
   fontFamily: "inherit",
   whiteSpace: "nowrap",
-  boxShadow: "0 6px 20px rgba(168,85,247,0.4)",
+  boxShadow: "0 6px 20px rgba(52,211,153,0.4)",
   minWidth: 72,
 };
 const toastStyle: CSSProperties = {
@@ -565,3 +586,43 @@ const toastStyle: CSSProperties = {
   border: "1px solid rgba(255,255,255,0.15)",
   color: "#fff",
 };
+
+
+const PLINKO_LAYOUT_CSS = `
+.plinko-game{width:100%;max-width:1120px;margin:0 auto;padding:10px 0 32px;display:grid;grid-template-columns:340px minmax(0,1fr);grid-template-rows:auto auto auto auto auto auto;gap:12px 18px;align-items:start;color:#edf2f7}
+.plinko-board{grid-column:2;grid-row:1/span 5;min-height:560px!important;height:560px!important;margin:0!important;border-radius:16px!important;border:1px solid #2a3d4a!important;background:radial-gradient(ellipse at 50% 0%,#16313e,#09121b 72%)!important;box-shadow:0 18px 48px #0008!important;overflow:hidden}
+.plinko-board canvas{width:100%!important;height:100%!important}
+.plinko-last-result{grid-column:2;grid-row:6;align-self:start;text-align:center!important;background:linear-gradient(180deg,#142532,#0d1822);border:1px solid #294858;border-radius:10px;padding:12px 14px!important;box-shadow:inset 0 1px #ffffff0a,0 10px 24px #0005;font-size:14px!important;letter-spacing:.01em}
+.plinko-board{position:relative}
+.plinko-board:after{content:"";position:absolute;inset:0;pointer-events:none;background:linear-gradient(180deg,#ffffff08,transparent 24%,transparent 78%,#0002)}
+.plinko-risk,.plinko-rows,.plinko-balls,.plinko-controls{box-shadow:0 10px 26px #0005,inset 0 1px #ffffff08!important}
+.plinko-risk{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px!important}
+.plinko-risk button{min-height:42px;font-weight:850!important;letter-spacing:.02em}
+.plinko-controls input{min-height:44px}
+.plinko-controls button{min-height:42px}
+.plinko-game button:not(:disabled){transition:transform .16s ease,filter .16s ease,box-shadow .16s ease}
+.plinko-game button:not(:disabled):active{transform:translateY(1px) scale(.985);filter:brightness(1.08)}
+.plinko-board canvas{position:relative;z-index:1}
+.plinko-risk,.plinko-rows,.plinko-balls,.plinko-controls{grid-column:1;margin:0 0 2px!important;padding:14px!important;background:linear-gradient(180deg,#151f2a,#101720)!important;border:1px solid #293947!important;border-radius:12px!important}
+.plinko-risk{grid-row:1}
+.plinko-rows{grid-row:2}
+.plinko-balls{grid-row:3}
+.plinko-controls{grid-row:4;align-self:start}
+.plinko-game button{border-radius:8px!important}
+.plinko-game input{background:#090f16!important;border:1px solid #344655!important;border-radius:8px!important;color:#eef3f8!important}
+.plinko-game .plinko-risk button[style*="linear-gradient"]{background:#126d8a!important;border-color:#2698b7!important;box-shadow:none!important;color:#fff!important}
+.plinko-game .plinko-controls button[style*="linear-gradient"]{background:linear-gradient(180deg,#168fba,#08769d)!important;box-shadow:0 4px 0 #064c68!important;color:white!important}
+@media(max-width:760px){.plinko-game{display:flex!important;flex-direction:column!important;gap:10px!important;padding:6px 0 24px!important}.plinko-board{width:100%;height:430px!important;min-height:430px!important}.plinko-last-result{width:100%;box-sizing:border-box;order:2}.plinko-risk,.plinko-rows,.plinko-balls,.plinko-controls{width:100%;box-sizing:border-box;padding:12px!important}}
+
+/* Gameplay pass: dedicated Plinko cabinet and stronger live-ball feedback */
+.plinko-board{isolation:isolate;position:relative;background:radial-gradient(ellipse at 50% 8%,#285238 0%,#102b1c 55%,#07130c 100%)!important;border:1px solid #a4874b!important;box-shadow:inset 0 1px #fff2,0 18px 48px #0009,0 0 35px #c99d3b12!important}
+.plinko-board:before{content:"";position:absolute;inset:8px;border:1px solid #e4c77b2b;border-radius:11px;pointer-events:none;z-index:2}
+.plinko-board:after{content:"";position:absolute;inset:0;pointer-events:none;z-index:2;background:linear-gradient(115deg,transparent 30%,#f5dfa00a 48%,transparent 65%);background-size:220% 100%;animation:plinkoCabinetSweep 6s linear infinite}
+.plinko-board canvas{position:relative;z-index:1;filter:drop-shadow(0 0 2px #c9a85a22)}
+.plinko-risk button,.plinko-rows input,.plinko-balls button,.plinko-controls button{transition:filter .15s ease,transform .15s ease,box-shadow .15s ease}
+.plinko-risk button:not(:disabled):active,.plinko-balls button:not(:disabled):active{transform:translateY(2px) scale(.98)}
+.plinko-last-result{font-variant-numeric:tabular-nums;box-shadow:inset 0 1px #fff2,0 0 24px #cba34a18,0 12px 28px #0007!important}
+@keyframes plinkoCabinetSweep{0%{background-position:150% 0}100%{background-position:-150% 0}}
+@media(max-width:760px){.plinko-board{height:440px!important;min-height:440px!important;border-radius:13px!important}}
+
+`;

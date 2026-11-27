@@ -329,11 +329,11 @@ export default function CrashGame({
       const h = canvas.height;
       ctx.clearRect(0, 0, w, h);
       const g = ctx.createLinearGradient(0, 0, 0, h);
-      g.addColorStop(0, "#0c1222");
+      g.addColorStop(0, "#0b1712");
       g.addColorStop(1, "#1a0a2e");
       ctx.fillStyle = g;
       ctx.fillRect(0, 0, w, h);
-      ctx.strokeStyle = "rgba(56,189,248,0.08)";
+      ctx.strokeStyle = "rgba(34,197,94,0.08)";
       ctx.lineWidth = 1;
       for (let i = 0; i < 6; i++) {
         const y = (h / 6) * i;
@@ -357,21 +357,44 @@ export default function CrashGame({
         ctx.font = "12px system-ui";
         ctx.fillText("Ожидание…", w / 2 - 30, 24);
       } else {
-        ctx.beginPath();
-        ctx.strokeStyle = ph === "result" ? "rgba(248,113,113,0.5)" : "rgba(74,222,128,0.55)";
-        ctx.lineWidth = 2.5;
-        ctx.moveTo(x0, y0);
         const steps = Math.max(2, Math.floor(40 * Math.min(1, p)));
-        for (let i = 1; i <= steps; i++) {
-          const t = i / 40;
-          const x = x0 + (x1 - x0) * t;
-          const y = y0 + (y1 - y0) * (t * t);
-          ctx.lineTo(x, y);
-        }
-        ctx.stroke();
         const t = Math.min(1, p);
         const rx = x0 + (x1 - x0) * t;
         const ry = y0 + (y1 - y0) * (t * t);
+
+        // Filled graph area and a crisp neon trajectory, like a live crash chart.
+        ctx.beginPath();
+        ctx.moveTo(x0, y0);
+        for (let i = 1; i <= steps; i++) {
+          const u = (t * i) / steps;
+          ctx.lineTo(x0 + (x1 - x0) * u, y0 + (y1 - y0) * (u * u));
+        }
+        ctx.lineTo(rx, h - 18);
+        ctx.lineTo(x0, h - 18);
+        ctx.closePath();
+        const area = ctx.createLinearGradient(0, y1, 0, h - 18);
+        area.addColorStop(0, ph === "result" ? "rgba(248,113,113,0.24)" : "rgba(52,211,153,0.24)");
+        area.addColorStop(1, "rgba(10,20,28,0.02)");
+        ctx.fillStyle = area;
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.moveTo(x0, y0);
+        for (let i = 1; i <= steps; i++) {
+          const u = (t * i) / steps;
+          ctx.lineTo(x0 + (x1 - x0) * u, y0 + (y1 - y0) * (u * u));
+        }
+        const line = ctx.createLinearGradient(x0, y0, rx, ry);
+        line.addColorStop(0, ph === "result" ? "#f87171" : "#34d399");
+        line.addColorStop(1, ph === "result" ? "#fb7185" : "#b7ffe1");
+        ctx.strokeStyle = line;
+        ctx.lineWidth = 3;
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+        ctx.shadowColor = ph === "result" ? "#fb7185" : "#34d399";
+        ctx.shadowBlur = 13;
+        ctx.stroke();
+        ctx.shadowBlur = 0;
         const ang = Math.atan2((y1 - y0) * 2 * t, x1 - x0);
         if (ph === "result" || exp > 0) {
           drawRocket(ctx, rx, ry, ang, false, imgRef.current, Math.max(0, 1 - exp * 1.3));
@@ -389,7 +412,7 @@ export default function CrashGame({
   const placeBet = async () => {
     if (busy || phase !== "betting" || !telegramId || betActive) return;
     if (stake > balance) {
-      setMsg("Недостаточно TON");
+      setMsg("Недостаточно демо-кредитов");
       return;
     }
     setBusy(true);
@@ -419,22 +442,22 @@ export default function CrashGame({
     }
   };
 
-  const phaseColor = phase === "betting" ? "#38bdf8" : phase === "fly" ? "#4ade80" : "#f87171";
+  const phaseColor = phase === "betting" ? "#4ade80" : phase === "fly" ? "#4ade80" : "#f87171";
   const card: CSSProperties = {
     background: "rgba(15,23,42,0.95)",
-    border: "1px solid rgba(56,189,248,0.2)",
+    border: "1px solid rgba(34,197,94,0.22)",
     borderRadius: 16,
     padding: 14,
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+    <div className="crash-game"><style>{CRASH_LAYOUT_CSS}</style>
       {!ready && (
         <div style={{ textAlign: "center", color: "#64748b", padding: 24 }}>Синхронизация…</div>
       )}
       {ready && (
         <>
-          <div style={{ ...card, textAlign: "center", paddingBottom: 10 }}>
+          <div className="crash-stage" style={{ ...card, textAlign: "center", paddingBottom: 10 }}>
             <div style={{ fontSize: 12, color: "#64748b", marginBottom: 4 }}>
               Раунд <b style={{ color: "#fbbf24" }}>#{roundId}</b>
               {betActive && <span style={{ marginLeft: 8, color: "#4ade80" }}>ставка</span>}
@@ -456,6 +479,7 @@ export default function CrashGame({
               {phase === "result" && "💥 краш"}
             </div>
             <canvas
+              className="crash-chart"
               ref={canvasRef}
               width={360}
               height={200}
@@ -463,13 +487,13 @@ export default function CrashGame({
                 width: "100%",
                 height: 180,
                 borderRadius: 12,
-                background: "#0c1222",
+                background: "#0b1712",
                 display: "block",
               }}
             />
           </div>
 
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", minHeight: 32 }}>
+          <div className="crash-history" style={{ display: "flex", gap: 6, flexWrap: "wrap", minHeight: 32 }}>
             {hist.length === 0 && (
               <span style={{ fontSize: 11, color: "#475569" }}>История появится после раундов</span>
             )}
@@ -495,8 +519,8 @@ export default function CrashGame({
             ))}
           </div>
 
-          <div style={card}>
-            <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 8 }}>Ставка (TON)</div>
+          <div className="crash-controls" style={card}>
+            <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 8 }}>Ставка (ДЕМО-КРЕДИТЫ)</div>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
               {PRESETS.map((p) => (
                 <button
@@ -506,8 +530,8 @@ export default function CrashGame({
                   style={{
                     padding: "8px 12px",
                     borderRadius: 10,
-                    border: stake === p ? "1px solid #38bdf8" : "1px solid rgba(255,255,255,0.1)",
-                    background: stake === p ? "rgba(56,189,248,0.2)" : "rgba(255,255,255,0.05)",
+                    border: stake === p ? "1px solid #4ade80" : "1px solid rgba(255,255,255,0.1)",
+                    background: stake === p ? "rgba(34,197,94,0.22)" : "rgba(255,255,255,0.05)",
                     color: "#e2e8f0",
                     fontWeight: 700,
                     cursor: "pointer",
@@ -546,7 +570,7 @@ export default function CrashGame({
                 border: "none",
                 background:
                   phase === "betting" && !betActive
-                    ? "linear-gradient(135deg,#0369a1,#0ea5e9)"
+                    ? "linear-gradient(135deg,#15803d,#22c55e)"
                     : "rgba(100,116,139,0.3)",
                 color: "#fff",
                 fontWeight: 900,
@@ -561,7 +585,7 @@ export default function CrashGame({
                   ? "Ждите раунд"
                   : busy
                     ? "…"
-                    : `Ставка ${stake} TON`}
+                    : `Ставка ${stake} демо-кредитов`}
             </button>
             {msg && (
               <div style={{ marginTop: 10, fontSize: 13, color: "#cbd5e1", textAlign: "center" }}>
@@ -702,3 +726,44 @@ function drawExplosion(ctx: CanvasRenderingContext2D, x: number, y: number, t: n
   ctx.arc(x, y, 6 + t * 10, 0, Math.PI * 2);
   ctx.fill();
 }
+
+
+const CRASH_LAYOUT_CSS = `
+.crash-game{width:100%;max-width:1120px;margin:0 auto;padding:10px 0 32px;display:grid;grid-template-columns:340px minmax(0,1fr);grid-template-rows:auto auto;gap:14px 18px;align-items:start;color:#eef3f8}
+.crash-stage{grid-column:2;grid-row:1;min-height:450px;margin:0!important;padding:18px!important;background:radial-gradient(ellipse at 50% 80%,#102c2b,#080e14 68%)!important;border:1px solid #283944!important;border-radius:14px!important;box-shadow:0 18px 48px #0008!important}
+.crash-stage>div:first-child{color:#8295a6!important}
+.crash-stage>div:nth-child(2){font-size:clamp(52px,7.5vw,82px)!important;letter-spacing:-.065em;text-shadow:0 0 34px currentColor}
+.crash-stage{position:relative;overflow:hidden}
+.crash-stage:before{content:"";position:absolute;inset:48% 0 0;pointer-events:none;background:linear-gradient(180deg,transparent,#0e39401c)}
+.crash-stage>*{position:relative;z-index:1}
+.crash-chart{box-shadow:inset 0 1px #ffffff08,0 12px 30px #0005}
+.crash-history{box-shadow:0 10px 24px #0005,inset 0 1px #ffffff08;gap:7px!important}
+.crash-history button{min-width:66px;transition:transform .15s ease,filter .15s ease}
+.crash-history button:hover{transform:translateY(-2px);filter:brightness(1.12)}
+.crash-controls{box-shadow:0 14px 34px #0006,inset 0 1px #ffffff0a!important}
+.crash-controls input{min-height:43px}
+.crash-controls button{transition:transform .15s ease,filter .15s ease}
+.crash-controls button:not(:disabled):active{transform:translateY(1px);filter:brightness(1.08)}
+.crash-chart{height:320px!important;border-radius:8px!important;background:linear-gradient(180deg,#081017,#0b1b1c)!important;border:1px solid #1d333a}
+.crash-history{grid-column:2;grid-row:2;align-content:start;background:#121a23;border:1px solid #283743;border-radius:10px;padding:12px}
+.crash-controls{grid-column:1;grid-row:1/span 2;margin:0!important;padding:18px!important;background:linear-gradient(180deg,#151f2a,#101720)!important;border:1px solid #293947!important;border-radius:13px!important;box-shadow:0 14px 34px #0006!important}
+.crash-controls input{background:#090f16!important;border:1px solid #344655!important;border-radius:8px!important;color:#eef3f8!important}
+.crash-controls button{border-radius:8px!important}
+.crash-controls button[style*="linear-gradient"]{background:linear-gradient(180deg,#168fba,#08769d)!important;box-shadow:0 4px 0 #064c68!important}
+@media(max-width:760px){.crash-game{display:flex;flex-direction:column;gap:10px;padding:6px 0 24px}.crash-stage,.crash-history,.crash-controls{width:100%;box-sizing:border-box}.crash-stage{min-height:300px;padding:12px!important}.crash-stage>div:nth-child(2){font-size:54px!important}.crash-chart{height:230px!important}.crash-controls{padding:14px!important}}
+
+/* Gameplay pass: live crash arena, animated chart trace and clear phase feedback */
+.crash-stage{isolation:isolate;background:radial-gradient(ellipse at 50% 78%,#244b32 0%,#10271b 45%,#08130d 100%)!important}
+.crash-stage:after{content:"";position:absolute;inset:0;pointer-events:none;opacity:.35;background:linear-gradient(115deg,transparent 35%,#e7c36a0b 48%,transparent 62%);background-size:220% 100%;animation:crashArenaSweep 5s linear infinite}
+.crash-chart{position:relative;overflow:hidden;border-color:#80683b!important;background:linear-gradient(180deg,#09170f,#102719)!important}
+.crash-chart:after{content:"";position:absolute;inset:0;pointer-events:none;background:repeating-linear-gradient(0deg,transparent 0 38px,#d9bd7520 39px),repeating-linear-gradient(90deg,transparent 0 54px,#d9bd7515 55px)}
+.crash-stage .crash-multiplier,.crash-stage [class*="mult"]{font-variant-numeric:tabular-nums;text-shadow:0 0 30px currentColor,0 3px 10px #000!important}
+.crash-history{display:flex;flex-wrap:wrap;gap:7px}
+.crash-history>*{font-variant-numeric:tabular-nums;transition:transform .16s ease,filter .16s ease}
+.crash-history>*:hover{transform:translateY(-2px);filter:brightness(1.2)}
+.crash-controls button:not(:disabled){transition:transform .14s ease,filter .14s ease,box-shadow .14s ease}
+.crash-controls button:not(:disabled):active{transform:translateY(2px) scale(.99)}
+@keyframes crashArenaSweep{0%{background-position:150% 0}100%{background-position:-150% 0}}
+@media(max-width:760px){.crash-stage{min-height:350px!important}.crash-chart{min-height:230px}}
+
+`;

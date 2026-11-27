@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
-import { usersTable, miniMineGamesTable } from "@workspace/db/schema";
+import { miniMineGamesTable } from "@workspace/db/schema";
 import {
   StartMineGameBody,
   RevealMineCellBody,
@@ -8,6 +8,8 @@ import {
   GetMineGameParams,
 } from "@workspace/api-zod";
 import { eq, and } from "drizzle-orm";
+import { randomInt } from "crypto";
+import { debitGameStake, finishMultiStepGame, refundGameStake } from "../../lib/game-balance.js";
 import { isGameEnabled, GAME_DISABLED_MESSAGE } from "../../lib/game-config.js";
 
 const router: IRouter = Router();
@@ -29,7 +31,7 @@ function generateBoard(minesCount: number): CellState[][] {
   const board: CellState[][] = Array.from({ length: GRID_SIZE }, () => Array(GRID_SIZE).fill("hidden"));
   const positions = Array.from({ length: GRID_SIZE * GRID_SIZE }, (_, i) => i);
   for (let i = positions.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
+    const j = randomInt(0, i + 1);
     [positions[i], positions[j]] = [positions[j], positions[i]];
   }
   for (const pos of positions.slice(0, minesCount)) {
@@ -126,31 +128,25 @@ router.post("/abandon", async (req, res) => {
   }
 
   const stakeTon = fromMilli(game.stake);
-  await db
-    .update(miniMineGamesTable)
-    .set({ status: "lost", payout: 0, finishedAt: new Date() })
-    .where(eq(miniMineGamesTable.id, game.id));
-
-  const user = await db.select().from(usersTable).where(eq(usersTable.telegramId, telegramId)).then((r) => r[0] ?? null);
-  let newBalance = 0;
-  if (user) {
-    newBalance = Math.round((Number(user.ton ?? 0) + stakeTon) * 1000) / 1000;
-    await db
-      .update(usersTable)
-      .set({ ton: String(newBalance), updatedAt: new Date() })
-      .where(eq(usersTable.telegramId, telegramId));
-  }
-
+  const [closed] = await db.update(miniMineGamesTable)
+    .set({ status: "abandoned", payout: 0, finishedAt: new Date() })
+    .where(and(eq(miniMineGamesTable.id, game.id), eq(miniMineGamesTable.status, "active")))
+    .returning({ id: miniMineGamesTable.id });
+  if (!closed) { res.status(409).json({ error: "Game already finished" }); return; }
+  const newBalance = await refundGameStake(telegramId, stakeTon);
+  if (newBalance === null) { res.status(500).json({ error: "Refund failed; contact support" }); return; }
   res.json({ ok: true, refunded: stakeTon, newBalance });
 });
 
 router.get("/:gameId", async (req, res) => {
   const gameId = parseInt(req.params.gameId);
+  const telegramId = String(req.query.telegramId ?? "");
+  if (!telegramId) { res.status(400).json({ error: "telegramId required" }); return; }
   if (!Number.isFinite(gameId)) {
     res.status(400).json({ error: "Invalid gameId" });
     return;
   }
-  const game = await db.select().from(miniMineGamesTable).where(eq(miniMineGamesTable.id, gameId)).then((r) => r[0] ?? null);
+  const game = await db.select().from(miniMineGamesTable).where(and(eq(miniMineGamesTable.id, gameId), eq(miniMineGamesTable.telegramId, telegramId))).then((r) => r[0] ?? null);
   if (!game) {
     res.status(404).json({ error: "Game not found" });
     return;
@@ -174,13 +170,7 @@ router.post("/start", async (req, res) => {
 
     const stakeTon = Math.round(Number(body.stake) * 1000) / 1000;
     if (!Number.isFinite(stakeTon) || stakeTon < MIN_STAKE) {
-      res.status(400).json({ error: `Minimum stake is ${MIN_STAKE} TON` });
-      return;
-    }
-
-    const user = await db.select().from(usersTable).where(eq(usersTable.telegramId, body.telegramId)).then((r) => r[0] ?? null);
-    if (!user) {
-      res.status(404).json({ error: "User not found" });
+      res.status(400).json({ error: `Minimum stake is ${MIN_STAKE} DEMO credits` });
       return;
     }
 
@@ -196,33 +186,35 @@ router.post("/start", async (req, res) => {
       return;
     }
 
-    const tonBal = Number(user.ton ?? 0);
-    if (tonBal < stakeTon) {
-      res.status(400).json({ error: `Insufficient TON. You have ${tonBal}` });
+    const newTon = await debitGameStake(body.telegramId, stakeTon);
+    if (newTon === null) {
+      res.status(400).json({ error: "User not found or insufficient balance" });
       return;
     }
-
-    const newTon = Math.round((tonBal - stakeTon) * 1000) / 1000;
-    await db
-      .update(usersTable)
-      .set({ ton: String(newTon), updatedAt: new Date() })
-      .where(eq(usersTable.telegramId, body.telegramId));
 
     const board = generateBoard(body.minesCount);
     const stakeMilli = toMilli(stakeTon);
 
-    const [game] = await db
-      .insert(miniMineGamesTable)
-      .values({
-        telegramId: body.telegramId,
-        stake: stakeMilli,
-        minesCount: body.minesCount,
-        board,
-        revealed: [],
-        multiplier: "1",
-        status: "active",
-      })
-      .returning();
+    let game: typeof miniMineGamesTable.$inferSelect;
+    try {
+      const [created] = await db
+        .insert(miniMineGamesTable)
+        .values({
+          telegramId: body.telegramId,
+          stake: stakeMilli,
+          minesCount: body.minesCount,
+          board,
+          revealed: [],
+          multiplier: "1",
+          status: "active",
+        })
+        .returning();
+      if (!created) throw new Error("Game creation failed");
+      game = created;
+    } catch (insertError) {
+      await refundGameStake(body.telegramId, stakeTon);
+      throw insertError;
+    }
 
     res.json(formatGame(game));
   } catch (e: any) {
@@ -256,32 +248,8 @@ async function handleReveal(req: any, res: any) {
       return;
     }
 
-    const user = await db.select().from(usersTable).where(eq(usersTable.telegramId, body.telegramId)).then((r) => r[0] ?? null);
-    const godMode = user?.forceWin ?? false;
-
-    let board = game.board as CellState[][];
-    let cellType = board[body.row][body.col];
-
-    if (godMode && cellType === "mine") {
-      const revealedSet = new Set(revealed.map(([r, c]) => `${r},${c}`));
-      revealedSet.add(`${body.row},${body.col}`);
-      let swapPos: [number, number] | null = null;
-      outer: for (let r = 0; r < GRID_SIZE; r++) {
-        for (let c = 0; c < GRID_SIZE; c++) {
-          if (board[r][c] === "safe" && !revealedSet.has(`${r},${c}`)) {
-            swapPos = [r, c];
-            break outer;
-          }
-        }
-      }
-      if (swapPos) {
-        board = board.map((row) => [...row]) as CellState[][];
-        board[body.row][body.col] = "safe";
-        board[swapPos[0]][swapPos[1]] = "mine";
-        await db.update(miniMineGamesTable).set({ board }).where(eq(miniMineGamesTable.id, game.id));
-        cellType = "safe";
-      }
-    }
+    const board = game.board as CellState[][];
+    const cellType = board[body.row][body.col];
 
     const hit = cellType === "mine";
     const newRevealed: [number, number][] = [...revealed, [body.row, body.col]];
@@ -292,9 +260,11 @@ async function handleReveal(req: any, res: any) {
       const [updated] = await db
         .update(miniMineGamesTable)
         .set({ revealed: newRevealed, multiplier: String(newMultiplier), status: "lost", payout: 0, finishedAt: new Date() })
-        .where(eq(miniMineGamesTable.id, game.id))
+        .where(and(eq(miniMineGamesTable.id, game.id), eq(miniMineGamesTable.status, "active"), eq(miniMineGamesTable.revealed, game.revealed)))
         .returning();
 
+      if (!updated) { res.status(409).json({ error: "Game state changed; refresh and retry" }); return; }
+      await finishMultiStepGame(body.telegramId, 0, false);
       res.json({ hit: true, multiplier: newMultiplier, payout: 0, game: formatGame(updated, false) });
       return;
     }
@@ -302,9 +272,10 @@ async function handleReveal(req: any, res: any) {
     const [updated] = await db
       .update(miniMineGamesTable)
       .set({ revealed: newRevealed, multiplier: String(newMultiplier) })
-      .where(eq(miniMineGamesTable.id, game.id))
+      .where(and(eq(miniMineGamesTable.id, game.id), eq(miniMineGamesTable.status, "active"), eq(miniMineGamesTable.revealed, game.revealed)))
       .returning();
 
+    if (!updated) { res.status(409).json({ error: "Game state changed; refresh and retry" }); return; }
     res.json({ hit: false, multiplier: newMultiplier, payout: null, game: formatGame(updated) });
   } catch (e: any) {
     console.error("[mines/reveal]", e);
@@ -341,21 +312,13 @@ router.post("/cashout", async (req, res) => {
     const payoutTon = Math.round(stakeTon * multiplier * 1000) / 1000;
     const payoutMilli = toMilli(payoutTon);
 
-    await db
-      .update(miniMineGamesTable)
+    const [closed] = await db.update(miniMineGamesTable)
       .set({ status: "won", payout: payoutMilli, finishedAt: new Date() })
-      .where(eq(miniMineGamesTable.id, game.id));
-
-    const user = await db.select().from(usersTable).where(eq(usersTable.telegramId, body.telegramId)).then((r) => r[0] ?? null);
-    let newBalance = 0;
-    if (user) {
-      newBalance = Math.round((Number(user.ton ?? 0) + payoutTon) * 1000) / 1000;
-      await db
-        .update(usersTable)
-        .set({ ton: String(newBalance), updatedAt: new Date() })
-        .where(eq(usersTable.telegramId, body.telegramId));
-    }
-
+      .where(and(eq(miniMineGamesTable.id, game.id), eq(miniMineGamesTable.status, "active"), eq(miniMineGamesTable.revealed, game.revealed)))
+      .returning({ id: miniMineGamesTable.id });
+    if (!closed) { res.status(409).json({ error: "Game already finished or changed" }); return; }
+    const newBalance = await finishMultiStepGame(body.telegramId, payoutTon, true);
+    if (newBalance === null) { res.status(500).json({ error: "Payout failed; contact support" }); return; }
     res.json({ payout: payoutTon, multiplier, newBalance });
   } catch (e: any) {
     console.error("[mines/cashout]", e);

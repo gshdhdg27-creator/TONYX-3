@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import ArenaGame from "@/components/ArenaGame";
 import SpinGame, { JackpotWheel } from "@/components/SpinGame";
 import CasesGame from "@/components/CasesGame";
+import QuickGames from "@/components/QuickGames";
 import FairnessModal, { type FairData } from "@/components/FairnessModal";
 import {
   useGetUserProfile,
@@ -173,13 +174,13 @@ export function MinesGame({ telegramId, balance, lang, onBalanceChange }: {
                 color: bet === v ? "#fff" : "#64748b", fontSize: 13, fontWeight: 700, cursor: "pointer",
                 boxShadow: bet === v ? "0 0 12px rgba(37,99,235,0.35)" : "none",
                 transition: "all 0.15s",
-              }}>{v} TON</button>
+              }}>{v} DEMO</button>
             ))}
           </div>
           <input value={bet} onChange={e => setBet(Math.max(MIN_BET, parseFloat(e.target.value) || 0))}
-            type="number" step="0.1" min={MIN_BET} placeholder={`мин. ${MIN_BET} TON`}
+            type="number" step="0.1" min={MIN_BET} placeholder={`мин. ${MIN_BET} DEMO`}
             style={{ width: "100%", background: "rgba(30,45,69,0.6)", border: "1px solid rgba(30,58,143,0.4)", borderRadius: 10, padding: "10px 14px", color: "#f1f5f9", fontFamily: "inherit", fontSize: 14, outline: "none", boxSizing: "border-box" }} />
-          <div style={{ fontSize: 12, color: "#334155", marginTop: 6 }}>{t.balance(balance)}</div>
+          <div style={{ fontSize: 12, color: "#334155", marginTop: 6 }}>Демо-баланс: {balance.toFixed(3)} DEMO</div>
         </div>
 
         <div style={{ background: "rgba(15,23,42,0.95)", border: "1px solid rgba(30,58,143,0.35)", borderRadius: 18, padding: 16, marginBottom: 16 }}>
@@ -235,7 +236,7 @@ export function MinesGame({ telegramId, balance, lang, onBalanceChange }: {
 
       <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
         {[
-          { label: t.stake, val: formatTon(game.stake) + " TON", col: "#94a3b8" },
+          { label: t.stake, val: formatTon(game.stake) + " DEMO", col: "#94a3b8" },
           { label: translations[lang].games.minesLabel, val: "💣 " + game.minesCount, col: "#f87171" },
           { label: translations[lang].games.multLabel, val: "×" + game.multiplier, col: "#22d3ee" },
         ].map(({ label, val, col }) => (
@@ -301,7 +302,7 @@ export function MinesGame({ telegramId, balance, lang, onBalanceChange }: {
           <svg width="14" height="14" viewBox="0 0 22 22"><polygon points="11,2 13.5,8 20,8.5 15,13 16.5,20 11,16.5 5.5,20 7,13 2,8.5 8.5,8" fill="#34d399"/></svg>
           <span style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600 }}>{t.nextStep}</span>
           <span style={{ fontSize: 13, fontWeight: 800, color: "#10b981", marginLeft: "auto" }}>
-            {formatTon(game.stake * steps[1])} TON
+            {formatTon(game.stake * steps[1])} DEMO
           </span>
         </div>
         <div style={{ display: "flex", gap: 5 }}>
@@ -1369,6 +1370,38 @@ const GAME_CARDS = [
     accentB: "#dc2626",
   },
   {
+    id: "dice",
+    titleRu: "Dice",
+    titleEn: "Dice",
+    descRu: "Проверь удачу с кубиком",
+    descEn: "Test your luck with the dice",
+    ready: true,
+    baseOnline: 12,
+    primary: "#38BDF8",
+    gradient: "linear-gradient(180deg,#0284C7,#1E3A8A)",
+    glow: "rgba(56,189,248,0.7)",
+    cardGlow: "rgba(56,189,248,0.14)",
+    border: "#0284C7",
+    accentA: "#7DD3FC",
+    accentB: "#0284C7",
+  },
+  {
+    id: "roulette",
+    titleRu: "Рулетка",
+    titleEn: "Roulette",
+    descRu: "Красное, чёрное или зеро",
+    descEn: "Red, black or zero",
+    ready: true,
+    baseOnline: 10,
+    primary: "#F472B6",
+    gradient: "linear-gradient(180deg,#BE185D,#831843)",
+    glow: "rgba(244,114,182,0.7)",
+    cardGlow: "rgba(244,114,182,0.14)",
+    border: "#BE185D",
+    accentA: "#F9A8D4",
+    accentB: "#BE185D",
+  },
+  {
     id: "cases",
     titleRu: "Кейсы",
     titleEn: "Cases",
@@ -1386,10 +1419,10 @@ const GAME_CARDS = [
   },
 ] as const;
 
-type ActiveGame = null | "arena" | "spin" | "mines" | "cases";
+type ActiveGame = null | "arena" | "spin" | "mines" | "dice" | "roulette" | "cases";
 
 function useGamesEnabled() {
-  const [enabled, setEnabled] = useState<Record<string, boolean>>({ spin: true, mines: true, arena: true, igro: true });
+  const [enabled, setEnabled] = useState<Record<string, boolean>>({ spin: true, mines: true, arena: true, igro: true, dice: true, roulette: true });
   useEffect(() => {
     fetch("/api/mini/admin/settings/games-enabled")
       .then(r => r.json())
@@ -1650,6 +1683,7 @@ export default function GamesPage() {
   
   const lang: Lang = ((profile as any)?.language ?? "ru") as Lang;
   const tonBalance = Number(profile?.ton ?? 0);
+ const demoBalance = Number((profile as any)?.demoCredits ?? 1000);
 
   const showToast = (msg: string, type: "success"|"error"|"info" = "info") => {
     setToast({ msg, type });
@@ -1728,8 +1762,10 @@ export default function GamesPage() {
           </div>
         ) : active === "mines" ? (
           <div style={{ padding: "0 16px" }}>
-            <MinesGame telegramId={telegramId} balance={tonBalance} lang={lang} onBalanceChange={refresh} />
+            <MinesGame telegramId={telegramId} balance={demoBalance} lang={lang} onBalanceChange={refresh} />
           </div>
+        ) : active === "dice" || active === "roulette" ? (
+          <QuickGames game={active} telegramId={telegramId} balance={demoBalance} onBalanceChange={refresh} />
         ) : active === "spin" ? (
           <SpinGame
             telegramId={telegramId}

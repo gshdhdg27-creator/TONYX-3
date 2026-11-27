@@ -173,7 +173,7 @@ const CSS = `
   position: absolute;
   inset: -8px;
   border-radius: 50%;
-  border: 1px dashed rgba(167,139,250,0.18);
+  border: 1px dashed rgba(52,211,153,0.18);
   animation: cfRingSpin 18s linear infinite;
 }
 .cf-stage {
@@ -276,6 +276,291 @@ const CSS = `
 .cf-result { animation: cfPop 0.35s ease-out; text-align: center; margin: 0 0 12px; }
 .cf-result-title { font-size: 18px; font-weight: 900; }
 .cf-result-sub { font-size: 13px; margin-top: 2px; font-weight: 700; opacity: 0.9; }
+
+  /* TONYX Coinflip — focused stage with compact control rail */
+  .cf-game{width:100%;max-width:1120px;margin:0 auto;padding:10px 0 32px;display:grid;grid-template-columns:minmax(0,1fr) 350px;grid-template-rows:auto auto auto;gap:14px 18px;align-items:start;color:#eef3f8}
+  .cf-game>.cf-ambient{position:absolute;inset:0;pointer-events:none;z-index:0}
+  .cf-game>.cf-header{grid-column:1/-1;z-index:1;text-align:left!important;border-bottom:1px solid #293743;padding:0 2px 12px;margin:0!important}
+  .cf-game .cf-header [style*="border-radius: 999px"]{background:#153d4c!important;color:#a9eafa!important;box-shadow:none!important;border:1px solid #23687e}
+  .cf-game .cf-header>div:nth-child(2){font-size:24px!important;color:#f1f6fa!important}
+  .cf-game .cf-header>div:nth-child(3){color:#91a5b5!important}
+  .cf-game-stage{grid-column:2;grid-row:2;min-height:470px;border:1px solid #293d4a;border-radius:16px;background:radial-gradient(ellipse at 50% 48%,#163342,#0b151e 72%);box-shadow:0 18px 48px #0008}
+  .cf-game .cf-ring{border-color:#2b6d82!important;box-shadow:inset 0 0 42px #0e668333!important}
+  .cf-game .cf-floor{background:radial-gradient(ellipse,#15536a55,transparent 68%)!important}
+  .cf-game .cf-coin{filter:drop-shadow(0 18px 22px #0009)}
+  .cf-game .cf-face{border-color:#b8d6e4!important}
+.cf-game-stage{position:relative;overflow:hidden}
+.cf-game-stage:before{content:"";position:absolute;width:280px;height:280px;border-radius:50%;border:1px solid #3b8498;box-shadow:0 0 0 18px #24748a14,0 0 80px #0b829b24,inset 0 0 55px #0b829b18;pointer-events:none}
+.cf-game .cf-coin{filter:drop-shadow(0 22px 30px #000b)}
+.cf-game .cf-controls{box-shadow:0 14px 34px #0006,inset 0 1px #ffffff0a!important}
+.cf-game .cf-controls button{transition:transform .16s ease,filter .16s ease}
+.cf-game .cf-controls button:not(:disabled):active{transform:translateY(1px) scale(.99);filter:brightness(1.08)}
+.cf-game .cf-controls input{min-height:44px}
+.cf-game .cf-result{box-shadow:0 10px 26px #0005,inset 0 1px #ffffff0a}
+  .cf-game .cf-face.cf-heads{background:linear-gradient(145deg,#c5e8f2,#3d819a)!important;color:#102b38!important}
+  .cf-game .cf-face.cf-tails{background:linear-gradient(145deg,#eaf4f8,#7999a8)!important;color:#1a2e38!important}
+  .cf-game .cf-controls{grid-column:1;grid-row:2;margin:0!important;padding:18px!important;background:linear-gradient(180deg,#151f2a,#101720)!important;border:1px solid #293947!important;border-radius:13px!important;box-shadow:0 14px 34px #0006!important}
+  .cf-game .cf-controls button{border-radius:8px!important}
+  .cf-game .cf-controls button[style*="linear-gradient"]{background:linear-gradient(180deg,#168fba,#08769d)!important;color:white!important;box-shadow:0 4px 0 #064c68!important}
+  .cf-game .cf-controls input{background:#090f16!important;border:1px solid #344655!important;color:#eef3f8!important;border-radius:8px!important}
+  .cf-game .cf-result{grid-column:1;grid-row:3;margin:0!important;padding:14px;border:1px solid #2b4654;border-radius:12px;background:#121e28}
+  @media(max-width:760px){.cf-game{display:flex!important;flex-direction:column!important;gap:10px!important;padding:6px 0 24px!important}.cf-game>.cf-header,.cf-game-stage,.cf-game .cf-controls,.cf-game .cf-result{width:100%;box-sizing:border-box}.cf-game-stage{min-height:310px}.cf-game-stage:before{width:220px;height:220px}.cf-game .cf-controls{padding:14px!important}}
+
+
+/* Gameplay pass: coin toss reads as a physical casino coin, not a flat icon */
+.cf-game-stage{isolation:isolate;background:radial-gradient(ellipse at 50% 52%,#315438 0%,#14291b 48%,#08130c 100%)!important;border-color:#9a7940!important}
+.cf-game-stage:after{content:"";position:absolute;inset:0;pointer-events:none;background:repeating-radial-gradient(circle at 50% 50%,transparent 0 34px,#e2c47a0b 35px 36px);mask-image:radial-gradient(circle,black,transparent 75%)}
+.cf-stage{filter:drop-shadow(0 24px 30px #000b)}
+.cf-coin{transform-style:preserve-3d;backface-visibility:visible}
+.cf-heads,.cf-tails{border:5px solid #d8b75f;outline:1px solid #fff5;outline-offset:-10px}
+.cf-rim{border:3px solid #f3d889!important;box-shadow:inset 0 0 0 3px #7b551e,inset 0 0 18px #fff5}
+.cf-rim-inner{border-color:#8b642c!important}
+.cf-stage.win{animation:cfWinPulse 1.1s ease-in-out 2}
+.cf-stage.lose{animation:cfLosePulse .9s ease-in-out 2}
+.cf-controls button:not(:disabled){transition:transform .15s ease,filter .15s ease}
+.cf-controls button:not(:disabled):active{transform:translateY(2px) scale(.985)}
+@media(max-width:760px){.cf-game-stage{min-height:360px!important}.cf-arena{height:250px!important}}
+
+/* Mobile Coin Flip: coin is the hero, controls become a full-width panel below it. */
+@media (max-width: 900px) {
+  .cf-root.cf-game {
+    display:flex!important;
+    flex-direction:column!important;
+    align-items:stretch!important;
+    width:100%!important;
+    max-width:520px!important;
+    min-width:0!important;
+    margin:0 auto!important;
+    padding:8px 12px 26px!important;
+    gap:12px!important;
+    box-sizing:border-box!important;
+    overflow:hidden!important;
+  }
+  .cf-game>.cf-ambient { inset:0!important; height:100%!important; }
+  .cf-game>.cf-header {
+    order:0!important;
+    width:100%!important;
+    padding:8px 0 12px!important;
+    margin:0!important;
+    text-align:center!important;
+    border-bottom:1px solid #29443a!important;
+  }
+  .cf-game .cf-header>div:nth-child(2) {font-size:26px!important}
+  .cf-game-stage {
+    order:1!important;
+    display:flex!important;
+    width:100%!important;
+    min-width:0!important;
+    height:clamp(250px,68vw,330px)!important;
+    min-height:0!important;
+    margin:0!important;
+    border-radius:20px!important;
+    align-items:center!important;
+    justify-content:center!important;
+  }
+  .cf-game-stage:before {width:clamp(190px,56vw,250px)!important;height:clamp(190px,56vw,250px)!important}
+  .cf-game .cf-arena {height:100%!important;min-height:0!important;margin:0!important;width:100%!important}
+  .cf-game .cf-ring {width:clamp(170px,49vw,218px)!important;height:clamp(170px,49vw,218px)!important}
+  .cf-game .cf-stage {width:clamp(132px,39vw,164px)!important;height:clamp(132px,39vw,164px)!important}
+  .cf-game .cf-floor {bottom:clamp(26px,8vw,42px)!important}
+  .cf-game-result {
+    order:2!important;
+    width:100%!important;
+    box-sizing:border-box!important;
+    margin:0!important;
+  }
+  .cf-game .cf-controls {
+    order:3!important;
+    display:flex!important;
+    flex-direction:column!important;
+    width:100%!important;
+    min-width:0!important;
+    box-sizing:border-box!important;
+    margin:0!important;
+    padding:14px!important;
+    gap:0!important;
+    border-radius:18px!important;
+  }
+  .cf-game .cf-controls>div:first-child {margin-bottom:10px!important}
+  .cf-game .cf-controls>div:nth-of-type(2) {margin-top:14px!important}
+  .cf-game .cf-controls button {touch-action:manipulation}
+  .cf-game .cf-controls button[style*="flex-direction: column"] {min-height:104px!important}
+  .cf-game .cf-controls input {min-width:0!important;width:100%!important}
+  .cf-game .cf-controls>div[style*="display: flex"] {min-width:0!important}
+  .cf-game .cf-controls>div[style*="justify-content: space-between"] {gap:8px!important;flex-wrap:wrap!important}
+  .cf-game .cf-controls button[style*="height: 56px"] {height:54px!important;margin-top:14px!important}
+}
+@media (max-width: 390px) {
+  .cf-root.cf-game {padding-left:9px!important;padding-right:9px!important;gap:10px!important}
+  .cf-game-stage {height:250px!important}
+  .cf-game .cf-controls {padding:12px!important}
+  .cf-game .cf-controls button[style*="flex-direction: column"] {min-height:94px!important}
+  .cf-game .cf-controls button svg {width:32px!important;height:32px!important}
+  .cf-game .cf-controls button[style*="height: 56px"] {font-size:15px!important}
+}
+
+
+/* Adapt to the actual Solo game panel width, not the desktop browser viewport. */
+@container solo-game (max-width: 620px) {
+  .cf-root.cf-game {
+    display:flex!important;
+    flex-direction:column!important;
+    align-items:stretch!important;
+    grid-template-columns:minmax(0,1fr)!important;
+    grid-template-rows:auto!important;
+    width:100%!important;
+    max-width:100%!important;
+    min-width:0!important;
+    margin:0!important;
+    padding:8px 0 24px!important;
+    gap:12px!important;
+    overflow:visible!important;
+    box-sizing:border-box!important;
+  }
+  .cf-game>.cf-header,
+  .cf-game-stage,
+  .cf-game .cf-controls,
+  .cf-game .cf-result {
+    position:relative!important;
+    inset:auto!important;
+    float:none!important;
+    grid-column:1!important;
+    grid-row:auto!important;
+    width:100%!important;
+    min-width:0!important;
+    max-width:100%!important;
+    box-sizing:border-box!important;
+    margin:0!important;
+  }
+  .cf-game>.cf-header {order:0!important;text-align:center!important;padding:6px 0 12px!important}
+  .cf-game-stage {
+    order:1!important;
+    display:flex!important;
+    flex:0 0 auto!important;
+    height:clamp(250px,62cqi,330px)!important;
+    min-height:250px!important;
+    align-items:center!important;
+    justify-content:center!important;
+    overflow:hidden!important;
+  }
+  .cf-game-stage:before {width:min(68cqi,260px)!important;height:min(68cqi,260px)!important}
+  .cf-game .cf-arena {width:100%!important;height:100%!important;min-height:0!important;margin:0!important}
+  .cf-game .cf-ring {width:min(58cqi,220px)!important;height:min(58cqi,220px)!important}
+  .cf-game .cf-stage {width:min(45cqi,170px)!important;height:min(45cqi,170px)!important;flex:0 0 auto!important}
+  .cf-game .cf-controls {
+    order:2!important;
+    display:flex!important;
+    flex:0 0 auto!important;
+    flex-direction:column!important;
+    gap:0!important;
+    padding:16px!important;
+    border-radius:16px!important;
+  }
+  .cf-game .cf-controls>div:first-child {margin-bottom:10px!important}
+  .cf-game .cf-controls>div:nth-of-type(2) {margin-top:14px!important}
+  .cf-game .cf-controls .cf-side-row,
+  .cf-game .cf-controls input {min-width:0!important}
+  .cf-game .cf-result {order:3!important}
+}
+
+
+/* Premium minted-metal coin finish: layered milled rim, engraved rings and relief. */
+.cf-game .cf-stage {
+  filter:drop-shadow(0 22px 28px rgba(0,0,0,.62)) drop-shadow(0 0 18px rgba(225,184,91,.16));
+}
+.cf-game .cf-coin {
+  transform-style:preserve-3d;
+}
+.cf-game .cf-face {
+  isolation:isolate;
+  border:1px solid rgba(255,255,255,.62);
+  box-shadow:
+    inset 0 0 0 3px rgba(255,255,255,.34),
+    inset 0 0 0 7px rgba(20,25,28,.28),
+    inset 0 3px 9px rgba(255,255,255,.65),
+    inset 0 -12px 22px rgba(0,0,0,.32),
+    0 2px 2px rgba(255,255,255,.25);
+}
+.cf-game .cf-heads {
+  background:
+    radial-gradient(circle at 50% 43%, rgba(255,249,210,.98) 0 18%, transparent 19%),
+    repeating-conic-gradient(from 2deg at 50% 50%,rgba(255,255,255,.10) 0deg 2deg,rgba(105,61,9,.08) 2deg 4deg),
+    radial-gradient(circle at 30% 24%,#fff9d9 0%,#f9df91 16%,#eebc50 37%,#c98722 66%,#70400e 100%)!important;
+  box-shadow:
+    inset 0 0 0 2px #fff0b7,
+    inset 0 0 0 5px #9a641e,
+    inset 0 0 0 8px #f7d77e,
+    inset 0 8px 14px rgba(255,255,255,.55),
+    inset 0 -15px 24px rgba(91,48,5,.55),
+    0 0 0 3px #8d5b1a,
+    0 0 0 5px #e8bd62,
+    0 14px 24px rgba(0,0,0,.5)!important;
+}
+.cf-game .cf-tails {
+  background:
+    repeating-conic-gradient(from 2deg at 50% 50%,rgba(255,255,255,.16) 0deg 2deg,rgba(51,65,85,.08) 2deg 4deg),
+    radial-gradient(circle at 30% 24%,#fff 0%,#e8edf2 17%,#b7c4d1 42%,#718397 72%,#354456 100%)!important;
+  box-shadow:
+    inset 0 0 0 2px #fff,
+    inset 0 0 0 5px #64748b,
+    inset 0 0 0 8px #e2e8f0,
+    inset 0 8px 14px rgba(255,255,255,.7),
+    inset 0 -15px 24px rgba(15,23,42,.5),
+    0 0 0 3px #526274,
+    0 0 0 5px #dce5ec,
+    0 14px 24px rgba(0,0,0,.5)!important;
+}
+.cf-game .cf-face::before {
+  content:"";
+  position:absolute;
+  inset:11px;
+  z-index:0;
+  border-radius:50%;
+  border:2px solid rgba(255,248,220,.62);
+  box-shadow:0 0 0 2px rgba(74,48,13,.22),inset 0 0 0 1px rgba(255,255,255,.38);
+  pointer-events:none;
+}
+.cf-game .cf-face::after {
+  content:"";
+  position:absolute;
+  inset:19px;
+  z-index:0;
+  border-radius:50%;
+  border:1px dashed rgba(255,255,255,.42);
+  opacity:.9;
+  pointer-events:none;
+}
+.cf-game .cf-rim {
+  inset:6px!important;
+  border:2px solid rgba(255,255,255,.55)!important;
+  box-shadow:inset 0 0 8px rgba(255,255,255,.18),0 0 6px rgba(0,0,0,.18);
+  z-index:2;
+}
+.cf-game .cf-rim-inner {
+  inset:15px!important;
+  border:1px dotted rgba(255,255,255,.52)!important;
+  z-index:2;
+}
+.cf-game .cf-face svg {
+  width:48%!important;
+  height:48%!important;
+  filter:drop-shadow(0 2px 1px rgba(0,0,0,.24));
+  z-index:3;
+}
+.cf-game .cf-label {
+  z-index:3;
+  margin-top:3px;
+  font-size:clamp(9px,2.3vw,12px)!important;
+  letter-spacing:.2em!important;
+  text-shadow:0 1px 2px rgba(0,0,0,.3);
+}
+.cf-game .cf-shine {
+  z-index:4;
+  opacity:.75;
+  mix-blend-mode:screen;
+}
+
+
 `;
 
 export default function CoinFlipGame({
@@ -346,11 +631,11 @@ export default function CoinFlipGame({
       return;
     }
     if (!Number.isFinite(stake) || stake < MIN_BET) {
-      flash(`Мин. ставка ${MIN_BET} TON`, false);
+      flash(`Мин. ставка ${MIN_BET} демо-кредитов`, false);
       return;
     }
     if (stake > balance) {
-      flash("Недостаточно TON", false);
+      flash("Недостаточно демо-кредитов", false);
       return;
     }
 
@@ -453,10 +738,10 @@ export default function CoinFlipGame({
 
       if (d.won) {
         hapticNotify("success");
-        flash(`+${Number(d.payout).toFixed(2)} TON  ·  ×${MULTIPLIER}`, true);
+        flash(`+${Number(d.payout).toFixed(2)} демо-кредитов  ·  ×${MULTIPLIER}`, true);
       } else {
         hapticNotify("error");
-        flash(`−${stake.toFixed(2)} TON`, false);
+        flash(`−${stake.toFixed(2)} демо-кредитов`, false);
       }
       onBalanceChange();
     } catch {
@@ -471,13 +756,13 @@ export default function CoinFlipGame({
   const canPlay = !busy && !spinning && Number(bet) >= MIN_BET;
 
   return (
-    <div className="cf-root" style={root}>
+    <div className="cf-root cf-game" style={root}>
       <style>{CSS}</style>
       <div
         className="cf-ambient"
         style={{
           background: `radial-gradient(ellipse 70% 55% at 50% 40%, ${th.ambient} 0%, transparent 70%),
-            radial-gradient(ellipse 50% 40% at 20% 60%, rgba(124,58,237,0.1) 0%, transparent 70%)`,
+            radial-gradient(ellipse 50% 40% at 20% 60%, rgba(22,132,84,0.1) 0%, transparent 70%)`,
         }}
       />
 
@@ -494,7 +779,7 @@ export default function CoinFlipGame({
         </div>
       )}
 
-      <div style={hero}>
+      <div className="cf-header" style={hero}>
         <div
           style={{
             ...multBadge,
@@ -512,7 +797,7 @@ export default function CoinFlipGame({
         </div>
       </div>
 
-      <div className="cf-arena">
+      <div className="cf-arena cf-game-stage">
         <div
           className="cf-ring"
           style={{ border: `1px solid ${th.ring}`, boxShadow: `inset 0 0 36px ${th.accentDim}` }}
@@ -569,7 +854,7 @@ export default function CoinFlipGame({
       </div>
 
       {lastResult && !spinning && (
-        <div className="cf-result">
+        <div className="cf-result cf-game-result">
           <div
             className="cf-result-title"
             style={{ color: lastResult.won ? "#86efac" : "#fca5a5" }}
@@ -581,13 +866,13 @@ export default function CoinFlipGame({
             style={{ color: lastResult.won ? "#bbf7d0" : "#fecaca" }}
           >
             {lastResult.won
-              ? `+${lastResult.payout.toFixed(2)} TON`
+              ? `+${lastResult.payout.toFixed(2)} DEMO`
               : `Выпало: ${lastResult.result === "heads" ? "Орёл" : "Решка"}`}
           </div>
         </div>
       )}
 
-      <div style={panel}>
+      <div className="cf-controls" style={panel}>
         <div style={sectionLabel}>Выбери сторону</div>
         <div style={sideRow}>
           <button
@@ -744,9 +1029,9 @@ export default function CoinFlipGame({
         </div>
 
         <div style={metaRow}>
-          <span>Баланс {balance.toFixed(2)} TON</span>
+          <span>Баланс {balance.toFixed(2)} демо-кредитов</span>
           <span style={{ color: choice === "heads" ? "#fde68a" : "#e2e8f0", fontWeight: 800 }}>
-            ≈ {potential.toFixed(2)} TON
+            ≈ {potential.toFixed(2)} DEMO
           </span>
         </div>
 
@@ -810,7 +1095,7 @@ const heroTitle: CSSProperties = {
 };
 const heroSub: CSSProperties = {
   fontSize: 12,
-  color: "#a78bfa",
+  color: "#34d399",
   marginTop: 4,
   fontWeight: 600,
 };
@@ -820,8 +1105,8 @@ const panel: CSSProperties = {
   marginTop: 4,
   padding: "16px 14px 18px",
   borderRadius: 20,
-  background: "linear-gradient(180deg,rgba(24,16,48,0.92),rgba(10,6,18,0.96))",
-  border: "1px solid rgba(167,139,250,0.18)",
+  background: "linear-gradient(180deg,rgba(20,39,29,0.96),rgba(9,17,13,0.98))",
+  border: "1px solid rgba(52,211,153,0.18)",
   boxShadow: "0 12px 40px rgba(0,0,0,0.35)",
 };
 const sectionLabel: CSSProperties = {
@@ -850,7 +1135,7 @@ const betAdj: CSSProperties = {
   height: 48,
   borderRadius: 14,
   border: "1px solid",
-  background: "rgba(15,23,42,0.95)",
+  background: "rgba(12,23,17,0.96)",
   fontWeight: 900,
   fontSize: 16,
   cursor: "pointer",

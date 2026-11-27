@@ -145,7 +145,7 @@ export default function PickaxeGame({
   const play = async () => {
     if (busy || phase === "falling" || phase === "spinning") return;
     if (!telegramId) { setErr("Нет telegramId"); return; }
-    if (bet <= 0 || bet > balance + 1e-9) { setErr("Недостаточно TON"); return; }
+    if (bet <= 0 || bet > balance + 1e-9) { setErr("Недостаточно DEMO"); return; }
     setBusy(true); setErr(""); setPayout(null);
     setPhase("spinning"); setSpinning(true);
     setGrid(makeMine()); setPickX(COLS * CELL / 2); setPickY(0); setCamY(0);
@@ -170,8 +170,7 @@ export default function PickaxeGame({
       setErr(e?.message || "Сеть"); setBusy(false); setPhase("idle"); setSpinning(false); return;
     }
 
-    const forced = empty >= EMPTY_G - 1 && !apiTier
-      ? TIER_ORDER[Math.floor(Math.random() * TIER_ORDER.length)] : apiTier;
+    const forced = apiTier;
 
     const nItems = REEL_ITEMS.length;
     let targetIdx = 0;
@@ -257,7 +256,7 @@ export default function PickaxeGame({
           vx = dir * (5.2 + Math.random() * 2.5);
           vy = -BOUNCE * 1.1;
           setTilt(dir * 22);
-          addF(cc * CELL + 14, rr * CELL, "↗", "#4ade80");
+          addF(cc * CELL + 14, rr * CELL, "↗", "#6ee7a8");
           lastHit.set(key, now);
           anyHit = true;
           continue;
@@ -291,7 +290,7 @@ export default function PickaxeGame({
           if (idx < 3) {
             curTier = TIER_ORDER[idx + 1]; setTier(curTier);
             curHp = TIER_HP[curTier]; setMaxHp(curHp); setHp(curHp);
-            addF(cc * CELL + 14, rr * CELL, "⬆ LVL", "#4ade80");
+            addF(cc * CELL + 14, rr * CELL, "⬆ LVL", "#6ee7a8");
           } else {
             curHp = TIER_HP[curTier]; setHp(curHp);
             addF(cc * CELL + 14, rr * CELL, "❤ FULL", "#f472b6");
@@ -358,14 +357,14 @@ export default function PickaxeGame({
   const mineW = COLS * CELL;
 
   return (
-    <div style={S.root}>
+    <div className="pickaxe-drop" style={S.root}>
       <div style={S.bg}>
         <div style={S.sky} />
         <div style={S.mountains} />
         <div style={S.island} />
       </div>
 
-      <div style={S.hudTop}>
+      <div className="pickaxe-hud" style={S.hudTop}>
         {onBack && <button type="button" style={S.back} onClick={onBack}>←</button>}
         <div style={S.logo}>
           <span style={{ filter: "drop-shadow(0 0 4px #5eead4)" }}>⛏️</span>
@@ -375,7 +374,7 @@ export default function PickaxeGame({
       </div>
 
       {(phase === "idle" || phase === "spinning" || phase === "result") && (
-        <div style={S.circleWrap}>
+        <div className="pickaxe-reel" style={S.circleWrap}>
           <div style={S.circleOuter}>
             <div style={{
               ...S.circleInner,
@@ -401,11 +400,11 @@ export default function PickaxeGame({
         </div>
       )}
 
-      <div style={S.mineOuter}>
+      <div className="pickaxe-shaft" style={S.mineOuter}>
         <div style={{ ...S.mineInner, width: mineW }}>
           <div style={{
             position: "absolute", inset: 0, zIndex: 0,
-            background: "linear-gradient(180deg, #87c8e8 0%, #a8d4e0 40%, #7a9a70 100%)",
+            background: "linear-gradient(180deg,#1a3024 0%,#233e2e 40%,#101c15 100%)",
             opacity: 0.9,
           }} />
           <div style={{ position: "absolute", top: -camY, left: 0, width: mineW, zIndex: 1 }}>
@@ -459,16 +458,16 @@ export default function PickaxeGame({
         </div>
       </div>
 
-      <div style={S.bottomBar}>
+      <div className="pickaxe-stats" style={S.bottomBar}>
         <button type="button" style={S.bonusBtn} disabled>BONUS BUY</button>
-        <div style={S.statBox}><div style={S.statLabel}>CASH</div><div style={S.statVal}>{balance.toFixed(2)}</div></div>
+        <div style={S.statBox}><div style={S.statLabel}>DEMO</div><div style={S.statVal}>{balance.toFixed(2)}</div></div>
         <div style={S.statBox}><div style={S.statLabel}>WIN</div><div style={{ ...S.statVal, color: "#fde047" }}>{(payout ?? win).toFixed(2)}</div></div>
         <div style={S.statBox}><div style={S.statLabel}>BET</div><div style={S.statVal}>{bet.toFixed(2)}</div></div>
       </div>
 
       {err && <div style={{ color: "#f87171", fontSize: 12, marginTop: 4 }}>{err}</div>}
 
-      <div style={S.controls}>
+      <div className="pickaxe-controls" style={S.controls}>
         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
           <button type="button" style={S.pm} onClick={() => setBet(Math.max(0.1, +(bet / 2).toFixed(2)))} disabled={busy}>−</button>
           <button type="button" style={S.spinCircle}
@@ -486,7 +485,7 @@ export default function PickaxeGame({
         </div>
       </div>
 
-      <style>{`@keyframes floatUp { from { opacity: 1; transform: translateY(0); } to { opacity: 0; transform: translateY(-28px); } }`}</style>
+      <style>{PICKAXE_LAYOUT_CSS + `@keyframes floatUp { from { opacity: 1; transform: translateY(0); } to { opacity: 0; transform: translateY(-28px); } }`}</style>
     </div>
   );
 }
@@ -494,7 +493,7 @@ export default function PickaxeGame({
 const S: Record<string, CSSProperties> = {
   root: { position: "relative", minHeight: "100%", overflow: "hidden", display: "flex", flexDirection: "column", alignItems: "center", padding: "6px 8px 20px", fontFamily: "system-ui, sans-serif", color: "#e2e8f0" },
   bg: { position: "absolute", inset: 0, zIndex: 0, pointerEvents: "none", overflow: "hidden" },
-  sky: { position: "absolute", inset: 0, background: "linear-gradient(180deg, #6eb8e0 0%, #9ecfe8 30%, #b8d8c0 55%, #5a7a50 80%, #3a4a38 100%)" },
+  sky: { position: "absolute", inset: 0, background: "linear-gradient(180deg,#17231d 0%,#20372a 42%,#15241c 72%,#0b120e 100%)" },
   mountains: { position: "absolute", left: 0, right: 0, bottom: "22%", height: "50%", background: "radial-gradient(ellipse 90% 70% at 15% 100%, #4a6a4a 0%, transparent 65%), radial-gradient(ellipse 80% 60% at 85% 100%, #3d5a3d 0%, transparent 60%), radial-gradient(ellipse 50% 40% at 50% 90%, #5a7a5a 0%, transparent 50%)", opacity: 0.55 },
   island: { position: "absolute", left: "8%", top: "12%", width: 70, height: 40, borderRadius: "50% 50% 40% 40%", background: "linear-gradient(180deg, #5a8a4a 30%, #6b4423 70%)", opacity: 0.35, boxShadow: "0 8px 0 -4px #4a7a3a" },
   hudTop: { position: "relative", zIndex: 2, width: "100%", maxWidth: 420, display: "flex", alignItems: "center", gap: 8, marginBottom: 4 },
@@ -505,7 +504,7 @@ const S: Record<string, CSSProperties> = {
   circleOuter: { width: 184, height: 184, borderRadius: "50%", border: "5px solid #1e293b", background: "rgba(15,23,42,.92)", position: "relative", boxShadow: "0 0 0 2px #334155, inset 0 0 28px rgba(0,0,0,.55)" },
   circleInner: { position: "absolute", inset: 10, borderRadius: "50%" },
   circleCenter: { position: "absolute", left: "50%", top: "50%", width: 38, height: 38, marginLeft: -19, marginTop: -19, borderRadius: "50%", background: "#0f172a", border: "2px solid #475569", zIndex: 3 },
-  pointer: { position: "absolute", left: "50%", top: -7, marginLeft: -7, width: 0, height: 0, borderLeft: "7px solid transparent", borderRight: "7px solid transparent", borderBottom: "11px solid #22c55e" },
+  pointer: { position: "absolute", left: "50%", top: -7, marginLeft: -7, width: 0, height: 0, borderLeft: "7px solid transparent", borderRight: "7px solid transparent", borderBottom: "11px solid #22c77a" },
   mineOuter: { position: "relative", zIndex: 2, display: "flex", justifyContent: "center", marginBottom: 6 },
   mineInner: { position: "relative", height: VIEW_H, overflow: "hidden", borderRadius: 4, border: "3px solid #1e293b", boxShadow: "0 0 0 1px #475569, inset 0 0 50px rgba(0,0,0,.25)" },
   bottomBar: { position: "relative", zIndex: 2, width: "100%", maxWidth: 400, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6, padding: "6px 4px", marginTop: 4 },
@@ -514,8 +513,41 @@ const S: Record<string, CSSProperties> = {
   statLabel: { fontSize: 9, color: "#94a3b8", letterSpacing: 1, fontWeight: 700 },
   statVal: { fontSize: 14, fontWeight: 800, color: "#f8fafc" },
   controls: { position: "relative", zIndex: 2, marginTop: 4, display: "flex", flexDirection: "column", alignItems: "center" },
-  pm: { width: 36, height: 36, borderRadius: "50%", background: "rgba(30,41,59,.9)", border: "2px solid #475569", color: "#e2e8f0", fontSize: 18, fontWeight: 700, cursor: "pointer" },
-  spinCircle: { width: 64, height: 64, borderRadius: "50%", background: "linear-gradient(180deg, #22c55e, #15803d)", border: "3px solid #14532d", color: "#fff", fontSize: 28, fontWeight: 900, cursor: "pointer", boxShadow: "0 4px 0 #052e16, 0 0 20px rgba(34,197,94,.4)" },
+  pm: { width: 36, height: 36, borderRadius: "50%", background: "rgba(19,35,27,.96)", border: "2px solid #475569", color: "#e2e8f0", fontSize: 18, fontWeight: 700, cursor: "pointer" },
+  spinCircle: { width: 64, height: 64, borderRadius: "50%", background: "linear-gradient(180deg, #22c77a, #15803d)", border: "3px solid #0b5a3a", color: "#fff", fontSize: 28, fontWeight: 900, cursor: "pointer", boxShadow: "0 4px 0 #052e16, 0 0 20px rgba(34,197,122,.4)" },
   preset: { background: "rgba(30,41,59,.8)", border: "1px solid #334155", color: "#cbd5e1", borderRadius: 6, padding: "3px 7px", fontSize: 10, cursor: "pointer" },
-  presetOn: { borderColor: "#22c55e", color: "#4ade80" },
+  presetOn: { borderColor: "#22c77a", color: "#6ee7a8" },
 };
+
+
+const PICKAXE_LAYOUT_CSS = `
+.pickaxe-drop{width:100%;max-width:1120px;margin:0 auto;padding:12px!important;display:grid!important;grid-template-columns:minmax(0,1fr) 300px;grid-template-rows:auto auto auto auto;gap:12px 18px;align-items:start;background:radial-gradient(ellipse at 50% 0%,#172a38,#080f17 72%);border:1px solid #293b48;border-radius:16px;box-shadow:0 18px 48px #0008;overflow:hidden}
+.pickaxe-drop>div:first-child{grid-column:1/-1}
+.pickaxe-hud{grid-column:1/-1;max-width:none!important;margin:0 0 4px!important;padding:0 0 12px;border-bottom:1px solid #2b3d49}
+.pickaxe-hud>div:nth-child(2){background:#142330!important;border:1px solid #2b4554;color:#d9f3ff}
+.pickaxe-reel{grid-column:2;grid-row:2;justify-self:center;margin:4px auto 8px!important}
+.pickaxe-reel>div{border-color:#2c7187!important;background:radial-gradient(circle,#183c4c,#0b1721)!important;box-shadow:0 0 0 2px #274b5b,inset 0 0 30px #0009!important}
+.pickaxe-shaft{grid-column:2;grid-row:3/span 2;margin:0!important;min-width:0}
+.pickaxe-shaft>div{max-width:100%!important;border-radius:12px!important;border:2px solid #315063!important;box-shadow:inset 0 0 50px #0008,0 10px 26px #0007!important}
+.pickaxe-stats{grid-column:1;grid-row:2;max-width:none!important;margin:0!important;padding:14px!important;background:#14202b;border:1px solid #2b3d49;border-radius:12px;flex-wrap:wrap}
+.pickaxe-stats>div{flex:1;min-width:65px}
+.pickaxe-controls{grid-column:1;grid-row:3/span 2;width:100%;box-sizing:border-box;padding:16px!important;background:#14202b;border:1px solid #2b3d49;border-radius:12px}
+.pickaxe-controls button{border-radius:8px!important}
+.pickaxe-drop{isolation:isolate;background:radial-gradient(ellipse at 72% 16%,#164052 0%,#0b1722 48%,#080e15 100%)!important}
+.pickaxe-drop:after{content:"";position:absolute;inset:0;z-index:0;pointer-events:none;background:linear-gradient(115deg,#ffffff05,transparent 36%,#36b6d108 72%,transparent)}
+.pickaxe-drop>*{position:relative;z-index:1}
+.pickaxe-hud{position:relative}
+.pickaxe-logo{letter-spacing:.13em}
+.pickaxe-reel{filter:drop-shadow(0 14px 24px #0008)}
+.pickaxe-reel>div{border-width:5px!important}
+.pickaxe-shaft>div{background:linear-gradient(180deg,#142b38,#0a141d)!important}
+.pickaxe-stats{box-shadow:0 12px 28px #0006,inset 0 1px #ffffff0a}
+.pickaxe-stat-label{letter-spacing:.14em}
+.pickaxe-controls{box-shadow:0 12px 28px #0006,inset 0 1px #ffffff0a}
+.pickaxe-controls button{transition:transform .16s ease,filter .16s ease}
+.pickaxe-controls button:not(:disabled):active{transform:translateY(1px);filter:brightness(1.1)}
+.pickaxe-controls button:disabled{opacity:.5}
+.pickaxe-drop .pickaxe-shaft>div{background-image:linear-gradient(180deg,#102a36aa,#07111aaa)!important}
+.pickaxe-controls button[style*="linear-gradient"]{background:linear-gradient(180deg,#168fba,#08769d)!important;border-color:#1a8db0!important;color:#fff!important;box-shadow:0 4px 0 #064c68!important}
+@media(max-width:760px){.pickaxe-drop{display:flex!important;flex-direction:column!important;gap:10px!important;padding:8px!important}.pickaxe-hud,.pickaxe-reel,.pickaxe-shaft,.pickaxe-stats,.pickaxe-controls{width:100%;box-sizing:border-box}.pickaxe-reel{order:1}.pickaxe-shaft{order:2}.pickaxe-stats{order:3}.pickaxe-controls{order:4}.pickaxe-shaft>div{max-width:100%!important}}
+`;

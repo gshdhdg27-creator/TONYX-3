@@ -19,7 +19,7 @@ interface MineGameState {
   safeCount: number;
 }
 
-const MINE_OPTIONS = [1, 3, 5, 10, 15, 24];
+const MINE_OPTIONS = [1, 3, 5, 7];
 const BET_PRESETS = [0.1, 0.5, 1, 2, 5, 10];
 const MIN_BET = 0.1;
 const GRID = 5;
@@ -155,7 +155,7 @@ export default function MinesGame({
       clearActiveLs();
       setGame(null);
       onBalanceChange();
-      if (r.ok) flash(d.refunded ? `Ставка ${d.refunded} TON возвращена` : "Игра сброшена", "success");
+      if (r.ok) flash(d.refunded ? `Ставка ${d.refunded} демо-кредитов возвращена` : "Игра сброшена", "success");
       else flash(d.error ?? "Не удалось сбросить", "error");
     } catch {
       flash(t.errNetwork, "error");
@@ -282,6 +282,7 @@ export default function MinesGame({
   const reveal = async (row: number, col: number) => {
     if (!game || game.status !== "active" || game.revealed[row]?.[col] !== "hidden") return;
     haptic("light");
+    setBusy(true);
     try {
       const r = await fetch("/api/mini/games/mines/reveal", {
         method: "POST",
@@ -320,6 +321,8 @@ export default function MinesGame({
       }
     } catch {
       flash(t.errNetwork, "error");
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -364,25 +367,25 @@ export default function MinesGame({
   const gemsLeft = 25 - (game?.minesCount ?? mines) - (game?.safeCount ?? 0);
 
   return (
-    <div style={root}>
+    <div className={`mn-game ${isPlaying ? "mn-active" : "mn-setup"}`} style={root}>
       <style>{CSS}</style>
 
       {toast && <div className={`mn-toast mn-toast-${toast.type}`}>{toast.msg}</div>}
 
-      <div style={header}>
+      <div className="mn-game-header" style={header}>
         <div>
           <div style={title}>Mines</div>
-          <div style={subtitle}>Stake style · 5×5</div>
+          <div style={subtitle}>TONYX ORIGINAL · 5×5</div>
         </div>
         <div style={balPill}>
           <span style={{ opacity: 0.55, fontSize: 10, letterSpacing: "0.06em" }}>БАЛАНС</span>
           <span style={{ fontWeight: 800, color: "#f8fafc", fontVariantNumeric: "tabular-nums" }}>
-            {formatTon(balance)} <span style={{ color: "#94a3b8", fontWeight: 600 }}>TON</span>
+            {formatTon(balance)} <span style={{ color: "#94a3b8", fontWeight: 600 }}>ДЕМО-КРЕДИТЫ</span>
           </span>
         </div>
       </div>
 
-      <div style={hero}>
+      <div className="mn-game-hero" style={hero}>
         <div style={heroLabel}>
           {isPlaying
             ? "ТЕКУЩИЙ"
@@ -428,7 +431,7 @@ export default function MinesGame({
         )}
       </div>
 
-      <div style={gridWrap}>
+      <div className="mn-game-board" style={gridWrap}>
         <div style={grid}>
           {Array.from({ length: GRID }).map((_, row) =>
             Array.from({ length: GRID }).map((_, col) => {
@@ -464,7 +467,7 @@ export default function MinesGame({
         </div>
       </div>
 
-      <div style={ladder}>
+      <div className="mn-game-ladder" style={ladder}>
         {steps.map((m, i) => (
           <div
             key={i}
@@ -483,7 +486,7 @@ export default function MinesGame({
       </div>
 
       {!isPlaying ? (
-        <div style={panel}>
+        <div className="mn-game-controls" style={panel}>
           <div style={sectionLabel}>{t.minesCount}</div>
           <div style={pills}>
             {MINE_OPTIONS.map((m) => (
@@ -566,9 +569,9 @@ export default function MinesGame({
                 style={{
                   ...pill,
                   flex: 1,
-                  background: bet === v ? "rgba(124,92,255,0.28)" : "rgba(30,41,59,0.9)",
-                  borderColor: bet === v ? "rgba(167,139,250,0.55)" : "rgba(148,163,184,0.1)",
-                  color: bet === v ? "#e9d5ff" : "#94a3b8",
+                  background: bet === v ? "rgba(32,184,121,0.28)" : "rgba(30,41,59,0.9)",
+                  borderColor: bet === v ? "rgba(52,211,153,0.55)" : "rgba(148,163,184,0.1)",
+                  color: bet === v ? "#bbf7d0" : "#94a3b8",
                 }}
               >
                 {v}
@@ -584,11 +587,11 @@ export default function MinesGame({
               style={{
                 ...pill,
                 flex: 1.15,
-                background: "linear-gradient(135deg,#7c5cff,#a855f7)",
+                background: "linear-gradient(135deg,#20b879,#34d399)",
                 borderColor: "transparent",
                 color: "#fff",
                 fontWeight: 900,
-                boxShadow: "0 0 16px rgba(124,92,255,0.35)",
+                boxShadow: "0 0 16px rgba(32,184,121,0.35)",
               }}
             >
               Max
@@ -630,7 +633,7 @@ export default function MinesGame({
           </button>
         </div>
       ) : (
-        <div style={panel}>
+        <div className="mn-game-controls" style={panel}>
           <div style={liveStats}>
             <div style={statBox}>
               <div style={statLab}>{t.stake}</div>
@@ -658,7 +661,7 @@ export default function MinesGame({
 
       {isOver && (
         <div
-          className="mn-result"
+          className="mn-result mn-game-result"
           style={{
             ...resultCard,
             borderColor: game!.status === "won" ? "rgba(34,197,94,0.5)" : "rgba(248,113,113,0.45)",
@@ -765,8 +768,8 @@ const heroSub: CSSProperties = {
 const gridWrap: CSSProperties = {
   padding: 10,
   borderRadius: 20,
-  background: "linear-gradient(160deg, rgba(30,16,51,0.95), rgba(8,6,18,0.98))",
-  border: "1px solid rgba(124,92,255,0.18)",
+  background: "linear-gradient(160deg, rgba(21,36,29,0.95), rgba(8,15,12,0.98))",
+  border: "1px solid rgba(32,184,121,0.18)",
   boxShadow: "0 20px 50px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.04)",
   marginBottom: 12,
 };
@@ -798,7 +801,7 @@ const ladderItem: CSSProperties = {
 };
 
 const panel: CSSProperties = {
-  background: "rgba(15,10,25,0.75)",
+  background: "rgba(12,22,17,0.75)",
   border: "1px solid rgba(148,163,184,0.1)",
   borderRadius: 18,
   padding: 14,
@@ -860,8 +863,8 @@ const betInput: CSSProperties = {
   flex: 1,
   padding: "12px 14px",
   borderRadius: 12,
-  border: "1px solid rgba(124,92,255,0.3)",
-  background: "rgba(8,6,18,0.95)",
+  border: "1px solid rgba(32,184,121,0.3)",
+  background: "rgba(8,15,12,0.95)",
   color: "#f8fafc",
   fontSize: 16,
   fontWeight: 800,
@@ -876,13 +879,13 @@ const startBtn: CSSProperties = {
   padding: "15px 0",
   borderRadius: 14,
   border: "none",
-  background: "linear-gradient(135deg,#7c5cff 0%,#a855f7 50%,#ec4899 100%)",
+  background: "linear-gradient(135deg,#20b879 0%,#34d399 50%,#9be7bd 100%)",
   color: "#fff",
   fontSize: 15,
   fontWeight: 900,
   cursor: "pointer",
   fontFamily: "inherit",
-  boxShadow: "0 8px 28px rgba(124,92,255,0.35)",
+  boxShadow: "0 8px 28px rgba(32,184,121,0.35)",
 };
 
 const liveStats: CSSProperties = {
@@ -928,74 +931,68 @@ const resultCard: CSSProperties = {
   marginTop: 14,
   padding: 16,
   borderRadius: 16,
-  background: "rgba(15,10,25,0.9)",
+  background: "rgba(12,22,17,0.9)",
   border: "1px solid",
   textAlign: "center",
 };
 
 const CSS = `
-  .mn-toast {
-    position: fixed; top: 16px; left: 50%; transform: translateX(-50%);
-    z-index: 9999; padding: 12px 18px; border-radius: 12px;
-    font-size: 13px; font-weight: 700; color: #fff;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.45);
-    max-width: calc(100% - 32px);
+  .mn-game{width:100%!important;max-width:1040px!important;margin:0 auto!important;padding:12px 0 32px!important;box-sizing:border-box;display:grid;grid-template-columns:minmax(260px,340px) minmax(0,1fr);grid-template-rows:auto auto auto auto;gap:14px 18px;align-items:start;color:#edf4f8}
+  .mn-game-header{grid-column:1/-1;grid-row:1;display:flex;justify-content:space-between;align-items:center;gap:12px;margin:0!important;padding:0 2px 12px;border-bottom:1px solid #2a3c46;min-width:0}
+  .mn-game-hero{grid-column:2;grid-row:2;margin:0!important;padding:12px 0 4px!important;text-align:center}
+  .mn-game .mn-hero-mult{font-size:clamp(38px,5vw,58px);font-weight:900;letter-spacing:-.06em;line-height:1.05;font-variant-numeric:tabular-nums}
+  .mn-game-board{grid-column:2;grid-row:3;position:relative;isolation:isolate;width:100%;min-width:0;box-sizing:border-box;margin:0!important;padding:clamp(12px,2vw,20px)!important;border-radius:18px!important;background:radial-gradient(ellipse at 50% 30%,#1b4933 0%,#102c1e 58%,#09170f 100%)!important;border:1px solid #80683b!important;box-shadow:0 18px 44px #0008,inset 0 1px #ffffff12!important;overflow:hidden}
+  .mn-game-board:before{content:"";position:absolute;inset:8px;border:1px solid #d5b46a35;border-radius:12px;pointer-events:none}
+  .mn-game-board>div{position:relative;z-index:1;display:grid!important;grid-template-columns:repeat(5,minmax(0,1fr))!important;width:100%;max-width:520px;margin:0 auto;gap:clamp(6px,1.2vw,10px)!important}
+  .mn-game .mn-cell{width:100%;min-width:0;aspect-ratio:1;border:1px solid #66844b!important;border-radius:11px!important;background:linear-gradient(155deg,#326448,#1c432e 70%,#153524)!important;box-shadow:inset 0 2px #ffffff20,0 4px 0 #0a2115,0 8px 14px #0007!important;display:flex;align-items:center;justify-content:center;transition:transform .16s,filter .16s,box-shadow .16s;transform:translateY(-2px)}
+  .mn-game .mn-cell.mn-hidden:not(:disabled):hover{filter:brightness(1.16);transform:translateY(-4px);box-shadow:inset 0 2px #ffffff30,0 6px 0 #0a2115,0 12px 18px #0009!important}
+  .mn-game .mn-cell.mn-hidden:not(:disabled):active{transform:translateY(1px) scale(.97)!important}
+  .mn-game .mn-cell.mn-safe{background:linear-gradient(145deg,#26a66c,#087443)!important;border-color:#8bca83!important;box-shadow:inset 0 2px #ffffff35,0 0 20px #31d58b44!important}
+  .mn-game .mn-cell.mn-mine{background:linear-gradient(145deg,#c84c43,#72251e)!important;border-color:#e18b5c!important;box-shadow:inset 0 2px #ffffff30,0 0 22px #ff514d55!important}
+  .mn-game .mn-cell:disabled{cursor:default}
+  .mn-game .mn-dot{width:7px;height:7px;border-radius:50%;background:#b8d9c2;box-shadow:0 0 9px #b8d9c277}
+  .mn-game .mn-cell.mn-flip{animation:mnPortReveal .4s cubic-bezier(.2,.8,.2,1) both}
+  .mn-game .mn-cell.mn-boom{animation:mnPortBoom .6s ease both}
+  @keyframes mnPortReveal{0%{transform:rotateY(90deg) scale(.82);filter:brightness(1.8)}70%{transform:rotateY(-7deg) scale(1.04)}100%{transform:rotateY(0) scale(1);filter:brightness(1)}}
+  @keyframes mnPortBoom{0%{transform:scale(.8);filter:brightness(2.5)}45%{transform:scale(1.13);filter:brightness(1.4)}100%{transform:scale(1);filter:brightness(1)}}
+  .mn-game-ladder{grid-column:2;grid-row:4;display:grid!important;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px!important;margin:0!important;padding:0 2px 4px;min-width:0}
+  .mn-game-ladder>div{min-width:0!important;padding:9px 3px!important;border-radius:8px!important;text-align:center;font-size:11px;font-weight:850;font-variant-numeric:tabular-nums;background:#14231a!important;border:1px solid #57482b!important;color:#b8aa84!important}
+  .mn-game-ladder>div:first-child,.mn-game-ladder>.mn-ladder-active{background:linear-gradient(145deg,#4b3b20,#2b2718)!important;border-color:#d4ad5e!important;color:#f5d98f!important;box-shadow:0 0 16px #d5a84b25!important}
+  .mn-game-controls{grid-column:1;grid-row:2/span 3;width:100%;min-width:0;box-sizing:border-box;margin:0!important;padding:18px!important;border-radius:16px!important;background:linear-gradient(155deg,#1b2b20,#101b15)!important;border:1px solid #5e4c2d!important;box-shadow:0 14px 32px #0008,inset 0 1px #fff1!important}
+  .mn-game-controls input{min-width:0;background:#09150f!important;border:1px solid #78623a!important;border-radius:9px!important;color:#fff6df!important}
+  .mn-game-controls button{font-family:inherit;border-radius:9px!important;transition:filter .16s,transform .16s}
+  .mn-game-controls button:not(:disabled):hover{filter:brightness(1.12)}
+  .mn-game-controls button:not(:disabled):active{transform:translateY(1px)}
+  .mn-game-controls button[style*="linear-gradient(135deg,#20b879"]{background:linear-gradient(180deg,#e5c574,#ae8134)!important;color:#241908!important;border:1px solid #f0d68f!important;box-shadow:0 4px 0 #6e5123!important}
+  .mn-game-controls .mn-cashout{width:100%;min-height:48px;padding:13px!important;background:linear-gradient(180deg,#e6c879,#b78b3c)!important;color:#201707!important;border:1px solid #f1d995!important;border-radius:10px!important;box-shadow:0 4px 0 #745323,0 8px 18px #0006!important;font-size:14px;font-weight:900}
+  .mn-game-result{grid-column:1/-1;grid-row:5;margin-top:0!important}
+  .mn-toast{position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:9999;padding:12px 18px;border-radius:12px;font-size:13px;font-weight:700;color:#fff;box-shadow:0 10px 30px #0007;max-width:calc(100% - 32px)}
+  .mn-toast-success{background:rgba(5,150,105,.96)}.mn-toast-error{background:rgba(220,38,38,.96)}.mn-toast-info{background:rgba(30,64,175,.96)}
+  .mn-ladder-active{animation:mnLadderPulse 1.6s ease infinite}
+  @keyframes mnLadderPulse{0%,100%{box-shadow:0 0 10px #d5a84b25}50%{box-shadow:0 0 18px #d5a84b55}}
+  .mn-hero-mult{font-variant-numeric:tabular-nums}
+  .mn-cashout{animation:mnCash 2.2s ease infinite}
+  @keyframes mnCash{0%,100%{filter:brightness(1)}50%{filter:brightness(1.12)}}
+  .mn-result{animation:mnResultIn .4s cubic-bezier(.34,1.4,.64,1) both}
+  @keyframes mnResultIn{0%{transform:scale(.94);opacity:0}100%{transform:scale(1);opacity:1}}
+  @container solo-game (max-width:720px){
+    .mn-game{display:flex!important;flex-direction:column!important;width:100%!important;max-width:520px!important;margin:0 auto!important;padding:8px 8px 28px!important;gap:11px!important;align-items:stretch!important}
+    .mn-game-header,.mn-game-hero,.mn-game-board,.mn-game-ladder,.mn-game-controls,.mn-game-result{order:initial!important;width:100%!important;min-width:0!important;max-width:none!important;box-sizing:border-box!important;margin:0!important}
+    .mn-game-header{order:0!important;padding:0 2px 10px!important}
+    .mn-game-hero{order:1!important;padding:3px 0!important}
+    .mn-game .mn-hero-mult{font-size:clamp(38px,11vw,54px)!important}
+    .mn-game-board{order:2!important;padding:clamp(9px,2.5vw,14px)!important}
+    .mn-game-board>div{width:100%!important;max-width:480px!important;gap:clamp(5px,1.8vw,9px)!important}
+    .mn-game .mn-cell{border-radius:clamp(7px,2.3vw,12px)!important;transform:none}
+    .mn-game-ladder{order:3!important;gap:4px!important;overflow:hidden}
+    .mn-game-ladder>div{padding:8px 1px!important;font-size:clamp(8px,2.5vw,11px)!important}
+    .mn-game-controls{order:4!important;padding:clamp(12px,3vw,16px)!important}
+    .mn-game-result{order:5!important}
   }
-  .mn-toast-success { background: rgba(5,150,105,0.96); }
-  .mn-toast-error { background: rgba(220,38,38,0.96); }
-  .mn-toast-info { background: rgba(30,64,175,0.96); }
-  .mn-cell {
-    aspect-ratio: 1; border-radius: 12px; border: none; cursor: pointer;
-    font-family: inherit; display: flex; align-items: center; justify-content: center;
-    position: relative; transition: transform 0.15s ease, box-shadow 0.2s ease;
-    background: linear-gradient(160deg, #2a1f45 0%, #16102a 100%);
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 4px 12px rgba(0,0,0,0.35);
-  }
-  .mn-hidden:active { transform: scale(0.94); }
-  .mn-safe {
-    background: linear-gradient(160deg, #065f46 0%, #022c22 100%);
-    box-shadow: inset 0 1px 0 rgba(74,222,128,0.25), 0 0 18px rgba(16,185,129,0.25);
-  }
-  .mn-mine {
-    background: linear-gradient(160deg, #7f1d1d 0%, #450a0a 100%);
-    box-shadow: inset 0 1px 0 rgba(248,113,113,0.25), 0 0 18px rgba(239,68,68,0.3);
-  }
-  .mn-idle { opacity: 0.55; cursor: default; }
-  .mn-dot { width: 8px; height: 8px; border-radius: 50%; background: rgba(148,163,184,0.25); }
-  .mn-flip { animation: mnFlip 0.45s cubic-bezier(0.34,1.4,0.64,1) both; }
-  .mn-boom { animation: mnBoom 0.55s ease both; }
-  @keyframes mnFlip {
-    0% { transform: scale(0.6) rotateY(90deg); opacity: 0.3; }
-    100% { transform: scale(1) rotateY(0); opacity: 1; }
-  }
-  @keyframes mnBoom {
-    0% { transform: scale(1); }
-    30% { transform: scale(1.18); filter: brightness(2); }
-    100% { transform: scale(1); }
-  }
-  .mn-ladder-active { animation: mnLadderPulse 1.6s ease infinite; }
-  @keyframes mnLadderPulse {
-    0%,100% { box-shadow: 0 0 10px rgba(251,191,36,0.15); }
-    50% { box-shadow: 0 0 18px rgba(251,191,36,0.35); }
-  }
-  .mn-cashout {
-    width: 100%; padding: 15px 0; border-radius: 14px; border: none;
-    font-family: inherit; font-size: 15px; font-weight: 900; cursor: pointer;
-    color: #1a0a00; background: linear-gradient(135deg, #f59e0b, #fbbf24, #f59e0b);
-    background-size: 200% 100%; box-shadow: 0 0 28px rgba(245,158,11,0.45), 0 4px 0 #b45309;
-    animation: mnCash 2.2s ease infinite;
-  }
-  @keyframes mnCash {
-    0%,100% { background-position: 0% 50%; }
-    50% { background-position: 100% 50%; }
-  }
-  .mn-hero-mult {
-    font-size: 42px; font-weight: 900; letter-spacing: -0.04em;
-    line-height: 1.1; margin-top: 4px; font-variant-numeric: tabular-nums;
-  }
-  .mn-result { animation: mnResultIn 0.4s cubic-bezier(0.34,1.4,0.64,1) both; }
-  @keyframes mnResultIn {
-    0% { transform: scale(0.85); opacity: 0; }
-    100% { transform: scale(1); opacity: 1; }
+  @container solo-game (max-width:380px){
+    .mn-game{padding-left:6px!important;padding-right:6px!important}
+    .mn-game-board>div{gap:5px!important}
+    .mn-game-controls{padding:11px!important}
+    .mn-game .mn-cell{border-radius:7px!important}
   }
 `;

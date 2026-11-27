@@ -150,6 +150,7 @@ function userResponse(user: typeof usersTable.$inferSelect, totalReferrals: numb
     photoUrl: user.photoUrl ?? undefined,
     coins: user.coins,
     ton: Number(user.ton),
+    demoCredits: Number(user.demoCredits ?? 0),
     tonyxCoins: user.tonyxCoins,
     boostRate: Number(user.boostRate ?? 0),
     totalAdsWatched: user.totalAdsWatched,

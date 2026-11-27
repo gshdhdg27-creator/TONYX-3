@@ -31,7 +31,7 @@ function extractAdminId(req: import("express").Request, res: import("express").R
   return fallback;
 }
 
-async function checkAdmin(id: string): Promise<boolean> {
+export async function checkAdmin(id: string): Promise<boolean> {
   if (!id) return false;
   if (SUPERADMIN_IDS.has(id)) return true;
   const user = await db
@@ -45,21 +45,8 @@ async function checkAdmin(id: string): Promise<boolean> {
 router.get("/check", async (req, res) => {
   const id = normalizeId(req.query.telegramId);
   const isSuperAdmin = id === OWNER_ID;
-  let forceWin = false;
-  if (id) {
-    const row = await db
-      .select({ forceWin: usersTable.forceWin })
-      .from(usersTable)
-      .where(eq(usersTable.telegramId, id))
-      .then((r) => r[0] ?? null);
-    forceWin = Boolean(row?.forceWin);
-  }
-  if (isSuperAdmin) {
-    res.json({ isAdmin: true, isSuperAdmin: true, ownerId: OWNER_ID, forceWin });
-    return;
-  }
   const isAdmin = await checkAdmin(id);
-  res.json({ isAdmin, isSuperAdmin: false, forceWin });
+  res.json({ isAdmin, isSuperAdmin, ...(isSuperAdmin ? { ownerId: OWNER_ID } : {}) });
 });
 
 router.get("/user-status", async (req, res) => {
@@ -83,53 +70,6 @@ router.get("/user-status", async (req, res) => {
     res.json({ status, bannedReason: user.bannedReason ?? null });
   } catch {
     res.json({ status: "active", bannedReason: null });
-  }
-});
-
-/** Crash control — sequential rounds admin */
-router.get("/settings/crash", async (req, res) => {
-  const adminId = extractAdminId(req, res);
-  if (!adminId) return;
-  try {
-    const { getRoundState, resolveCrash } = await import("./games-crash.js");
-    const st = await getRoundState();
-    const nextId = st.phase === "betting" ? st.roundId : st.roundId + 1;
-    const nextCrash = await resolveCrash(nextId);
-    res.json({ ...st, nextRoundId: nextId, nextCrashPreview: nextCrash });
-  } catch (e: any) {
-    res.status(500).json({ error: e?.message ?? "crash state failed" });
-  }
-});
-
-router.post("/settings/crash/force-next", async (req, res) => {
-  const adminId = extractAdminId(req, res);
-  if (!adminId) return;
-  try {
-    const mult = Number(req.body?.mult);
-    if (!Number.isFinite(mult) || mult < 1 || mult > 100) {
-      res.status(400).json({ error: "mult must be 1–100" });
-      return;
-    }
-    const { getRoundState, setCrashOverride } = await import("./games-crash.js");
-    const st = await getRoundState();
-    const target = st.phase === "betting" ? st.roundId : st.roundId + 1;
-    await setCrashOverride(target, mult);
-    res.json({ ok: true, message: `Коэффициент ${mult}x для раунда #${target}`, targetRoundId: target, mult });
-  } catch (e: any) {
-    res.status(500).json({ error: e?.message ?? "force failed" });
-  }
-});
-
-router.post("/settings/crash/reset", async (req, res) => {
-  const adminId = extractAdminId(req, res);
-  if (!adminId) return;
-  try {
-    const { resetCrashRounds, getRoundState } = await import("./games-crash.js");
-    await resetCrashRounds();
-    const st = await getRoundState();
-    res.json({ ok: true, message: "Раунды сброшены — снова с #1", ...st });
-  } catch (e: any) {
-    res.status(500).json({ error: e?.message ?? "reset failed" });
   }
 });
 
@@ -167,6 +107,8 @@ router.get("/settings/games-enabled", async (_req, res) => {
       plinko: s["game_enabled_plinko"] !== "false",
       upgrade: s["game_enabled_upgrade"] !== "false",
       coin: s["game_enabled_coin"] !== "false",
+      dice: s["game_enabled_dice"] !== "false",
+      roulette: s["game_enabled_roulette"] !== "false",
     });
   } catch (e) { res.status(500).json({ error: String(e) }); }
 });
@@ -287,7 +229,6 @@ router.get("/users", async (req, res) => {
         isBlocked: u.isBlocked,
         isAdmin: u.isAdmin,
         isOnline,
-        forceWin: u.forceWin,
         lastIp: u.lastIp,
         twinCount: u.warningCount ?? 0,
         isMainAccount: true,
@@ -312,31 +253,8 @@ router.get("/users", async (req, res) => {
 
 
 /* POST /admin/users/:id/force-win — only for self (admin/owner) */
-router.post("/users/:id/force-win", async (req, res) => {
-  const adminId = extractAdminId(req, res);
-  if (!adminId || !(await checkAdmin(adminId))) {
-    res.status(401).json({ error: "Unauthorized" });
-    return;
-  }
-  const targetId = normalizeId(req.params.id);
-  // Only yourself — god mode cannot be granted to other players
-  if (targetId !== adminId) {
-    res.status(403).json({ error: "Режим Бога можно включить только себе" });
-    return;
-  }
-  const enable = Boolean((req.body as { enable?: boolean })?.enable);
-  const user = await db.select().from(usersTable).where(eq(usersTable.telegramId, targetId)).then((r) => r[0] ?? null);
-  if (!user) {
-    res.status(404).json({ error: "Пользователь не найден" });
-    return;
-  }
-  await db.update(usersTable).set({ forceWin: enable, updatedAt: new Date() }).where(eq(usersTable.telegramId, targetId));
-  console.log(`[Admin] force_win=${enable} self=${targetId}`);
-  res.json({
-    success: true,
-    forceWin: enable,
-    message: enable ? "⚡ Режим Бога ВКЛ — 100% победа в любой игре" : "Режим Бога выключен",
-  });
+router.post("/users/:id/force-win", (_req, res) => {
+  res.status(410).json({ error: "Forced outcomes are permanently disabled" });
 });
 
 export { router as adminRouterPartial };
